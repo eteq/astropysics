@@ -465,7 +465,7 @@ class FunctionModel(object):
                         data.append(20)
                     data.append('r')
                 plt.scatter(*data)
-                
+        plt.xlim(lower,upper)
         
     #Can Override:
     def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
@@ -669,6 +669,48 @@ class LinearModel(FunctionModel):
             legend(loc=0)
         
         return B,A,sigmaB,sigmaA
+  
+  
+#<----------------------Module functions -------------->  
+def generate_composite_model(models):
+    raise NotImplementedError
+
+__model_registry={}
+def register_model(model,name=None,overwrite=False,stripmodel=True):
+    if not issubclass(model,FunctionModel):
+        raise TypeError('Supplied model is not a FunctionModel')
+    if name is None:
+        name = model.__name__.lower()
+    else:
+        name = name.lower()
+    if stripmodel:
+        name = name.replace('model','')
+    if overwrite and name in __model_registry:
+        raise KeyError('Model %s already exists'%name)
+    
+    __model_registry[name]=model
+    
+def get_model(modelname):
+    return __model_registry[modelname]
+
+def list_models():
+    return __model_registry.keys()
+
+
+
+#<----------------------Builtin models----------------->
+class ConstantModel(FunctionModel):
+    """
+    the simplest model imaginable - just a constant value
+    """
+    def f(self,x,C=0):
+        return C*np.ones_like(x)
+    
+    def derivative(self,x,dx=1):
+        return np.zeros_like(x)
+    
+    def integrate(self,lower,upper):
+        return self.C*(upper-lower)
     
 class QuadraticModel(FunctionModel):
     """
@@ -704,6 +746,62 @@ class GaussianModel(FunctionModel):
         sig=self.sig
         return self(x)*-x/sig/sig
     
+class DoubleGaussianModel(FunctionModel):
+    """
+    Two Normalized 1D gaussian functions, fixed to be of opposite sign
+    A is the positive gaussian, while B is negative
+    note that fitting often requires the initial condition to have the upper and lower 
+    """
+    def f(self,x,A=1,B=1,sig1=1,sig2=1,mu1=-0.5,mu2=0.5):
+        A,B=abs(A),-abs(B) #TOdO:see if we should also force self.A and self.B
+        tsq1=(x-mu1)*2**-0.5/sig1
+        tsq2=(x-mu2)*2**-0.5/sig2
+        return (A*np.exp(-tsq1*tsq1)/sig1+B*np.exp(-tsq2*tsq2)/sig2)*(2*pi)**-0.5
+    
+    @staticmethod
+    def autoDualModel(x,y,taller='A',wider='B',**kwargs):
+        """
+        generates and fits a double-gaussian model where one of the peaks is
+        on top of the other and much stronger.
+        the taller and wider argument must be either 'A' or 'B' for the positive
+        and negative components, respectively
+        kwargs go into the fitData calls
+        """
+        gm=GaussianModel()
+        gm.fitData(x,y,**kwargs)
+        dgm=DoubleGaussianModel()
+        dgm.mu1=dgm.mu2=gm.mu
+        if taller == 'A':
+            dgm.A=gm.A
+            dgm.B=gm.A/2
+            dgm.sig1=gm.sig
+            if wider =='A':
+                dgm.sig2=gm.sig/2
+            elif wider =='B':
+                dgm.sig2=gm.sig*2
+            else:
+                raise ValueError('unrecognized wider component')
+            print dgm.pardict
+            dgm.fitData(x,y,fixedpars=('mu1','A','sig1'),**kwargs)
+        elif taller == 'B':
+            dgm.B=gm.A
+            dgm.A=gm.A/2
+            dgm.sig2=gm.sig
+            if wider =='B':
+                dgm.sig1=gm.sig/2
+            elif wider =='A':
+                dgm.sig1=gm.sig*2
+            else:
+                raise ValueError('unrecognized wider component')
+            print dgm.pardict
+            dgm.fitData(x,y,fixedpars=('mu2','B','sig2'),**kwargs)
+        else:
+            raise ValueError('unrecognized main component')
+        print dgm.pardict
+        dgm.fitData(x,y,fixedpars=(),**kwargs)
+        print dgm.pardict
+        return dgm
+    
 class LorentzianModel(FunctionModel):
     def f(self,x,A=1,gamma=1,mu=0):
         return gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
@@ -735,9 +833,98 @@ class TwoPowerModel(FunctionModel):
     """
     A model that smoothly transitions between two power laws at the turnover 
     point xs.  a is the inner slope, b is the outer slope
+    A and fxs are the same parameter - A is the absolute normalization, and fxs
+    is the function's value at xs
     """
     def f(self,x,A=1,xs=1,a=1,b=2):
         return A*((x+xs)**(b-a))*(x**a)
+    
+    def _getFxs(self):
+        A,xs,a,b=self.A,self.xs,self.a,self.b
+        return A*xs**b*2**(b-a)
+    
+    def _setFxs(self,fxs):
+        xs,a,b=self.xs,self.a,self.b
+        self.A=fxs*xs**-b*2**(a-b)
+    
+    fxs=property(fget=_getFxs,fset=_setFxs)
+    
+class BlackbodyModel(FunctionModel):
+    """
+    a Planck blackbody radiation model
+    
+    unittype can be set to a variety of energy, wavelength, or frequency options
+    """
+    from astro.constants import h,c,kb
+    h = h*1e16 #cm^2 -> angstroms^2
+    c = c*1e8 #cm -> angstroms
+    kb = kb*1e16 #cm^2 -> angstroms^2
+    
+    def __init__(self,unittype='wl'):
+        self.unittype = unittype
+    
+    def f(self,x,A=1,T=5800):
+        raise NotImplementedError
+    
+    def _flambda(self,x,A=1,T=5800):
+        h,c,k=self.h,self.c,self.kb
+        x=self._scaling*x
+        return A*2*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
+    
+    def _fnu(self,x,A=1,T=5800):
+        h,c,k=self.h,self.c,self.kb
+        
+        return A*2*h/c/c*x**3/(np.exp(h*x/(k*T))-1)
+    
+    def _fen(self,x,A=1,T=5800):
+        x=self._scaling*x
+        raise NotImplementedError
+    
+    
+    def _setUnittype(self,unittype):
+        if unittype == 'wl' or unittype == 'lambda' or unittype == 'wavelength-angstroms':
+            self._unittype = 'wavelength-angstroms'
+            self.f = self._flambda
+            self._scaling=1
+        elif unittype == 'nm' or unittype == 'wavelength-nm':
+            self._unittype = 'wavelength-nm'
+            self.f = self._flambda
+            self._scaling=10
+        elif unittype == 'microns' or unittype == 'um' or unittype == 'wavelength-microns':
+            self._unittype = 'wavelength-microns'
+            self.f = self._flambda
+            self._scaling=1e4
+            
+        elif unittype == 'm' or unittype == 'wavelength-m':
+            self._unittype = 'wavelength-m'
+            self.f = self._flambda
+            self._scaling=1e10
+        elif unittype == 'f' or unittype == 'nu' or unittype == 'frequency-Hz':
+            self._unittype = 'frequency-Hz'
+            self.f = self._fnu
+            self._scaling=1
+        elif unittype == 'THz' or unittype == 'frequency-THz':
+            self._unittype = 'frequency-THz'
+            self.f = self._fnu
+            self._scaling=1e12
+        elif unittype == 'e' or unittype == 'energy-eV':
+            self._unittype = 'energy-eV'
+            self.f = self._fen
+            self._scaling=1
+        elif unittype == 'erg' or unittype == 'energy-erg':
+            self._unittype = 'energy-erg'
+            self.f = self._fen    
+            self._scaling=1.0/ergperev
+        elif unittype == 'J' or unittype == 'energy-J':
+            self._unittype = 'energy-J'
+            self.f = self._fen    
+            self._scaling=1e7/ergperev
+        else:
+            raise ValueError('unrecognized unittype')
+    unittype = property(lambda self:self._unittype,_setUnittype)
+    
+    
+    
     
 class SplineModel(FunctionModel):
     """
@@ -859,3 +1046,9 @@ class SersicModel(FunctionModel):
         return A*np.exp(-(r/rs)**(1/n))
         
     #TODO:versions of exponential disk and deVauculeurs
+
+#register all models in this class
+for o in locals().values():
+    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel:
+        register_model(o)
+

@@ -3,6 +3,9 @@ from math import pi
 import numpy as np
 
 #all in cgs including gaussian esu for charge
+prop=property(lambda:5)
+unit_system='cgs'
+
 G=6.673e-8
 mp=1.67262171e-24
 me=9.1093897e-28
@@ -17,9 +20,10 @@ De=1.49597887e13
 kb=1.3807e-16 
 #sigma=5.6704e-5
 c=2.99792458e10
+h=6.626068E-27
 
 #unit conversion factors
-evtoerg=1.60217646e-12
+ergperev=1.60217646e-12
 secperyr=3.15576926e7
 secpergyr=secperyr*1e9
 pcpercm=1/3.08568025e18
