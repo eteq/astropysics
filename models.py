@@ -55,35 +55,35 @@ class _FuncMeta(type):
             setattr(cls,arg,_Parameter(arg,d))
             
         if varargs is not None:
-            cls.__args = None
+            cls._args = None
             cls.__statargs = list(args)
         else:
-            cls.__args = tuple(args)
+            cls._args = tuple(args)
         
             
-        cls.params = property(lambda cls:cls.__args)
+        cls.params = property(lambda cls:cls._args)
         def _set_parvals(cls,newpars):
-            if len(newpars)>len(cls.__args):
+            if len(newpars)>len(cls._args):
                 raise ValueError('too many new parameters')
-            for a,v in zip(cls.__args,newpars):
+            for a,v in zip(cls._args,newpars):
                 setattr(cls,a,v)        
         def _set_pardict(cls,newpardict):
             for k in newpardict.keys():
-                if k not in cls.__args:
+                if k not in cls._args:
                     raise KeyError('No parameter %s found'%k)
             for k,v in newpardict.iteritems():
                 setattr(cls,k,v)
-        cls.parvals = property(lambda cls:[getattr(cls,a) for a in cls.__args],fset=_set_parvals)
-        cls.pardict = property(lambda cls:dict([(a,getattr(cls,a)) for a in cls.__args]),fset=_set_pardict)
+        cls.parvals = property(lambda cls:[getattr(cls,a) for a in cls._args],fset=_set_parvals)
+        cls.pardict = property(lambda cls:dict([(a,getattr(cls,a)) for a in cls._args]),fset=_set_pardict)
         
     def __call__(cls,*args,**kwargs):
-        if cls.__args is None: #this is the case for *args in the function
+        if cls._args is None: #this is the case for *args in the function
             args=list(args)
             try:
                 nparams=args.pop(0) if 'nparams' not in kwargs else kwargs.pop('nparams')
             except IndexError:
                 IndexError('No # of parameters found for variable-size function')
-            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls.__args])    
+            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
             obj = type.__call__(cls,**objkwargs) #object __init__ is called here
             pars = cls.__statargs
             del cls.__statargs
@@ -91,9 +91,9 @@ class _FuncMeta(type):
                 p='p%i'%i
                 pars.append(p)
                 setattr(obj,p,1) #default varargs to 1
-            cls.__args = tuple(pars)
+            cls._args = tuple(pars)
         else: #this is the case for fixed functions
-            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls.__args])
+            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
             obj = type.__call__(cls,**objkwargs) #object __init__ is called here
             
         obj.f(np.array([0]),*obj.parvals) #try once to check for a real function
@@ -139,6 +139,35 @@ class FunctionModel(object):
         the result
         """
         return self.f(np.atleast_1d(x),*self.parvals)
+    
+    def optimize(self,x0,type='min',method='fmin',**kwargs):
+        """
+        find an optimal value for the model - x0 is where to start the search
+        type can be 'min','max','root',or 'saddle'
+        method can be 'fmin' or 'fmin_powell'
+        """
+        from scipy.optimize import fmin,fmin_powell
+        
+        if type == 'min':
+            g=lambda *args,**kwargs:self.f(*args,**kwargs)
+        elif type == 'max':
+            g=lambda *args,**kwargs:-1*self.f(*args,**kwargs)
+        elif type == 'root':
+            g=lambda *args,**kwargs:np.abs(self.f(*args,**kwargs))
+        elif type == 'saddle':
+            raise NotImplementedError
+        else:
+            raise ValueError('Unrecognized type')
+        
+        if method == 'fmin':
+            res=fmin(g,x0,tuple(self.parvals),**kwargs)
+        elif method == 'fmin_powell':
+            res=fmin_powell(g,x0,tuple(self.parvals),**kwargs)
+        else:
+            raise ValueError('Unrecognized method')
+        
+        self.lastOpt = res
+        return res[0]
         
         
     def fitData(self,x,y,method=None,fixedpars=(),contraction='sumsq',
@@ -484,7 +513,7 @@ class FunctionModel(object):
         jac is the jacobian factor as a function f(x,*params)
         
         returns value
-        some methods will also store attributes "lastIntError" and "lastIntInfo"
+        most methods will also store their result to "lastIntegrate"
         
         if subclassing, this should be overwritten with a function of the form
         integrate(lower,upper,[args])
@@ -503,24 +532,23 @@ class FunctionModel(object):
             f=self.f
         
         if method=='quad':
-            t=itg.quad(f,lower,upper,args=ps,full_output=1,**kwargs)
-            if len(t) == 2:
-                v,e = t
-            elif len(t) == 3:
-                v,e,d = t
-            else:
-                raise ValueError("problem with return value of scipy.integrate.quad")
+            res=itg.quad(f,lower,upper,args=ps,full_output=1,**kwargs)
+            if len(res) == 4:
+                v,e,d,m = res
+                #from warnings import warn
+                #warn('Integration message: %s'%m)
+                print 'Integration message:',m
         #use these for 2d and 3d
         #elif method=='dblquad':
         #    raise NotImplementedError
         #elif method=='tplquad':
         #    raise NotImplementedError
         elif method=='fixed_quad':
-            v=itg.fixed_quad(f,lower,upper,ps,5 if n is None else n,**kwargs)
+            res=itg.fixed_quad(f,lower,upper,ps,5 if n is None else n,**kwargs)
         elif method=='quadrature':
-            v,e=itg.quadrature(f,lower,upper,ps,**kwargs)
+            res=itg.quadrature(f,lower,upper,ps,**kwargs)
         elif method=='romberg':
-            v=itg.romberg(f,lower,upper,ps,**kwargs)
+            res=itg.romberg(f,lower,upper,ps,**kwargs)
         else: #sampled techniques
             if n is None:
                 n=100
@@ -530,21 +558,19 @@ class FunctionModel(object):
                 x=np.array(n)
             y=f(x,*ps)
             if method=='trapz':
-                v=itg.trapz(y,x,**kwargs)
+                res=itg.trapz(y,x,**kwargs)
             elif method=='cumtrapz':
-                v=itg.cumtrapz(y,x,**kwargs)
+                res=itg.cumtrapz(y,x,**kwargs)
             elif method=='simps':
-                v=itg.simps(y,x,**kwargs)
+                res=itg.simps(y,x,**kwargs)
             elif method=='romb':
-                v=itg.simps(y,np.convolve(x,[1,-1],mode='same').mean(),**kwargs)
+                res=itg.simps(y,np.convolve(x,[1,-1],mode='same').mean(),**kwargs)
             else:
                 raise ValueError('unrecognized integration method')
         
-        if e is not None:
-            self.lastIntError = e
-        if d is not None:
-            self.lastIntInfo = d
-        return v
+        
+        self.lastIntegrate = res
+        return res if np.isscalar(res) else res[0]
     
     def derivative(self,x,dx=1):
         """
@@ -670,10 +696,85 @@ class LinearModel(FunctionModel):
         
         return B,A,sigmaB,sigmaA
   
-  
+class CompositeModel(FunctionModel):
+    #TODO:initial vals
+    def __init__(self,models=[],operation='+'):
+        raise NotImplementedError
+        self.op = operation
+        ms=[]
+        for m in models:
+            if type(m) == str:
+                m=get_model(m)
+            if not issubclass(m,FunctionModel):
+                raise ValueError('Non FunctionModel provided')
+            ms.append(m)
+        self._modelcounts=dict([(m,ms.count(m)) for m in set(ms)])
+        self._models=[m() for m in ms]
+        
+        self.f=self.__f
+        
+        #TODO: set up attributes
+        
+    def _getParams(self):
+        ps=[]
+        from collections import defaultdict
+        d=defaultdict(lambda:1)
+        for m in self._models:
+            i=d[m]
+            d[m]=i+1
+            mname=m.__name__.replace('Model','').replace('model','')
+            for p in m.params:
+                ps.append('%s_%i_%s'%(mname,i+1,p))
+        return ps
+    def _getParvals(self):
+        ps=[]
+        for m in self._models:
+            for p in m.params:
+                ps.append(getattr(m,p))
+        return ps
+    def _setParvals(self,val):
+        i=0
+        for m in self._models:
+            for p in m.params:
+                v=val[i]
+                setattr(m,p,v)
+                i+=1
+    def _getPardict(self):
+        from collections import defaultdict
+        d=defaultdict(lambda:1)
+        for m in self._models:
+            i=d[m]
+            d[m]=i+1
+            mname=m.__name__.replace('Model','').replace('model','')
+            for p in m.params:
+                ps.append(('%s_%i_%s'%(mname,i+1,p),getattr(m,p)))
+        return dict(ps)
+    def _setPardict(self,val):
+        raise NotImplementedError
+    
+    params = property(_getParams)
+    parvals = property(_getParvals,_setParvals)
+    pardict = property(_getPardict,_setPardict)
+        
+    def f(self,x):
+        raise RuntimeException('Placeholder function - this should never be reachable')
+    def __f(self,x,*args):
+        #TODO:optimize
+        vals=[]
+        i=0
+        vals = [m(x) for m in self._models]
+        if self.op == '+':
+            return np.sum(vals)
+        elif self.op == '*':
+            return np.prod(vals)
+        else:
+            return ValueError('unrecognized operation')
+            
+        
+        
 #<----------------------Module functions -------------->  
-def generate_composite_model(models):
-    raise NotImplementedError
+def generate_composite_model(models,operation):
+    return CompsiteModel(models=models,operation=op)
 
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
@@ -853,15 +954,14 @@ class BlackbodyModel(FunctionModel):
     """
     a Planck blackbody radiation model
     
-    unittype can be set to a variety of energy, wavelength, or frequency options
+    inunit can be set to a variety of energy, wavelength, or frequency options
     """
     from astro.constants import h,c,kb
-    h = h*1e16 #cm^2 -> angstroms^2
-    c = c*1e8 #cm -> angstroms
-    kb = kb*1e16 #cm^2 -> angstroms^2
     
-    def __init__(self,unittype='wl'):
-        self.unittype = unittype
+    def __init__(self,inunit='wl',outunit='erg'):
+        self.inunit = inunit
+        self.outunit = outunit
+        self.stephanBoltzmannLaw = self._instanceSBLaw
     
     def f(self,x,A=1,T=5800):
         raise NotImplementedError
@@ -869,60 +969,160 @@ class BlackbodyModel(FunctionModel):
     def _flambda(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
         x=self._scaling*x
-        return A*2*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
+        return A*self._enscale*self._scaling*2*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
     
     def _fnu(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
-        
-        return A*2*h/c/c*x**3/(np.exp(h*x/(k*T))-1)
+        x=self._scaling*x
+        return A*self._enscale*self._scaling*2*h/c/c*x**3/(np.exp(h*x/(k*T))-1)
     
     def _fen(self,x,A=1,T=5800):
         x=self._scaling*x
         raise NotImplementedError
     
-    
-    def _setUnittype(self,unittype):
-        if unittype == 'wl' or unittype == 'lambda' or unittype == 'wavelength-angstroms':
-            self._unittype = 'wavelength-angstroms'
+    def _getInunit(self):
+        return self._inunit
+    def _setInunit(self,inunit):
+        u = inunit.lower()
+        if inunit == 'wl' or inunit == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
+            self._inunit = 'wavelength-angstrom'
+            self.f = self._flambda
+            self._scaling=1e-8
+        elif u == 'nm' or inunit == 'wavelength-nm':
+            self._inunit = 'wavelength-nm'
+            self.f = self._flambda
+            self._scaling=1e-7
+        elif u == 'microns' or u == 'um' or u == 'wavelength-micron':
+            self._inunit = 'wavelength-micron'
+            self.f = self._flambda
+            self._scaling=1e-4
+        elif inunit == 'm' or u == 'wavelength-m':
+            self._inunit = 'wavelength-m'
+            self.f = self._flambda
+            self._scaling=1e2
+        elif inunit == 'cm' or u == 'wavelength-cm':
+            self._inunit = 'wavelength-cm'
             self.f = self._flambda
             self._scaling=1
-        elif unittype == 'nm' or unittype == 'wavelength-nm':
-            self._unittype = 'wavelength-nm'
-            self.f = self._flambda
-            self._scaling=10
-        elif unittype == 'microns' or unittype == 'um' or unittype == 'wavelength-microns':
-            self._unittype = 'wavelength-microns'
-            self.f = self._flambda
-            self._scaling=1e4
-            
-        elif unittype == 'm' or unittype == 'wavelength-m':
-            self._unittype = 'wavelength-m'
-            self.f = self._flambda
-            self._scaling=1e10
-        elif unittype == 'f' or unittype == 'nu' or unittype == 'frequency-Hz':
-            self._unittype = 'frequency-Hz'
+        elif inunit == 'f' or inunit == 'nu' or u == 'hz' or u == 'frequency-hz':
+            self._inunit = 'frequency-Hz'
             self.f = self._fnu
             self._scaling=1
-        elif unittype == 'THz' or unittype == 'frequency-THz':
-            self._unittype = 'frequency-THz'
+        elif u == 'thz' or inunit == 'frequency-THz':
+            self._inunit = 'frequency-THz'
             self.f = self._fnu
             self._scaling=1e12
-        elif unittype == 'e' or unittype == 'energy-eV':
-            self._unittype = 'energy-eV'
+        elif u == 'e' or inunit == 'energy-eV':
+            self._inunit = 'energy-eV'
             self.f = self._fen
+            self._scaling=ergperev
+        elif u == 'erg' or inunit == 'energy-erg':
+            self._inunit = 'energy-erg'
+            self.f = self._fen    
             self._scaling=1
-        elif unittype == 'erg' or unittype == 'energy-erg':
-            self._unittype = 'energy-erg'
+        elif inunit == 'J' or inunit == 'energy-J':
+            self._inunit = 'energy-J'
             self.f = self._fen    
-            self._scaling=1.0/ergperev
-        elif unittype == 'J' or unittype == 'energy-J':
-            self._unittype = 'energy-J'
-            self.f = self._fen    
-            self._scaling=1e7/ergperev
+            self._scaling=1e-7
         else:
-            raise ValueError('unrecognized unittype')
-    unittype = property(lambda self:self._unittype,_setUnittype)
+            raise ValueError('unrecognized inunit')
+    inunit = property(_getInunit,_setInunit)
     
+    def _getOutunit(self):
+        return self._outunit
+    def _setOutunit(self,outunit):
+        outunit=' '.join(outunit.split()[:2])
+        u=outunit.lower()
+        if 'J' in outunit or 'joule' in u:
+            self._outunit='J'
+            self._enscale=1e-7
+        elif 'ev' in u or 'electronvolt' in u:
+            from astro.constants import ergperev
+            self._outunit='eV'
+            self._enscale=1/ergperev
+        elif 'surface brightness' in u or 'mag' in u or 'sb' in u:
+            raise NotImplementedError
+            self._outunit='mag'
+        else: # assume ergs as default for cgs
+            self._outunit='erg'
+            self._enscale=1
+            
+        if 'ang' in u:
+            self._outunit+=' angstroms^-2'
+            self._enscale*=1e-16
+        elif 'm' in u.replace('mag','').replace('nm','').replace('angstrom','').replace('cm',''):
+            self._outunit+=' m^-2'
+            self._enscale*=1e4
+        elif 'nm' in u:
+            self._outunit+=' nm^-2'
+            self._enscale*=1e-14
+        else: #assume cm for cgs as default
+            self._outunit+=' cm^-2'
+            self._enscale*=1
+            
+        self._outunit+=' %s^-1 s^-1'%self._inunit.split('-')[1]
+        
+    outunit = property(_getOutunit,_setOutunit)
+    
+    def _getArea(self):
+        return self.A/4/pi
+    def _setArea(self,area):
+        self.A=area*4*pi
+    area = property(_getArea,_setArea)
+    
+    def setFlux(self,radius,distance):
+        """
+        sets A so that the output is the flux at the specified distance from
+        a blackbody with the surface given by "area"
+        """
+        ratio=radius/distance
+        self.A=pi*ratio*ratio
+    def getFluxRadius(self,distance):
+        """
+        determines the radius of a spherical blackbody at the specified distance
+        assuming the flux is given by the model at the given temperature
+        """
+        return (A*distance*distance/pi)**0.5 
+    def getFluxdistance(self,radius):
+        """
+        determines the distance to a spherical blackbody of the specified radius
+        assuming the flux is given by the model at the given temperature
+        """
+        return (pi*radius*radius/self.A)**0.5
+    
+    def wienDisplacementLaw(self,peakval,updatepars=True):
+        """
+        uses the Wien Displacement Law to calculate the temperature
+        """
+        h,k = self.h,self.kb
+        if self.f == self._flambda:
+            b = 2.8977685e7 #angstroms K
+            T=b/self._scaling*1e-8*peakval
+        elif self.f == self._fnu:
+            a=2.821439 #constant from optimizing BB function
+            T=self._scaling*peakval*h/a/k
+        elif self.f == self._fen:
+            raise NotImplementedError
+        else:
+            raise RuntimeError('Should never see this - bug in BB code')
+        if updatepars:
+            self.T=T
+        return T
+    
+    def _instanceSBLaw(self,T=None,area=1):
+        if T is not None:
+            self.T = T
+        return BlackbodyModel.stephanBoltzmannLaw(self.T,area)*self._enscale
+    
+    @staticmethod
+    def stephanBoltzmannLaw(T,area=1):
+        """
+        assumes cgs units
+        """
+            
+        h,c,kb=BlackbodyModel.h,BlackbodyModel.c,BlackbodyModel.kb
+        sigma = 2*pi**5*kb**4*h**-3*c**-2/15
+        return area*sigma*T**4
     
     
     
@@ -1049,6 +1249,6 @@ class SersicModel(FunctionModel):
 
 #register all models in this class
 for o in locals().values():
-    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel:
+    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel and o!= CompositeModel:
         register_model(o)
 
