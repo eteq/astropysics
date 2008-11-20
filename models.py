@@ -1242,13 +1242,32 @@ class SchecterModelLum(SchecterModel):
         
 class SersicModel(FunctionModel):
     #TODO:better normalizations and rs
-    def f(self,r,A=1,rs=1,n=4):
+    def f(self,r,A=1,rs=1,n=2):
         return A*np.exp(-(r/rs)**(1/n))
-        
-    #TODO:versions of exponential disk and deVauculeurs
+EinastoModel=SersicModel
 
+class ExponentialDiskModel(SersicModel):
+    def f(self,rz,A=1,rs=1,zs=.3):
+        r=rz[0]
+        z=rz[1]
+        return SersicModel.f(self,r,A,rs,1)*exp(np.abs(z)/zs)
+    
+class DeVauculeursModel(SersicModel):
+    def f(self,r,A=1,rs=1):
+        return SersicModel.f(self,r,A,rs,4)
 #register all models in this class
 for o in locals().values():
     if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel and o!= CompositeModel:
         register_model(o)
 
+class MaxwellBoltzmannModel(FunctionModel):
+    from astro.constants import me #electron
+    def f(self,v,T=273,m=me):
+        from astro.constants import kb,pi
+        return (m/(2*pi*kb*T))**0.5*np.exp(-m*v*v/2/kb/T)
+    
+class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
+    from astro.constants import me #electron
+    def f(self,v,T=273,m=me):
+        from astro.constants import kb,pi
+        return 4*pi*v*v*(m/(2*pi*kb*T))**1.5*np.exp(-m*v*v/2/kb/T)
