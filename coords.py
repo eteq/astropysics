@@ -568,12 +568,12 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
     return rap,decp
 
 #<-----------------Cosmological distance and conversions ---------->
-def cosmo_z_to_dist(z,zerr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,inttol=1e-6,normed=False,intkwargs={}):
+def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
     """
-    omegaM is the matter density to critical density ratio
-    omegaE is the dark energy density to critical density ratio
-    omegaR is the radiation density to critical density ratio
-    quadkwargs are fed into scipy.integrate.quad
+    calculates the cosmolgical distance to some object given a redshift
+    note that this uses H0,omegaM,omegaL, and omegaR from the current cosmology
+    
+    intkwargs are kwargs for the integration routine (probably scipy.integrate.quad)
     
     if z is None, returns the limit of z->inf to the requested tolerance (or at maximum if angular) -
     this may be infinite
@@ -587,7 +587,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,
     from scipy.integrate import quad as integrate
     from numpy import array,vectorize,abs
     
-    from astro.constants import c
+    from astro.constants import H0,omegaM,omegaL,omegaR,c
     
     c=c/1e5 #convert to km/s
     if type(disttype) == str:
@@ -664,7 +664,8 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,
         d=c*intres*3.26163626e-3
         #d=chi*3.08568025e19/24/3600/365.25e9
     elif disttype == 4:
-        d=distance_to_dist_mod(c*intres/a0*1e6)
+        from astro.phot import distance_modulus
+        d=distance_modulus(c*intres/a0*1e6,autocosmo=False)
         
     else:
         raise KeyError('unknown disttype')
@@ -681,14 +682,14 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,
         lower=cosmo_z_to_dist(z-zerr,None,disttype,H0,omegaM,omegaL,omegaR,inttol,intkwargs)
         return nrm*d,nrm*(upper-d),nrm*(lower-d)
     
-def cosmo_dist_to_z(d,derr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,inttol=1e-6,normed=False,intkwargs={}):
+def cosmo_dist_to_z(d,derr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
     from scipy.optimize import brenth
     maxz=10000.0
     
     if derr is not None:
         raise NotImplementedError
     
-    f=lambda z,dmin:dmin-cosmo_z_to_dist(z,None,disttype,H0,omegaM,omegaL,omegaR,inttol,normed,intkwargs)
+    f=lambda z,dmin:dmin-cosmo_z_to_dist(z,None,disttype,inttol,normed,intkwargs)
     try:
         while f(maxz,d) > 0:
             maxz=maxz**2
@@ -700,34 +701,19 @@ def cosmo_dist_to_z(d,derr=None,disttype=0,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0,
     return zval
     
     
-def cosmo_z_to_H(z,zerr=None,H0=72,omegaM=0.3,omegaL=0.7,omegaR=0):
-    z=np.array(z)
-    M,L,R=omegaM,omegaL,omegaR
-    K=1-M-L-R
-    a=1/(1+z)
-    H=H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
+def cosmo_z_to_H(z,zerr=None):
+    """
+    calculate the hubble constant as a function of redshift for the selected
+    """
+    from astro.constants import get_cosmology
+    c = get_cosmology()
     if zerr is None:
-        return H
+        return c.H(z)
     else:
-        upper=cosmo_z_to_H(z+zerr,None,H0,omegaM,omegaL,omegaR)
-        lower=cosmo_z_to_H(z-zerr,None,H0,omegaM,omegaL,omegaR)
+        H=c.H(z)
+        upper=c.H(z+zerr)
+        lower=c.H(z-zerr)
         return H,upper-H,lower-H
-    
-def dist_mod_to_distance(muorm,M=None):
-    """
-    distance in pc
-    """
-    if M !=None:
-        mu=muorm-M
-    else:
-        mu=muorm
-    return 10**(.2*mu+1)
-    
-def distance_to_dist_mod(d):
-    """
-    distance in pc
-    """
-    return 5*np.log10(d/10)
 
 def angular_to_physical_size(angsize,z,**kwargs):
     """

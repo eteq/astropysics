@@ -1255,10 +1255,6 @@ class ExponentialDiskModel(SersicModel):
 class DeVauculeursModel(SersicModel):
     def f(self,r,A=1,rs=1):
         return SersicModel.f(self,r,A,rs,4)
-#register all models in this class
-for o in locals().values():
-    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel and o!= CompositeModel:
-        register_model(o)
 
 class MaxwellBoltzmannModel(FunctionModel):
     from astro.constants import me #electron
@@ -1271,3 +1267,8 @@ class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
     def f(self,v,T=273,m=me):
         from astro.constants import kb,pi
         return 4*pi*v*v*(m/(2*pi*kb*T))**1.5*np.exp(-m*v*v/2/kb/T)
+    
+#register all Models in this module
+for o in locals().values():
+    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel and o!= CompositeModel:
+        register_model(o)

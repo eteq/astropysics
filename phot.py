@@ -123,30 +123,87 @@ def M_star_from_mags(B,V,R,I,color='B-V'):
     
     return np.mean(mstar),tuple(mstar)
 
-def abs_mag(appmag,z,H=73.5):
+
+def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
+    """
+    compute the distance modulus given  a distance or redshift
+    
+    for H=0/False/None, will treat z as a distance in pc, otherwise, redshift
+    will be used with hubble relation
+    
+    autocosmo determines if the cosmological calculation should be
+    automatically performed for z > 0.1 . if False, the only the basic
+    calculation will be done.  if 'warn,' a warning will be issued
+    """
     from math import log10
+    from astro.coords import cosmo_z_to_dist
+    from astro.constants import H0,c
+    
+    c=c/1e5 #km/s
+    cosmo=False
+    
+    if intype == 'distance':
+        z=x*H0/c
+        if dx is not None:
+            dz = dx*H0/c
+        else:
+            dz = None
+    elif intype == 'redshift':
+        z=x
+        x=z*c/H0
+        if dx is not None:
+            dz = dx
+            dx = dz*c/H0
+        else:
+            dz = None
+    else:
+        raise ValueError('unrecognized intype')
+    
+    if autocosmo and z > 0.1:
+        if autocosmo == 'warn':
+            from warnings import warn
+            warn('redshift < 0.1 - cosmological calculation should be used')
+        else:
+            cosmo=True
+    if cosmo:
+        return cosmo_z_to_dist(z,dz,4)
+    elif dx is None:
+        return 5*log10(x)-5
+    else:
+        dm = 5*log10(x)-5
+        ddm = 5*dx/x/log(10)
+        return dm,ddm,ddm
+    
+def distance_from_modulus(self,dm):
+    """
+    compute the distance given the specified distance modulus.  Currently
+    non-cosmological
+    """
+    return 10**(1+dm/5.0)
+    
+
+def abs_mag(appmag,x,intype='distance',autocosmo=True):
+    """
+    computes absolute magnitude from apparent magnitude and distance.
+    See astro.phot.distance_modulus for details on arguments
+    """
     from operator import isSequenceType
-    """
-    for H=0, will treat z as a distance in pc
-    """
-    if H==0:
-        H=2.99792E11
-    if isSequenceType(appmag):
-        [abs_mag(elem,z,H) for elem in appmag]
-    distmod=5*log10(z*2.99792/H)+50
+    if isSequenceType(absmag):
+        absmag=np.array(absmag)
+    
+    distmod = distance_modulus(x,intype,None,autocosmo)
     return appmag-distmod
 
-def app_mag(absmag,z,H=73.5):    
+def app_mag(absmag,x,intype='distance',autocosmo=True):
     """
-    for H=0, will treat z as a distance in pc
+    computes apparent magnitude from absolute magnitude and distance.
+    See astro.phot.distance_modulus for details on arguments
     """
-    from math import log10
-    
-    if H==0:
-        H=2.99792E11
-    if hasattr(absmag,"__iter__"):
-        [app_mag(elem,z,H) for elem in absmag]
-    distmod=5*log10(z*2.99792/H)+50
+    from operator import isSequenceType
+    if isSequenceType(appmag):
+        appmag=np.array(appmag)
+        
+    distmod = distance_modulus(x,intype,None,autocosmo)
     return absmag+distmod
 
 def rh_to_surface_brightness(totalm,rh):
@@ -260,3 +317,4 @@ def cosmo_surface_brightness_correction(Sobs,z,mag=True):
         return Sobs-10*np.log10(1+z)
     else:
         return Sobs*(1+z)**4
+        
