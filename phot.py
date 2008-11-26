@@ -135,7 +135,6 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     automatically performed for z > 0.1 . if False, the only the basic
     calculation will be done.  if 'warn,' a warning will be issued
     """
-    from math import log10
     from astro.coords import cosmo_z_to_dist
     from astro.constants import H0,c
     
@@ -143,9 +142,9 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     cosmo=False
     
     if intype == 'distance':
-        z=x*H0/c
+        z=x/1e6*H0/c
         if dx is not None:
-            dz = dx*H0/c
+            dz = dx/1e6*H0/c
         else:
             dz = None
     elif intype == 'redshift':
@@ -159,7 +158,7 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     else:
         raise ValueError('unrecognized intype')
     
-    if autocosmo and z > 0.1:
+    if autocosmo and np.any(z) > 0.1:
         if autocosmo == 'warn':
             from warnings import warn
             warn('redshift < 0.1 - cosmological calculation should be used')
@@ -168,10 +167,10 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     if cosmo:
         return cosmo_z_to_dist(z,dz,4)
     elif dx is None:
-        return 5*log10(x)-5
+        return 5*np.log10(x)-5
     else:
-        dm = 5*log10(x)-5
-        ddm = 5*dx/x/log(10)
+        dm = 5*np.log10(x)-5
+        ddm = 5*dx/x/np.log(10)
         return dm,ddm,ddm
     
 def distance_from_modulus(self,dm):
