@@ -378,7 +378,7 @@ class FunctionModel(object):
     def bootstrapFits(self,x,y,n=250,prefit=True,plothist=False,**kwargs):
         """
         uses the fitData function to fit the function and then uses the
-        "bootstrap" technique to estimate errors - that is, use shuffling
+        "bootstrap" technique to estimate errors - that is, use sampling
         w/replacement
         
         x and y are the data to fit, n is the number of iterations to perform,
@@ -424,7 +424,7 @@ class FunctionModel(object):
     def fitMCMC(self,x,y):
         raise NotImplementedError
         
-    def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',powerx=False,powery=False,deriv=None,data=None,*args,**kwargs):
+    def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',powerx=False,powery=False,deriv=None,data=None,fit = False,*args,**kwargs):
         """
         (Assumes 1D)
         plot the model function from lower to upper with n samples
@@ -436,6 +436,7 @@ class FunctionModel(object):
         extra args and kwargs go into the matplotlib plot function
         
         data is either an x,y pair of data points or a dictionary of kwargs into scatter
+        fit determines if the model should be fit to the data before plotting.
         
         logplot determines whether or not to plot on a log scale, and powerx and
         poweru determine if the model points should be used as powers (base 10)
@@ -446,6 +447,13 @@ class FunctionModel(object):
         
         if (lower is None or upper is None) and data is None:
             raise ValueError("Can't choose limits for plotting without specifying or providing data")
+        if fit:
+            from operator import isMappingType
+            if not isMappingType(fit):
+                fit = {}
+            if data is None:
+                raise ValueError("Need to supply data to perform fit before plot")
+            self.fitdata(*data,**fit)
         if data is not None:
             if lower is None:
                 lower=np.min(data[0])
@@ -751,6 +759,7 @@ class CompositeModel(FunctionModel):
             i=d[m]
             d[m]=i+1
             mname=m.__name__.replace('Model','').replace('model','')
+            ps=[]
             for p in m.params:
                 ps.append(('%s_%i_%s'%(mname,i+1,p),getattr(m,p)))
         return dict(ps)
