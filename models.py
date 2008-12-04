@@ -961,7 +961,7 @@ class BlackbodyModel(FunctionModel):
     
     inunit can be set to a variety of energy, wavelength, or frequency options
     """
-    from astro.constants import h,c,kb
+    from .constants import h,c,kb
     
     def __init__(self,inunit='wl',outunit='erg'):
         self.inunit = inunit
@@ -1018,7 +1018,7 @@ class BlackbodyModel(FunctionModel):
             self.f = self._fnu
             self._scaling=1e12
         elif u == 'e' or inunit == 'energy-eV':
-            from astro.constants import ergperev
+            from .constants import ergperev
             self._inunit = 'energy-eV'
             self.f = self._fen
             self._scaling=ergperev
@@ -1043,7 +1043,7 @@ class BlackbodyModel(FunctionModel):
             self._outunit='J'
             self._enscale=1e-7
         elif 'ev' in u or 'electronvolt' in u:
-            from astro.constants import ergperev
+            from .constants import ergperev
             self._outunit='eV'
             self._enscale=1/ergperev
         elif 'surface brightness' in u or 'mag' in u or 'sb' in u:
@@ -1243,7 +1243,7 @@ class SchecterModel(FunctionModel):
     
 class SchecterModelLum(SchecterModel):
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
-        from astro.phot import lum_to_mag as l2m
+        from .phot import lum_to_mag as l2m
         M,Mstar=l2m(L),l2m(Lstar)
         return SchecterModel.f(self,M,Mstar,alpha,phistar)
     #TODO:check to make sure this is actually the right way
@@ -1266,15 +1266,15 @@ class DeVauculeursModel(SersicModel):
         return SersicModel.f(self,r,A,rs,4)
 
 class MaxwellBoltzmannModel(FunctionModel):
-    from astro.constants import me #electron
+    from .constants import me #electron
     def f(self,v,T=273,m=me):
-        from astro.constants import kb,pi
+        from .constants import kb,pi
         return (m/(2*pi*kb*T))**0.5*np.exp(-m*v*v/2/kb/T)
     
 class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
-    from astro.constants import me #electron
+    from .constants import me #electron
     def f(self,v,T=273,m=me):
-        from astro.constants import kb,pi
+        from .constants import kb,pi
         return 4*pi*v*v*(m/(2*pi*kb*T))**1.5*np.exp(-m*v*v/2/kb/T)
     
 #register all Models in this module

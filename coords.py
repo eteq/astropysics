@@ -587,7 +587,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     from scipy.integrate import quad as integrate
     from numpy import array,vectorize,abs
     
-    from astro.constants import H0,omegaM,omegaL,omegaR,c
+    from .constants import H0,omegaM,omegaL,omegaR,c
     
     c=c/1e5 #convert to km/s
     if type(disttype) == str:
@@ -664,7 +664,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         d=c*intres*3.26163626e-3
         #d=chi*3.08568025e19/24/3600/365.25e9
     elif disttype == 4:
-        from astro.phot import distance_modulus
+        from .phot import distance_modulus
         d=distance_modulus(c*intres/a0*1e6,autocosmo=False)
         
     else:
@@ -705,7 +705,7 @@ def cosmo_z_to_H(z,zerr=None):
     """
     calculate the hubble constant as a function of redshift for the selected
     """
-    from astro.constants import get_cosmology
+    from .constants import get_cosmology
     c = get_cosmology()
     if zerr is None:
         return c.H(z)

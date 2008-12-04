@@ -135,8 +135,8 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     automatically performed for z > 0.1 . if False, the only the basic
     calculation will be done.  if 'warn,' a warning will be issued
     """
-    from astro.coords import cosmo_z_to_dist
-    from astro.constants import H0,c
+    from .coords import cosmo_z_to_dist
+    from .constants import H0,c
     
     c=c/1e5 #km/s
     cosmo=False

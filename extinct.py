@@ -14,7 +14,7 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     if the input lineflux is None (or NaN but NOT False or 0) , Alambda is returned instead
     """
     from numpy import array,logical_and,logical_or,polyval,log10,isscalar,where
-    from astro.phot import bandwl
+    from .phot import bandwl
     
     if exttype=='LMC' or exttype=='SMC':
         raise NotImplementedError 
@@ -147,7 +147,7 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
         
     if outlambda:
         if type(outlambda) == str:
-            from astro.phot import bandwl
+            from .phot import bandwl
             outlambda=bandwl[outlambda]
         return extinction_correction(None,outlambda,EBmV,Rv)
     else:
@@ -218,6 +218,6 @@ def get_dust_gal(dustmapfn,long,lat,interpolate=True):
         
     
 def get_dust_radec(dustmapfn,ra,dec,interpolate=True):
-    from astro.coords import equatorial_to_galactic_flt
+    from .coords import equatorial_to_galactic_flt
     l,b=equatorial_to_galactic_flt(ra,dec,interpolate)
     return get_dust_gal(dustmapfn,l,b)

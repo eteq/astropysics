@@ -1,7 +1,7 @@
 from __future__ import division
 from math import pi
 import numpy as np
-from astro.coordinates import AngularPosition,AngularCoordinate,galactic_to_equatorial
+from .coordinates import AngularPosition,AngularCoordinate,galactic_to_equatorial
 
 class MeasuredValue(object):    
     __slots__ = ('__val','__err','__src')
