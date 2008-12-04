@@ -121,7 +121,7 @@ class FunctionModel(object):
     should be accessed with self.pardict, self.parvals, or by properties/name :
     *integrate(self,lower,upper)
     *derivative(self,x,dx)
-    *_fitCustom(x,y,fixedpars=(),**kwargs)
+    *_customFit(x,y,fixedpars=(),**kwargs)
     
     The metaclass generates the following properties:
     Parameters for each of the inputs of the function (other than self/cls and the first)
@@ -196,8 +196,8 @@ class FunctionModel(object):
         
         kwargs go into the fitting function (don't alter 'full_output')
         
-        returns the vector of the best fit parameters, and sets the parameters if
-        updatepars is True
+        returns the vector of the best fit parameters, and sets the parameters 
+        if updatepars is True
         
         the full output is available is self.lastFit
         
@@ -207,14 +207,13 @@ class FunctionModel(object):
         
         if method is None:
             #TODO: figure out a less hackish way than matching the docs
-            method = 'leastsq' if self._fitCustom.__doc__ is FunctionModel._fitCustom.__doc__ else 'custom'
+            method = 'leastsq' if self._customFit.__doc__ is FunctionModel._customFit.__doc__ else 'custom'
             
         if x.shape != y.shape:
             raise ValueError("x and y don't match")
         
         if timer:
             raise NotImplementedError
-        
         
         ps=list(self.params)
         v=list(self.parvals) #initial guess
@@ -233,7 +232,15 @@ class FunctionModel(object):
             f=lambda x,v:self.f(x,*v)
         
         if method == 'custom':
-            res = self._fitCustom(x,y,fixedpars=fixedpars,**kwargs) 
+            res = self._customFit(x,y,fixedpars=fixedpars,**kwargs) 
+            #ensure that res is at least a tuple with parameters in elem 0
+            from operator import isSequenceType
+            if not isSequenceType(res[0]):
+                res = (res,)
+#            try:
+#                res[0][0] 
+#            except:
+#                res = (res,)
         elif method == 'leastsq':
             if 'frac' in contraction:
                 g=lambda v,x,y:1-f(x,v)/y
@@ -314,7 +321,7 @@ class FunctionModel(object):
         
         return v
     
-    def _fitCustom(x,y,fixedpars=(),**kwargs):
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
         Must be overridden to use 'custom' fit technique
         
@@ -602,7 +609,7 @@ class LinearModel(FunctionModel):
     def f(self,x,m=1,b=0):
         return m*x+b
     
-    def _customFit(x,y,fixedpars=(),**kwargs):
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
         does least-squares fit on the x,y data
         
@@ -610,9 +617,7 @@ class LinearModel(FunctionModel):
         or leave them free by having fixint or fixslope be False or None
         
         lastFit stores (m,b,dm,db,dy)
-        """
-        raise NotImplementedError('Linear not done yet')
-        
+        """  
         fixslope = 'm' in fixedpars
         fixint = 'b' in fixedpars
         
@@ -757,7 +762,7 @@ class CompositeModel(FunctionModel):
     pardict = property(_getPardict,_setPardict)
         
     def f(self,x):
-        raise RuntimeException('Placeholder function - this should never be reachable')
+        raise RuntimeError('Placeholder function - this should never be reachable')
     def __f(self,x,*args):
         #TODO:optimize
         vals=[]
@@ -774,7 +779,7 @@ class CompositeModel(FunctionModel):
         
 #<----------------------Module functions -------------->  
 def generate_composite_model(models,operation):
-    return CompsiteModel(models=models,operation=op)
+    return CompsiteModel(models=models,operation=operation)
 
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
@@ -1013,6 +1018,7 @@ class BlackbodyModel(FunctionModel):
             self.f = self._fnu
             self._scaling=1e12
         elif u == 'e' or inunit == 'energy-eV':
+            from astro.constants import ergperev
             self._inunit = 'energy-eV'
             self.f = self._fen
             self._scaling=ergperev
@@ -1082,7 +1088,7 @@ class BlackbodyModel(FunctionModel):
         determines the radius of a spherical blackbody at the specified distance
         assuming the flux is given by the model at the given temperature
         """
-        return (A*distance*distance/pi)**0.5 
+        return (self.A*distance*distance/pi)**0.5 
     def getFluxdistance(self,radius):
         """
         determines the distance to a spherical blackbody of the specified radius
@@ -1130,7 +1136,6 @@ class SplineModel(FunctionModel):
     """
     this uses the scipy.interpolate.UnivariateSpline class as a model for the function
     """
-    from scipy.interpolate import UnivariateSpline
     def __init__(self,xdata=None,ydata=None,degree=3):
         from warnings import warn
         if xdata is None and ydata is None:
@@ -1146,22 +1151,26 @@ class SplineModel(FunctionModel):
         self._olds=None
         self.degree = degree
             
-    def _fitCustom(self,x,y,fixedpars=(),**kwargs):
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
         just fits the spline with the current s-value - if s is not changed,
         it will execute very quickly after
         """
+        from scipy.interpolate import UnivariateSpline
+        
         self.spline = UnivariateSpline(self._x,self._y,s=self.s,k=self.degree)
         self._olds = self.s
-        return np.array([s])
+        return np.array([self.s])
         
-    def fitData(x,y,*args,**kwargs):
+    def fitData(self,x,y,*args,**kwargs):
         self._x=x
         self._y=y
         self._olds=None
         return FunctionModel.fitData(x,y,*args,**kwargs)
     
     def f(self,x,s=2):
+        from scipy.interpolate import UnivariateSpline
+        
         if self._olds != s:
             self.spline = UnivariateSpline(self._x,self._y,s=s,k=self.degree)
             self._olds = s
@@ -1230,7 +1239,7 @@ class SchecterModel(FunctionModel):
     def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
         from numpy import log,exp
         x=10**(0.4*(Mstar-M))
-        return 0.4*log10(10)*phistar*(x**(1+alpha))*exp(-x)
+        return 0.4*np.log10(10)*phistar*(x**(1+alpha))*exp(-x)
     
 class SchecterModelLum(SchecterModel):
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
@@ -1250,7 +1259,7 @@ class ExponentialDiskModel(SersicModel):
     def f(self,rz,A=1,rs=1,zs=.3):
         r=rz[0]
         z=rz[1]
-        return SersicModel.f(self,r,A,rs,1)*exp(np.abs(z)/zs)
+        return SersicModel.f(self,r,A,rs,1)*np.exp(np.abs(z)/zs)
     
 class DeVauculeursModel(SersicModel):
     def f(self,r,A=1,rs=1):

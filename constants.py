@@ -66,14 +66,14 @@ class Cosmology(object):
     
     def __init__(self,*args,**kwargs):
         ps=self._params_
-        
     h = property(lambda self:self.H0/100.0)
     h7 = h70 = property(lambda self:self.H0/70.0)
     __params_cache=None
     def _getParams(self):
         if self.__params_cache is None:
             import inspect
-            pars= [cls._params_ for cls in inspect.getmro(self.__class__) if hasattr(cls,'_params_')]
+            pars= [cls._params_ for cls in inspect.getmro(self.__class__) if 
+                    hasattr(cls,'_params_')]
             s=set()
             for p in pars:
                 s.update(p)
@@ -124,7 +124,7 @@ class MLRCosmology(Cosmology):
         M,L,R=self.omegaM,self.omegaL,self.omegaR
         K=1-M-L-R
         a=1/(1+z)
-        H=H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
+        H=self.H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
         
     
 class WMAP5Cosmology(MLRCosmology):

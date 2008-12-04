@@ -187,8 +187,8 @@ def abs_mag(appmag,x,intype='distance',autocosmo=True):
     See astro.phot.distance_modulus for details on arguments
     """
     from operator import isSequenceType
-    if isSequenceType(absmag):
-        absmag=np.array(absmag)
+    if isSequenceType(appmag):
+        appmag=np.array(appmag)
     
     distmod = distance_modulus(x,intype,None,autocosmo)
     return appmag-distmod
@@ -199,8 +199,8 @@ def app_mag(absmag,x,intype='distance',autocosmo=True):
     See astro.phot.distance_modulus for details on arguments
     """
     from operator import isSequenceType
-    if isSequenceType(appmag):
-        appmag=np.array(appmag)
+    if isSequenceType(absmag):
+        absmag=np.array(absmag)
         
     distmod = distance_modulus(x,intype,None,autocosmo)
     return absmag+distmod
@@ -316,4 +316,3 @@ def cosmo_surface_brightness_correction(Sobs,z,mag=True):
         return Sobs-10*np.log10(1+z)
     else:
         return Sobs*(1+z)**4
-        
