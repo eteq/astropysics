@@ -857,6 +857,15 @@ class GaussianModel(FunctionModel):
         tsq=(x-mu)*2**-0.5/sig
         return A*np.exp(-tsq*tsq)*(2*pi)**-0.5/sig
     
+    def _getPeak(self):
+        return self(self.mu)[0]
+    
+    def _setPeak(self,peakval):
+        self.A = 1
+        self.A = peakval/self._getPeak()
+        
+    peak=property(_getPeak,_setPeak)
+        
     def derivative(self,x,dx=1):
         sig=self.sig
         return self(x)*-x/sig/sig
@@ -921,14 +930,26 @@ class LorentzianModel(FunctionModel):
     def f(self,x,A=1,gamma=1,mu=0):
         return gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
     
+    def _getPeak(self):
+        return self(self.mu)[0]
+    
+    def _setPeak(self,peakval):
+        self.A = 1
+        self.A = peakval/self._getPeak()
+        
+    peak=property(_getPeak,_setPeak)
+    
 class VoigtModel(GaussianModel,LorentzianModel):
     """
     Convolution of a Gaussian and Lorentzian profile
     """
-    def f(self,x,A=1,sig=1,gamma=1,mu=0):
+    def f(self,x,A=1,sig=0.5,gamma=0.5,mu=0):
         from scipy.special import wofz
-        w=wofz((x+1j*gamma)*2**-0.5/sig)
-        return A*w.real*(2*pi)**-0.5/sig
+        if sig == 0:
+            return LorentzianModel.f(self,x,A,sig,mu)
+        else:
+            w=wofz(((x-mu)+1j*gamma)*2**-0.5/sig)
+            return A*w.real*(2*pi)**-0.5/sig
     
 class ExponentialModel(FunctionModel):
     """
@@ -1105,17 +1126,38 @@ class BlackbodyModel(FunctionModel):
         """
         return (pi*radius*radius/self.A)**0.5
     
+    def _getPeak(self):
+        h,k = self.h,self.kb
+        if self.f == self._flambda:
+            b = .28977685 #cm * K
+            peakval = b/self.T/self._scaling
+        elif self.f == self._fnu:
+            a=2.821439 #constant from optimizing BB function
+            peakval=a/h*k*self.T/self._scaling
+        elif self.f == self._fen:
+            raise NotImplementedError
+        else:
+            raise RuntimeError('Should never see this - bug in BB code')
+        return self(peakval)[0]
+    
+    def _setPeak(self,peakval):
+        self.A = 1
+        self.A = peakval/self._getPeak()
+    
+    peak=property(_getPeak,_setPeak)
+    
     def wienDisplacementLaw(self,peakval,updatepars=True):
         """
         uses the Wien Displacement Law to calculate the temperature
         """
         h,k = self.h,self.kb
         if self.f == self._flambda:
-            b = 2.8977685e7 #angstroms K
-            T=b/self._scaling*1e-8*peakval
+            b = .28977685 #cm * K
+            T = b/peakval/self._scaling
         elif self.f == self._fnu:
             a=2.821439 #constant from optimizing BB function
-            T=self._scaling*peakval*h/a/k
+            peakval=a/h*k*self.T/self._scaling
+            T=peakval*self._scaling*h/a/k
         elif self.f == self._fen:
             raise NotImplementedError
         else:
