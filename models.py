@@ -453,7 +453,7 @@ class FunctionModel(object):
                 fit = {}
             if data is None:
                 raise ValueError("Need to supply data to perform fit before plot")
-            self.fitdata(*data,**fit)
+            self.fitData(*data,**fit)
         if data is not None:
             if lower is None:
                 lower=np.min(data[0])
@@ -1181,6 +1181,22 @@ class BlackbodyModel(FunctionModel):
         sigma = 2*pi**5*kb**4*h**-3*c**-2/15
         return area*sigma*T**4
     
+class BlackbodyOffsetModel(FunctionModel):
+    """
+    This is a Planck spectrum with y and x offsets
+    """
+    
+    def f(self,x,A=1,T=5800,xoff=0,yoff=0):
+        raise NotImplementedError
+    
+    def _flambda(self,x,A=1,T=5800,xoff=0,yoff=0):
+        return BlackbodyOffsetModel._flambda(self,x+xoff,A,T)+yoff
+    
+    def _fnu(self,x,A=1,T=5800,xoff=0,yoff=0):
+        return BlackbodyOffsetModel._fnu(self,x+xoff,A,T)+yoff
+    
+    def _fen(self,x,A=1,T=5800,xoff=0,yoff=0):
+        return BlackbodyOffsetModel._fen(self,x+xoff,A,T)+yoff
     
     
 class SplineModel(FunctionModel):
