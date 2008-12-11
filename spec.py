@@ -17,8 +17,8 @@ class Flux(object):
         
         self._type,self._unit,self._scaling = self._strToType(type)
         
-        self._x = x/self._scaling
-        self._flux = flux/self._scaling
+        self._x = x
+        self._flux = flux
         
     def _strToType(self,typestr):
         u = typestr.lower()
@@ -59,34 +59,41 @@ class Flux(object):
         tyep,unit = val.split('-')
         return type,unit,scaling
         
-    def _convertType(self,oldtype,newtype):
+    def _convertType(self,oldtype,newtype,oldscale,newscale):
         from .constants import c,h
+        
+        x,flux = self._x/oldscale,self._flux*oldscale # convert to cgs
     
-        if newtype == 'energy':
-            if oldtype == 'energy':
+        if newtype == 'energy': #TODO:check
+            if oldtype == 'energy': 
                 pass
             elif oldtype == 'wavelength':
-                raise NotImplementedError
+                x = h*c/x
+                flux = x*x*flux/c/h #convert to fnu and divide by h
+                
             elif oldtype == 'frequency':
-                raise NotImplementedError
+                x = h*x
+                flux = flux/h
             else:
                 raise ValueError('unrecognized oldtype')
         elif newtype == 'wavelength':
-            if oldtype == 'energy':
-                raise NotImplementedError
+            if oldtype == 'energy': #TODO:check
+                x = h*c/x
+                flux = x*x*flux*h/c #convert to fnu and then to  by h
             elif oldtype == 'wavelength':
                 pass
             elif oldtype == 'frequency':
-                self._x = c/self._x
-                self._flux = self._x*self._x*self._flux/c #flambda = fnu*nu^2/c
+                x = c/x
+                flux = x*x*flux/c #flambda = fnu*nu^2/c
             else:
                 raise ValueError('unrecognized oldtype')
         elif newtype == 'frequency':
-            if oldtype == 'energy':
-                raise NotImplementedError
+            if oldtype == 'energy': #TODO:check
+                x = x/h
+                flux = flux*h
             elif oldtype == 'wavelength':
-                self._x = c/self._x
-                self._flux = self._x*self._x*self._flux/c #fnu = flambda*lambda^2/c
+                x = c/x
+                flux = x*x*flux/c #fnu = flambda*lambda^2/c
             elif oldtype == 'frequency':
                 pass
             else:
@@ -94,13 +101,15 @@ class Flux(object):
         else:
             raise ValueError('unrecognized newtype')
         
+        return x*newscale,flux/newscale
+        
     def _getFlux(self):
-        return self._flux.copy()*self._scaling
+        return self._flux.copy()
     def _setFlux(self,flux):
         flux = np.array(flux)
         if flux.shape != self._x.shape:
             raise ValueError("new flux doesn't match x shape")
-        self._flux = flux/self._scaling
+        self._flux = flux
     flux = property(_getFlux,_setFlux)
     
     def _getNFlux(self):
@@ -114,9 +123,9 @@ class Flux(object):
     nflux = property(_getNFlux,_setNFlux)
     
     def _getX(self):
-        return self._x.copy()*self._scaling
+        return self._x.copy()
     def _setX(self,x):
-        x = np.array(x)/self._scaling
+        x = np.array(x)
         if x.shape != self._flux.shape:
             raise ValueError("new x doesn't match flux shape")
         self._x = x
@@ -127,8 +136,10 @@ class Flux(object):
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToType(typestr)
         
-        self._convertType(self._type,newtype)
+        x,flux = self._convertType(self._type,newtype,self._scaling,newscaling)
         
+        self._x = x
+        self._flux = flux
         self._type = newtype
         self._unit = newunit
         self._scaling = newscaling
