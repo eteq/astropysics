@@ -1,0 +1,17 @@
+Astropysics
+===========
+
+A python library for astronomy/astrophysics calculations and data analysis.
+
+http://physics.uci.edu/~etolleru/software.html
+
+Installation
+------------
+
+If you have numpy () and scipy () installed, just do
+
+python setup.py install
+
+On some linux distributions, this may need to be 
+
+sudo python setup.py install
