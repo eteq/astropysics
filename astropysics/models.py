@@ -1315,12 +1315,16 @@ class SchecterModelLum(SchecterModel):
         return SchecterModel.f(self,M,Mstar,alpha,phistar)
     #TODO:check to make sure this is actually the right way
         
-        
-class SersicModel(FunctionModel):
+class EinastoModel(FunctionModel):
+    def f(self,r,A=1,rs=1,alpha=.2):
+        return A*np.exp(-(r/rs)**alpha)
+
+class SersicModel(EinastoModel):
     #TODO:better normalizations and rs
     def f(self,r,A=1,rs=1,n=2):
-        return A*np.exp(-(r/rs)**(1/n))
-EinastoModel=SersicModel
+        return EinastoModel.f(self,r,A,rs,1/alpha)
+    
+
 
 class ExponentialDiskModel(SersicModel):
     def f(self,rz,A=1,rs=1,zs=.3):
