@@ -173,7 +173,7 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
         ddm = 5*dx/x/np.log(10)
         return dm,ddm,ddm
     
-def distance_from_modulus(self,dm):
+def distance_from_modulus(dm):
     """
     compute the distance given the specified distance modulus.  Currently
     non-cosmological

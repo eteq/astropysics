@@ -144,3 +144,91 @@ class Flux(object):
         self._unit = newunit
         self._scaling = newscaling
     unit = property(_getUnit,_setUnit)
+    
+    def smooth(self,width=1,filtertype='gaussian',replace=False):
+        """
+        smooths the flux in this object by a filter of the given filtertype 
+        (can be either 'gaussian' or 'boxcar')
+        
+        if replace is True, the flux in this object is replaced by the smoothed flux
+        
+        returns smoothedflux
+        """
+        import scipy.ndimage as ndi 
+        
+        if filtertype == 'gaussian':
+            filter = ndi.gaussian_filter1d
+        elif filtertype == 'boxcar' or type == 'uniform':
+            filter = ndi.uniform_filter1d
+        else:
+            raise ValueError('unrecognized filter type %s'%filtertype)
+        
+        smoothed = filter(self._flux,width)
+        
+        if replace:
+            self.flux = smoothed
+        
+        return smoothed
+    
+    def plot(self,fmt='-',clf=True,log=False,**kwargs):
+        import matplotlib.pyplot as plt
+        
+        if clf:
+            plt.clf()
+        
+        if log:
+            plot = plt.semilogx
+        else:
+            plot = plt.plot
+        return plot(self.x,self.flux,fmt,**kwargs)
+
+def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing=None):
+    """
+    extraction type can 'horne' or 'boxcar'
+    
+    returns Flux object with ivar, [bdata,rdata]
+    """
+    import pyfits
+    if 'spec1d' not in fn or 'fits' not in fn:
+        raise ValueError('loaded file must be a 1d spectrum from deep pipeline')
+    
+    if extraction == 'horne':
+        extname = 'HORNE'
+    elif extraction == 'boxcar':
+        extname = 'BXSPF'
+    else:
+        raise ValueError('unrecgnized extraction type %s'%extraction)
+    
+    f=pyfits.open(fn)
+    try:
+        extd = dict([(f[i].header['EXTNAME'],i) for i in range(1,len(f))])
+        bi,ri = extd[extname+'-B'],extd[extname+'-R']
+        bd,rd=f[bi].data,f[ri].data
+        x=np.concatenate((bd.LAMBDA[0],rd.LAMBDA[0]))
+        flux=np.concatenate((bd.SPEC[0],rd.SPEC[0]))
+        ivar=np.concatenate((bd.IVAR[0],rd.IVAR[0]))
+        sky=np.concatenate((bd.SKYSPEC[0],rd.SKYSPEC[0]))
+        
+        changei = len(bd.LAMBDA[0])
+        
+        fobj = Flux(x,flux)
+        fobj.ivar = ivar
+        fobj.sky = sky
+        
+        if smoothing:
+            fobj.smooth(smoothing,replace=True)
+        
+        if plot:
+#            from operator import isMappingType
+#            if not isMappingType(plot):
+#                plot={}
+            from matplotlib import pyplot as plt
+            plt.plot(fobj.x[:changei],fobj.flux[:changei],'-b')
+            plt.plot(fobj.x[changei:],fobj.flux[changei:],'-r')
+        
+        if retdata:
+            return fobj,bd,rd
+        else:
+            return fobj
+    finally:
+        f.close()
