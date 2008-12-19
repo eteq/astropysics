@@ -20,16 +20,20 @@ Re=6.371e8
 De=1.49597887e13
 kb=1.3807e-16 
 #sigma=5.6704e-5
-c=2.99792458e10
+c=2.99792458e10 #exact
 h=6.626068E-27
-
 
 #<-------------------------------Conversions----------------------------------->
 ergperev=1.60217646e-12
-secperyr=3.15576926e7
+secperday=86400 #IAU standard
+secperyr=365.25*secperday#3.15576926e7
 secpergyr=secperyr*1e9
 pcpercm=1/3.08568025e18
 pcperly=1/3.26
+msolar=1.98892e33 #grams
+mearth=5.9742e27 #grams
+mjup=1.8986e30 #grams
+
 
 #TODO:rethink flux units and adapt to BlackbodyModel
 def flambda_to_fnu_l(flambda,lamb):
