@@ -1,6 +1,11 @@
 #!/usr/bin/env python
 
-from distutils.core import setup
+try:
+    from setuptools import setup
+    stls=True
+except ImportError:
+    from distutils.core import setup
+    stls=False
 
 setup(name='Astropysics',
       version='0.1',

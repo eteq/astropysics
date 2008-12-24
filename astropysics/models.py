@@ -421,8 +421,55 @@ class FunctionModel(object):
         
         return d
         
-    def fitMCMC(self,x,y):
-        raise NotImplementedError
+    def getMCMC(self,x,y,priors={},datasig=None):
+        """
+        Note that this function requires PyMC (http://code.google.com/p/pymc/)
+        
+        To specify the priors, either supply pymc.Stochastric objects, a 2-tuple 
+        (uniform lower and upper), a scalar > 0 (gaussian w/ the center given by 
+        the current value and sigma provided by the scalar), or 0 (poisson with 
+        k set by the current value)
+        
+        Any missing priors will raise a ValueError
+        
+        datasig is the sigma for the data model - if None, the std will be
+        used
+        
+        returns a pymc.MCMMC object for Markov Chain Monte Carlo sampling
+        """
+        import pymc
+        from operator import isSequenceType
+        
+        if set(priors.keys()) != set(self.params):
+            raise ValueError("input priors don't match function params")
+        
+        d={}
+        for k,v in priors.iteritems():
+            if isinstance(v,pymc.StochasticBase):
+                d[k]=v
+            elif isSequenceType(v):
+                if len(v) == 2:
+                    d[k]=pymc.distributions.Uniform(k,v[0].v[1])
+                else:
+                    raise ValueError("couldn't understand sequence "+str(v) )
+            elif v > 0:
+                d[k] = pymc.distributions.Normal(k,self.pardict[k],1.0/v/v)
+            elif v == 0:
+                d[k] = pymc.distributions.Poisson(k,self.pardict[k])
+            else:
+                raise ValueError("couldn't interpret prior "+str(v))
+        
+        funcdict=dict(d)    
+        funcdict['x']=x
+        funcdet=pymc.Deterministic(name='f',eval=self.f,parents=funcdict,doc="FunctionModel function")
+        d['f'] = funcdet
+        
+        if datasig is None:
+            datasig = np.std(y)
+        datamodel = pymc.distributions.Normal('data',mu=funcdet,tau=1/datasig/datasig,oberved=True,data=y)
+        d['datamodel']=datamodel
+        
+        return pymc.MCMC(d)
         
     def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',powerx=False,powery=False,deriv=None,data=None,fit = False,*args,**kwargs):
         """

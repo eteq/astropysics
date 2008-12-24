@@ -30,13 +30,15 @@ class Flux(object):
         if ivar is None and err is None:
             err = np.zeros_like(flux)
         elif ivar is not None:
-            if ivar.shape != flux.shape:
-                raise ValueError("ivar and flux don't match shapes")
             err = np.array(ivar,copy=False)**-0.5
+            if err.shape != flux.shape:
+                raise ValueError("ivar and flux don't match shapes")
+            
         elif err is not None:
+            err=np.array(err,copy=copy)
             if err.shape != flux.shape:
                 raise ValueError("err and flux don't match shapes")
-            err=np.array(err,copy=copy)
+            
         else:
             raise ValueError("can't set both err and ivar at the same time")
         
@@ -220,15 +222,15 @@ class Flux(object):
         else:
             return dx
         
-    def getDlogx(self,mean=True):
+    def getDlogx(self,mean=True,logbase=10):
         """
         get the logarithmic spacing of the x-axis, which is always 1 element
         shorter than x
         
         if mean, returns the mean of the spacing
         """
-        x = self._x
-        dlogx = np.convolve(x,(1,-1),mode='valid')/x[1:]
+        x = np.log(self._x)/np.log(logbase)
+        dlogx = np.convolve(x,(1,-1),mode='valid')
         if mean:
             return dlogx.mean()
         else:
@@ -382,9 +384,11 @@ class Flux(object):
         return plot(self.x,self.flux,fmt,**kwargs)
     
 
-def zfind(object,templates,lags=True,dochecks = True):
+def zfind(object,templates,lags=True,dochecks = True,verbose = False):
     """
-    Computes the template with the best-fitting chi-squared
+    Computes the lag with the best-fitting chi-squared over all the templates
+    
+    templates should be nstars X npix 
     
     lags specify the possible pix-lags to try - if True, it will try all 
     possibilities, if a sequence of numbers, will try all supplied lags, and 
@@ -393,14 +397,14 @@ def zfind(object,templates,lags=True,dochecks = True):
     dochecks makes sure the spectra are all logarithmically spaced and interpolates
     if necessary
     
-    returns bestz,chi2s,zs
+    returns bestz,chi2s,zs,coeffs(nzs X nstars),dofs
     """
     from operator import isSequenceType,isMappingType
     
     if dochecks:
         from warnings import warn
         
-        if isinstance(object,Flux):
+        if hasattr(object,'flux'): #allows for type-matching
             pass
         elif isSequenceType(object):
             object = Flux(*object)
@@ -419,11 +423,14 @@ def zfind(object,templates,lags=True,dochecks = True):
         elif isSequenceType(templates):
             temptemplates=[]
             for t in templates:
-                if isinstance(object,Flux):
+                if isinstance(t,Flux):
                     temptemplates.append(t)
-                elif isSequenceType(object):
-                    temptemplates.append(Flux(*t))
-                elif isMappingType(object):
+                elif isSequenceType(t):
+                    if len(t) == len(object): #assume this is a flux array
+                        temptemplates.append(Flux(object.x,t))
+                    else:
+                        temptemplates.append(Flux(*t))
+                elif isMappingType(t):
                     temptemplates.append(Flux(**t))
                 else:
                     raise TypeError("couldn't interpret input object")
@@ -437,21 +444,87 @@ def zfind(object,templates,lags=True,dochecks = True):
                 t.logify()
         #TODO:align templates to object - for now just assume its right
     
-    x = object.x
+    dlogx = object.getDlogx()
         
     objflux = object.flux
-    ierr = 1/object.err
-    tempfluxes=np.array([t.flux for t in templates])
+    ivar = object.ivar
+    infi=np.isinf(ivar)
+    if all(ivar):
+        ivar[infi]=1 #equally weight
+    else:
+        ivar[infi]= 0 #ignore 0 ivars
+    tempfluxes=np.array([t.flux for t in templates]).T
     
-    #go over all possible lags, computer chi2s
-    b = objflux * ierr
-
-    mmatrix = tempfluxes * outer(ierr,ones(tempfluxes.shape[0]))
-    
-    raise NotImplementedError
-    return bestz,chi2s,zs
+    npix,nstars = tempfluxes.shape
+    if npix != objflux.shape[0] != ivar.shape[0]:
+        raise ValueError("pixels don't match")
     
     
+    if lags is True:
+        lags = np.arange(2*npix-3)-npix+2
+    elif not np.any(lags):
+        lags=np.array((0,))
+    elif isSequenceType(lags):
+        lags = np.array(lags,dtype=int)
+    else:
+        raise ValueError("couldn't understand lags")
+    
+    dofs=np.ndarray(len(lags),int)
+    rchi2s=np.ndarray(len(lags))
+    coeffs=np.ndarray((len(lags),nstars))
+    fits= np.zeros((len(lags),npix))
+    #go over all possible lags, compute chi-squared
+    for i,l in enumerate(lags): #TODO: arrayify this?
+        if verbose:
+            print 'lag=',l
+        b = np.matrix(objflux).T
+        A = np.matrix(tempfluxes)
+        W = np.array(np.tile(ivar,nstars).reshape(A.shape))
+        
+        if l > 0:
+            objrange=slice(l,None)
+            matrange=slice(None,-l)
+            
+            
+        elif l < 0:
+            objrange=slice(None,l)
+            matrange=slice(-l,None)
+        else:
+            objrange=slice(None,None)
+            matrange=slice(None,None)
+        
+        b = b[objrange]
+        A = A[matrange]
+        W = W[matrange]
+        dof = np.sum(ivar[objrange]) - nstars
+        
+            
+        
+        #cos = np.linalg.solve(A,b) #does not work for non-square mats, so:
+        #AAi = np.linalg.inv(A.T * A) #often mats are singular
+        AAi = np.linalg.pinv(A.T * np.multiply(W,A)) #TODO:speed tests?
+        
+        coeff = AAi *  ( A.T * np.multiply(ivar[objrange] * b) )
+        
+        fit = np.asarray(A * coeff).flatten()
+        chis = fit - b.A.flatten()
+        chis = chis
+        csq = chis*chis*ivar[objrange] #faster than cs**2
+        
+        coeffs[i] = np.asarray(coeff).flatten()
+        fits[i][objrange] = fit
+        #fits[i][round((npix-len(fit))/2.0):round((npix+len(fit))/2.0)] = fit
+        dofs[i] = dof
+        rchi2s[i]=sum(csq)/dof
+    minvalid = rchi2s[np.isfinite(rchi2s)].min()
+    imin = np.where(rchi2s==minvalid)
+    if imin[0].size > 1:
+        raise ValueError('found more than 1 chi-squared minimum')
+    zs = 10**(lags*dlogx)-1    
+        
+    #TODO:go bzck to zs
+    return lags[imin],rchi2s,zs,coeffs,dofs,fits
+    #return zs[imin],rchi2s,zs,coeffs,dofs,fits
 
     
 #<---------------------Data loading functions---TODO:move to plugin-like?------>
