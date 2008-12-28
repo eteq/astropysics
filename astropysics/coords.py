@@ -608,16 +608,17 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             #need to find maximum value for angular diam dist
             from scipy.optimize import brent
             #-1 on the H0 will make the function negative for purposes of minimizing
+            raise NotImplemetedError('need to fix -H0')
             return -1*brent(cosmo_z_to_dist,(None,disttype,-1*H0,omegaM,omegaL,omegaR,inttol,False,intkwargs),tol=inttol,full_output=1)[1]
         else:
             #iterate towards large numbers until convergence achieved
             iterz=1e6
-            currval=cosmo_z_to_dist(iterz,None,disttype,H0,omegaM,omegaL,omegaR,inttol,False,intkwargs)
+            currval=cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
             lastval=currval+2*inttol
             while(abs(lastval-currval)>inttol):
                 lastval=currval
                 iterz*=10
-                currval=cosmo_z_to_dist(iterz,None,disttype,H0,omegaM,omegaL,omegaR,inttol,False,intkwargs)
+                currval=cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
             return currval
         
     z=array(z)
@@ -671,15 +672,15 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         raise KeyError('unknown disttype')
     
     if normed:
-            nrm=1/cosmo_z_to_dist(None if normed is True else normed,None,disttype,H0,omegaM,omegaL,omegaR,inttol,intkwargs)
+            nrm=1/cosmo_z_to_dist(None if normed is True else normed,None,disttype,inttol,intkwargs)
     else:
         nrm=1
         
     if zerr is None:
         return nrm*d
-    else:
-        upper=cosmo_z_to_dist(z+zerr,None,disttype,H0,omegaM,omegaL,omegaR,inttol,intkwargs)
-        lower=cosmo_z_to_dist(z-zerr,None,disttype,H0,omegaM,omegaL,omegaR,inttol,intkwargs)
+    else: 
+        upper=cosmo_z_to_dist(z+zerr,None,disttype,inttol,intkwargs)
+        lower=cosmo_z_to_dist(z-zerr,None,disttype,inttol,intkwargs)
         return nrm*d,nrm*(upper-d),nrm*(lower-d)
     
 def cosmo_dist_to_z(d,derr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
