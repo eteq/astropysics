@@ -316,3 +316,68 @@ def cosmo_surface_brightness_correction(Sobs,z,mag=True):
         return Sobs-10*np.log10(1+z)
     else:
         return Sobs*(1+z)**4
+    
+def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
+    """
+    Uses the Blanton et al. 2003 k-correction
+    
+    requires pidly (http://astronomy.sussex.ac.uk/~anthonys/pidly/) and IDL with
+    kcorrect installed
+    
+    input magnitudes should be of dimension (nfilter,nobj), as should magerr
+    zs should be sequence of length nobj
+    if magerr is None, 
+    
+    returns absmag,kcorrections,chi2s
+    """
+    from .constants import H0
+    import pidly
+    idl=pidly.IDL()
+    idl('.com kcorrect')
+    #TODO: figure out if it worked
+    
+    mags = np.array(mags,copy=False)
+    zs = np.array(zs,copy=False).flatten()
+    if magerr is None:
+        magerr = np.ones_like(mags)
+    else:
+        magerr = np.array(magerr,copy=False)
+    
+    if mags.shape[0] != len(filterlist) or magerr.shape[0] != len(filterlist):
+        raise ValueError("number of filters and magnitude shapes don't match")
+    if mags.shape[1] != zs.size or magerr.shape[1] != zs.size:
+        raise ValueError("number of redshifts doesn't match magnitude shapes")
+        
+    fd = {'U':'bessell_U.par',
+          'B':'bessell_B.par',
+          'V':'bessell_V.par',
+          'R':'bessell_R.par',
+          'I':'bessell_I.par',
+          'u':'sdss_u0.par',
+          'g':'sdss_g0.par',
+          'r':'sdss_r0.par',
+          'i':'sdss_i0.par',
+          'z':'sdss_z0.par'}    
+    
+    filterlist = [fd.get(fl,fl) for fl in filterlist]
+    
+    try:
+        idl.mags = mags
+        idl.magerr = magerr
+        idl.zs = zs
+        idl.flst = filterlist
+        idl('kcorrect,mags,magerr,zs,kcorr,absmag=absmag,chi2=chi2,filterlist=flst,/magnitude,/stddev')
+        #idl.pro('kcorrect',mags,magerr,zs,'kcorr',absmag='absmag',chi2='chi2',filterlist=filterlist,magnitude=True,stddev=True,)
+        
+        kcorr = idl.kcorr
+        absmag = idl.absmag +5*np.log10(H0/100)
+        chi2 = idl.chi2    
+        
+        return absmag,kcorr,chi2
+        
+    finally:
+        idl.close()
+        
+    
+        
+    
