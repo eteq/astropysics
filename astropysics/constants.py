@@ -63,10 +63,9 @@ class Cosmology(object):
     be exported to the constants module
     """
     #TODO:use ABCs in py 2.6
-    _params_=('H0','omega')
+    _params_=('H0',)
     
     H0=0
-    omega=0
     
     def __init__(self,*args,**kwargs):
         ps=self._params_
@@ -97,25 +96,16 @@ class Cosmology(object):
             if out is None:
                 warn('Cosmological parameter %s not present despite being current cosmology'%p)
         
-    def rhoC(self):
-        """
-        critical density
-        """
-        return 3*self.H0*self.H0/(8*pi*G)
     
-    def rho(self):
-        """
-        mean density in this cosmology
-        """
-        return self.omega*self.rhoC()
     
-class MLRCosmology(Cosmology):
+class FRWCosmology(Cosmology):
     """
-    A cosmology with a lambda, a matter density, and a radiation density
+    A cosmology based on the FRW metric  with a global density, a matter 
+    density, and a radiation density, and a comological constant
     
     default values are approximately LambdaCDM
     """
-    _params_=('omegaR','omegaM','omegaL')
+    _params_=('omega','omegaR','omegaM','omegaL')
     
     H0=72
     omega = property(lambda self:self.omegaR+self.omegaM+self.omegaL)
@@ -129,9 +119,20 @@ class MLRCosmology(Cosmology):
         K=1-M-L-R
         a=1/(1+z)
         H=self.H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
-        
     
-class WMAP5Cosmology(MLRCosmology):
+    def rhoC(self):
+        """
+        critical density
+        """
+        return 3*self.H0*self.H0/(8*pi*G)
+    
+    def rho(self):
+        """
+        mean density in this cosmology
+        """
+        return self.omega*self.rhoC()
+    
+class WMAP5Cosmology(FRWCosmology):
     _params_=('t0','sigma8')
     t0=13.69 #Gyr
     sigma8=.796
@@ -141,7 +142,7 @@ class WMAP5Cosmology(MLRCosmology):
     omegaL=0.721
     omegaM=property(lambda self:self.omegaB+self.omegaC)
 
-class WMAP3Cosmology(MLRCosmology):
+class WMAP3Cosmology(FRWCosmology):
     _params_=('t0','sigma8')
     t0=13.69 #Gyr
     sigma8=.776
