@@ -81,7 +81,8 @@ class AngularCoordinate(object):
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     def __init__(self,inpt=None):
         """
-        If an undecorated 3-element iterator, inpt is taken to be deg,min,sec , othewise, input is cast to a float and treated as decimal degrees
+        If an undecorated 3-element iterator, inpt is taken to be deg,min,sec, 
+        othewise, input is cast to a float and treated as decimal degrees
         """
         if inpt.__class__.__name__=='AngularCoordinate':
             self.__decval=inpt.__decval
@@ -157,11 +158,44 @@ class AngularCoordinate(object):
         return self.degrees
         
         
-    def getDmsStr(self):
-        return ''.join([str(self.degminsec[0]),unichr(176).encode("latin-1"),str(self.degminsec[1]),"'",str(self.degminsec[2]),'"'])
-    
-    def getHmsStr(self):
-        return ''.join([str(self.hrsminsec[0]),'h',str(self.hrsminsec[1]),'m',str(self.hrsminsec[2]),'s'])
+    def getDmsStr(self,secform = None,sep = None):
+        """
+        gets the string representation of this AngularCoordinate as degrees,
+        minutes, and seconds
+        
+        secform is the formatter for the seconds component
+        
+        sep is the seperator between components - defaults to degree symbol,
+        ' and " symbols 
+        """
+        t = self.degminsec
+        if secform is None:
+            last = str(t[2])
+        else:
+            last = secform%t[2]
+        if sep is None:
+            return ''.join([str(t[0]),unichr(176).encode("latin-1"),str(t[1]),"'",last,'"'])
+        else:
+            return sep.join([str(t[0]),str(t[1]),last])
+        
+    def getHmsStr(self,secform = None,sep = None):
+        """
+        gets the string representation of this AngularCoordinate as hours,
+        minutes, and seconds
+        
+        secform is the formatter for the seconds component
+        
+        sep is the seperator between components - defaults to h, m, and s
+        """
+        t = self.hrsminsec
+        if secform is None:
+            last = str(t[2])
+        else:
+            last = secform%t[2]
+        if sep is None:
+            return ''.join([str(t[0]),'h',str(t[1]),'m',last,'s'])
+        else:
+            return sep.join([str(t[0]),str(t[1]),last])
     
     def getSizeAtDistance(self,distance):
         """
@@ -463,13 +497,15 @@ def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True)
     """
     Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
     
-    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc','cg','cq','qc'
+    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
+    'cg','cq','qc'
     transtype   From           To       |  transtype    From         To
         1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
         2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
         3     RA-Dec         Ecliptic   |     6       Galactic      Ecliptic
         
-    adapted from IDL procedure EULER (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
+    adapted from IDL procedure EULER 
+    (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
     """
     #   J2000 coordinate conversions are based on the following constants
     #   (see the Hipparcos explanatory supplement).
@@ -573,15 +609,19 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     calculates the cosmolgical distance to some object given a redshift
     note that this uses H0,omegaM,omegaL, and omegaR from the current cosmology
     
-    intkwargs are kwargs for the integration routine (probably scipy.integrate.quad)
+    intkwargs are kwargs for the integration func (usually scipy.integrate.quad)
     
-    if z is None, returns the limit of z->inf to the requested tolerance (or at maximum if angular) -
-    this may be infinite
+    if z is None, returns the limit of z->inf to the requested tolerance (or at 
+    maximum if angular) - this may be infinite
     
-    disttype can be 'comoving'(0),'luminosity'(1), or 'angular'(2),'lookback'(3),'distmod'(4)
-    for the angular diameter distance, a flat universe is assumed for simple dang=a*chi
-    output in Mpc or Gyr or if normed is True, normalized to value for z=None, or if normed is a
-    number, normalized to z=normed
+    disttype can be 'comoving'(0),'luminosity'(1),'angular'(2),'lookback'(3),
+    or 
+    'distmod'(4)
+    for the angular diameter distance, a flat universe is assumed for simple 
+    dang=a*chi
+    
+    output in Mpc or Gyr or if normed is True, normalized to value for z=None, 
+    or if normed is a number, normalized to z=normed
     """
     from operator import isSequenceType
     from scipy.integrate import quad as integrate
@@ -609,7 +649,8 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             from scipy.optimize import brent
             #-1 on the H0 will make the function negative for purposes of minimizing
             raise NotImplemetedError('need to fix -H0')
-            return -1*brent(cosmo_z_to_dist,(None,disttype,-1*H0,omegaM,omegaL,omegaR,inttol,False,intkwargs),tol=inttol,full_output=1)[1]
+            return -1*brent(cosmo_z_to_dist,(None,disttype,-1*H0,omegaM,omegaL,
+                            omegaR,inttol,False,intkwargs),tol=inttol,full_output=1)[1]
         else:
             #iterate towards large numbers until convergence achieved
             iterz=1e6
@@ -636,7 +677,8 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             return a*(R + M*a + L*a**4 + K*a**2)**-0.5/H0
         
     if isSequenceType(a0):
-        integratevec=vectorize(lambda x:integrate(integrand,x,1,args=(H0,omegaR,omegaM,omegaL,omegaK),**intkwargs))
+        integratevec=vectorize(lambda x:integrate(integrand,x,1,args=(H0,omegaR,
+                                             omegaM,omegaL,omegaK),**intkwargs))
         res=integratevec(a0)
         intres,interr=res[0],res[1]        
         try:
