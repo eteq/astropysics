@@ -24,7 +24,7 @@ class _Parameter(object):
     def __delete__(self,obj):
         raise AttributeError("can't delete a parameter")
 
-class _FuncMeta(type):
+class _FuncMeta1D(type):
     def __init__(cls,name,bases,dct):
         #called on import of astro.models
         from inspect import getargspec
@@ -110,9 +110,10 @@ class _FuncMeta(type):
             setattr(obj,p,v)
         return obj
 
-class FunctionModel(object):
+class FunctionModel1D(object):
     """
-    This class is the base for Models with parameters based on python functions.
+    This class is the base for 1-dimensional models with parameters that are 
+    implemented as python functions.
     
     Subclassing:
     The following method MUST be overridden in a subclass:
@@ -124,12 +125,12 @@ class FunctionModel(object):
     *_customFit(x,y,fixedpars=(),**kwargs)
     
     The metaclass generates the following properties:
-    Parameters for each of the inputs of the function (other than self/cls and the first)
+    Parameters for each of the inputs of the function (except self and x)
     self.params: a tuple of the parameter names
     self.parvals: a list of the values in the parameters
     self.pardict: a dictionary of the parameter names and values
     """
-    __metaclass__ = _FuncMeta
+    __metaclass__ = _FuncMeta1D
     
     defaultIntMethod = 'quad'
     
@@ -201,13 +202,13 @@ class FunctionModel(object):
         
         the full output is available is self.lastFit
         
-        see also:fitMCMC
+        see also:getMCMC
         """
         from scipy import optimize as opt
         
         if method is None:
             #TODO: figure out a less hackish way than matching the docs
-            method = 'leastsq' if self._customFit.__doc__ is FunctionModel._customFit.__doc__ else 'custom'
+            method = 'leastsq' if self._customFit.__doc__ is FunctionModel1D._customFit.__doc__ else 'custom'
             
         if x.shape != y.shape:
             raise ValueError("x and y don't match")
@@ -217,19 +218,7 @@ class FunctionModel(object):
         
         ps=list(self.params)
         v=list(self.parvals) #initial guess
-        if fixedpars:
-            for p in fixedpars:
-                i=ps.index(p)
-                del ps[i]
-                del v[i]
-            
-            #make a function of signature f(x,v) where v are the parameters to be fit
-            pdict=dict([(p,getattr(self,p)) for p in fixedpars])
-            def f(x,v):
-                pdict.update(dict(zip(ps,v)))
-                return self.f(x,**pdict)
-        else:
-            f=lambda x,v:self.f(x,*v)
+        
         
         if method == 'custom':
             res = self._customFit(x,y,fixedpars=fixedpars,**kwargs) 
@@ -237,75 +226,86 @@ class FunctionModel(object):
             from operator import isSequenceType
             if not isSequenceType(res[0]):
                 res = (res,)
-#            try:
-#                res[0][0] 
-#            except:
-#                res = (res,)
-        elif method == 'leastsq':
-            if 'frac' in contraction:
-                g=lambda v,x,y:1-f(x,v)/y
-            else:
-                g=lambda v,x,y:y-f(x,v)
-            res=opt.leastsq(g,v,(x,y),full_output=1,**kwargs)
         else:
-            if not contraction:
-                f=lambda v,x,y:y-f(x,v)
-            else:
-                if 'frac' in contraction:
-                    if 'sq' in contraction:
-                        def g1(v,x,y):
-                            diff=1-f(x,v)/y
-                            return diff*diff
-                    elif 'abs' in contraction:
-                        def g1(v,x,y):
-                            diff=1-f(x,v)/y
-                            return np.abs(diff)
-                    else:
-                        def g1(v,x,y):
-                            diff=1-f(x,v)/y
-                            return diff
-                else:
-                    if 'sq' in contraction:
-                        def g1(v,x,y):
-                            diff=y-f(x,v)
-                            return diff*diff
-                    elif 'abs' in contraction:
-                        def g1(v,x,y):
-                            diff=y-f(x,v)
-                            return np.abs(diff)
-                    else:
-                        def g1(v,x,y):
-                            diff=y-f(x,v)
-                            return diff
-                if 'sum' in contraction:
-                    g=lambda v,x,y:np.sum(g1(v,x,y))
-                elif 'mean' in contraction:
-                    g=lambda v,x,y:np.mean(g1(v,x,y))
-                elif 'median' in contraction:
-                    g=lambda v,x,y:np.median(g1(v,x,y))
+            if fixedpars:
+                for p in fixedpars:
+                    i=ps.index(p)
+                    del ps[i]
+                    del v[i]
                 
-            if method == 'fmin':
-                res=opt.fmin(g,v,(x,y),full_output=1)
-            elif method == 'fmin_powell':
-                res=opt.fmin_powell(g,v,(x,y),full_output=1)
-            elif method == 'fmin_cg':
-                #TODO:smartly include derivative
-                res=opt.fmin_cg(g,v,args=(x,y),full_output=1)
-            elif method == 'fmin_bfgs':
-                #TODO:smartly include derivative
-                res=opt.fmin_bfgs(g,v,args=(x,y),full_output=1)
-            elif method == 'fmin_ncg':
-                raise NotImplementedError
-                #TODO:needs gradient and hessian
-                opt.fmin_ncg
-            elif method == 'anneal' or method == 'global':
-                res=opt.anneal(g,v,args=(x,y),full_output=1,**kwargs)
-            elif method == 'brute':
-                raise NotImplementedError
-                #TODO: set parrange smartly
-                res=opt.brute(g,parrange,(x,y),full_output=1,**kwargs)
+                #make a function of signature f(x,v) where v are the parameters to be fit
+                pdict=dict([(p,getattr(self,p)) for p in fixedpars])
+                def f(x,v):
+                    pdict.update(dict(zip(ps,v)))
+                    return self.f(x,**pdict)
             else:
-                raise ValueError('Unrecognzied method %s'%method)
+                f=lambda x,v:self.f(x,*v)
+                
+            if method == 'leastsq':
+                if 'frac' in contraction:
+                    g=lambda v,x,y:1-f(x,v)/y
+                else:
+                    g=lambda v,x,y:y-f(x,v)
+                res=opt.leastsq(g,v,(x,y),full_output=1,**kwargs)
+            else:
+                if not contraction:
+                    f=lambda v,x,y:y-f(x,v)
+                else:
+                    if 'frac' in contraction:
+                        if 'sq' in contraction:
+                            def g1(v,x,y):
+                                diff=1-f(x,v)/y
+                                return diff*diff
+                        elif 'abs' in contraction:
+                            def g1(v,x,y):
+                                diff=1-f(x,v)/y
+                                return np.abs(diff)
+                        else:
+                            def g1(v,x,y):
+                                diff=1-f(x,v)/y
+                                return diff
+                    else:
+                        if 'sq' in contraction:
+                            def g1(v,x,y):
+                                diff=y-f(x,v)
+                                return diff*diff
+                        elif 'abs' in contraction:
+                            def g1(v,x,y):
+                                diff=y-f(x,v)
+                                return np.abs(diff)
+                        else:
+                            def g1(v,x,y):
+                                diff=y-f(x,v)
+                                return diff
+                    if 'sum' in contraction:
+                        g=lambda v,x,y:np.sum(g1(v,x,y))
+                    elif 'mean' in contraction:
+                        g=lambda v,x,y:np.mean(g1(v,x,y))
+                    elif 'median' in contraction:
+                        g=lambda v,x,y:np.median(g1(v,x,y))
+                    
+                if method == 'fmin':
+                    res=opt.fmin(g,v,(x,y),full_output=1)
+                elif method == 'fmin_powell':
+                    res=opt.fmin_powell(g,v,(x,y),full_output=1)
+                elif method == 'fmin_cg':
+                    #TODO:smartly include derivative
+                    res=opt.fmin_cg(g,v,args=(x,y),full_output=1)
+                elif method == 'fmin_bfgs':
+                    #TODO:smartly include derivative
+                    res=opt.fmin_bfgs(g,v,args=(x,y),full_output=1)
+                elif method == 'fmin_ncg':
+                    raise NotImplementedError
+                    #TODO:needs gradient and hessian
+                    opt.fmin_ncg
+                elif method == 'anneal' or method == 'global':
+                    res=opt.anneal(g,v,args=(x,y),full_output=1,**kwargs)
+                elif method == 'brute':
+                    raise NotImplementedError
+                    #TODO: set parrange smartly
+                    res=opt.brute(g,parrange,(x,y),full_output=1,**kwargs)
+                else:
+                    raise ValueError('Unrecognzied method %s'%method)
             
         self.lastFit = res
         v=res[0] #assumes output is at least a tuple - needs "full_output=1 !"
@@ -324,6 +324,9 @@ class FunctionModel(object):
     def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
         Must be overridden to use 'custom' fit technique
+        
+        fixedpars will be a sequence of parameters that should be kept fixed
+        for the fitting (possibly/typically empty)
         
         should return a tuple where the first element gives the best fit
         parameter vector 
@@ -421,7 +424,7 @@ class FunctionModel(object):
         
         return d
         
-    def getMCMC(self,x,y,priors={},datasig=None):
+    def getMCMC(self,x,y,priors={},datamodel=None):
         """
         Note that this function requires PyMC (http://code.google.com/p/pymc/)
         
@@ -432,8 +435,16 @@ class FunctionModel(object):
         
         Any missing priors will raise a ValueError
         
-        datasig is the sigma for the data model - if None, the std will be
-        used
+        datamodel can be:
+        *None: a normal distribution with sigma given by the data's standard 
+        deviation is used as the data model
+        *a tuple: (dist,dataname,kwargs)the first element is the 
+        pymc.distribution to be used as the distribution representing the data
+        and the second is the name of the argument to be associated with the 
+        FunctionModel1D's output, and the third is kwargs for the distribution 
+        ("observed" and "data" will be ignored, as will the data argument)
+        *a scalar or sequence of length == data: a normal distribution is used 
+        with sigma specified by the scalar/sequence
         
         returns a pymc.MCMMC object for Markov Chain Monte Carlo sampling
         """
@@ -461,19 +472,32 @@ class FunctionModel(object):
         
         funcdict=dict(d)    
         funcdict['x']=x
-        funcdet=pymc.Deterministic(name='f',eval=self.f,parents=funcdict,doc="FunctionModel function")
+        funcdet=pymc.Deterministic(name='f',eval=self.f,parents=funcdict,doc="FunctionModel1D function")
         d['f'] = funcdet
         
-        if datasig is None:
-            datasig = np.std(y)
-        datamodel = pymc.distributions.Normal('data',mu=funcdet,tau=1/datasig/datasig,oberved=True,data=y)
-        d['datamodel']=datamodel
+        if type(datamodel) is tuple:
+            distobj,dataarg,kwargs=datamodel
+            if 'name' not in kwargs:
+                kwargs['name'] = 'data'
+                
+            kwargs[dataarg] = funcdet
+            kwargs['observed'] = True
+            kwargs['data'] = y
+            
+            datamodel = distobj(**kwargs)
+        else:
+            if datamodel is None:
+                sig = np.std(y)
+            else:
+                sig = datamodel
+            datamodel = pymc.distributions.Normal('data',mu=funcdet,tau=1/sig/sig,oberved=True,data=y)
+        d[datamodel.__name__ ]=datamodel
         
         return pymc.MCMC(d)
         
-    def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',powerx=False,powery=False,deriv=None,data=None,fit = False,*args,**kwargs):
+    def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
+              powerx=False,powery=False,deriv=None,data=None,fit = False,*args,**kwargs):
         """
-        (Assumes 1D)
         plot the model function from lower to upper with n samples
         
         integrate controls whether or not to plot the integral of the function -
@@ -482,8 +506,9 @@ class FunctionModel(object):
         
         extra args and kwargs go into the matplotlib plot function
         
-        data is either an x,y pair of data points or a dictionary of kwargs into scatter
-        fit determines if the model should be fit to the data before plotting.
+        data is either an x,y pair of data points or a dictionary of kwargs into 
+        scatter fit determines if the model should be fit to the data before
+        plotting.
         
         logplot determines whether or not to plot on a log scale, and powerx and
         poweru determine if the model points should be used as powers (base 10)
@@ -561,7 +586,6 @@ class FunctionModel(object):
     #Can Override:
     def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
         """
-        (Assumes 1D)
         This will numerically integrate the model function from lower to upper
         using scipy.integrate techniques
         
@@ -651,13 +675,14 @@ class FunctionModel(object):
         be taken as initial parameter values, and unspecified defaults will
         default to 1
         
-        the first parameter (other than 'self' or 'cls', if provided) must be the data
-        vector/matrix (and have no default value), and the rest are parameters
+        the first parameter (other than 'self' or 'cls', if provided) must be 
+        the data vector/matrix (and have no default value), and the rest are 
+        parameters
         """
         raise NotImplementedError
         
         
-class LinearModel(FunctionModel):
+class LinearModel(FunctionModel1D):
     """
     y=mx+b linear fit
     """
@@ -668,16 +693,17 @@ class LinearModel(FunctionModel):
         """
         does least-squares fit on the x,y data
         
-        fixint and fixslope can be used to specify the intercept or slope of the fit
-        or leave them free by having fixint or fixslope be False or None
+        fixint and fixslope can be used to specify the intercept or slope of the 
+        fit or leave them free by having fixint or fixslope be False or None
         
-        lastFit stores (m,b,dm,db,dy)
+        lastFit stores ((m,b),dm,db,dy)
         """  
+        
         fixslope = 'm' in fixedpars
         fixint = 'b' in fixedpars
         
         N=len(x) 
-        if fixint is False and fixslope is False:
+        if not fixint and not fixslope:
             if len(y)!=N:
                 raise ValueError('data arrays are not same length!')
             sxsq=np.sum(x*x)
@@ -687,31 +713,34 @@ class LinearModel(FunctionModel):
             m=(N*sxy-sx*sy)/delta
             b=(sxsq*sy-sx*sxy)/delta
             dy=(y-m*x-b).std(ddof=2)
-            dm=dy*(sxsq/delta)**0.5
-            db=dy*(N/delta)**0.5
+            dm=dy*(sxsq/delta)**0.5 
+            db=dy*(N/delta)**0.5 
             
-        elif fixslope is not False:
-            m,dm=fixslope,0
-            sxsq=np.sum(x*x)
-            b=np.sum(y-m*x)/N
+        elif not fixint:
+            
+            m,dm=self.m,0
+            
+            b=np.sum(y-m*x)/N 
             
             dy=(y-m*x-b).std(ddof=1)
-            db=dy #TODO:check
+            #db= sum(dy*dy)**0.5/N
+            db = dy
             
-        elif fixint is not False:
-            b,db=fixslope,0
+        elif not fixslope:
+            b,db=self.b,0
+            
+            sx=np.sum(x)
             sxy=np.sum(x*y)
             sxsq=np.sum(x*x)
-            m=(sxy-N*b)/sxsq
+            m=(sxy-b*sx)/sxsq
             
-            dy=(y-m*x-b).std(ddof=1)
-            dm=dy*(sxsq/N)**0.5
+            dy=(y-m*x-b).std(ddof=1) 
+            #dm=(np.sum(x*dy*x*dy))**0.5/sxsq
+            dm = dy*sxsq**-0.5
         else:
             raise ValueError("can't fix both slope and intercept")
         
-        self.lastFit=(m,b,dm,db,dy)
-        
-        return np.array((m,b))
+        return (np.array((m,b)),dm,db,dy)
     
     def derivative(self,x,dx=1):
         return np.ones_like(x)*m
@@ -719,14 +748,19 @@ class LinearModel(FunctionModel):
     def integrate(self,lower,upper):
         return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
     
-    def weightedFit(x,y,sigmay=None,doplot=False):
+    def weightedFit(self,x,y,sigmay=None,doplot=False):
         """
-        does a linear weighted least squares fit and computes the coefficients and errors
+        does a linear weighted least squares fit and computes the coefficients 
+        and errors
+        
         fit is y=B*x+A
-        if sigma is None, the weights are all equal - otherwise, it's the stddev of the y values
+        
+        if sigma is None, the weights are all equal - otherwise, it's the stddev 
+        of the y values
+        
         returns B,A,sigmaB,sigmaA
         """
-        raise NotImplementedError('needs to be adapted to astro.models')
+#        raise NotImplementedError('needs to be adapted to astro.models')
         from numpy import array,ones,sum
         if sigmay is None:
             sigmay=ones(len(x))
@@ -756,7 +790,7 @@ class LinearModel(FunctionModel):
         
         return B,A,sigmaB,sigmaA
   
-class CompositeModel(FunctionModel):
+class CompositeModel(FunctionModel1D):
     #TODO:initial vals
     def __init__(self,models=[],operation='+'):
         raise NotImplementedError
@@ -765,8 +799,8 @@ class CompositeModel(FunctionModel):
         for m in models:
             if type(m) == str:
                 m=get_model(m)
-            if not issubclass(m,FunctionModel):
-                raise ValueError('Non FunctionModel provided')
+            if not issubclass(m,FunctionModel1D):
+                raise ValueError('Non FunctionModel1D provided')
             ms.append(m)
         self._modelcounts=dict([(m,ms.count(m)) for m in set(ms)])
         self._models=[m() for m in ms]
@@ -839,8 +873,8 @@ def generate_composite_model(models,operation):
 
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
-    if not issubclass(model,FunctionModel):
-        raise TypeError('Supplied model is not a FunctionModel')
+    if not issubclass(model,FunctionModel1D):
+        raise TypeError('Supplied model is not a FunctionModel1D')
     if name is None:
         name = model.__name__.lower()
     else:
@@ -861,7 +895,7 @@ def list_models():
 
 
 #<----------------------Builtin models----------------->
-class ConstantModel(FunctionModel):
+class ConstantModel(FunctionModel1D):
     """
     the simplest model imaginable - just a constant value
     """
@@ -874,14 +908,14 @@ class ConstantModel(FunctionModel):
     def integrate(self,lower,upper):
         return self.C*(upper-lower)
     
-class QuadraticModel(FunctionModel):
+class QuadraticModel(FunctionModel1D):
     """
     2-degree polynomial
     """
     def f(self,x,c2=1,c1=0,c0=0):
         return c2*x*x+c1*x+c0
 
-class PolynomialModel(FunctionModel):
+class PolynomialModel(FunctionModel1D):
     """
     arbitrary-degree polynomial
     """
@@ -896,7 +930,7 @@ class PolynomialModel(FunctionModel):
         p = np.polyint(np.array(self.parvals)[::-1])
         return p(upper)-p(lower)
 
-class GaussianModel(FunctionModel):
+class GaussianModel(FunctionModel1D):
     """
     Normalized 1D gaussian function
     """
@@ -917,11 +951,12 @@ class GaussianModel(FunctionModel):
         sig=self.sig
         return self(x)*-x/sig/sig
     
-class DoubleGaussianModel(FunctionModel):
+class DoubleGaussianModel(FunctionModel1D):
     """
     Two Normalized 1D gaussian functions, fixed to be of opposite sign
     A is the positive gaussian, while B is negative
-    note that fitting often requires the initial condition to have the upper and lower 
+    note that fitting often requires the initial condition to have the 
+    upper and lower approximately correct
     """
     def f(self,x,A=1,B=1,sig1=1,sig2=1,mu1=-0.5,mu2=0.5):
         A,B=abs(A),-abs(B) #TOdO:see if we should also force self.A and self.B
@@ -973,7 +1008,7 @@ class DoubleGaussianModel(FunctionModel):
         print dgm.pardict
         return dgm
     
-class LorentzianModel(FunctionModel):
+class LorentzianModel(FunctionModel1D):
     def f(self,x,A=1,gamma=1,mu=0):
         return gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
     
@@ -998,21 +1033,21 @@ class VoigtModel(GaussianModel,LorentzianModel):
             w=wofz(((x-mu)+1j*gamma)*2**-0.5/sig)
             return A*w.real*(2*pi)**-0.5/sig
     
-class ExponentialModel(FunctionModel):
+class ExponentialModel(FunctionModel1D):
     """
     exponential function Ae^(kx)
     """
     def f(self,x,A=1,k=1):
         return A*np.exp(k*x)
     
-class PowerLawModel(FunctionModel):
+class PowerLawModel(FunctionModel1D):
     """
     A single power law model Ax^p+B 
     """
     def f(self,x,A=1,p=1,B=0):
         return A*x**p+B
     
-class TwoPowerModel(FunctionModel):
+class TwoPowerModel(FunctionModel1D):
     """
     A model that smoothly transitions between two power laws at the turnover 
     point xs.  a is the inner slope, b is the outer slope
@@ -1032,7 +1067,7 @@ class TwoPowerModel(FunctionModel):
     
     fxs=property(fget=_getFxs,fset=_setFxs)
     
-class BlackbodyModel(FunctionModel):
+class BlackbodyModel(FunctionModel1D):
     """
     a Planck blackbody radiation model
     
@@ -1246,7 +1281,7 @@ class BlackbodyOffsetModel(BlackbodyModel):
         return BlackbodyModel._fen(self,x+xoff,A,T)+yoff
     
     
-class SplineModel(FunctionModel):
+class SplineModel(FunctionModel1D):
     """
     this uses the scipy.interpolate.UnivariateSpline class as a model for the function
     """
@@ -1280,7 +1315,7 @@ class SplineModel(FunctionModel):
         self._x=x
         self._y=y
         self._olds=None
-        return FunctionModel.fitData(x,y,*args,**kwargs)
+        return FunctionModel1D.fitData(x,y,*args,**kwargs)
     
     def f(self,x,s=2):
         from scipy.interpolate import UnivariateSpline
@@ -1334,22 +1369,22 @@ class NFWModel(TwoPowerModel):
         """
         return (Omega0*NFWModel.Delta(z)/97.2)**-0.5*(1+z)**-1.5*h*1e12*(Vvir/143.8)**3
 
-class PlummerModel(FunctionModel):
+class PlummerModel(FunctionModel1D):
     def f(self,r,rp=1.,M=1.):
         return 3*M/(4.*pi*rp**3)*(1+(r/rp)**2)**-2.5
 
-class King2DModel(FunctionModel):    
+class King2DModel(FunctionModel1D):    
     def f(self,r,rc=1,rt=2,A=1):
         rcsq=rc*rc
         return A*rcsq*((r*r+rcsq)**-0.5 - (rt*rt+rcsq)**-0.5)**2
     
-class King3DModel(FunctionModel):
+class King3DModel(FunctionModel1D):
     def f(self,r,rc=1,rt=2,A=1):
         rcsq=rc*rc
         z=((r*r+rcsq)**0.5) * ((rt*rt+rcsq)**-0.5)
         return (A/z/z/pi/rc)*((1+rt*rt/rcsq)**-1.5)*(np.arccos(z)/z-(1-z*z)**0.5)
 
-class SchecterModel(FunctionModel):
+class SchecterModel(FunctionModel1D):
     def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
         from numpy import log,exp
         x=10**(0.4*(Mstar-M))
@@ -1362,7 +1397,7 @@ class SchecterModelLum(SchecterModel):
         return SchecterModel.f(self,M,Mstar,alpha,phistar)
     #TODO:check to make sure this is actually the right way
         
-class EinastoModel(FunctionModel):
+class EinastoModel(FunctionModel1D):
     def f(self,r,A=1,rs=1,alpha=.2):
         return A*np.exp(-(r/rs)**alpha)
 
@@ -1383,7 +1418,7 @@ class DeVauculeursModel(SersicModel):
     def f(self,r,A=1,rs=1):
         return SersicModel.f(self,r,A,rs,4)
 
-class MaxwellBoltzmannModel(FunctionModel):
+class MaxwellBoltzmannModel(FunctionModel1D):
     from .constants import me #electron
     def f(self,v,T=273,m=me):
         from .constants import kb,pi
@@ -1397,5 +1432,5 @@ class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
     
 #register all Models in this module
 for o in locals().values():
-    if type(o) == type(FunctionModel) and issubclass(o,FunctionModel) and o != FunctionModel and o!= CompositeModel:
+    if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel:
         register_model(o)
