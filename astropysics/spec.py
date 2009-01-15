@@ -7,7 +7,7 @@ try:
 except ImportError:
     print 'Spylot not found - some spec package functions may not work correctly'
     
-class Flux(object):
+class Spectrum(object):
     """
     Represents a flux/luminosity/intensity
     
@@ -344,7 +344,7 @@ class Flux(object):
         convinience function for resampling to an equally-spaced linear x-axis
         
         if lower or upper are None, the upper and lower x values are used
-        kwargs go into Flux.resample
+        kwargs go into Spectrum.resample
         """
         if lower is None:
             lower = np.min(self._x)
@@ -383,8 +383,66 @@ class Flux(object):
             plot = plt.plot
         return plot(self.x,self.flux,fmt,**kwargs)
     
+    
+def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
+    """
+    resample the spectra in the sequence specs so that they all have the same 
+    x-axis.  
+    
+    ressample can be 'super' lower-resolution spectra to the highest or 'sub' 
+    to interolate the highest-resolution spectrum to the lowest
+    alternateively, 'logsuper' or 'logsub' will use the logarithmic resolution
+    to determine
+    
+    copy makes new copies of the Spectrum objects 
+    
+    returns specs, or new copies if copy is True
+    """
+    from operator import isSequenceType
+    if not isSequenceType(specs):
+        raise ValueError('specs must be a sequence')
+    
+    for s in specs:
+        if s.__class__.__name__ != 'Spectrum':
+            raise ValueError(str(s)+' is not a spectrum')
+    
+    if copy:
+        from copy import deepcopy
+        specs= [deepcopy(s) for s in specs]
+    
+    if 'super' in ressample:
+        super = True
+    elif 'sub' in ressample:
+        super = False
+    else:
+        raise ValueError('unrecognized ressample value')
+    
+    logres = 'log' in ressample
+        
+    
+    
+    
+    if logres:
+        reses=[s.getDlogx() for s in specs]
+    else:
+        reses=[s.getDx() for s in specs]
+    mins=[np.min(s) for s in specs]
+    maxs=[np.max(s) for s in specs]
+    
+    if super:
+        templi = np.where(reses == max(reses))[0][0]
+    else:
+        templi = np.where(reses == max(reses))[0][0]
+    
+    x = specs[templi].x
+    
+    
+    for s in specs:
+        s.resample(x,interpolation)
+    
+    return specs
 
-def zfind(object,templates,lags=True,dochecks = True,verbose = False):
+def zfind(object,templates,lags=True,dochecks = True, interpolation='linear',verbose = False):
     """
     Computes the lag with the best-fitting chi-squared over all the templates
     
@@ -397,7 +455,9 @@ def zfind(object,templates,lags=True,dochecks = True,verbose = False):
     dochecks makes sure the spectra are all logarithmically spaced and interpolates
     if necessary
     
-    returns bestz,chi2s,zs,coeffs(nzs X nstars),dofs
+    interpolation determines the type of interpolation to use whenever it is necessary
+    
+    returns bestz,besti,chi2s,zs,coeffs(nzs X nstars),dofs
     """
     from operator import isSequenceType,isMappingType
     
@@ -407,9 +467,9 @@ def zfind(object,templates,lags=True,dochecks = True,verbose = False):
         if hasattr(object,'flux'): #allows for type-matching
             pass
         elif isSequenceType(object):
-            object = Flux(*object)
+            object = Spectrum(*object)
         elif isMappingType(object):
-            object = Flux(**object)
+            object = Spectrum(**object)
         else:
             raise TypeError("couldn't interpret input object")
         
@@ -418,31 +478,52 @@ def zfind(object,templates,lags=True,dochecks = True,verbose = False):
             object.logify()
         
         
-        if isinstance(templates,Flux):
+        if isinstance(templates,Spectrum):
             templates=[templates]
         elif isSequenceType(templates):
             temptemplates=[]
             for t in templates:
-                if isinstance(t,Flux):
+                if hasattr(t,'flux'):#assume this is a flux-object
                     temptemplates.append(t)
                 elif isSequenceType(t):
                     if len(t) == len(object): #assume this is a flux array
-                        temptemplates.append(Flux(object.x,t))
+                        temptemplates.append(Spectrum(object.x,t))
                     else:
-                        temptemplates.append(Flux(*t))
+                        temptemplates.append(Spectrum(*t))
                 elif isMappingType(t):
-                    temptemplates.append(Flux(**t))
+                    temptemplates.append(Spectrum(**t))
                 else:
                     raise TypeError("couldn't interpret input object")
             templates = temptemplates
             del temptemplates
         else:
             raise TypeError("input templates not a sequence")
+        
+        #search for first logarithmically spaced template and use that one as the basis
+        tgoodi = None
         for i,t in enumerate(templates):
-            if not t.isLogarithmic():
-                warn('template %i is not logarithmic - interpolating to logarithmic spacing'%i)
-                t.logify()
-        #TODO:align templates to object - for now just assume its right
+            if t.isLogarithmic():
+                tgoodi = i
+                break
+        
+        if tgoodi is None:
+            warn('No logarithmic templates found - interpolating to logarithmic spacing for template 0')
+            templates[0].logify()
+            tgoodi = 0
+            
+        tgoods = templates[tgoodi].shape
+        tgoodx = templates[tgoodi].x
+            
+        for i,t in enumerate(templates):
+            if t.shape != tgoods or np.any(t.x != tgoodx):
+                warn('Template %i does not match base template %i - interpolating'%(i,tgoodi))
+                t.resample(tgoodx,interpolation=interpolation)
+        
+                #TODO:resample smarter so that there aren't 0-set areas
+        if object.shape != tgoods or np.any(object.x != tgoodx):
+            warn('object x-axis does not match templates - interpolating')
+            newt = object.resample(tgoodx,interpolation=interpolation,replace=False)
+            object = Spectrum(*newt)#TODO:make this more robust?
     
     dlogx = object.getDlogx()
         
@@ -496,15 +577,17 @@ def zfind(object,templates,lags=True,dochecks = True,verbose = False):
         b = b[objrange]
         A = A[matrange]
         W = W[matrange]
-        dof = np.sum(ivar[objrange]) - nstars
+        dof = np.sum(ivar[objrange] > 0) - nstars
         
             
         
         #cos = np.linalg.solve(A,b) #does not work for non-square mats, so:
         #AAi = np.linalg.inv(A.T * A) #often mats are singular
         AAi = np.linalg.pinv(A.T * np.multiply(W,A)) #TODO:speed tests?
+        #AAi = np.linalg.pinv(A.T * A) #TODO:speed tests?
         
-        coeff = AAi *  ( A.T * np.multiply(ivar[objrange] * b) )
+        coeff = AAi *  ( A.T * np.multiply(W[:,0:1],b) )
+        #coeff = AAi *  ( A.T * b )
         
         fit = np.asarray(A * coeff).flatten()
         chis = fit - b.A.flatten()
@@ -523,8 +606,8 @@ def zfind(object,templates,lags=True,dochecks = True,verbose = False):
     zs = 10**(lags*dlogx)-1    
         
     #TODO:go bzck to zs
-    return lags[imin],rchi2s,zs,coeffs,dofs,fits
-    #return zs[imin],rchi2s,zs,coeffs,dofs,fits
+    #return lags[imin],imin,rchi2s,zs,coeffs,dofs,fits
+    return zs[imin],imin,rchi2s,zs,coeffs,dofs,fits
 
     
 #<---------------------Data loading functions---TODO:move to plugin-like?------>
@@ -533,7 +616,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     """
     extraction type can 'horne' or 'boxcar'
     
-    returns Flux object with ivar, [bdata,rdata]
+    returns Spectrum object with ivar, [bdata,rdata]
     """
     import pyfits
     if 'spec1d' not in fn or 'fits' not in fn:
@@ -558,7 +641,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
         
         changei = len(bd.LAMBDA[0])
         
-        fobj = Flux(x,flux,ivar)
+        fobj = Spectrum(x,flux,ivar)
         fobj.sky = sky
         
         if smoothing:
@@ -581,7 +664,8 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
         
 def load_deimos_templates(fns):
     """
-    This will generate a dictionary of Flux objects from the specified templates 
+    This will generate a dictionary of Spectrum objects from the specified  
+    templates 
     fn can be a single file, a list of files, or a unix-style pattern
     """
     import pyfits
@@ -638,7 +722,7 @@ def load_deimos_templates(fns):
         finally:
             f.close()
     
-    return dict(((k,Flux(xd[k],tempd[k])) for k in tempd))
+    return dict(((k,Spectrum(xd[k],tempd[k])) for k in tempd))
     
     
          
