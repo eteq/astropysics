@@ -36,6 +36,7 @@ class Spectrum(object):
             
         elif err is not None:
             err=np.array(err,copy=copy)
+            err[err<0]=-1*err[err<0]
             if err.shape != flux.shape:
                 raise ValueError("err and flux don't match shapes")
             
@@ -131,6 +132,10 @@ class Spectrum(object):
             raise ValueError('unrecognized newtype')
         
         return x*newscale,flux*fluxscale/newscale,err*fluxscale/newscale
+        
+    
+    
+    
     #------------------------Properties--------------------------------->
     @property
     def npix(self):
@@ -369,19 +374,33 @@ class Spectrum(object):
         
         newx = np.logspace(np.log10(lower),np.log10(upper),self.npix)
         return self.resample(newx,**kwargs)
-        
     
-    def plot(self,fmt='-',clf=True,log=False,**kwargs):
+    def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,**kwargs):
+        """
+        uses matplotlib to plot the Spectrum object
+        
+        kwargs go into 
+        """
         import matplotlib.pyplot as plt
         
-        if clf:
-            plt.clf()
+        x,y,e = self.x,self.flux,self.err
         
-        if log:
-            plot = plt.semilogx
+        if fmt is None:
+            res = [plt.plot(x,y,**kwargs)]
         else:
-            plot = plt.plot
-        return plot(self.x,self.flux,fmt,**kwargs)
+            res = [plt.plot(x,y,fmt,**kwargs)]
+            
+        if ploterrs and np.any(e):
+            from operator import isMappingType
+            if not isMappingType(ploterrs):
+                ploterrs = {}
+            ploterrs.setdefault('ls','--')
+            
+            res.append(plt.plot(x,e,**ploterrs))
+        plt.xlim(np.min(x),np.max(x))
+            
+        return res
+        
     
     
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
