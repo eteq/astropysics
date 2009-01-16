@@ -92,7 +92,9 @@ class Spectrum(object):
         #TODO:fix wl to freq
         from .constants import c,h
         
-        x,flux,err = self._x/oldscale,self._flux*oldscale,self._err*oldscale # convert to cgs
+        print oldtype,newtype,oldscale,newscale #DB
+        
+        x,flux,err = self._x/oldscale,self._flux/oldscale,self._err/oldscale # convert to cgs
     
         if newtype == 'energy': #TODO:check
             if oldtype == 'energy': 
@@ -131,7 +133,7 @@ class Spectrum(object):
         else:
             raise ValueError('unrecognized newtype')
         
-        return x*newscale,flux*fluxscale/newscale,err*fluxscale/newscale
+        return x*newscale,flux*fluxscale*newscale,err*fluxscale*newscale
         
     
     
@@ -200,7 +202,7 @@ class Spectrum(object):
         return self._phystype+'-'+self._unit
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToUnit(typestr)
-        
+        print newtype,newunit,newscaling #DB
         x,flux,err = self._convertType(self._phystype,newtype,self._scaling,newscaling)
         
         self._x[:] = x
@@ -265,7 +267,9 @@ class Spectrum(object):
         if replace is True, the flux in this object is replaced by the smoothed
         flux and the error is smoothed in the same fashion
         
-        returns smoothedflux
+        width is in pixels
+        
+        returns smoothedflux,smoothederr
         """
         import scipy.ndimage as ndi 
         
@@ -276,13 +280,14 @@ class Spectrum(object):
         else:
             raise ValueError('unrecognized filter type %s'%filtertype)
         
-        smoothed = filter(self._flux,width)
+        smoothedflux = filter(self._flux,width)
+        smoothederr = filter(self._err,width)
         
         if replace:
-            self.flux = smoothed
-            self.err = filter(self._err,width)
+            self.flux = smoothedflux
+            self.err = smoothederr
         
-        return smoothed
+        return smoothedflux,smoothederr
     
     def resample(self,newx,interpolation='linear',replace=True,**kwargs):
         """
@@ -383,7 +388,16 @@ class Spectrum(object):
         """
         import matplotlib.pyplot as plt
         
-        x,y,e = self.x,self.flux,self.err
+        if smoothing:
+            x,(y,e) = self.x,self.smooth(smoothing,replace=False)
+        else:
+            x,y,e = self.x,self.flux,self.err
+        
+        if 'ls' not in kwargs and 'linestyle' not in kwargs:
+            kwargs['ls']='steps'
+            
+        if clf:
+            plt.clf()
         
         if fmt is None:
             res = [plt.plot(x,y,**kwargs)]
@@ -394,7 +408,7 @@ class Spectrum(object):
             from operator import isMappingType
             if not isMappingType(ploterrs):
                 ploterrs = {}
-            ploterrs.setdefault('ls','--')
+            ploterrs.setdefault('ls','-')
             
             res.append(plt.plot(x,e,**ploterrs))
         plt.xlim(np.min(x),np.max(x))
