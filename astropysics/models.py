@@ -1404,9 +1404,46 @@ class EinastoModel(FunctionModel1D):
 class SersicModel(EinastoModel):
     #TODO:better normalizations and rs
     def f(self,r,A=1,rs=1,n=2):
-        return EinastoModel.f(self,r,A,rs,1/alpha)
+        #return EinastoModel.f(self,r,A,rs,1/n)
+        return A*np.exp(-(r/rs)**(1/n))
     
-
+    def sbfit(self,r,sb,zpt=0,**kwargs):
+        """
+        fit surface brightness using the SersicModel
+        
+        r is the radial value,sb is surface brightness, zpt is the zero point
+        of the magnitude scale, and kwargs go into fitdata
+        """
+        flux = 10**((zpt-sb)/2.5)
+        return self.fitData(r,flux,**kwargs)
+        
+    def sbplot(self,lower=None,upper=None,data=None,n=100,zpt=0,clf=True):
+        """
+        plots the surface brightness for this flux-based SersicModel.  arguments
+        are like fitDat
+        """
+        from matplotlib import pyplot as plt
+        
+        if data is None and (lower is None or upper is None):
+            raise ValuError('need data for limits or lower/upper')
+        if data is not None:
+            if upper is None:
+                upper = np.max(data[0])
+            if lower is None:
+                lower = np.min(data[0])
+        
+        if clf:
+            plt.clf()
+        
+        print lower,upper
+        x = np.linspace(lower,upper,n)
+        plt.plot(x,zpt-2.5*np.log10(self(x)))
+        if data:
+            skwargs={'c':'r'}
+            plt.scatter(*data,**skwargs)
+        
+        plt.ylim(*reversed(plt.ylim()))
+        plt.xlim(lower,upper)
 
 class ExponentialDiskModel(SersicModel):
     def f(self,rz,A=1,rs=1,zs=.3):
