@@ -119,6 +119,9 @@ class AngularCoordinate(object):
             return self.__decval==other.__decval
         else:
             return self.__decval==other
+    def __ne__(self,other):
+        return not self.__eq__(other)
+        
     def __add__(self,other):
         if type(other) == AngularCoordinate:
             return AngularCoordinate(self.__decval+other.__decval)
@@ -168,15 +171,33 @@ class AngularCoordinate(object):
         sep is the seperator between components - defaults to degree symbol,
         ' and " symbols 
         """
-        t = self.degminsec
+        d,m,s = self.degminsec
+        
+        d,m=str(d),str(m)
         if secform is None:
-            last = str(t[2])
+            s = str(s)
         else:
-            last = secform%t[2]
+            s = secform%s
+        
+        tojoin = []
+        
+        if d is not '0':
+            tojoin.append(d)
+            if sep is None:
+                tojoin.append(unichr(176).encode("latin-1"))
+                
+        if m is not '0':
+            tojoin.append(m)
+            if sep is None:
+                tojoin.append("'")
+                
+        tojoin.append(s)
         if sep is None:
-            return ''.join([str(t[0]),unichr(176).encode("latin-1"),str(t[1]),"'",last,'"'])
-        else:
-            return sep.join([str(t[0]),str(t[1]),last])
+            tojoin.append('"')
+            
+        if sep is None:
+            sep = ''
+        return sep.join(tojoin)
         
     def getHmsStr(self,secform = None,sep = None):
         """
@@ -187,15 +208,34 @@ class AngularCoordinate(object):
         
         sep is the seperator between components - defaults to h, m, and s
         """
-        t = self.hrsminsec
+        
+        h,m,s = self.hrsminsec
+        
+        h,m=str(h),str(m)
         if secform is None:
-            last = str(t[2])
+            s = str(s)
         else:
-            last = secform%t[2]
+            s = secform%s
+        
+        tojoin = []
+        
+        if h is not '0':
+            tojoin.append(h)
+            if sep is None:
+                tojoin.append('h')
+                
+        if m is not '0':
+            tojoin.append(m)
+            if sep is None:
+                tojoin.append('m')
+                
+        tojoin.append(s)
         if sep is None:
-            return ''.join([str(t[0]),'h',str(t[1]),'m',last,'s'])
-        else:
-            return sep.join([str(t[0]),str(t[1]),last])
+            tojoin.append('s')
+            
+        if sep is None:
+            sep = ''
+        return sep.join(tojoin)
     
     def getSizeAtDistance(self,distance):
         """
@@ -251,10 +291,10 @@ class AngularPosition(object):
         else:
             raise ValueError('Unrecognized format for coordiantes')
         
-        self.__ra=kwargs.pop('ra',0)
-        self.__dec=kwargs.pop('dec',0)
-        self.__raerr=kwargs.pop('raerr',0)
-        self.__decerr=kwargs.pop('decerr',0)
+        self.__ra=kwargs.pop('ra',AngularCoordinate(0))
+        self.__dec=kwargs.pop('dec',AngularCoordinate(0))
+        self.__raerr=kwargs.pop('raerr',AngularCoordinate(0))
+        self.__decerr=kwargs.pop('decerr',AngularCoordinate(0))
         self.__epoch=kwargs.pop('epoch','J2000')
         if len(kwargs) > 0:
             raise ValeError('unrecognized keyword'+'s ' if len(kwargs)> 1 else ' '+','.join(kwargs.keys()))
@@ -307,9 +347,9 @@ class AngularPosition(object):
         return self.__epoch
     
     def __str__(self):
-        rastr=self.__ra.getHmsStr()+'\\pm'+self.__raerr.getHmsStr()
-        decstr=self.__ra.getHmsStr()+'\\pm'+self.__raerr.getHmsStr()
-        return ' '.join((rastr,self.__dec.getDmsStr()))
+        rastr=self.__ra.getHmsStr()+('\\pm'+self.__raerr.getHmsStr() if self.__raerr != 0 else '')
+        decstr=self.__dec.getDmsStr()+('\\pm'+self.__decerr.getDmsStr() if self.__decerr != 0 else '')
+        return ' '.join((rastr,decstr))
     
     ra=property(fget=__getra,fset=__setra)
     dec=property(fget=__getdec,fset=__setdec)
@@ -330,6 +370,9 @@ class AngularPosition(object):
             return self.__ra==other[0] and  self.__dec==other[1]
         else:
             return False
+    def __ne__(self,other):
+        return not self.__eq__(other)
+    
     #TODO:add sequence operations
     def __add__(self,other):
         return AngularPosition(self.__ra+other,self.__dec+other)
