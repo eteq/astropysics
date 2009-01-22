@@ -30,13 +30,19 @@ class Spectrum(object):
         if ivar is None and err is None:
             err = np.zeros_like(flux)
         elif ivar is not None:
-            err = np.array(ivar,copy=False)**-0.5
+            if np.isscalar(ivar):
+                err = ivar**-0.5*np.ones_like(flux)
+            else:
+                err = np.array(ivar,copy=False)**-0.5
             if err.shape != flux.shape:
                 raise ValueError("ivar and flux don't match shapes")
             
         elif err is not None:
-            err=np.array(err,copy=copy)
-            err[err<0]=-1*err[err<0]
+            if np.isscalar(err):
+                err = err*np.ones_like(flux)
+            else:
+                err=np.array(err,copy=copy)
+                err[err<0]=-1*err[err<0]
             if err.shape != flux.shape:
                 raise ValueError("err and flux don't match shapes")
             
@@ -262,7 +268,7 @@ class Spectrum(object):
     def smooth(self,width=1,filtertype='gaussian',replace=True):
         """
         smooths the flux in this object by a filter of the given filtertype 
-        (can be either 'gaussian' or 'boxcar')
+        (can be either 'gaussian' or 'boxcar'/'uniform')
         
         if replace is True, the flux in this object is replaced by the smoothed
         flux and the error is smoothed in the same fashion
@@ -412,6 +418,17 @@ class Spectrum(object):
             
             res.append(plt.plot(x,e,**ploterrs))
         plt.xlim(np.min(x),np.max(x))
+        
+        xl=self.unit
+        xl=xl.replace('wavelength','\\lambda')
+        xl=xl.replace('frequency','\\nu')
+        xl=xl.replace('energy','E')
+        xl=xl.replace('angstrom','\\AA')
+        xl=xl.replace('micron','\\mu')
+        xl=tuple(xl.split('-'))
+        plt.xlabel('$%s/{\\rm %s}$'%xl)
+        
+        plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
             
         return res
         
@@ -757,5 +774,12 @@ def load_deimos_templates(fns):
     
     return dict(((k,Spectrum(xd[k],tempd[k])) for k in tempd))
     
-    
+def load_spylot_spectrum(s,bandi):
+    x=s.getCurrentXAxis()
+    f=s.getCurrentData(bandi=bandi)
+    if s.isContinuumSubtracted():
+        e=s.getContinuumError()
+    else:
+        e=s.getWindowedRMSError(bandi=bandi)
+    return Spectrum(x,f,e)
          
