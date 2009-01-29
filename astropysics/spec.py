@@ -1,6 +1,17 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+"""
+This module is for observed or synthetic spectra (Spectrum object) and 
+related operations.
+
+Methods/functions tend to be oriented towards optical, but will work in other
+bands.
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np
+
+
 
 try:
     import spylot

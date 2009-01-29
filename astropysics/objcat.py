@@ -1,3 +1,16 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+
+"""
+This module contains objects and functions for generating catalogs of objects
+where derived quantities are dynamically updated as they are changed.
+
+The eventual plan is to include modules to also dynamically update via a web
+server.
+
+(this package is currently not in a useable state - heavy development is under 
+way)
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np

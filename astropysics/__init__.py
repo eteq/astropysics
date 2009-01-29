@@ -1,17 +1,18 @@
 """
-Erik Tollerud 2008
+Erik Tollerud (etolleru@uci.edu) 2008
 
 This package contains a variety of utilities and algorithms for processing
 and visualizing astronomical data.
 
-Subpackages:
-*constants: physical constants in cgs, conversion factors, and simple
-conversion functions
+Modules:
+*constants: physical constants and conversions, Cosmology objects for choosing 
+related sets of constants
 *coords: Astronomical coordinate systems, distance measurements,
 and related objects
-*extinct: Extinction,dust, and atmospheric absorption related functions
-*models: Mass models and fitting functions
+*obstools: Tools and corrections for observations (mostly optical)
+*models: Fitting functions/models and related calculations
 *objcat: Object Catalog objects and functions
-*phot: photometry and related functions
-*spec: spectra-related functions
+*phot: Photometry objects and related functions
+*spec: Spectrum objects and related functions
+*ccd: Functions and tools for processing CCD images.
 """

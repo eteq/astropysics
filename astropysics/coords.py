@@ -1,3 +1,18 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+
+"""
+This module contains objects and functions for specifying locations as well 
+as calculating distances and similar tools.
+
+Some of the calculations involved make use of the currently selected cosmology 
+(see astropysics.constants) and hence may not function properly if a 
+particularly strange cosmology is in use.
+
+Note that some of the functions use the PyEphem (http://rhodesmill.org/pyephem/)
+project for conversions and calculations - some functions will work poorly or 
+not at all without this package installed
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np
@@ -7,7 +22,7 @@ try:
     import ephem
 except ImportError:
     from warnings import warn
-    warn('PyEphem not found - a lot of coordinate functions will not work correctly')
+    warn('PyEphem not found - some astropysics.coords functions will not work correctly')
     ephem = None
 
 #<----------------coordinate classes and related functions------------------>

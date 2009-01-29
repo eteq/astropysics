@@ -1,3 +1,13 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+
+"""
+This module stores tools for oberving (pre- and post-) as well as functioning as
+a "miscellaneous" bin for various corrections and calculations that don't have
+a better place to live.
+
+The focus is currently on optical astronomy, as that is what the author does.
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np

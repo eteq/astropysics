@@ -1,3 +1,11 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+"""
+This module is for observed or synthetic photometry and 
+related operations.
+
+Methods/functions tend to be oriented towards optical.
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np

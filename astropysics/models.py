@@ -1,3 +1,17 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+
+"""
+This module contains objects and functions for fitting data to models as well as
+calculations and estimates from these models.
+
+The aim of these classes are mostly for easily and quickly generating a range of
+models - subclasses with just a function "f" will do all the expected things 
+right out of the box.
+
+Currently, the main fitting algorithms are those from scipy.optimize and the 
+PyMC package (http://code.google.com/p/pymc/)
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np

@@ -1,10 +1,21 @@
-#!/usr/bin/env python
+#Erik Tollerud (etolleru@uci.edu) 2008
+
+"""
+This module contains objects and functions for viewing and/or reducing CCD 
+images.
+
+This package deals mostly with the raw CCD images themselves - for science tools
+see the phot and spec packages.
+"""
 
 from __future__ import division
 import matplotlib.pyplot as plt
 import numpy as np
 
 class CCDImage(object):
+    """
+    Represents a CCD image.  Currently only fits format is supported.
+    """
     def __init__(self,fn,irange=None,scaling=None,ihdu=0,memmap=0):
         import pyfits
         fnl = fn.lower()

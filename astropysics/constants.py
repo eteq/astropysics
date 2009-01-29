@@ -1,3 +1,12 @@
+#Erik Tollerud (etolleru@uci.edu) 2008
+"""
+This module stores physical constants and conversion factors for the astropysics
+package.
+
+Some of the package-level variables are generated from the currently selected
+Cosmology (see Cosmology object and choose_cosmology function for details)
+"""
+
 from __future__ import division
 from math import pi
 import numpy as np
@@ -158,6 +167,12 @@ __current_cosmology._exportParams()
 __cosmo_registry={}
 
 def register_cosmology(cosmocls,name=None):
+    """
+    Add the provided subclass of Cosmology to the cosmology registry
+    
+    if name is None, the name will be inferred from the class name, otherwise
+    
+    """
     if not name:
         name = cosmocls.__name__
     name = name.lower().replace('cosmology','')
@@ -174,16 +189,41 @@ for o in locals().values():
     if type(o)==type and issubclass(o,Cosmology) and o != Cosmology:
         register_cosmology(o)
 
-def choose_cosmology(name,*args,**kwargs):
+def choose_cosmology(nameorobj,*args,**kwargs):
     """
-    generate a new cosmology with the args and kwargs going into the initializer
+    Select the currently active cosmology and export its cosmological 
+    parameters into the package namespace
+    
+    nameorobj can be a string or a Cosmology object
+    
+    If string, a new instance corresponding to the type with the given name in 
+    the cosmology registry is generated with the args and kwargs going into the 
+    initializer.
+    
+    If nameorobj is an instance of Cosmology, the supplied object is selected as 
+    the current cosmology and the registry is updated to include its class, if 
+    it is not already present
+    
+    return value is the cosmology object
     """
     global __current_cosmology
-    c = __cosmo_registry[name.lower()](*args,**kwargs)
-    __current_cosmology._removeParams()
-    c._exportParams()
     
-    __current_cosmology =  c
+    if type(nameorobj) is str:
+        c = __cosmo_registry[nameorobj.lower()](*args,**kwargs)
+    elif isinstance(nameorobj,Cosmology):
+        c = nameorobj
+        if c.__class__ not in __cosmo_registry.values():
+            register_cosmology(c.__class__)
+    
+    __current_cosmology._removeParams()
+    try:
+        c._exportParams()
+        __current_cosmology =  c
+    except:
+        __current_cosmology._exportParams()
+        
+    return c
+    
     
 def get_cosmology(name=None):
     """
@@ -194,4 +234,16 @@ def get_cosmology(name=None):
         return __current_cosmology
     else:
         return __cosmo_registry[name]
-        
+    
+def update_cosmology():
+    """
+    updates the package-level variables for changes in the current Cosmology 
+    object
+    """
+    __current_cosmology._exportParams()
+
+def get_registry_names():
+    """
+    Returns the names of all cosmology types in the registry
+    """
+    return __cosmo_registry.keys()
