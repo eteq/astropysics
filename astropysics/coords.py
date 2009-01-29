@@ -2,6 +2,14 @@ from __future__ import division
 from math import pi
 import numpy as np
 
+
+try:
+    import ephem
+except ImportError:
+    from warnings import warn
+    warn('PyEphem not found - a lot of coordinate functions will not work correctly')
+    ephem = None
+
 #<----------------coordinate classes and related functions------------------>
 
 
