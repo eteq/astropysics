@@ -66,6 +66,13 @@ class Spectrum(object):
         self._flux = flux
         self._err = err
         
+    def copy(self):
+        """
+        Generates a deep copy of this Spectrum
+        """
+        from copy import deepcopy
+        return deepcopy(self)
+        
     def _strToUnit(self,typestr):
         u = typestr.lower()
         if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':

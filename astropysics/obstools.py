@@ -5,7 +5,8 @@ This module stores tools for oberving (pre- and post-) as well as functioning as
 a "miscellaneous" bin for various corrections and calculations that don't have
 a better place to live.
 
-The focus is currently on optical astronomy, as that is what the author does.
+The focus is currently on optical astronomy, as that is what the primary author 
+does.
 """
 
 from __future__ import division
@@ -14,8 +15,120 @@ import numpy as np
 
 #<----------------------Extinction and dust-related---------------------------->
 
-class Extinct(object):
-    def  __init__(self):
+class Extinction(object):
+    """
+    This is the base class for extinction-law objects. Extinction laws can be
+    passed in as a function to the initializer, or subclasses should override 
+    the function f with the preferred law as f(self,lambda), and their 
+    initializers should set the zero point
+    
+    Note that functions are interpreted as magnitude extinction laws ... if 
+    optical depth is desired, f should return (-2.5/log(10))*tau(lambda)
+    """
+    def  __init__(self,f=None):
+        if f is not None:
+            if not callable(f):
+                self.f = f
+            else:
+                raise ValueError('function must be a callable')
+    
+    def f(self,lamb):
+        raise NotImplementedError('must specify an extinction function ')
+    
+    def correctPhotometry(self,mags,band):
+        """
+        Uses the extinction law to correct a magnitude (or array of magnitudes)
+        
+        bands is either a string specifying the band, or a wavelength to use
+        """
+        from .phot import bandwl
+        #TODO:better band support
+        if type(band) is str:
+            wl = bandwl[band]
+        else:
+            wl = band
+        
+        return mags-self.f(wl)
+        
+    
+    def correctColor(self,colors,bands):
+        """
+        Uses the supplied extinction law to correct a color (or array of colors)
+        where the color is in the specified bands
+        
+        bands is a length-2 sequence with either a band name or a wavelength for
+        the band, or of the form 'bandname1-bandname2' or 'E(band1-band2)'
+        """
+        
+        if type(bands) is str:
+            b1,b2=bands.replace('E(','').replace(')','').split(',')
+        else:
+            b1,b2=bands
+            
+        from .phot import bandwl
+        #TODO:better band support
+        wl1 = bandwl[b1] if type(b1) is str else b1
+        wl2 = bandwl[b2] if type(b2) is str else b2
+    
+        return colors-self.f(wl1)+self.f(wl2)
+    
+    def correctSpectrum(self,spec,newspec=True):
+        """
+        Uses the supplied extinction law to correct a spectrum for extinction.
+        
+        if newspec is True, a copy of the supplied spectrum will have the 
+        extinction correction applied
+        
+        returns the corrected spectrum
+        """
+    
+        if newspec:
+            spec = spec.copy()
+            
+        oldunits = spec.unit
+        spec.unit = 'wavelength-angstrom'
+        corr = 10**(self.f(spec.x)/2.5)
+        spec.flux *= corr
+        spec.err *= corr
+        
+        spec.unit = oldunit
+        return spec
+    
+class CalzettiExtinction(Extinction):
+    """
+    This is the average extinction law derived in Calzetti et al. 1994:
+    x=1/lambda in mu^-1
+    Q(x)=-2.156+1.509*x-0.198*x**2+0.011*x**3
+    """
+    _poly=np.poly1d((0.011,-0.198,1.509,-2.156)) #TODO: check this - it doesn't seem right
+    def __init__(self,A=1):
+        self._A=A
+        
+    def f(self,lamb):
+        return self._A*(-2.5/log(10))*self._poly(1e3/lamb)
+    
+    def fluxRatio(self):
+        raise NotImplementedError
+    
+class CardelliExtinction(Extinction):
+    """
+    Milky Way Extinction law from Cardelli et al. 1989
+    """
+    def __init__(self,EBmV=0,Rv=3.1):
+        self.Rv=Rv
+    def f(self,lamb):
+        raise NotImplementedError
+    
+class LMCExtinction(Extinction):
+    def __init__(self,EBmV=0,Rv=3.1):
+        self.Rv=Rv
+    def f(self,lamb):
+        raise NotImplementedError
+    
+class SMCExtinction(Extinction):
+    def __init__(self,EBmV=0,Rv=3.1):
+        self.Rv=Rv
+    def f(self,lamb):
         raise NotImplementedError
 
 def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
@@ -29,6 +142,7 @@ def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
         t   : Temperature map in degrees Kelvin for n=2 emissivity
         ebv : E(B-V) in magnitudes
         mask: Mask values
+    (in which case the files are assumed to lie in the current directory)
     
     input coordinates are in degrees of galactic latiude and logitude - they can
     be scalars or arrays
