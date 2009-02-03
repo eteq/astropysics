@@ -24,16 +24,22 @@ class Extinction(object):
     
     Note that functions are interpreted as magnitude extinction laws ... if 
     optical depth is desired, f should return (-2.5/log(10))*tau(lambda)
+    
+    A0 is the normalization factor that gets multiplied into the reddening law.
     """
-    def  __init__(self,f=None):
+    def  __init__(self,f=None,A0=1):
         if f is not None:
             if not callable(f):
                 self.f = f
             else:
                 raise ValueError('function must be a callable')
+        self.A0 = A0
     
     def f(self,lamb):
         raise NotImplementedError('must specify an extinction function ')
+    
+    def __call__(self,*args,**kwargs):
+        return self.A0*self.f(*args,**kwargs)
     
     def correctPhotometry(self,mags,band):
         """
@@ -48,7 +54,7 @@ class Extinction(object):
         else:
             wl = band
         
-        return mags-self.f(wl)
+        return mags-self(wl)
         
     
     def correctColor(self,colors,bands):
@@ -70,7 +76,7 @@ class Extinction(object):
         wl1 = bandwl[b1] if type(b1) is str else b1
         wl2 = bandwl[b2] if type(b2) is str else b2
     
-        return colors-self.f(wl1)+self.f(wl2)
+        return colors-self(wl1)+self(wl2)
     
     def correctSpectrum(self,spec,newspec=True):
         """
@@ -85,14 +91,75 @@ class Extinction(object):
         if newspec:
             spec = spec.copy()
             
-        oldunits = spec.unit
+        oldunit = spec.unit
         spec.unit = 'wavelength-angstrom'
-        corr = 10**(self.f(spec.x)/2.5)
+        corr = 10**(self(spec.x)/2.5)
         spec.flux *= corr
         spec.err *= corr
         
         spec.unit = oldunit
         return spec
+    
+    
+    __balmerratios={
+            'Hab':(2.86,6562.82,4861.33),
+            'Hag':(6.16,6562.82,4340.46),
+            'Had':(11.21,6562.82,4101.74),
+            'Hae':(18.16,6562.82,3970.07),
+            'Hbg':(2.15,4861.33,4340.46),
+            'Hbd':(3.91,4861.33,4101.74),
+            'Hbe':(6.33,4861.33,3970.07),
+            'Hgd':(1.82,4340.46,4101.74),
+            'Hge':(2.95,4340.46,3970.07),
+            'Hde':(1.62,4101.74,3970.07)
+            }
+    def computeA0FromFluxRatio(self,measured,expected,lambda1=None,lambda2=None,contractionf=np.mean):
+        """
+        This derives the normalization of the Extinction function from provided
+        ratios for theoretically expected fluxes.  If multiple measurements are
+        provided, the mean will be used
+        
+        measured is the measured line ratio (possibly an array), while expected
+        is either the expected line ratios, or a string specifying the
+        appropriate balmer flux ratio as "Hab","Hde",etc. (for Halpha/Hbeta or
+        Hdelta/Hepsilon) to assume case B recombination fluxes (see e.g. 
+        Osterbrock 2007).
+        
+        lambda1 and lambda2 are the wavelengths for the ratios F1/F2, or None if
+        a string is provided 
+    
+        contraction is the function to be used to combine an array of A0s down
+        to one (default is numpy.mean)
+        
+        returns A0,standard deviation of measurements
+        """
+        if type(expected) is str:
+            R = measured
+            balmertuple = __balmerratios[expected]
+            R0=balmertuple[0]
+            lambda1,lambda2=balmertuple[1],balmertuple[2]
+        elif type(expected[0]) is str:
+            if not np.all([type(e) is str for e in expected]):
+                raise ValueError('expected must be only transitions or only numerical')
+            R0,lambda1,lambda2=[],[],[]
+            for e in expected:
+                balmertuple = __balmerratios[e]
+                R0.append(balmertuple[0])
+                lambda1.append(balmertuple[1])
+                lambda2.append(balmertuple[2])
+            R0,lambda1,lambda2=np.array(R0),np.array(lambda1),np.array(lambda2)    
+        else:
+            if lambda1 and lambda2:
+                R,R0 = np.array(measured,copy=False),np.array(expected,copy=False)
+                lambda1,lambda2 = np.array(lambda1,copy=False),np.array(lambda2,copy=False)
+            else:
+                raise ValueError('need to provide wavelengths if not specifying transitions')
+        
+        A0 = 2.5*np.log10(R/R0)/(self.f(lambda1)-self.f(lambda2))
+        
+        
+        self.A0 = contractionf(A0)
+        return contractionf(A0),np.std(A0)
     
 class CalzettiExtinction(Extinction):
     """
@@ -100,34 +167,109 @@ class CalzettiExtinction(Extinction):
     x=1/lambda in mu^-1
     Q(x)=-2.156+1.509*x-0.198*x**2+0.011*x**3
     """
-    _poly=np.poly1d((0.011,-0.198,1.509,-2.156)) #TODO: check this - it doesn't seem right
-    def __init__(self,A=1):
-        self._A=A
+    _poly=np.poly1d((0.011,-0.198,1.509,-2.156)) 
+    def __init__(self,A0=1):
+        Extinction.__init__(self,A0=A0)
+        raise NotImplementedError('TODO: check this - it does not seem right')
         
     def f(self,lamb):
-        return self._A*(-2.5/log(10))*self._poly(1e3/lamb)
+        return (-2.5/log(10))*self._poly(1e4/lamb)
     
-    def fluxRatio(self):
+class _EBmVExtinction(Extinction):
+    """
+    Base class for Extinction classes that get normalization from E(B-V)
+    """
+    from .phot import bandwl
+    __lambdaV=bandwl['V']
+    del bandwl
+    
+    def __init__(self,EBmV=1,Rv=3.1):
+        Extinction.__init__(self,None,1)
+        self.Rv=Rv
+        self.EBmV=EBmV
+    
+    def _getEBmV(self):
+        return A0*self.f(self.__lambdaV)/self.Rv
+    def _setEBmV(self,val):
+        Av=self.Rv*val
+        self.A0=Av/self.f(self.__lambdaV)
+    EBmV = property(_getEBmV,_setEBmV)
+    
+    def f(self,lamb):
         raise NotImplementedError
     
-class CardelliExtinction(Extinction):
+class FMExctionction(Extinction):
+    """
+    Base class for Extinction classes that use the form from Fitzpatrick & Massa
+    """
+    from .phot import bandwl
+    __lambdaV=bandwl['V']
+    del bandwl
+    
+    def __init__(self,EBmV=0):
+        Extinction.__init__(self,None,1)
+        raise NotImplementedError
+    
+class CardelliExtinction(_EBmVExtinction):
     """
     Milky Way Extinction law from Cardelli et al. 1989
     """
-    def __init__(self,EBmV=0,Rv=3.1):
-        self.Rv=Rv
+    def f(self,lamb):
+        scalar=np.isscalar(lamb)
+        x=1e4/np.atleast_1d(lamb) #CCM x is 1/microns
+        a,b=np.ndarray(x.shape,x.dtype),np.ndarray(x.shape,x.dtype)
+        
+        if any((x<0.3)|(10<x)):
+            raise ValueError('some wavelengths outside CCM 89 extinction curve range')
+        
+        irs=(0.3 <= x) & (x <= 1.1)
+        opts = (1.1 <= x) & (x <= 3.3)
+        nuv1s = (3.3 <= x) & (x <= 5.9)
+        nuv2s = (5.9 <= x) & (x <= 8)
+        fuvs = (8 <= x) & (x <= 10)
+        
+        #TODO:pre-compute polys
+        
+        #CCM Infrared
+        a[irs]=.574*x[irs]**1.61
+        b[irs]=-0.527*x[irs]**1.61
+        
+        #CCM NIR/optical
+        a[opts]=np.polyval((.32999,-.7753,.01979,.72085,-.02427,-.50447,.17699,1),x[opts]-1.82)
+        b[opts]=np.polyval((-2.09002,5.3026,-.62251,-5.38434,1.07233,2.28305,1.41338,0),x[opts]-1.82)
+        
+        #CCM NUV
+        y=x[nuv1s]-5.9
+        Fa=-.04473*y**2-.009779*y**3
+        Fb=-.2130*y**2-.1207*y**3
+        a[nuv1s]=1.752-.316*x[nuv1s]-0.104/((x[nuv1s]-4.67)**2+.341)+Fa
+        b[nuv1s]=-3.09+1.825*x[nuv1s]+1.206/((x[nuv1s]-4.62)**2+.263)+Fb
+        
+        a[nuv2s]=1.752-.316*x[nuv2s]-0.104/((x[nuv2s]-4.67)**2+.341)
+        b[nuv2s]=-3.09+1.825*x[nuv2s]+1.206/((x[nuv2s]-4.62)**2+.263)
+        
+        #CCM FUV
+        a[fuvs]=np.polyval((-.070,.137,-.628,-1.073),x[fuvs]-8)
+        b[fuvs]=np.polyval((.374,-.42,4.257,13.67),x[fuvs]-8)
+        
+        AloAv = a+b/self.Rv
+        
+        if scalar:
+            return AloAv[0]
+        else:
+            return AloAv
+    
+class LMCExtinction(_EBmVExtinction):
+    """
+    LMC Extinction law from ???
+    """
     def f(self,lamb):
         raise NotImplementedError
     
-class LMCExtinction(Extinction):
-    def __init__(self,EBmV=0,Rv=3.1):
-        self.Rv=Rv
-    def f(self,lamb):
-        raise NotImplementedError
-    
-class SMCExtinction(Extinction):
-    def __init__(self,EBmV=0,Rv=3.1):
-        self.Rv=Rv
+class SMCExtinction(_EBmVExtinction):
+    """
+    SMC Extinction law from ???
+    """
     def f(self,lamb):
         raise NotImplementedError
 
@@ -150,7 +292,7 @@ def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
     if interpolate is an integer, it can be used to specify the order of the
     interpolating polynomial
     """
-    from numpy import sin,cos,round,isscalar,array,ndarray
+    from numpy import sin,cos,round,isscalar,array,ndarray,ones_like
     from pyfits import open
     
     if type(dustmap) is not str:
@@ -285,7 +427,7 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     from .phot import bandwl
     
     from warnings import warn
-    warn('extinction_correction function is deprecated - use Extinct class instead',DeprecationWarnings)
+    warn('extinction_correction function is deprecated - use Extinct class instead',DeprecationWarning)
     
     if exttype=='LMC' or exttype=='SMC':
         raise NotImplementedError 
@@ -384,7 +526,7 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
     from scipy.optimize import fmin
     
     from warnings import warn
-    warn('extinction_from_flux_ratio function is deprecated - use Extinct class instead',DeprecationWarnings)
+    warn('extinction_from_flux_ratio function is deprecated - use Extinct class instead',DeprecationWarning)
     
     scalarout=np.isscalar(frobs)
     
