@@ -100,6 +100,9 @@ class Extinction(object):
         spec.unit = oldunit
         return spec
     
+    def correctFlux(self,flux,lamb):
+        return flux*10**(self(spec.x)/2.5)
+    
     
     __balmerratios={
             'Hab':(2.86,6562.82,4861.33),
@@ -170,7 +173,6 @@ class CalzettiExtinction(Extinction):
     _poly=np.poly1d((0.011,-0.198,1.509,-2.156)) 
     def __init__(self,A0=1):
         Extinction.__init__(self,A0=A0)
-        raise NotImplementedError('TODO: check this - it does not seem right')
         
     def f(self,lamb):
         return (-2.5/log(10))*self._poly(1e4/lamb)
@@ -198,17 +200,39 @@ class _EBmVExtinction(Extinction):
     def f(self,lamb):
         raise NotImplementedError
     
-class FMExctionction(Extinction):
+class FMExtinction(_EBmVExtinction):
     """
-    Base class for Extinction classes that use the form from Fitzpatrick & Massa
+    Base class for Extinction classes that use the form from 
+    Fitzpatrick & Massa 90
     """
-    from .phot import bandwl
-    __lambdaV=bandwl['V']
-    del bandwl
     
-    def __init__(self,EBmV=0):
-        Extinction.__init__(self,None,1)
-        raise NotImplementedError
+    def __init__(self,C1,C2,C3,C4,x0,gamma,EBmV=1,Rv=3.1):
+        self.x0 = x0
+        self.gamma = gamma
+        self.C1 = C1
+        self.C2 = C2
+        self.C3 = C3
+        self.C4 = C4
+        
+        _EBmVExtinction.__init__(self,EBmV,Rv)
+        
+    def f(self,lamb):
+        x=1e4/np.array(lamb,copy=False)
+        C1,C2,C3,C4 = self.C1,self.C2,self.C3,self.C4
+        gamma,x0 = self.gamma,self.x0
+        
+        xsq=x*x
+        D=xsq*((xsq-x0*x0)**2+xsq*gamma*gamma)**-2
+        FMf=C1+C2*x+C3*D
+        
+        if np.isscalar(FMf):
+            if x>=5.9:
+                FMf+=C4*(0.5392*(x-5.9)**2+0.05644*(x-5.9)**3)
+        else:
+            C4m=x>=5.9
+            FMf[C4m]+=C4*(0.5392*(x[C4m]-5.9)**2+0.05644*(x[C4m]-5.9)**3)
+        
+        return FMf+self.Rv #EBmV is the normalization and is multiplied in at the end
     
 class CardelliExtinction(_EBmVExtinction):
     """
@@ -259,19 +283,19 @@ class CardelliExtinction(_EBmVExtinction):
         else:
             return AloAv
     
-class LMCExtinction(_EBmVExtinction):
+class LMCExtinction(FMExtinction):
     """
-    LMC Extinction law from ???
+    LMC Extinction law from Gordon et al. 2003 LMC Average Sample
     """
-    def f(self,lamb):
-        raise NotImplementedError
+    def __init__(self,EBmV=.3,Rv=3.41):
+        FMExtinction.__init__(self,-.890,0.998,2.719,0.400,4.579,0.934,EBmV,Rv)
     
-class SMCExtinction(_EBmVExtinction):
+class SMCExtinction(FMExtinction):
     """
-    SMC Extinction law from ???
+    SMC Extinction law from Gordon et al. 2003 SMC Bar Sample
     """
-    def f(self,lamb):
-        raise NotImplementedError
+    def __init__(self,EBmV=.2,Rv=2.74):
+        FMExtinction.__init__(self,-4.959,2.264,0.389,0.461,4.6,1,EBmV,Rv)
 
 def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
     """
@@ -404,12 +428,12 @@ def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
         
     
 def get_dust_radec(ra,dec,dustmap,interpolate=True):
-    from .coords import equatorial_to_galactic_flt
-    l,b = equatorial_to_galactic_flt(ra,dec)
-    return get_dust_gal(l,b,dustmap,interpolate)
+    from .coords import equatorial_to_galactic
+    l,b = equatorial_to_galactic(ra,dec)
+    return get_SFD_dust(l,b,dustmap,interpolate)
 
 
-
+  
 #<---------------Deprecated---------------------------------------------------->
 def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     """
@@ -427,10 +451,14 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     from .phot import bandwl
     
     from warnings import warn
-    warn('extinction_correction function is deprecated - use Extinct class instead',DeprecationWarning)
+    warn('extinction_correction function is deprecated - use Extinction class instead',DeprecationWarning)
     
-    if exttype=='LMC' or exttype=='SMC':
-        raise NotImplementedError 
+    if exttype=='LMC':
+        eo = LMCExtinction(EBmV=EBmV,Rv=Rv)
+        return eo.correctFlux(lineflux,linewl)
+    elif exttype == 'SMC':
+        eo = SMCExtinction(EBmV=EBmV,Rv=Rv)
+        return eo.correctFlux(lineflux,linewl)
     
     if type(linewl) == str:
         linewl=bandwl[linewl]
