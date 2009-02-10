@@ -137,6 +137,9 @@ class FunctionModel1D(object):
     *integrate(self,lower,upper)
     *derivative(self,x,dx)
     *_customFit(x,y,fixedpars=(),**kwargs)
+    The following attributes may be set for additional information:
+    xAxisName
+    yAxisName
     
     The metaclass generates the following properties:
     Parameters for each of the inputs of the function (except self and x)
@@ -147,13 +150,21 @@ class FunctionModel1D(object):
     __metaclass__ = _FuncMeta1D
     
     defaultIntMethod = 'quad'
+    xAxisName = None
+    yAxisName = None
     
     def __call__(self,x):
         """
         call the function on the input x with the current parameters and return
         the result
         """
-        return self.f(np.atleast_1d(x),*self.parvals)
+        arr = np.array(x,copy=False)
+        res = self.f(np.atleast_1d(arr),*self.parvals)
+        if len(arr.shape) > 0:
+            return res
+        else:
+            return res[0]
+            
     
     def optimize(self,x0,type='min',method='fmin',**kwargs):
         """
@@ -597,6 +608,11 @@ class FunctionModel1D(object):
                 plt.scatter(*data)
         plt.xlim(lower,upper)
         
+        if self.xAxisName:
+            plt.xlabel(self.xAxisName)
+        if self.yAxisName:
+            plt.ylabel(self.yAxisName)
+        
     #Can Override:
     def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
         """
@@ -694,12 +710,127 @@ class FunctionModel1D(object):
         parameters
         """
         raise NotImplementedError
+  
+class CompositeModel(FunctionModel1D):
+    #TODO:initial vals
+    def __init__(self,models=[],operation='+'):
+        raise NotImplementedError
+        self.op = operation
+        ms=[]
+        for m in models:
+            if type(m) == str:
+                m=get_model(m)
+            if not issubclass(m,FunctionModel1D):
+                raise ValueError('Non FunctionModel1D provided')
+            ms.append(m)
+        self._modelcounts=dict([(m,ms.count(m)) for m in set(ms)])
+        self._models=[m() for m in ms]
+        
+        self.f=self.__f
+        
+        #TODO: set up attributes
+        
+    def _getParams(self):
+        ps=[]
+        from collections import defaultdict
+        d=defaultdict(lambda:1)
+        for m in self._models:
+            i=d[m]
+            d[m]=i+1
+            mname=m.__name__.replace('Model','').replace('model','')
+            for p in m.params:
+                ps.append('%s_%i_%s'%(mname,i+1,p))
+        return ps
+    def _getParvals(self):
+        ps=[]
+        for m in self._models:
+            for p in m.params:
+                ps.append(getattr(m,p))
+        return ps
+    def _setParvals(self,val):
+        i=0
+        for m in self._models:
+            for p in m.params:
+                v=val[i]
+                setattr(m,p,v)
+                i+=1
+    def _getPardict(self):
+        from collections import defaultdict
+        d=defaultdict(lambda:1)
+        for m in self._models:
+            i=d[m]
+            d[m]=i+1
+            mname=m.__name__.replace('Model','').replace('model','')
+            ps=[]
+            for p in m.params:
+                ps.append(('%s_%i_%s'%(mname,i+1,p),getattr(m,p)))
+        return dict(ps)
+    def _setPardict(self,val):
+        raise NotImplementedError
+    
+    params = property(_getParams)
+    parvals = property(_getParvals,_setParvals)
+    pardict = property(_getPardict,_setPardict)
+        
+    def f(self,x):
+        raise RuntimeError('Placeholder function - this should never be reachable')
+    def __f(self,x,*args):
+        #TODO:optimize
+        vals=[]
+        i=0
+        vals = [m(x) for m in self._models]
+        if self.op == '+':
+            return np.sum(vals)
+        elif self.op == '*':
+            return np.prod(vals)
+        else:
+            return ValueError('unrecognized operation')
+            
         
         
+#<----------------------Module functions -------------->  
+__model_registry={}
+def register_model(model,name=None,overwrite=False,stripmodel=True):
+    if not issubclass(model,FunctionModel1D):
+        raise TypeError('Supplied model is not a FunctionModel1D')
+    if name is None:
+        name = model.__name__.lower()
+    else:
+        name = name.lower()
+    if stripmodel:
+        name = name.replace('model','')
+    if overwrite and name in __model_registry:
+        raise KeyError('Model %s already exists'%name)
+    
+    __model_registry[name]=model
+    
+def get_model(modelname):
+    return __model_registry[modelname]
+
+def list_models():
+    return __model_registry.keys()
+
+
+
+#<----------------------Builtin models----------------->
+class ConstantModel(FunctionModel1D):
+    """
+    the simplest model imaginable - just a constant value
+    """
+    def f(self,x,C=0):
+        return C*np.ones_like(x)
+    
+    def derivative(self,x,dx=1):
+        return np.zeros_like(x)
+    
+    def integrate(self,lower,upper):
+        return self.C*(upper-lower)
+    
 class LinearModel(FunctionModel1D):
     """
     y=mx+b linear fit
     """
+    
     def f(self,x,m=1,b=0):
         return m*x+b
     
@@ -803,124 +934,6 @@ class LinearModel(FunctionModel1D):
             legend(loc=0)
         
         return B,A,sigmaB,sigmaA
-  
-class CompositeModel(FunctionModel1D):
-    #TODO:initial vals
-    def __init__(self,models=[],operation='+'):
-        raise NotImplementedError
-        self.op = operation
-        ms=[]
-        for m in models:
-            if type(m) == str:
-                m=get_model(m)
-            if not issubclass(m,FunctionModel1D):
-                raise ValueError('Non FunctionModel1D provided')
-            ms.append(m)
-        self._modelcounts=dict([(m,ms.count(m)) for m in set(ms)])
-        self._models=[m() for m in ms]
-        
-        self.f=self.__f
-        
-        #TODO: set up attributes
-        
-    def _getParams(self):
-        ps=[]
-        from collections import defaultdict
-        d=defaultdict(lambda:1)
-        for m in self._models:
-            i=d[m]
-            d[m]=i+1
-            mname=m.__name__.replace('Model','').replace('model','')
-            for p in m.params:
-                ps.append('%s_%i_%s'%(mname,i+1,p))
-        return ps
-    def _getParvals(self):
-        ps=[]
-        for m in self._models:
-            for p in m.params:
-                ps.append(getattr(m,p))
-        return ps
-    def _setParvals(self,val):
-        i=0
-        for m in self._models:
-            for p in m.params:
-                v=val[i]
-                setattr(m,p,v)
-                i+=1
-    def _getPardict(self):
-        from collections import defaultdict
-        d=defaultdict(lambda:1)
-        for m in self._models:
-            i=d[m]
-            d[m]=i+1
-            mname=m.__name__.replace('Model','').replace('model','')
-            ps=[]
-            for p in m.params:
-                ps.append(('%s_%i_%s'%(mname,i+1,p),getattr(m,p)))
-        return dict(ps)
-    def _setPardict(self,val):
-        raise NotImplementedError
-    
-    params = property(_getParams)
-    parvals = property(_getParvals,_setParvals)
-    pardict = property(_getPardict,_setPardict)
-        
-    def f(self,x):
-        raise RuntimeError('Placeholder function - this should never be reachable')
-    def __f(self,x,*args):
-        #TODO:optimize
-        vals=[]
-        i=0
-        vals = [m(x) for m in self._models]
-        if self.op == '+':
-            return np.sum(vals)
-        elif self.op == '*':
-            return np.prod(vals)
-        else:
-            return ValueError('unrecognized operation')
-            
-        
-        
-#<----------------------Module functions -------------->  
-def generate_composite_model(models,operation):
-    return CompsiteModel(models=models,operation=operation)
-
-__model_registry={}
-def register_model(model,name=None,overwrite=False,stripmodel=True):
-    if not issubclass(model,FunctionModel1D):
-        raise TypeError('Supplied model is not a FunctionModel1D')
-    if name is None:
-        name = model.__name__.lower()
-    else:
-        name = name.lower()
-    if stripmodel:
-        name = name.replace('model','')
-    if overwrite and name in __model_registry:
-        raise KeyError('Model %s already exists'%name)
-    
-    __model_registry[name]=model
-    
-def get_model(modelname):
-    return __model_registry[modelname]
-
-def list_models():
-    return __model_registry.keys()
-
-
-
-#<----------------------Builtin models----------------->
-class ConstantModel(FunctionModel1D):
-    """
-    the simplest model imaginable - just a constant value
-    """
-    def f(self,x,C=0):
-        return C*np.ones_like(x)
-    
-    def derivative(self,x,dx=1):
-        return np.zeros_like(x)
-    
-    def integrate(self,lower,upper):
-        return self.C*(upper-lower)
     
 class QuadraticModel(FunctionModel1D):
     """
