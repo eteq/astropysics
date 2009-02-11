@@ -136,6 +136,7 @@ class FunctionModel1D(object):
     should be accessed with self.pardict, self.parvals, or by properties/name :
     *integrate(self,lower,upper)
     *derivative(self,x,dx)
+    *inv(yval,*args,**kwargs)
     *_customFit(x,y,fixedpars=(),**kwargs)
     The following attributes may be set for additional information:
     xAxisName
@@ -150,6 +151,7 @@ class FunctionModel1D(object):
     __metaclass__ = _FuncMeta1D
     
     defaultIntMethod = 'quad'
+    defaultInvMethod = 'brentq'
     xAxisName = None
     yAxisName = None
     
@@ -165,7 +167,42 @@ class FunctionModel1D(object):
         else:
             return res[0]
             
-    
+    def inv(self,yval,*args,**kwargs):
+        """
+        Find the x value matching the requested y-value.  
+        (note that yval must be a scalar)
+        
+        typical usage is inv(yval,a,b,method='brentq')
+        
+        the kwarg 'method' can be any of the root finders from scipy.optimize 
+        scalar solvers are recommended (default is brentq or newton).  'method' 
+        can also be a function that should take f(g(x),*args,**kwargs) and 
+        return where g(x) is 0
+        
+        *args and **kwargs are passed into the minimizer
+        """    
+        import scipy.optimize
+        
+        if len(args) == 0:
+            args=[0]
+            method = kwargs.pop('method','newton')
+        elif len(args) == 1:
+            method = kwargs.pop('method','newton')
+        else:
+            method = kwargs.pop('method','brentq')
+            
+        if type(method) is str:
+            f = getattr(scipy.optimize,method)
+        else:
+            f = method
+        
+        if kwargs.pop('abs',False):
+            g = lambda(x):np.abs(self(x)-yval)
+        else:
+            g = lambda(x):self(x)-yval
+        
+        return f(g,*args,**kwargs)
+        
     def optimize(self,x0,type='min',method='fmin',**kwargs):
         """
         find an optimal value for the model - x0 is where to start the search
