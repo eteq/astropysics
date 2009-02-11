@@ -1,5 +1,5 @@
 """
-Erik Tollerud (etolleru@uci.edu) 2008
+©2008 Erik Tollerud (etolleru@uci.edu) 
 
 This package contains a variety of utilities and algorithms for processing
 and visualizing astronomical data.

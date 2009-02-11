@@ -1,4 +1,4 @@
-#Erik Tollerud (etolleru@uci.edu) 2008
+#©2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
 This module contains objects and functions for generating catalogs of objects

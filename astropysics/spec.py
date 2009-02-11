@@ -1,4 +1,4 @@
-#Erik Tollerud (etolleru@uci.edu) 2008
+#©2008 Erik Tollerud (etolleru@uci.edu) 
 """
 This module is for observed or synthetic spectra (Spectrum object) and 
 related operations.
