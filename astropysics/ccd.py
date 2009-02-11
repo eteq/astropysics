@@ -9,7 +9,6 @@ see the phot and spec packages.
 """
 
 from __future__ import division
-import matplotlib.pyplot as plt
 import numpy as np
 
 class CCDImage(object):
@@ -334,6 +333,7 @@ class CCDImage(object):
         
         kwargs are passed into imshow
         """
+        import matplotlib.pyplot as plt
         
         vals=self._active
             
@@ -431,6 +431,8 @@ class CCDImage(object):
         kwargs go into hist
         reset defaults: 'log'->True,'bins'->100 or 25,'histtype'->'step'
         """
+        import matplotlib.pyplot as plt
+        
         vals=self._active
         
         if clf:
@@ -491,7 +493,9 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,cl
     if noticks is True, x and y ticks are not drawn
     clf determines if the figure is cleared before the mosaic is generated
     """
+    import matplotlib.pyplot as plt
     from operator import isSequenceType
+    
     if isSequenceType(xcens):
         onev=np.ones(len(xcens))
     elif isSequenceType(ycens):

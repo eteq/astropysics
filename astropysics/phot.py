@@ -9,7 +9,6 @@ Tends to be oriented towards optical techniques.
 from __future__ import division
 from math import pi
 import numpy as np
-import matplotlib.pyplot as plt
 
 #photometric band centers - B&M
 bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110}
