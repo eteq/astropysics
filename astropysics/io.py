@@ -1,4 +1,4 @@
-#©2009 Erik Tollerud (etolleru@uci.edu) 
+#Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
 This module contains functions and classes for various forms of data/file

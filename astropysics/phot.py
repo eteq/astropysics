@@ -1,4 +1,4 @@
-#©2008 Erik Tollerud (etolleru@uci.edu) 
+#Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 """
 This module is for observed or synthetic photometry and 
 related operations.

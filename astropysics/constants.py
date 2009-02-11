@@ -1,4 +1,4 @@
-#©2008 Erik Tollerud (etolleru@uci.edu) 
+#Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 """
 This module stores physical constants and conversion factors for the astropysics
 package.

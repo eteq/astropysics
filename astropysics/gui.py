@@ -1,4 +1,4 @@
-#©2009 Erik Tollerud (etolleru@uci.edu) 
+#Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
 This module contains GUI elements and adapters for various parts of astropysics.
