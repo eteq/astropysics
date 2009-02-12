@@ -16,9 +16,103 @@ bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,
 #<---------------------Classes------------------------------------------------->
 
 class Band(object):
+    """
+    This class is the base of all photometric band objects
+    
+    subclasses should set the following arrays:
+    self._x (wavelength)
+    self._S (maximum should be 1)
+    
+    It is recommended that subclasses set the following values (otherwise they will be calculated on first access):
+    self._cenwl (center of the band)
+    self._widthwl (second moment of the band)
+    """
     def __init__(self):
         raise NotImplementedError
+    
+    _cenwl = None
+    @property
+    def center(self):
+        """
+        The center of the band
+        """
+        if self._cenwl is None:
+            raise NotImplementedError
+            self._cenwl = cen
+        else:
+            return self._cenwl
+    
+    _widthwl = None
+    @property
+    def width(self):
+        """
+        second centralized moment of the band
+        """
+        if self._widthwl is None:
+            raise NotImplementedError
+            self._widthwl = wid
+        else:
+            return self._widthwl
+    
+    @property
+    def lamb(self):
+        """
+        wavelengths for the band
+        """
+        return self._x
+    
+    @property
+    def response(self):
+        """
+        response function - e.g. probability a photon will be detected
+        """
+        return self.norm*self._S
+    
+    norm = 1
 
+class GaussianBand(self):
+    def __init__(self,center,width,sigs=6,n=100):
+        """
+        center is the central wavelength of the band, while width is the sgima 
+        (if positive) or FWHM (if negative)
+        """
+        self._cenwl = center
+        self._widthwl = sig = width if width > 0 else -width*(8*np.log(2))**-0.5#TODO:*?
+        
+        self._x = np.linspace(-sigs,sigs,n)*width+center
+        xp = x - center
+        self._S = np.exp(-xp*xp/2/sig/sig)
+        
+class FileBand(self):
+    def __init__(self,fn,type=None):
+        """
+        type can be 'txt', or 'fits', or inferred from extension
+        
+        if txt, first column should be lambda, second should be response
+        """
+        from os import path
+        
+        if type is None:
+            ext = path.splitext(fn)[-1].lower()
+            if ext == 'fits' or ext == 'fit':
+                type = 'fits'
+            else:
+                type = 'txt'
+        
+        if type == 'txt':
+            x,S = np.loadtxt(fn).T
+        elif type == 'fits':
+            import pyfits
+            f = pyfits.open(fn)
+            try:
+                #TODO: much smarter/WCS
+                x,S = f[0].data
+            finally:
+                f.close()
+        else:
+            raise ValueError('unrecognized type')
+        
+        
 
 #<---------------------Procedural/utility functions---------------------------->
     
