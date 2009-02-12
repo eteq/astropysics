@@ -13,7 +13,11 @@ import numpy as np
 #photometric band centers - B&M
 bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110}
 
+#<---------------------Classes------------------------------------------------->
 
+class Band(object):
+    def __init__(self):
+        raise NotImplementedError
 
 
 #<---------------------Procedural/utility functions---------------------------->
@@ -257,56 +261,80 @@ _band_to_msun={'U':5.61,
                'r':4.67,
                'i':4.48,
                'z':4.42}
-
-def lum_to_mag(L,Msun=4.83,Lsun=1,Lerr=None):
-    """
-    calculate a magnitude from a luminosity
-    
-    if Lerr is given, will return (M,dM)
-    
-    Lsun is a units conversion fact for luminosity - e.g. 4.64e32 for ergs
-        
-    default values are from Binney&Merrifield for V-band and solar lums
-    
-    Msun can also be 'U','B','V','R','I','J','H', or 'K' and will use B&M values for solar magnitudes
-    or 'u','g','r','i', or 'z' from http://www.ucolick.org/~cnaw/sun.html
-    """
-    if type(Msun) == str:
-        Msun=_band_to_msun[Msun]
-    if type(L) is not np.ndarray:
-        L=np.array(L)
-    M=Msun-2.5*np.log10(L/Lsun)
-
-    if np.any(Lerr):
-        dM=1.0857362047581294*Lerr/L #-1.0857362047581294 = -2.5/ln(10)
-        return M,dM
-    else:
-        return M
-    
-def mag_to_lum(M,Msun=4.83,Lsun=1,Merr=None):
+               
+def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     """
     calculate a luminosity from a magnitude
     
+    input M can be either a magnitude value, a sequence/array of magnitudes, or
+    a dictionary where the keys will be interpreted as specifying the bands  
+    (e.g. they can be 'U','B','V', etc. to be looked up as described 
+    below or a value for the zero-point)
+    
     if Merr is given, will return (L,dL)
     
-    Lsun is a units conversion fact for luminosity - e.g. 4.64e32 for ergs
+    Mzpt specifies the magnitude that matches Lzpt, so Lzpt is a unit conversion
+    factor for luminosity - e.g. 4.64e32 for ergs in V with solar zero points,
+    or 1 for solar
     
-    default values are from Binney&Merrifield for V-band and solar lums
-    
-    Msun can also be 'U','B','V','R','I','J','H', or 'K' and will use B&M values for solar magnitudes
-    or 'u','g','r','i', or 'z' from http://www.ucolick.org/~cnaw/sun.html
+    Mzpt can also be 'U','B','V','R','I','J','H', or 'K' and will use B&M values 
+    for solar magnitudes or 'u','g','r','i', or 'z' from http://www.ucolick.org/~cnaw/sun.html
     """
-    if type(Msun) == str:
-        Msun=_band_to_msun[Msun]
-    if type(M) is not np.ndarray:
+    from operator import isMappingType,isSequenceType
+    
+    dictin = isMappingType(M)    
+    if dictin:
+        dkeys = Mzpt = M.keys()
+        M = M.values()
+    elif type(M) is not np.ndarray:
         M=np.array(M)
-    L=(10**((Msun-M)/2.5))*Lsun
+        
+    if type(Mzpt) == str:
+        Mzpt=_band_to_msun[Mzpt]
+    elif isSequenceType(Mzpt):    
+        Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
+        
+    L=(10**((Mzpt-M)/2.5))*Lzpt
+    
+    if dictin:
+        L = dict([t for t in zip(dkeys,L)])
     
     if np.any(Merr):
         dL=Merr*L/1.0857362047581294 #-1.0857362047581294 = -2.5/ln(10)
         return L,dL
     else:
         return L
+
+def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
+    """
+    calculate a magnitude from a luminosity
+    
+    see mag_to_lum() for syntax details
+    """
+    from operator import isMappingType,isSequenceType
+        
+    dictin = isMappingType(L)    
+    if dictin:
+        dkeys = Mzpt = L.keys()
+        L = L.values()
+    elif type(L) is not np.ndarray:
+        L=np.array(L)     
+        
+    if type(Mzpt) == str:
+        Mzpt=_band_to_msun[Mzpt]
+    elif isSequenceType(Mzpt):    
+        Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
+        
+    M=Mzpt-2.5*np.log10(L/Lzpt)
+
+    if dictin:
+        M = dict([t for t in zip(dkeys,M)])
+
+    if np.any(Lerr):
+        dM=1.0857362047581294*Lerr/L #-1.0857362047581294 = -2.5/ln(10)
+        return M,dM
+    else:
+        return M
     
 def intensities_to_sig(Is,In,exposure=1,area=1):
     """
