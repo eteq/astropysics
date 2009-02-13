@@ -70,7 +70,7 @@ class Band(object):
     
     norm = 1
 
-class GaussianBand(self):
+class GaussianBand(Band):
     def __init__(self,center,width,sigs=6,n=100):
         """
         center is the central wavelength of the band, while width is the sgima 
@@ -83,7 +83,7 @@ class GaussianBand(self):
         xp = x - center
         self._S = np.exp(-xp*xp/2/sig/sig)
         
-class FileBand(self):
+class FileBand(Band):
     def __init__(self,fn,type=None):
         """
         type can be 'txt', or 'fits', or inferred from extension

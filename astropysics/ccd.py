@@ -25,7 +25,7 @@ class CCDImage(object):
             raise IOError('unrecognized file type')
         
         
-        self.chdu = ihdu
+        self._chdu = ihdu
         self._rng = None
         self.__examcid = None
         self._changed = False
@@ -33,7 +33,11 @@ class CCDImage(object):
         self.setScaling(scaling)
         self._calcGlobalStats()
         
-        self.activateRange(irange) 
+        #informational properties
+        self._pixscale = None
+        self._zpt = None
+        
+        self.activateRange(irange,hdu=ihdu) 
         
         
         
@@ -44,9 +48,22 @@ class CCDImage(object):
     def close(self):
         self.file.close()
         
-    def setHDU(self,hdu):
-        self.file[hdu]
-        self.chdu=hdu
+#    def setHDU(self,hdu):
+#        self.file[hdu]
+#        self._chdu=hdu
+#        self._updateFromHeader(hdu.header)
+        
+    def _updateFromHeader(self):
+        d = dict(self.file[self._chdu].header.items())
+        del d['']
+        
+        if 'PIXSCALE' in d:
+            self.pixelscale = d['PIXSCALE']
+        elif 'PIXSCAL1' in d:
+            if 'PIXSCAL2' in d:
+                self.pixelscale = (d['PIXSCAL1'],d['PIXSCAL2'])
+            else:
+                self.pixelscale = d['PIXSCAL1']
         
     def setScaling(self,scalefunc,invscalefunc=None):
         """
@@ -136,17 +153,27 @@ class CCDImage(object):
         
     def setScalingASinh(self):
         #TOOD:test
-        self._scalefunc=np.asinh
+        self._scalefunc=np.arcsinh
         self._invscalefunc=np.sinh
         
         
-    def activateRange(self,range):
+    def activateRange(self,range,hdu=None):
         """
         chooses the range to activate for further operations
         
         can either be None (whole file), a 4-tuple of
         the form (xl,xu,yl,yu) or a 3-tuple of the form (xcen,ycen,radius)
         """
+        if hdu is not None and hdu != self._chdu:
+            oldhdu = self._chdu
+            self._chdu = hdu
+            try:
+                self._calcGlobalStats()
+                self._updateFromHeader()
+            except:
+                self._chdu = oldhdu
+                raise
+            
         if self.applyChangesOnActivate and self._changed:
             try:
                 self.applyChanges()
@@ -155,7 +182,7 @@ class CCDImage(object):
                 warn("No inverse function available - can't save",category = RuntimeWarning)
                 
         if range is None:
-            im = self.file[self.chdu].data
+            im = self.file[self._chdu].data
         else:
             if len(range) == 3:
                 xcen,ycen,rad = range
@@ -167,7 +194,7 @@ class CCDImage(object):
                 raise ValueError('Unregonized form for range')
             
             xl,xu,yl,yu = range
-            im = self.file[self.chdu].data
+            im = self.file[self._chdu].data
             xr,yr=im.shape
             
             #do checks
@@ -201,7 +228,9 @@ class CCDImage(object):
         
     def getRange(self,editing = True):
         """
-        editing = whether or not you intend to change the data
+        direct access to the array holding the current data
+        
+        editing = whether or not you intend to change the data 
         """
         self._changed = editing
         return self._rng
@@ -216,13 +245,13 @@ class CCDImage(object):
             range = self._rng
             
             if range is None:
-                self.file[self.chdu].data = altim
+                self.file[self._chdu].data = altim
             elif len(range) == 3:
                 xcen,ycen,rad = range
-                self.file[self.chdu].data[xcen-rad:xcen+rad,ycen-rad:ycen+rad]  = altim
+                self.file[self._chdu].data[xcen-rad:xcen+rad,ycen-rad:ycen+rad]  = altim
             elif len(range) == 4:
                 xl,xu,yl,yu = range
-                self.file[self.chdu].data[xl:xu,yl:yu] = altim
+                self.file[self._chdu].data[xl:xu,yl:yu] = altim
             else:
                 raise ValueError('Unregonized form for range')
             
@@ -263,7 +292,7 @@ class CCDImage(object):
         im=self._active
             
         if fullsig:
-            statdat=self._scalefunc(self.file[self.chdu].data)
+            statdat=self._scalefunc(self.file[self._chdu].data)
         else:
             statdat=self._scalefunc(self._active)
             
@@ -308,10 +337,10 @@ class CCDImage(object):
         return clipi
     
     def _getGlobalData(self):
-        return self.file[self.chdu].data.ravel()
+        return self.file[self._chdu].data.ravel()
     
     def _calcGlobalStats(self):
-        v = self.file[self.chdu].data.ravel()
+        v = self.file[self._chdu].data.ravel()
         
         self._global_median=np.median(v)
         self._global_mean=np.mean(v)
@@ -475,11 +504,44 @@ class CCDImage(object):
         
         return {'mean':np.mean(v),'median':np.median(v),'std':np.std(v),'min':np.min(v),'max':np.max(v)}
     
-    def getShape(self):
-        return self.file[self.chdu]._dimShape()
+    @property
+    def shape(self):
+        """
+        tuple with dimensions of the currently selected image
+        """
+        return self.file[self._chdu]._dimShape()
     
-    def getSize(self):
-        return self.file[self.chdu].size()
+    @property
+    def size(self):
+        """
+        number of pixels in the currently selected image
+        """
+        return self.file[self._chdu].size()
+    
+    pixelscale = property(_getPixScale,_setPixScale,doc="""
+    Pixel scale of the image in 
+    """)
+    def _getPixScale(self):
+        return self._pixscale
+    def _setPixScale(self,val):
+        if np.isscalar(val):
+            self._pixscale = (val,val)
+        else:
+            if len(val) != 2:
+                raise ValueError('set pixel scale as (xscale,yscale)')
+            self._pixscale = tuple(val)
+            
+    zeropoint = property(_getZpt,_setZpt,doc="""
+    The photometric zero-point for this CCDImage, to be used in other 
+    processing tasks (see astropysics.phot)
+    """)
+    def _getZpt(self):
+        return self._zpt
+    def _setZpt(self,val):
+        if not np.isscalar(val):
+            return ValueError('zero points must be scalars')
+        self._zpt = val
+            
         
         
 def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,clf=True,logify=False,**kwargs):
@@ -576,4 +638,78 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,cl
             plt.ion()
         
     
+def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,**kckwargs):
+    """
+    This function performs kcorrections pixel-by-pixel on a matched set of 
+    images.  Note that one must be carefule to ensure the images are matched
+    (e.g. they must be degraded to the largest PSF image), something that this 
+    function does nothing about.  
+    See astropysics.phot.kcorrect for more details on the k-correction algorithm
     
+    images are a sequence of CCDImage objects, or a list of filenames that will 
+    be loaded as images (using the 0th hdu if FITS).
+    
+    bands should be the photometric bands of each of the images as accepted by
+    kcorrect
+    
+    z is the redshift to correct this image to
+    
+    range is the range from each of the images to select
+    
+    zeropoints and pixelareas (sq asec) will be deduced from the CCDImage 
+    properties zeropoint and platescale if they are not provided 
+    
+    extra kwargs will be passed into astropysics.phot.kcorrect
+    
+    returns absmag,kcorrection,chi2 as arrays shaped like the input range
+    """
+    from .phot import kcorrect
+    nbands = len(bands)
+    if  len(images) != nbands:
+        raise ValueError("images and bands don't match!")
+    if zeropoints is not None and nbands != len(zeropoints):
+        raise ValueError("zeropoints and # of bands don't match!")
+    if pixelareas is not None and nbands != len(pixelareas):
+        raise ValueError("platescale and # of bands don't match!")
+    
+    imobj,imdata = [],[]
+    for i in images:
+        if isinstance(i,CCDImage):
+            imobj.append(i)
+        elif type(i) is str:
+            imobj.append(CCDImage(i))
+        i = imobj[-1]
+        i.setScaling(None)
+        i.activateRange(range)
+        imdata.append(i.getRange())
+    dshape = imdata[0].shape
+        
+    if zeropoints is None:
+        zeropoints=[]
+        for i,im in enumerate(imobj):
+            zpt = i.zeropoint
+            if zpt is None:
+                raise ValueError('image #%i has no zeropoint'%i)
+            zeropoints.append(zpt)
+    if pixelareas is None:
+        pixelareas=[]
+        for i,im in enumerate(imobj):
+            psc = i.platescale
+            if psc is None:
+                raise ValueError('image #%i has no platescale'%i)
+            pixelareas.append(psc[0]*psc[1])
+    
+    
+    sbs = [(m + 2.5*np.log10(A) - zpt).flatten() for m,A,zpt in zip(imdata,pixelareas,zeropoints)]
+    
+    #TODO: implement errors
+    #TODO: shape matching tests
+    ams,kcs,chi2s = kcorrect(sbs,z,filterlist=bands) #TODO: test if z*ones(imdata[0].size*nbands) is necessary
+    
+    targetshape = tuple(np.r_[nbands,dshape]) #all should match
+    
+    ams = ams.reshape(targetshape)
+    kcs = kcs.reshape(targetshape)
+    chi2s = chi2s.reshape(targetshape)
+    
+    return ams,kcs,chi2s
