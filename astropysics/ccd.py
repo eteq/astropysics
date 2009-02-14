@@ -24,20 +24,25 @@ class CCDImage(object):
             self.file = None
             raise IOError('unrecognized file type')
         
-        
-        self._chdu = ihdu
-        self._rng = None
-        self.__examcid = None
-        self._changed = False
-        self.applyChangesOnActivate = False#True #TODO:check this out for consistency
-        self.setScaling(scaling)
-        self._calcGlobalStats()
-        
-        #informational properties
+        #informational property attributes
         self._pixscale = None
         self._zpt = None
         
-        self.activateRange(irange,hdu=ihdu) 
+        #internal variables
+        self.__examcid = None
+        self._changed = False
+        self.applyChangesOnActivate = False#True #TODO:check this out for consistency
+        
+        self._rng = irange
+        self._chdu = ihdu 
+        self._scalefunc = self._invscalefunc = None
+        self.setScaling(scaling) #implicitly calls activateRange
+        self._calcGlobalStats()
+        self._updateFromHeader()
+        
+        
+        
+        
         
         
         
@@ -63,6 +68,7 @@ class CCDImage(object):
             if 'PIXSCAL2' in d:
                 self.pixelscale = (d['PIXSCAL1'],d['PIXSCAL2'])
             else:
+                print 'hit4'
                 self.pixelscale = d['PIXSCAL1']
         
     def setScaling(self,scalefunc,invscalefunc=None):
@@ -81,6 +87,8 @@ class CCDImage(object):
                     return self.setScalingLinear()
                 elif sfl=='log':
                     return self.setScalingLog()
+                elif sfl=='sb':
+                    return self.setScalingSurfaceBrightness()
                 elif sfl=='exp':
                     return self.setScalingExp()
                 elif sfl=='power':
@@ -91,14 +99,16 @@ class CCDImage(object):
                     raise ValueError('Unrecognized scaling string')
             elif not callable(scalefunc):
                 raise ValueError('scalefunc is not a callable')
-            self._scalefunc=scalefunc
-            self._invscalefunc=invscalefunc
+            newf=scalefunc
+            newif=invscalefunc
         else:
-            self._scalefunc=lambda x:x
-            self._invscalefunc=self._scalefunc
-        
+            newf = lambda x:x
+            newif = newf
             
-        self.activateRange(self._rng)
+        if self._scalefunc != newf or self._invscalefunc != newif :
+            self._scalefunc = newf
+            self._invscalefunc = newif    
+            self.activateRange(self._rng)
         
     def setScalingLinear(self):
         self.setScaling(None)
@@ -141,20 +151,56 @@ class CCDImage(object):
         
         self.activateRange(self._rng)
         
+    def setScalingSurfaceBrightness(self,negaction='mask'):
+        """
+        set the scaling so that output is magnitudes per square arcsecond.  Note
+        that the zeropoint and pixelscale properties must be set for this scaling
+        to work.
+        
+        neg determines what to do with negative values - one of the standard
+        replacement actions
+        """        
+        if self.zeropoint is None:
+            raise ValueError('no zero point set')
+        if self.pixelscale is None:
+            raise ValueError('No pixel scale set')
+        
+        zpt,A=self.zeropoint,self.pixelscale[0]*self.pixelscale[1]
+        offset = 2.5*np.log10(A) - zpt
+        
+        def scale(im):
+            im,nclip=self._repl_inds(negaction,self._active <= 0)
+            return -2.5*log10(im)+offset
+            
+        def invscale(im):
+            return 10**((im-offset)/-2.5)
+            
+        self._scalefunc = scale
+        self._invscalefunc = invscale
+        
+        self.activateRange(self._rng)
+        
+        
     def setScalingExp(self,base=10):
         from math import log
         logbase=log(base)
         self._scalefunc=lambda x:base**x
         self._invscalefunc=lambda x:np.log(x)/logbase
         
+        self.activateRange(self._rng)
+        
     def setScalingPower(self,power=2):
         self._scalefunc=lambda x:x**power
         self._invscalefunc=lambda x:x**(1/power)
         
+        self.activateRange(self._rng)
+        
     def setScalingASinh(self):
         #TOOD:test
-        self._scalefunc=np.arcsinh
-        self._invscalefunc=np.sinh
+        self._scalefunc = np.arcsinh
+        self._invscalefunc = np.sinh
+        
+        self.activateRange(self._rng)
         
         
     def activateRange(self,range,hdu=None):
@@ -182,19 +228,20 @@ class CCDImage(object):
                 warn("No inverse function available - can't save",category = RuntimeWarning)
                 
         if range is None:
-            im = self.file[self._chdu].data
+            im = self.file[self._chdu].data.T
         else:
             if len(range) == 3:
                 xcen,ycen,rad = range
-                range=(ycen-rad,ycen+rad,xcen-rad,xcen+rad)
+                #range=(ycen-rad,ycen+rad,xcen-rad,xcen+rad)
+                range=(xcen-rad,xcen+rad,ycen-rad,ycen+rad)
             elif len(range) == 4: 
                 xl,xu,yl,yu=range
-                range=(yl,yu,xl,xu)
+                #range=(yl,yu,xl,xu)
             else:
                 raise ValueError('Unregonized form for range')
             
             xl,xu,yl,yu = range
-            im = self.file[self._chdu].data
+            im = self.file[self._chdu].data.T
             xr,yr=im.shape
             
             #do checks
@@ -225,15 +272,7 @@ class CCDImage(object):
         
         self._rng = range
         self._active = self._scalefunc(im)
-        
-    def getRange(self,editing = True):
-        """
-        direct access to the array holding the current data
-        
-        editing = whether or not you intend to change the data 
-        """
-        self._changed = editing
-        return self._rng
+    
     
     def applyChanges(self):
         if not self._invscalefunc:
@@ -245,13 +284,13 @@ class CCDImage(object):
             range = self._rng
             
             if range is None:
-                self.file[self._chdu].data = altim
-            elif len(range) == 3:
-                xcen,ycen,rad = range
-                self.file[self._chdu].data[xcen-rad:xcen+rad,ycen-rad:ycen+rad]  = altim
+                self.file[self._chdu].data = altim.T
+            #elif len(range) == 3:
+            #    xcen,ycen,rad = range
+            #    self.file[self._chdu].data[xcen-rad:xcen+rad,ycen-rad:ycen+rad]  = altim.T
             elif len(range) == 4:
                 xl,xu,yl,yu = range
-                self.file[self._chdu].data[xl:xu,yl:yu] = altim
+                self.file[self._chdu].data[xl:xu,yl:yu] = altim.T
             else:
                 raise ValueError('Unregonized form for range')
             
@@ -274,10 +313,10 @@ class CCDImage(object):
             limits=(mi+limits[0]*rng/100,mi+limits[1]*rng/100)
             
         clipcond=np.logical_or(im>limits[1],im<limits[0])
-        clipi=self._repl_inds(action,clipcond)
+        self._active,nclip=self._repl_inds(action,clipcond)
         
         self._changed = True
-        return len(clipi[0])
+        return nclip
         
     def clipSigma(self,sigma=12,fullsig=True,action='noclipmedian'):
         """
@@ -300,41 +339,41 @@ class CCDImage(object):
         mean=statdat.mean()
         
         wcond=np.logical_or(im>(mean+slim),im<(mean-slim))
-        clipi=self._repl_inds(action,wcond)
+        self._active,nclip=self._repl_inds(action,wcond)
         
         self._changed = True
-        return len(clipi[0])
+        return nclip
     
     def clipInvalids(self,action):
         wcond=np.logical_not(np.isfinite(self._active))
-        clipi=self._repl_inds(action,wcond)
+        self._active,nclip=self._repl_inds(action,wcond)
         
         self._changed = True
-        return len(clipi[0])
+        return nclip
         
     def _repl_inds(self,action,cliparr):
-        clipi=np.where(cliparr)
-        nclipi=np.where(np.logical_not(cliparr))
         im=self._active
         
-        if action == 'median':
-            im[clipi]=np.median(im,None)
+        if action == 'mask':
+            im, = np.ma.masked_array(im,cliparr,copy=False)
+        elif action == 'median':
+            im[cliparr]=np.median(im,None)
         elif action == 'fullmedian':
-            im[clipi]=self._global_median
+            im[cliparr]=self._global_median
         elif action == 'noclipmedian':
-            im[clipi]=np.median(im[nclipi],None)
+            im[cliparr]=np.median(im[~clipar],None)
         elif action == 'mean':
-            im[clipi]=np.mean(im,None)
+            im[cliparr]=np.mean(im,None)
         elif action == 'fullmean':
-            im[clipi]=self._global_mean
+            im[cliparr]=self._global_mean
         elif action == 'noclipmean':
-            im[clipi]=np.mean(im[nclipi],None)
+            im[cliparr]=np.mean(im[~clipar],None)
         elif type(action) != str and np.isscalar(action):
-            im[clipi]=action
+            im[cliparr]=action
         else:
             raise ValueError('unrecognized action')
         
-        return clipi
+        return im,sum(cliparr)
     
     def _getGlobalData(self):
         return self.file[self._chdu].data.ravel()
@@ -434,7 +473,8 @@ class CCDImage(object):
         preint=plt.isinteractive()    
         try:
             plt.ioff()
-            plt.imshow(-vals if invert else vals,norm=nrm,**kwargs)
+            print vals.shape
+            plt.imshow(-vals.T if invert else vals.T,norm=nrm,**kwargs)
             if cb:
                 plt.colorbar()
             if 'x' in flipaxis:
@@ -508,8 +548,9 @@ class CCDImage(object):
     def shape(self):
         """
         tuple with dimensions of the currently selected image
+        (the internal representation is flipped for FITS - this is the correct orientation)
         """
-        return self.file[self._chdu]._dimShape()
+        return tuple(reversed(self.file[self._chdu]._dimShape()))
     
     @property
     def size(self):
@@ -518,9 +559,6 @@ class CCDImage(object):
         """
         return self.file[self._chdu].size()
     
-    pixelscale = property(_getPixScale,_setPixScale,doc="""
-    Pixel scale of the image in 
-    """)
     def _getPixScale(self):
         return self._pixscale
     def _setPixScale(self,val):
@@ -530,17 +568,43 @@ class CCDImage(object):
             if len(val) != 2:
                 raise ValueError('set pixel scale as (xscale,yscale)')
             self._pixscale = tuple(val)
-            
-    zeropoint = property(_getZpt,_setZpt,doc="""
-    The photometric zero-point for this CCDImage, to be used in other 
-    processing tasks (see astropysics.phot)
+    pixelscale = property(_getPixScale,_setPixScale,doc="""
+    Pixel scale of the image in 
     """)
+            
     def _getZpt(self):
         return self._zpt
     def _setZpt(self,val):
         if not np.isscalar(val):
             return ValueError('zero points must be scalars')
         self._zpt = val
+    zeropoint = property(_getZpt,_setZpt,doc="""
+    The photometric zero-point for this CCDImage, to be used in other 
+    processing tasks (see astropysics.phot)
+    """)
+    
+    def _getData(self):
+        return self._active
+    data = property(_getData,doc="""
+    direct access to the array holding the current data.  If this data is 
+    subsequently edited, applyChanges() should be called to ensure consistancy
+    """)
+    
+    def _getRange(self):
+        return self._rng
+    def _setRange(self,value):
+        self.activateRange(value,None)
+    range = property(_getRange,_setRange,doc="""
+    returns or sets the range (setting is syntactic sugar for activateRange)
+    """)
+    def _getHdu(self):
+        return self._chdu
+    def _setHdu(self,value):
+        currrng = self._rng
+        self.activateRange(currrng,value)
+    hdu = property(_getHdu,_setHdu,doc="""
+    the hdu of the current fits file
+    """)
             
         
         
@@ -638,7 +702,7 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,cl
             plt.ion()
         
     
-def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,**kckwargs):
+def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,retdict=False,**kckwargs):
     """
     This function performs kcorrections pixel-by-pixel on a matched set of 
     images.  Note that one must be carefule to ensure the images are matched
@@ -657,11 +721,16 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,**
     range is the range from each of the images to select
     
     zeropoints and pixelareas (sq asec) will be deduced from the CCDImage 
-    properties zeropoint and platescale if they are not provided 
+    properties zeropoint and pixelscale if they are not provided (if they are,
+    they will everwrite the existing properties)
     
     extra kwargs will be passed into astropysics.phot.kcorrect
     
     returns absmag,kcorrection,chi2 as arrays shaped like the input range
+    (for absmag and kcorrection, the first dimension is the bans)
+    
+    if True, retdict means the absmag and kcorrection will be returned as
+    dictionaries of arrays with the band names as the keys
     """
     from .phot import kcorrect
     nbands = len(bands)
@@ -670,46 +739,47 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,**
     if zeropoints is not None and nbands != len(zeropoints):
         raise ValueError("zeropoints and # of bands don't match!")
     if pixelareas is not None and nbands != len(pixelareas):
-        raise ValueError("platescale and # of bands don't match!")
+        raise ValueError("pixelscale and # of bands don't match!")
     
     imobj,imdata = [],[]
-    for i in images:
-        if isinstance(i,CCDImage):
-            imobj.append(i)
+    for i,im in enumerate(images):
+        if isinstance(im,CCDImage):
+            imobj.append(im)
         elif type(i) is str:
-            imobj.append(CCDImage(i))
-        i = imobj[-1]
-        i.setScaling(None)
-        i.activateRange(range)
-        imdata.append(i.getRange())
-    dshape = imdata[0].shape
+            imobj.append(CCDImage(im))
+        else:
+            raise ValueError('image #%i is not a CCDImage or string'%i)
         
-    if zeropoints is None:
-        zeropoints=[]
-        for i,im in enumerate(imobj):
-            zpt = i.zeropoint
-            if zpt is None:
-                raise ValueError('image #%i has no zeropoint'%i)
-            zeropoints.append(zpt)
+    if zeropoints is not None:
+        for zpt,im in zip(zeropoints,imobj):
+            imobj.zeropoint = zpt
     if pixelareas is None:
         pixelareas=[]
-        for i,im in enumerate(imobj):
-            psc = i.platescale
-            if psc is None:
-                raise ValueError('image #%i has no platescale'%i)
-            pixelareas.append(psc[0]*psc[1])
-    
-    
-    sbs = [(m + 2.5*np.log10(A) - zpt).flatten() for m,A,zpt in zip(imdata,pixelareas,zeropoints)]
+        for pa,im in zip(pixelareas,imobj):
+            imobj.pixelscale = pa**0.5
+            
+    for i,im in enumerate(images):
+        im.setScaling('sb')
+        im.activateRange(range)
+        imdata.append(im.data)
+        
+    dshape = imdata[0].shape
+        
+    sbs = [da.flatten() for da in imdata]
     
     #TODO: implement errors
-    #TODO: shape matching tests
-    ams,kcs,chi2s = kcorrect(sbs,z,filterlist=bands) #TODO: test if z*ones(imdata[0].size*nbands) is necessary
+    #TODO: shape matching tests?
+    ams,kcs,chi2s = kcorrect(sbs,z*np.ones(imdata[0].size),filterlist=bands) 
     
     targetshape = tuple(np.r_[nbands,dshape]) #all should match
     
     ams = ams.reshape(targetshape)
     kcs = kcs.reshape(targetshape)
-    chi2s = chi2s.reshape(targetshape)
+    chi2s = chi2s.reshape(dshape)
     
-    return ams,kcs,chi2s
+    if retdict:
+        dam = dict([(b,am) for am,b in zip(ams,bands)])
+        dkcs =  dict([(b,kc) for kc,b in zip(kcs,bands)])
+        return dams,dkcs,chi2s
+    else:
+        return ams,kcs,chi2s
