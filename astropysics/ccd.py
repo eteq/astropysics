@@ -151,14 +151,13 @@ class CCDImage(object):
         
         self.activateRange(self._rng)
         
-    def setScalingSurfaceBrightness(self,negaction='mask'):
+    def setScalingSurfaceBrightness(self):
         """
         set the scaling so that output is magnitudes per square arcsecond.  Note
         that the zeropoint and pixelscale properties must be set for this scaling
         to work.
         
-        neg determines what to do with negative values - one of the standard
-        replacement actions
+        note that if any part of the image is negative, errors can occur
         """        
         if self.zeropoint is None:
             raise ValueError('no zero point set')
@@ -167,16 +166,9 @@ class CCDImage(object):
         
         zpt,A=self.zeropoint,self.pixelscale[0]*self.pixelscale[1]
         offset = 2.5*np.log10(A) - zpt
-        
-        def scale(im):
-            im,nclip=self._repl_inds(negaction,self._active <= 0)
-            return -2.5*log10(im)+offset
             
-        def invscale(im):
-            return 10**((im-offset)/-2.5)
-            
-        self._scalefunc = scale
-        self._invscalefunc = invscale
+        self._scalefunc = lambda im:-2.5*np.log10(im)+offset
+        self._invscalefunc = lambda imsb:10**((imsb-offset)/-2.5)
         
         self.activateRange(self._rng)
         
@@ -210,6 +202,7 @@ class CCDImage(object):
         can either be None (whole file), a 4-tuple of
         the form (xl,xu,yl,yu) or a 3-tuple of the form (xcen,ycen,radius)
         """
+        
         if hdu is not None and hdu != self._chdu:
             oldhdu = self._chdu
             self._chdu = hdu
@@ -267,7 +260,6 @@ class CCDImage(object):
             elif yu > yr:
                 yl,yu=yl-yu,yr
                 
-                
             im = im[xl:xu,yl:yu]
         
         self._rng = range
@@ -298,6 +290,14 @@ class CCDImage(object):
         self._changed = False
     
     def clipOutliers(self,limits=(1,99),percentage=True,action='noclipmedian'):
+        """
+        clip points lying outside the range specified in the 2-sequence limits
+        
+        if percentage is outside True, the limits are percentages, otherwise 
+        fractions
+        
+        action is a replacement action (see clipSigma)
+        """
         if np.isscalar(limits):
             limits=(-limits,limits)
         elif len(limits)==2:
@@ -324,7 +324,7 @@ class CCDImage(object):
         deviation instead of just the active region
         
         action can be a value to set the outliers to, 'mean','median',
-        'noclipmean','noclipmedian', 'fullmean', or 'fullmedian'
+        'noclipmean','noclipmedian', 'fullmean', or 'fullmedian', or 'mask'
         
         returns number of pixels replaced
         """
@@ -344,18 +344,72 @@ class CCDImage(object):
         self._changed = True
         return nclip
     
-    def clipInvalids(self,action):
+    def clipInvalids(self,action='mask'):
+        """
+        clip points that are non-finite (i.e. NaN or infinite)
+        
+        action is a replacement action (see clipSigma)
+        """
         wcond=np.logical_not(np.isfinite(self._active))
-        self._active,nclip=self._repl_inds(action,wcond)
+        self._active,nclip= self._repl_inds(action,wcond)
         
         self._changed = True
         return nclip
+    
+    def clipThreshold(self,thresh=0,action='mask',comp='<'):
+        """
+        clip data points that are above/below a threshold
+        
+        thresh is the threshold
+        
+        comp can be '<', '>','<=', or '>=' for clipping points that are 
+        less that, greater than, less than or equal to, or greater than or
+        equal to the threshold.
+        
+        action is a replacement action (see clipSigma)
+        """
+        
+        if comp == '<':
+            m = self._active < thresh
+        elif comp == '>':
+            m = self._active > thresh
+        elif comp == '>=':
+            m = self._active >= thresh
+        elif comp == '<=':
+            m = self._active <= thresh
+        else:
+            raise ValueError('unrecognized comp operator')
+        self._active,nclip = self._repl_inds(action,m)
+        
+        self._changed = True
+        return nclip
+    
+    def offsetData(self,offset='minp1'):
+        """
+        apply a global offset to all the current data
+        
+        offset can either by a value or 'gmin' to offset the data by the global 
+        minimum or 'gminp1' to offset the lowest value to 1, or 'min' or 'minp1'
+        to use the selected area minimum
+        """
+        
+        
+        if offset == 'gmin':
+            offset = self._global_min
+        elif offset == 'gminp1':
+            offset = self._global_min + 1
+        elif offset == 'min':
+            offset = np.min(self._active)
+        elif offset == 'minp1':
+            offset = np.min(self._active) + 1
+        self._active-=offset
+        self._changed = True
         
     def _repl_inds(self,action,cliparr):
         im=self._active
         
         if action == 'mask':
-            im, = np.ma.masked_array(im,cliparr,copy=False)
+            im = np.ma.masked_array(im,cliparr,copy=False)
         elif action == 'median':
             im[cliparr]=np.median(im,None)
         elif action == 'fullmedian':
@@ -473,7 +527,6 @@ class CCDImage(object):
         preint=plt.isinteractive()    
         try:
             plt.ioff()
-            print vals.shape
             plt.imshow(-vals.T if invert else vals.T,norm=nrm,**kwargs)
             if cb:
                 plt.colorbar()
