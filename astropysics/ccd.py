@@ -755,7 +755,7 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,cl
             plt.ion()
         
     
-def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,retdict=False,**kckwargs):
+def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,retdict=False,offset=None,**kckwargs):
     """
     This function performs kcorrections pixel-by-pixel on a matched set of 
     images.  Note that one must be carefule to ensure the images are matched
@@ -776,6 +776,8 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,re
     zeropoints and pixelareas (sq asec) will be deduced from the CCDImage 
     properties zeropoint and pixelscale if they are not provided (if they are,
     they will everwrite the existing properties)
+    
+    offset is the type of offset to be used (passed into offsetData)
     
     extra kwargs will be passed into astropysics.phot.kcorrect
     
@@ -798,22 +800,23 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,re
     for i,im in enumerate(images):
         if isinstance(im,CCDImage):
             imobj.append(im)
-        elif type(i) is str:
+        elif type(im) is str:
             imobj.append(CCDImage(im))
         else:
             raise ValueError('image #%i is not a CCDImage or string'%i)
         
     if zeropoints is not None:
         for zpt,im in zip(zeropoints,imobj):
-            imobj.zeropoint = zpt
+            im.zeropoint = zpt
     if pixelareas is None:
         pixelareas=[]
         for pa,im in zip(pixelareas,imobj):
-            imobj.pixelscale = pa**0.5
+            im.pixelscale = pa**0.5
             
-    for i,im in enumerate(images):
-        im.setScaling('sb')
+    for i,im in enumerate(imobj):
+        im.offsetData(offset)
         im.activateRange(range)
+        im.setScaling('sb')
         imdata.append(im.data)
         
     dshape = imdata[0].shape
