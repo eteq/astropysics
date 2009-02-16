@@ -471,7 +471,7 @@ def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
     #TODO: figure out if it worked
     
     mags = np.array(mags,copy=False)
-    zs = np.array(zs,copy=False).flatten()
+    zs = np.array(zs,copy=False).ravel()
     if magerr is None:
         magerr = np.ones_like(mags)
     else:

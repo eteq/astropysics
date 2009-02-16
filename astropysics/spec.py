@@ -657,12 +657,12 @@ def zfind(object,templates,lags=True,dochecks = True, interpolation='linear',ver
         coeff = AAi *  ( A.T * np.multiply(W[:,0:1],b) )
         #coeff = AAi *  ( A.T * b )
         
-        fit = np.asarray(A * coeff).flatten()
-        chis = fit - b.A.flatten()
+        fit = np.asarray(A * coeff).ravel()
+        chis = fit - b.A.ravel()
         chis = chis
         csq = chis*chis*ivar[objrange] #faster than cs**2
         
-        coeffs[i] = np.asarray(coeff).flatten()
+        coeffs[i] = np.asarray(coeff).ravel()
         fits[i][objrange] = fit
         #fits[i][round((npix-len(fit))/2.0):round((npix+len(fit))/2.0)] = fit
         dofs[i] = dof
