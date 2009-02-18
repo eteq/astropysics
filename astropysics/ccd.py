@@ -38,7 +38,8 @@ class CCDImage(object):
         #internal variables
         self.__examcid = None
         self._changed = False
-        self._fstatd = self._lstatd = None
+        self._fstatd = {}
+        self._lstatd = {}
         self._scaling = ''
         self.applyChangesOnActivate = False#True #TODO:check this out for consistency
         
@@ -105,7 +106,8 @@ class CCDImage(object):
             self._applyArray(range,altim)
             
         self._changed = False
-        self._lstatd = self._gstatd = None
+        self._lstatd.clear() 
+        self._gstatd.clear()
         
     def _extractArray(self,range):
         raise NotImplementedError
@@ -403,11 +405,10 @@ class CCDImage(object):
         """
         statistics for the full image 
         """
-        if self._fstatd is None:
+        if not self._fstatd:
             v = self._scalefunc(self._extractArray(None).ravel())
             #TODO:deal with clipping/masks
             
-            self._fstatd={}
             self._fstatd['median']=np.median(v)
             self._fstatd['mean']=np.mean(v)
             self._fstatd['std']=np.std(v)
@@ -421,11 +422,10 @@ class CCDImage(object):
         """
         statistics for the full image with linear scaling
         """
-        if self._lstatd is None:
+        if not self._lstatd:
             v = self._extractArray(None).ravel()
             #TODO:deal with clipping/masks
             
-            self._lstatd={}
             self._lstatd['median']=np.median(v)
             self._lstatd['mean']=np.mean(v)
             self._lstatd['std']=np.std(v)
@@ -474,45 +474,51 @@ class CCDImage(object):
                 valrange=(vm-valrange,vm+valrange)
                 
             elif 'n' in valrange or 'p' in valrange:
-                if 'g' in valrange:
-                    valrange = valrange.replace('g','')
-                    statvals = self._scalefunc(self._extractArray(None).ravel())
+                if 'g' in valrange and valrange.replace('g','') in self._fstatd: #use cached value for this valrange if present
+                    valrange = self._fstatd[valrange.replace('g','')]
                 else:
-                    statvals = vals.ravel()
-                vrspl=valrange.split(',')
-                if len(vrspl)==2:
-                    if 'p' in valrange:
-                        niglow=(100-float(vrspl[0].replace('p','')))*statvals.size/200
-                        nigup=(100-float(vrspl[1].replace('p','')))*statvals.size/200
+                    if 'g' in valrange:
+                        statvals = self._scalefunc(self._extractArray(None).ravel())
                     else:
-                        niglow=float(vrspl[0].replace('n',''))
-                        nigup=float(vrspl[1].replace('n',''))
-                    niglow,nigup=int(round(niglow)),int(round(nigup))
-                elif len(vrspl)==1:
-                    if 'p' in valrange:
-                        nignore=(100-float(valrange.replace('p','')))*statvals.size/200
+                        statvals = vals.ravel()
+                    vrspl=valrange.split(',')
+                    if len(vrspl)==2:
+                        if 'p' in valrange:
+                            niglow=(100-float(vrspl[0].replace('g','').replace('p','')))*statvals.size/200
+                            nigup=(100-float(vrspl[1].replace('g','').replace('p','')))*statvals.size/200
+                        else:
+                            niglow=float(vrspl[0].replace('g','').replace('n',''))
+                            nigup=float(vrspl[1].replace('g','').replace('n',''))
+                        niglow,nigup=int(round(niglow)),int(round(nigup))
+                    elif len(vrspl)==1:
+                        if 'p' in valrange:
+                            nignore=(100-float(valrange.replace('g','').replace('p','')))*statvals.size/200
+                        else:
+                            nignore=float(valrange.replace('g','').replace('n',''))
+                            
+                        niglow=nigup=int(round(nignore))
                     else:
-                        nignore=float(valrange.replace('n',''))
-                        
-                    niglow=nigup=int(round(nignore))
-                else:
-                    raise ValueError('unrecognized valrange w/p or n')
-                
-                
-                
-                sortval=statvals[np.argsort(statvals)]
-                
-                if niglow < 0:
-                    niglow=0
-                if nigup < 0:
-                    nigup=0
+                        raise ValueError('unrecognized valrange w/p or n')
                     
-                if niglow+nigup >= sortval.size:
-                    from warnings import warn
-                    warn('ignored all of the values - displaying all instead')
-                    valrange = (sortval[0],sortval[-1])
-                else:
-                    valrange = (sortval[niglow],sortval[-1 if nigup == 0 else -nigup])
+                    sortval=statvals[np.argsort(statvals)]
+                    
+                    if niglow < 0:
+                        niglow=0
+                    if nigup < 0:
+                        nigup=0
+                        
+                    if niglow+nigup >= sortval.size:
+                        from warnings import warn
+                        warn('ignored all of the values - displaying all instead')
+                        valrange = (sortval[0],sortval[-1])
+                    else:
+                        if 'g' in valrange:
+                            self._fstatd[valrange.replace('g','')] =  valrange = (sortval[niglow],sortval[-1 if nigup == 0 else -nigup])
+                        else:
+                            valrange = (sortval[niglow],sortval[-1 if nigup == 0 else -nigup])
+                    
+                    
+                    
             elif 'i' in valrange:
                 igvals=[float(vstr) for vstr in valrange.replace('i','').split(',')]
                 m=np.ones(vals.shape,bool)
@@ -654,7 +660,7 @@ class CCDImage(object):
     def _getRange(self):
         return self._rng
     def _setRange(self,value):
-        self.activateRange(value,None)
+        self.activateRange(value)
     range = property(_getRange,_setRange,doc="""
     returns or sets the range (setting is syntactic sugar for activateRange)
     """)
@@ -689,8 +695,8 @@ class FitsImage(CCDImage):
         if hdu is not None and hdu != self._chdu:
             
             oldhdu,oldfstatd,oldlstatd = self._chdu,self._fstatd,self._lstatd
-            self._fstatd = None
-            self._lstatd = None
+            self._fstatd.clear()
+            self._lstatd.clear()
             self._chdu = hdu
             try:
                 res = self._extractArray(range,hdu=None)
