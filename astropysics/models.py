@@ -1003,7 +1003,7 @@ class GaussianModel(FunctionModel1D):
         return A*np.exp(-tsq*tsq)*(2*pi)**-0.5/sig
     
     def _getPeak(self):
-        return self(self.mu)[0]
+        return self(self.mu)
     
     def _setPeak(self,peakval):
         self.A = 1
@@ -1077,7 +1077,7 @@ class LorentzianModel(FunctionModel1D):
         return gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
     
     def _getPeak(self):
-        return self(self.mu)[0]
+        return self(self.mu)
     
     def _setPeak(self,peakval):
         self.A = 1
@@ -1284,7 +1284,7 @@ class BlackbodyModel(FunctionModel1D):
             raise NotImplementedError
         else:
             raise RuntimeError('Should never see this - bug in BB code')
-        return self(peakval)[0]
+        return self(peakval)
     
     def _setPeak(self,peakval):
         self.A = 1
