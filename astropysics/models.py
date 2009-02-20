@@ -32,7 +32,7 @@ class _Parameter(object):
     
     def __set__(self,obj,value):
         if not np.isscalar(value):
-            raise ValueError('Parameters must be scalar values')
+            raise ValueError('Parameters must be scalar values - type '+str(type(value))+' provided')
         setattr(obj,'_Parameter__'+self.name,value)
     
     def __delete__(self,obj):
@@ -1452,13 +1452,15 @@ class SchecterModel(FunctionModel1D):
     def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
         from numpy import log,exp
         x=10**(0.4*(Mstar-M))
-        return 0.4*np.log10(10)*phistar*(x**(1+alpha))*exp(-x)
+        return 0.4*log(10)*phistar*(x**(1+alpha))*exp(-x)
     
 class SchecterModelLum(SchecterModel):
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
-        from .phot import lum_to_mag as l2m
-        M,Mstar=l2m(L),l2m(Lstar)
-        return SchecterModel.f(self,M,Mstar,alpha,phistar)
+        #from .phot import lum_to_mag as l2m
+        #M,Mstar=l2m(L),l2m(Lstar)
+        #return SchecterModel.f(self,M,Mstar,alpha,phistar)
+        x = L/Lstar
+        return phistar*(x**alpha)*exp(-x)/Lstar
     #TODO:check to make sure this is actually the right way
         
 class EinastoModel(FunctionModel1D):
