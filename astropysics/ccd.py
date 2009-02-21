@@ -30,7 +30,7 @@ class CCDImage(object):
     MAY implement:    
     * close(self) do any necessary file cleanup (default does nothing)
     """
-    def __init__(self,irange=None,scaling=None):
+    def __init__(self,range=None,scaling=None):
         #informational property attributes
         self._pixscale = None
         self._zpt = None
@@ -43,7 +43,7 @@ class CCDImage(object):
         self._scaling = ''
         self.applyChangesOnActivate = False#True #TODO:check this out for consistency
         
-        self._rng = irange
+        self._rng = range
         self._scalefunc = self._invscalefunc = None
         self.setScaling(scaling) #implicitly calls activateRange and will NotImplementedError if not overridden
         
@@ -667,7 +667,7 @@ class CCDImage(object):
     
             
 class FitsImage(CCDImage):
-    def __init__(self,fn,irange=None,scaling=None,ihdu=0,memmap=0):
+    def __init__(self,fn,range=None,scaling=None,hdu=0,memmap=0):
         import pyfits
         
         fnl = fn.lower()
@@ -676,10 +676,10 @@ class FitsImage(CCDImage):
         else:
             raise IOError('unrecognized file type')
         
-        self._chdu = ihdu 
+        self._chdu = hdu 
         self._updateFromHeader()
         
-        CCDImage.__init__(self,irange=irange,scaling=scaling)
+        CCDImage.__init__(self,range=range,scaling=scaling)
         
     def close(self):
         self.fitsfile.close()
@@ -742,7 +742,8 @@ class FitsImage(CCDImage):
         
     def _updateFromHeader(self):
         d = dict(self.fitsfile[self._chdu].header.items())
-        del d['']
+        
+        d.pop('',None)
         
         if 'PIXSCALE' in d:
             self.pixelscale = d['PIXSCALE']
