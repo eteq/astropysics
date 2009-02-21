@@ -241,6 +241,15 @@ class Spectrum(object):
     def __len__(self):
         return len(self._x)
     
+    def __eq__(self,other):
+        try:
+            xeq = self._x == other._x
+            feq = self._flux == other._flux
+            eeq = self._err == other._err
+            return np.all(xeq & feq & eeq) 
+        except AttributeError:
+            return False
+    
     def getDx(self,mean=True):
         """
         get the spacing of the x-axis, which is always 1 element shorter than x
@@ -266,6 +275,22 @@ class Spectrum(object):
             return dlogx.mean()
         else:
             return dlogx
+        
+    def isXMatched(self,other,tol=1e-10):
+        """
+        tests if the x-axis of this Spectrum matches that of another Spectrum
+        or equal length array, with an average deviation less than tol
+        """
+        from operator import isSequenceType
+        if isSequenceType(other):
+            ox = other
+        else:
+            ox = other.x
+            
+        try:
+            return np.std(self.x - ox) < tol
+        except (TypeError,ValueError):
+            return False
     
     def isLinear(self,eps=1e-10):
         """
@@ -510,173 +535,145 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     
     return specs
 
-def zfind(object,templates,lags=True,dochecks = True, interpolation='linear',verbose = False):
-    """
-    Computes the lag with the best-fitting chi-squared over all the templates
-    
-    templates should be nstars X npix 
-    
-    lags specify the possible pix-lags to try - if True, it will try all 
-    possibilities, if a sequence of numbers, will try all supplied lags, and 
-    if False/None, does no lag
-    
-    dochecks makes sure the spectra are all logarithmically spaced and interpolates
-    if necessary
-    
-    interpolation determines the type of interpolation to use whenever it is necessary
-    
-    returns bestz,besti,chi2s,zs,coeffs(nzs X nstars),dofs
-    """
-    from operator import isSequenceType,isMappingType
-    
-    if dochecks:
-        from warnings import warn
-        
-        if hasattr(object,'flux'): #allows for type-matching
-            pass
-        elif isSequenceType(object):
-            object = Spectrum(*object)
-        elif isMappingType(object):
-            object = Spectrum(**object)
-        else:
-            raise TypeError("couldn't interpret input object")
-        
-        if not object.isLogarithmic():
-            warn('object is not logarithmic - interpolating to logarithmic spacing')
-            object.logify()
-        
-        
-        if isinstance(templates,Spectrum):
-            templates=[templates]
-        elif isSequenceType(templates):
-            temptemplates=[]
-            for t in templates:
-                if hasattr(t,'flux'):#assume this is a flux-object
-                    temptemplates.append(t)
-                elif isSequenceType(t):
-                    if len(t) == len(object): #assume this is a flux array
-                        temptemplates.append(Spectrum(object.x,t))
-                    else:
-                        temptemplates.append(Spectrum(*t))
-                elif isMappingType(t):
-                    temptemplates.append(Spectrum(**t))
-                else:
-                    raise TypeError("couldn't interpret input object")
-            templates = temptemplates
-            del temptemplates
-        else:
-            raise TypeError("input templates not a sequence")
-        
-        #search for first logarithmically spaced template and use that one as the basis
-        tgoodi = None
-        for i,t in enumerate(templates):
-            if t.isLogarithmic():
-                tgoodi = i
-                break
-        
-        if tgoodi is None:
-            warn('No logarithmic templates found - interpolating to logarithmic spacing for template 0')
-            templates[0].logify()
-            tgoodi = 0
-            
-        tgoods = templates[tgoodi].shape
-        tgoodx = templates[tgoodi].x
-            
-        for i,t in enumerate(templates):
-            if t.shape != tgoods or np.any(t.x != tgoodx):
-                warn('Template %i does not match base template %i - interpolating'%(i,tgoodi))
-                t.resample(tgoodx,interpolation=interpolation)
-        
-                #TODO:resample smarter so that there aren't 0-set areas
-        if object.shape != tgoods or np.any(object.x != tgoodx):
-            warn('object x-axis does not match templates - interpolating')
-            newt = object.resample(tgoodx,interpolation=interpolation,replace=False)
-            object = Spectrum(*newt)#TODO:make this more robust?
-    
-    dlogx = object.getDlogx()
-        
-    objflux = object.flux
-    ivar = object.ivar
-    infi=np.isinf(ivar)
-    if all(ivar):
-        ivar[infi]=1 #equally weight
-    else:
-        ivar[infi]= 0 #ignore 0 ivars
-    tempfluxes=np.array([t.flux for t in templates]).T
-    
-    npix,nstars = tempfluxes.shape
-    if npix != objflux.shape[0] != ivar.shape[0]:
-        raise ValueError("pixels don't match")
-    
-    
-    if lags is True:
-        lags = np.arange(2*npix-3)-npix+2
-    elif not np.any(lags):
-        lags=np.array((0,))
-    elif isSequenceType(lags):
-        lags = np.array(lags,dtype=int)
-    else:
-        raise ValueError("couldn't understand lags")
-    
-    dofs=np.ndarray(len(lags),int)
-    rchi2s=np.ndarray(len(lags))
-    coeffs=np.ndarray((len(lags),nstars))
-    fits= np.zeros((len(lags),npix))
-    #go over all possible lags, compute chi-squared
-    for i,l in enumerate(lags): #TODO: arrayify this?
-        if verbose:
-            print 'lag=',l
-        b = np.matrix(objflux).T
-        A = np.matrix(tempfluxes)
-        W = np.array(np.tile(ivar,nstars).reshape(A.shape))
-        
-        if l > 0:
-            objrange=slice(l,None)
-            matrange=slice(None,-l)
-            
-            
-        elif l < 0:
-            objrange=slice(None,l)
-            matrange=slice(-l,None)
-        else:
-            objrange=slice(None,None)
-            matrange=slice(None,None)
-        
-        b = b[objrange]
-        A = A[matrange]
-        W = W[matrange]
-        dof = np.sum(ivar[objrange] > 0) - nstars
-        
-            
-        
-        #cos = np.linalg.solve(A,b) #does not work for non-square mats, so:
-        #AAi = np.linalg.inv(A.T * A) #often mats are singular
-        AAi = np.linalg.pinv(A.T * np.multiply(W,A)) #TODO:speed tests?
-        #AAi = np.linalg.pinv(A.T * A) #TODO:speed tests?
-        
-        coeff = AAi *  ( A.T * np.multiply(W[:,0:1],b) )
-        #coeff = AAi *  ( A.T * b )
-        
-        fit = np.asarray(A * coeff).ravel()
-        chis = fit - b.A.ravel()
-        chis = chis
-        csq = chis*chis*ivar[objrange] #faster than cs**2
-        
-        coeffs[i] = np.asarray(coeff).ravel()
-        fits[i][objrange] = fit
-        #fits[i][round((npix-len(fit))/2.0):round((npix+len(fit))/2.0)] = fit
-        dofs[i] = dof
-        rchi2s[i]=sum(csq)/dof
-    minvalid = rchi2s[np.isfinite(rchi2s)].min()
-    imin = np.where(rchi2s==minvalid)
-    if imin[0].size > 1:
-        raise ValueError('found more than 1 chi-squared minimum')
-    zs = 10**(lags*dlogx)-1    
-        
-    #TODO:go bzck to zs
-    #return lags[imin],imin,rchi2s,zs,coeffs,dofs,fits
-    return zs[imin],imin,rchi2s,zs,coeffs,dofs,fits
 
+def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verbose=True,interpolation = None):
+    """
+    computes the best fit by linear least-squares fitting of templates to the 
+    spectrum for each possible pixel offset.  Weighted fits will be done if 
+    the spectrum ivars are different.
+    
+    lags can either be a sequence of lags or a 2-tuple specifying the lower and 
+    upper possible lags
+    
+    specobj must be a Spectrum object or a sequence of (flux,[x],[ivar]) or 
+    flux 
+    
+    templates can be either a sequence of Spectrum objects or an array with at
+    least one dimension matching the pixel dimension.  Long templates are not
+    yet supported.
+    
+    interpolation is the technique for interpolating for sub-pixel lags.  If 
+    None, no interpolation is used, so lags must be integers (but this method is
+    much faster)
+    
+    returns besti,lags,coeffs,xs,fitfluxes,rchi2s
+    """
+    if interpolation is not None:
+        raise NotImplementedError('interpolation not implemented yet')
+    
+    from operator import isSequenceType
+    if not isinstance(specobj,Spectrum) and isSequenceType(specobj):
+        if len(specobj) > 3:
+            specobj = Spectrum(np.logspace(0,1,len(specobj)),specobj)
+        else:
+            flux = specobj[0]
+            if len(specobj) < 3:
+                ivar = None
+            else:
+                ivar = specobj[2]
+            if len(specobj) < 2:
+                x = np.arange(len(flux))
+            else:
+                x = specobj[1]
+            specobj = Spectrum(x,flux,ivar=ivar)
+        
+    x = specobj.x
+    if checkspec:
+        if not specobj.isLogarithmic():
+            newx = np.logspace(np.log10(np.min(x)),np.log10(np.max(x)),len(x))
+            specobj = specobj.copy()
+            specobj.resample(newx)
+            x = specobj.x
+    flux = specobj.flux
+    npix = specobj.shape[0]
+    ivar = specobj.ivar
+    
+    if checktemplates:
+        templates=[t if isinstance(t,Spectrum) else Spectrum(x,t) for t in templates]
+        for i,t in enumerate(templates):
+            if not t.isXMatched(x):
+                if verbose:
+                    print 'template',i,'does not match spectrum -- resampling'
+                t.resample(x)
+        templates = [t.flux for t in templates]
+    templates=np.atleast_1d(templates)
+    
+    if templates.shape[0] == npix:
+        tm = np.matrix(templates)
+    elif templates.shape[1] == npix:
+        tm = np.matrix(templates).T
+        
+    y = np.matrix(flux).T
+    ws = np.matrix(ivar).T
+    
+    
+    if type(lags) is tuple and len(lags) == 2:
+        lags = np.arange(*lags)
+    llags = lags[lags<0]
+    ulags = lags[lags>0]
+    
+    ls,slices=[],[]
+    for l in llags:
+        ls.append(l)
+        #tml = tm[-l:,:]
+        #yl = y[:l]
+        slices.append(((slice(-l,None),slice(None)),slice(None,l)))
+    if 0 in lags:
+        ls.append(0)
+        slices.append(((slice(None),slice(None)),slice(None)))
+    for l in ulags:
+        ls.append(l)
+        #tml = tm[:-l,:]
+        #yl=y[l:]
+        slices.append(((slice(None,-l),slice(None)),slice(l,None)))
+        
+        
+    cs,dsq,fitfluxes=[],[],[]
+    
+    #don't do weighting if all of the errors are identical -- matrix becomes singular
+    useweights = np.any(ivar-ivar[0]) and not np.all(~np.isfinite(ivar)) 
+    for l,s in zip(ls,slices):
+        if verbose:
+            print 'doing lag',l
+        A = tm[s[0]]
+        v = y[s[1]]
+        w = ivar[s[1]]
+        
+        if useweights:
+            try:
+                AT = np.multiply(A.T,w)
+                cs.append(np.linalg.inv(AT*A)*AT*v)
+            except np.linalg.LinAlgError,e:
+                if verbose:
+                    print 'Error inverting matrix in lag',l,':',e
+                cs.append(np.linalg.pinv(A)*v)
+        else:
+            cs.append(np.linalg.pinv(A)*v)
+            #TODO: faster inversion schemes?
+        
+        fitspec = A*cs[-1]
+        fitfluxes.append(fitspec)
+        fitdiff = (v-fitspec).A
+        dsq.append(np.sum(fitdiff*fitdiff))
+    ls=np.array(ls)
+    cs=np.array(cs)
+    dsq=np.array(dsq)
+    dofs = np.sum(ivar!=0) - np.abs(ls)
+    rchi2s = dsq/dofs
+    
+    mins = np.where(rchi2s==min(rchi2s))[0]
+    if len(mins) == 1:
+        besti = mins[0]
+    else:
+        besti = mins
+        
+    xs = [x[s[1]] for s in slices]
+    fitspecs = [s.A[:,0] for s in fitspecs]
+    
+    return besti,ls,cs,xs,fitfluxes,rchi2s
+        
+            
+    
     
 #<---------------------Data loading functions---TODO:move to plugin-like?------>
 
