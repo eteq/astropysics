@@ -50,7 +50,7 @@ class CCDImage(object):
     def __del__(self):
         self.close()
     
-    def activateRange(self,range,**kwargs):
+    def activateRange(self,range):
         """
         chooses the range to activate for further operations
         
@@ -676,10 +676,11 @@ class FitsImage(CCDImage):
         else:
             raise IOError('unrecognized file type')
         
-        self._chdu = hdu 
-        self._updateFromHeader()
+        self._chdu = None
+        self._newhdu = hdu 
         
         CCDImage.__init__(self,range=range,scaling=scaling)
+        #self._updateFromHeader()#called implicity in CCDImage.__init__ through activateRange
         
     def close(self):
         self.fitsfile.close()
@@ -688,18 +689,18 @@ class FitsImage(CCDImage):
         if self.fitsfile is not None:
             self.fitsfile.close()
     
-    def _extractArray(self,range,hdu=None):
+    def _extractArray(self,range):
         """
         kwarg hdu chooses which hdu to use for this image
         """
-        if hdu is not None and hdu != self._chdu:
+        if self._newhdu != self._chdu:
             
             oldhdu,oldfstatd,oldlstatd = self._chdu,self._fstatd,self._lstatd
             self._fstatd.clear()
             self._lstatd.clear()
-            self._chdu = hdu
             try:
-                res = self._extractArray(range,hdu=None)
+                self._chdu = self._newhdu
+                res = self._extractArray(range)
             except IndexError:
                 print 'New HDU Has incompatible range - using whole image'
                 res = self._extractArray(None,hdu=None)
@@ -761,8 +762,9 @@ class FitsImage(CCDImage):
     def _getHdu(self):
         return self._chdu
     def _setHdu(self,value):
+        self._newhdu = value
         currrng = self._rng
-        self.activateRange(currrng,hdu = value)
+        self.activateRange(currrng)
     hdu = property(_getHdu,_setHdu,doc="""
     the hdu of the current fits file
     """)       
