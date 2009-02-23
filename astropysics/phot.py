@@ -27,8 +27,15 @@ class Band(object):
     self._cenwl (center of the band)
     self._widthwl (second moment of the band)
     """
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self,x,S):
+        self._x = np.array(x)
+        self._S = np.array(S)
+        
+        if len(self._x.shape) != 1 or len(self._S.shape) != 1
+            raise ValueError('x and S must be 1D arrays')
+        
+        if self._x.size != self._S.size:
+            raise ValueError('x and S do not match sizes')
     
     _cenwl = None
     @property
@@ -37,7 +44,8 @@ class Band(object):
         The center of the band
         """
         if self._cenwl is None:
-            raise NotImplementedError
+            from scipy.integrate import simps
+            cen = simps(self._x*self._S,self._x) #TODO:test
             self._cenwl = cen
         else:
             return self._cenwl
@@ -49,7 +57,8 @@ class Band(object):
         second centralized moment of the band
         """
         if self._widthwl is None:
-            raise NotImplementedError
+            from scipy.integrate import simps
+            wid = simps(self._x*self._x*self._S,self._x) #TODO:test
             self._widthwl = wid
         else:
             return self._widthwl
