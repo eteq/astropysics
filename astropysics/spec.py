@@ -599,12 +599,12 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     templates=np.atleast_1d(templates)
     
     if templates.shape[0] == npix:
-        tm = np.matrix(templates)
+        tm = np.asmatrix(templates)
     elif templates.shape[1] == npix:
-        tm = np.matrix(templates).T
+        tm = np.asmatrix(templates).T
         
-    y = np.matrix(flux).T
-    ws = np.matrix(ivar).T
+    y = np.asmatrix(flux).T
+    ws = np.asmatrix(ivar).T
     
     
     if type(lags) is tuple and len(lags) == 2:
