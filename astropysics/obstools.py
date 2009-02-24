@@ -100,8 +100,17 @@ class Extinction(object):
         spec.unit = oldunit
         return spec
     
+    __builtinlines ={
+            'Ha':6562.82,
+            'Hb':4861.33,
+            'Hg':4340.46,
+            'Hd':4101.74,
+            'He':3970.07
+            }
     def correctFlux(self,flux,lamb):
-        return flux*10**(self(spec.x)/2.5)
+        if type(lamb) is str and lamb in Extinction.__builtinlines:
+            lamb = Extinction.__builtinlines[lamb]
+        return flux*10**(self(lamb)/2.5)
     
     
     __balmerratios={
@@ -116,7 +125,7 @@ class Extinction(object):
             'Hge':(2.95,4340.46,3970.07),
             'Hde':(1.62,4101.74,3970.07)
             }
-    def computeA0FromFluxRatio(self,measured,expected,lambda1=None,lambda2=None,contractionf=np.mean):
+    def computeA0FromFluxRatio(self,measured,expected,lambda1=None,lambda2=None,contractionf=None):
         """
         This derives the normalization of the Extinction function from provided
         ratios for theoretically expected fluxes.  If multiple measurements are
@@ -132,13 +141,13 @@ class Extinction(object):
         a string is provided 
     
         contraction is the function to be used to combine an array of A0s down
-        to one (default is numpy.mean)
+        to one.  If None, no contraction will be applied
         
         returns A0,standard deviation of measurements
         """
         if type(expected) is str:
             R = measured
-            balmertuple = __balmerratios[expected]
+            balmertuple = Extinction.__balmerratios[expected]
             R0=balmertuple[0]
             lambda1,lambda2=balmertuple[1],balmertuple[2]
         elif type(expected[0]) is str:
@@ -146,7 +155,7 @@ class Extinction(object):
                 raise ValueError('expected must be only transitions or only numerical')
             R0,lambda1,lambda2=[],[],[]
             for e in expected:
-                balmertuple = __balmerratios[e]
+                balmertuple = Extinction.__balmerratios[e]
                 R0.append(balmertuple[0])
                 lambda1.append(balmertuple[1])
                 lambda2.append(balmertuple[2])
@@ -160,7 +169,8 @@ class Extinction(object):
         
         A0 = 2.5*np.log10(R/R0)/(self.f(lambda1)-self.f(lambda2))
         
-        
+        if contractionf is None:
+            contractionf = lambda x:x
         self.A0 = contractionf(A0)
         return contractionf(A0),np.std(A0)
     
@@ -175,7 +185,7 @@ class CalzettiExtinction(Extinction):
         Extinction.__init__(self,A0=A0)
         
     def f(self,lamb):
-        return (-2.5/log(10))*self._poly(1e4/lamb)
+        return (-2.5/np.log(10))*self._poly(1e4/lamb)
     
 class _EBmVExtinction(Extinction):
     """
@@ -191,7 +201,7 @@ class _EBmVExtinction(Extinction):
         self.EBmV=EBmV
     
     def _getEBmV(self):
-        return A0*self.f(self.__lambdaV)/self.Rv
+        return self.A0*self.f(self.__lambdaV)/self.Rv
     def _setEBmV(self,val):
         Av=self.Rv*val
         self.A0=Av/self.f(self.__lambdaV)
