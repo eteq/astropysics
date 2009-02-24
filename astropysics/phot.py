@@ -126,7 +126,6 @@ class FileBand(Band):
             raise ValueError('unrecognized type')
         
         
-
 #<---------------------Procedural/utility functions---------------------------->
     
 def UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed=False):
@@ -528,3 +527,16 @@ def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
     
         
     
+#<---------------------Load built-in data-------------------------------------->
+def __load_UBVRI():
+    from .io import _get_package_data
+    raise NotImplementedError()
+    return FileBand()
+def __load_ugriz():
+    from .io import _get_package_data
+    raise NotImplementedError()
+    return FileBand()
+def __load_human_eye():
+    from .io import _get_package_data
+    raise NotImplementedError()
+    return FileBand()
