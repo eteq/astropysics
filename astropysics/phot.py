@@ -19,6 +19,10 @@ class Band(object):
     """
     This class is the base of all photometric band objects
     
+    subclasses should implement the following:
+    self._cen : center of band 
+    self._width : 
+    
     subclasses should set the following arrays:
     self._x (wavelength)
     self._S (maximum should be 1)
@@ -31,7 +35,7 @@ class Band(object):
         self._x = np.array(x)
         self._S = np.array(S)
         
-        if len(self._x.shape) != 1 or len(self._S.shape) != 1
+        if len(self._x.shape) != 1 or len(self._S.shape) != 1:
             raise ValueError('x and S must be 1D arrays')
         
         if self._x.size != self._S.size:
