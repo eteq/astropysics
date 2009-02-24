@@ -530,13 +530,79 @@ def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
 #<---------------------Load built-in data-------------------------------------->
 def __load_UBVRI():
     from .io import _get_package_data
-    raise NotImplementedError()
-    return FileBand()
+    bandlines = _get_package_data('UBVRIbands.dat').split('\n')
+    
+    src = bandlines.pop(0).replace('#Source:','').strip()
+    bandlines.pop(0)
+    
+    d={}
+    for ln in bandlines:
+        if ln.strip() == '':
+            pass
+        elif 'Band' in ln:
+            k = ln.replace('Band','').strip()
+            xl = []
+            Rl = []
+            d[k]=(xl,Rl)
+        else:
+            t = ln.split()
+            xl.append(t[0])
+            Rl.append(t[1])
+            
+    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    for v in d.itervalues():
+        v.source = src
+    return d
+
 def __load_ugriz():
     from .io import _get_package_data
-    raise NotImplementedError()
-    return FileBand()
+    bandlines = _get_package_data('ugrizbands.dat').split('\n')
+    
+    bandlines.pop(0)
+    psrc = bandlines.pop(0).replace('#primes:','').strip()
+    src = bandlines.pop(0).replace('#SDSS ugriz:','').strip()
+    bandlines.pop(0)
+    
+    d={}
+    for ln in bandlines:
+        if ln.strip() == '':
+            pass
+        elif 'Band' in ln:
+            k = ln.replace('Band','').strip()
+            xl = []
+            Rl = []
+            d[k]=(xl,Rl)
+        else:
+            t = ln.split()
+            xl.append(t[0])
+            Rl.append(t[1])
+            
+    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    for k,v in d.iteritems():
+        if "'" in k:
+            v.source = psrc
+        else:
+            v.source = src
+    return d
+
 def __load_human_eye():
     from .io import _get_package_data
-    raise NotImplementedError()
-    return FileBand()
+    bandlines = _get_package_data('eyeresponse.dat').split('\n')
+    
+    src = bandlines.pop(0).replace('#from','').strip()
+    d={'cone_s':[],'cone_m':[],'cone_l':[]}
+    for ln in bandlines:
+        if ln.strip() == '':
+            pass
+        else:
+            t = ln.split(',')
+            d['cone_l'].append((t[0],t[1]))
+            d['cone_m'].append((t[0],t[2]))
+            if t[3]!='':
+                d['cone_s'].append((t[0],t[3]))
+    
+    d = dict([(k,array(v)) for k,v in d.iteritems()])
+    d = dict([(k,FileBand(v[:,0],v[:,1])) for k,v in d.iteritems()])
+    for v in d.itervalues():
+        v.source = src
+    return d
