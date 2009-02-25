@@ -617,15 +617,18 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
         ls.append(l)
         #tml = tm[-l:,:]
         #yl = y[:l]
-        slices.append(((slice(-l,None),slice(None)),slice(None,l)))
+        slices.append((np.s_[-l:,:],np.s_[:l]))
+        #slices.append(((slice(-l,None),slice(None)),slice(None,l)))
     if 0 in lags:
         ls.append(0)
-        slices.append(((slice(None),slice(None)),slice(None)))
+        slices.append((np.s_[:,:],np.s_[:]))
+        #slices.append(((slice(None),slice(None)),slice(None)))
     for l in ulags:
         ls.append(l)
         #tml = tm[:-l,:]
         #yl=y[l:]
-        slices.append(((slice(None,-l),slice(None)),slice(l,None)))
+        slices.append((np.s_[:-l,:],np.s_[l:]))
+        #slices.append(((slice(None,-l),slice(None)),slice(l,None)))
         
         
     cs,dsq,fitfluxes=[],[],[]
@@ -668,7 +671,7 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
         besti = mins
         
     xs = [x[s[1]] for s in slices]
-    fitspecs = [s.A[:,0] for s in fitspecs]
+    fitfluxes = [f.A[:,0] for f in fitfluxes]
     
     return besti,ls,cs,xs,fitfluxes,rchi2s
         
