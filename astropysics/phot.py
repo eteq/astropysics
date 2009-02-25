@@ -9,6 +9,16 @@ Tends to be oriented towards optical techniques.
 from __future__ import division
 from math import pi
 import numpy as np
+try:
+    #requires Python 2.6
+    from abc import ABCMeta as _ABCMeta
+    from abc import abstractmethod as _abstractmethod
+    from abc import abstractproperty as _abstractproperty 
+except ImportError: #support for earlier versions
+    _abstractmethod = lambda x:x
+    _abstractproperty = property
+    _ABCMeta = type
+    
 
 #photometric band centers - B&M
 bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110}
@@ -17,86 +27,86 @@ bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,
 
 class Band(object):
     """
-    This class is the base of all photometric band objects
+    This class is the base of all photometric band objects.  Bands are expected
+    to be immutable once created except for changes of units.
     
-    subclasses should implement the following:
-    self._cen : center of band 
-    self._width : 
-    
-    subclasses should set the following arrays:
-    self._x (wavelength)
-    self._S (maximum should be 1)
-    
-    It is recommended that subclasses set the following values (otherwise they will be calculated on first access):
-    self._cenwl (center of the band)
-    self._widthwl (second moment of the band)
+    subclasses must implement the following functions:
+    *__init__ : initialize the object
+    *_etCen : return the center of band 
+    *_getFWHM : return the FWHM of the band
+    *_getx: return an array with the x-axis
+    *_getS: return the photon sensitivity (shape should match x)
     """
-    def __init__(self,x,S):
-        self._x = np.array(x)
-        self._S = np.array(S)
-        
-        if len(self._x.shape) != 1 or len(self._S.shape) != 1:
-            raise ValueError('x and S must be 1D arrays')
-        
-        if self._x.size != self._S.size:
-            raise ValueError('x and S do not match sizes')
+    __metaclass__ = _ABCMeta
     
-    _cenwl = None
-    @property
-    def center(self):
-        """
-        The center of the band
-        """
-        if self._cenwl is None:
-            from scipy.integrate import simps
-            cen = simps(self._x*self._S,self._x) #TODO:test
-            self._cenwl = cen
-        else:
-            return self._cenwl
+    @_abstractmethod
+    def __init__(self):
+        raise NotImplementedError
     
-    _widthwl = None
-    @property
-    def width(self):
-        """
-        second centralized moment of the band
-        """
-        if self._widthwl is None:
-            from scipy.integrate import simps
-            wid = simps(self._x*self._x*self._S,self._x) #TODO:test
-            self._widthwl = wid
-        else:
-            return self._widthwl
+    @_abstractmethod
+    def _getCen(self):
+        raise NotImplementedError
     
-    @property
-    def lamb(self):
-        """
-        wavelengths for the band
-        """
-        return self._x
+    @_abstractmethod
+    def _getFWHM(self):
+        raise NotImplementedError
     
-    @property
-    def response(self):
-        """
-        response function - e.g. probability a photon will be detected
-        """
-        return self.norm*self._S
+    @_abstractmethod
+    def _getx(self):
+        raise NotImplementedError
     
-    norm = 1
+    @_abstractmethod
+    def _getS(self):
+        raise NotImplementedError
+    
+    
+    cen = property(lambda self:self._getCen())
+    FWHM = property(lambda self:self._getFWHM())
+    x = property(lambda self:self._getx())
+    S = property(lambda self:self._getS())
 
 class GaussianBand(Band):
     def __init__(self,center,width,sigs=6,n=100):
         """
-        center is the central wavelength of the band, while width is the sgima 
+        center is the central wavelength of the band, while width is the sigma 
         (if positive) or FWHM (if negative)
         """
-        self._cenwl = center
-        self._widthwl = sig = width if width > 0 else -width*(8*np.log(2))**-0.5#TODO:*?
+        self._cen = center
+        self.sigma = width if width > 0 else -width*(8*np.log(2))**-0.5#TODO:*?
         
-        self._x = np.linspace(-sigs,sigs,n)*width+center
-        xp = x - center
-        self._S = np.exp(-xp*xp/2/sig/sig)
+        self._n = n
+        self.sigs = 6 #sets x and y implicitly
         
-class FileBand(Band):
+        self._f = lambda x: np.exp(-xp*xp/2/self.sig/sig)
+    def _f(self):
+        return np.exp(-self._x*self._x/2/self.sig/self.sig)
+    def _getSigs(self):
+        return self._sigs
+    def _setSigs(self,val):
+        self._x = linspace(-val*self.sigma,val*self.sigma,self._n)-self._cen #TODO:fix
+        self.y = np.exp(-self._x*self._x/2/self.sig/self.sig)
+        self._sigs = val
+    sigs = property(_getSigs,_setSigs)
+    def _getn(self):
+        return self._n
+    def _setn(self,val):
+        self._x = linspace(-self._sigs*self.sigma,self._sigs*self.sigma,val)-self._cen
+        self._n = val
+    n = property(_getn,_setn)
+    
+    def _getCen(self):
+        raise NotImplementedError
+    
+    def _getFWHM(self):
+        raise NotImplementedError
+    
+    def _getx(self):
+        raise NotImplementedError
+    
+    def _getS(self):
+        raise NotImplementedError
+        
+class ArrayBand(Band):
     def __init__(self,fn,type=None):
         """
         type can be 'txt', or 'fits', or inferred from extension
@@ -124,6 +134,18 @@ class FileBand(Band):
                 f.close()
         else:
             raise ValueError('unrecognized type')
+        
+    def _getCen(self):
+        raise NotImplementedError
+    
+    def _getFWHM(self):
+        raise NotImplementedError
+    
+    def _getx(self):
+        raise NotImplementedError
+    
+    def _getS(self):
+        raise NotImplementedError
         
         
 #<---------------------Procedural/utility functions---------------------------->
@@ -549,7 +571,7 @@ def __load_UBVRI():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
@@ -577,7 +599,7 @@ def __load_ugriz():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
     for k,v in d.iteritems():
         if "'" in k:
             v.source = psrc
@@ -602,7 +624,7 @@ def __load_human_eye():
                 d['cone_s'].append((t[0],t[3]))
     
     d = dict([(k,array(v)) for k,v in d.iteritems()])
-    d = dict([(k,FileBand(v[:,0],v[:,1])) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(v[:,0],v[:,1])) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
