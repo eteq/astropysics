@@ -15,7 +15,15 @@ PyMC package (http://code.google.com/p/pymc/)
 from __future__ import division
 from math import pi
 import numpy as np
-
+try:
+    #requires Python 2.6
+    from abc import ABCMeta as _ABCMeta
+    from abc import abstractmethod as _abstractmethod
+    from abc import abstractproperty as _abstractproperty 
+except ImportError: #support for earlier versions
+    _abstractmethod = lambda x:x
+    _abstractproperty = property
+    _ABCMeta = type
 
 class _Parameter(object):
     
@@ -38,12 +46,12 @@ class _Parameter(object):
     def __delete__(self,obj):
         raise AttributeError("can't delete a parameter")
 
-class _FuncMeta1D(type):
+class _FuncMeta1D(ABCMeta):
     def __init__(cls,name,bases,dct):
         #called on import of astro.models
         from inspect import getargspec
         
-        type.__init__(name,bases,dct)
+        ABCMeta.__init__(name,bases,dct)
         
         args,varargs,varkw,defaults=getargspec(dct['f'])
         if varkw is not None:
@@ -98,7 +106,7 @@ class _FuncMeta1D(type):
             except IndexError:
                 IndexError('No # of parameters found for variable-size function')
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
-            obj = type.__call__(cls,**objkwargs) #object __init__ is called here
+            obj = ABCMeta.__call__(cls,**objkwargs) #object __init__ is called here
             pars = cls.__statargs
             del cls.__statargs
             for i in range(nparams):
@@ -108,7 +116,7 @@ class _FuncMeta1D(type):
             cls._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
-            obj = type.__call__(cls,**objkwargs) #object __init__ is called here
+            obj = ABCMeta.__call__(cls,**objkwargs) #object __init__ is called here
             
         obj.f(np.array([0]),*obj.parvals) #try once to check for a real function
             
@@ -734,8 +742,7 @@ class FunctionModel1D(object):
         """
         return (self(x+dx)-self(x))/dx
     
-    
-    #Must Override:
+    @abstractmethod
     def f(self,x):
         """
         this function MUST be overriden in subclasses - default arguments will
