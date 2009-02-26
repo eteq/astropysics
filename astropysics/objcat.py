@@ -16,6 +16,30 @@ from math import pi
 import numpy as np
 from .coords import AngularPosition,AngularCoordinate
 
+class _SourceMeta(type):
+    def __call__(cls,*args,**kwargs):
+        obj = type.__call__(cls,*args,**kwargs)
+        if not obj._str in Source._singdict:
+            Source._singdict[obj._str] = obj
+        return Source._singdict[obj._str]
+            
+
+class Source(object):
+    """
+    This class represents a data source - typically a paper, but possibly a
+    web site or other sort of bibliographic record.
+    """
+    #TODO:improve singleton?
+    __metaclass__ = _SourceMeta
+    _singdict = {}
+    
+    def __init__(self,src):
+        self._str = str(src)
+        
+        
+    def __str__(self):
+        return 'Source: ' + self._str
+
 class Datum(object):
     """
     Base for all forms of data
