@@ -10,69 +10,39 @@ bands.
 from __future__ import division
 from math import pi
 import numpy as np
-
-
-
 try:
-    import spylot
-except ImportError:
-    print 'Spylot not found - some spec package functions may not work correctly'
+    #requires Python 2.6
+    from abc import ABCMeta as _ABCMeta
+    from abc import abstractmethod as _abstractmethod
+    from abc import abstractproperty as _abstractproperty 
+except ImportError: #support for earlier versions
+    _abstractmethod = lambda x:x
+    _abstractproperty = property
+    _ABCMeta = type
+
+
+class FluxUnits(object):
+    __metaclass__ = _ABCMeta
     
-class Spectrum(object):
-    """
-    Represents a flux/luminosity/intensity
-    
-    Note that operations are performed in-place, and properties retrieve the 
-    same versions that are changed (except ivar)
-    """
-    def __init__(self,x,flux,err=None,ivar=None,unit='wl',copy=True):
-        """
-        sets the x-axis values and the flux.  Optionally, an error can be
-        given by supplying an error or an inverse variance (bot not both)
-        
-        copy determines if the inputs will be copied if they are already arrays
-        """
-        
-        x = np.array(x,copy=copy)
-        flux = np.array(flux,copy=copy)
-        if x.shape != flux.shape:
-            raise ValueError("x and flux don't match shapes")
-        
-        if ivar is None and err is None:
-            err = np.zeros_like(flux)
-        elif ivar is not None:
-            if np.isscalar(ivar):
-                err = ivar**-0.5*np.ones_like(flux)
-            else:
-                err = np.array(ivar,copy=False)**-0.5
-            if err.shape != flux.shape:
-                raise ValueError("ivar and flux don't match shapes")
-            
-        elif err is not None:
-            if np.isscalar(err):
-                err = err*np.ones_like(flux)
-            else:
-                err=np.array(err,copy=copy)
-                err[err<0]=-1*err[err<0]
-            if err.shape != flux.shape:
-                raise ValueError("err and flux don't match shapes")
-            
-        else:
-            raise ValueError("can't set both err and ivar at the same time")
-        
+    def __init__(self,unit):
         self._phystype,self._unit,self._scaling = self._strToUnit(unit)
-        
-        self._x = x
-        self._flux = flux
-        self._err = err
-        
-    def copy(self):
-        """
-        Generates a deep copy of this Spectrum
-        """
-        from copy import deepcopy
-        return deepcopy(self)
-        
+    
+    @abstractmethod
+    def _unitGetX(self):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _unitSetX(self,val):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _unitGetY(self):
+        raise NotImplementedError
+    
+    @abstractmethod
+    def _unitSetY(self,val):
+        raise NotImplementedError
+    
     def _strToUnit(self,typestr):
         u = typestr.lower()
         if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
@@ -118,7 +88,7 @@ class Spectrum(object):
         
         print oldtype,newtype,oldscale,newscale #DB
         
-        x,flux,err = self._x/oldscale,self._flux/oldscale,self._err/oldscale # convert to cgs
+        x,flux = self._unitGetX()/oldscale,self._unitGetY()/oldscale # convert to cgs
     
         if newtype == 'energy': #TODO:check
             if oldtype == 'energy': 
@@ -157,7 +127,91 @@ class Spectrum(object):
         else:
             raise ValueError('unrecognized newtype')
         
-        return x*newscale,flux*fluxscale*newscale,err*fluxscale*newscale
+        return x*newscale,flux*fluxscale*newscale
+    
+    def _getUnit(self):
+        return self._phystype+'-'+self._unit
+    def _setUnit(self,typestr):
+        newtype,newunit,newscaling = self._strToUnit(typestr)
+        print newtype,newunit,newscaling #DB
+        x,flux,err = self._convertType(self._phystype,newtype,self._scaling,newscaling)
+        
+        self._unitSetX(x)
+        self._unitSetY(flux)
+        #self._x[:] = x
+        #self._flux[:] = flux
+        #self._err[:] = err
+        self._phystype = newtype
+        self._unit = newunit
+        self._scaling = newscaling
+    unit = property(_getUnit,_setUnit)
+
+class Spectrum(object):
+    """
+    Represents a flux/luminosity/intensity
+    
+    Note that operations are performed in-place, and properties retrieve the 
+    same versions that are changed (except ivar)
+    """
+    def __init__(self,x,flux,err=None,ivar=None,unit='wl',copy=True):
+        """
+        sets the x-axis values and the flux.  Optionally, an error can be
+        given by supplying an error or an inverse variance (bot not both)
+        
+        copy determines if the inputs will be copied if they are already arrays
+        """
+        
+        x = np.array(x,copy=copy)
+        flux = np.array(flux,copy=copy)
+        if x.shape != flux.shape:
+            raise ValueError("x and flux don't match shapes")
+        
+        if ivar is None and err is None:
+            err = np.zeros_like(flux)
+        elif ivar is not None:
+            if np.isscalar(ivar):
+                err = ivar**-0.5*np.ones_like(flux)
+            else:
+                err = np.array(ivar,copy=False)**-0.5
+            if err.shape != flux.shape:
+                raise ValueError("ivar and flux don't match shapes")
+            
+        elif err is not None:
+            if np.isscalar(err):
+                err = err*np.ones_like(flux)
+            else:
+                err=np.array(err,copy=copy)
+                err[err<0]=-1*err[err<0]
+            if err.shape != flux.shape:
+                raise ValueError("err and flux don't match shapes")
+            
+        else:
+            raise ValueError("can't set both err and ivar at the same time")
+        
+        FluxUnits.__init__(self,unit)
+        
+        self._x = x
+        self._flux = flux
+        self._err = err
+        
+    def copy(self):
+        """
+        Generates a deep copy of this Spectrum
+        """
+        from copy import deepcopy
+        return deepcopy(self)
+    
+    #Units mapping methods
+    def _unitGetX(self):
+        return self._x
+    def _unitSetX(self,val):
+        self._x[:] = val
+    def _unitGetY(self):
+        return self._flux
+    def _unitSetY(self,val):
+        self._err[:]=err*val/flux
+        self._flux[:] = val
+        
         
     
     
@@ -222,20 +276,7 @@ class Spectrum(object):
         self._x = np.array(x)
     x = property(_getX,_setX)
     
-    def _getUnit(self):
-        return self._phystype+'-'+self._unit
-    def _setUnit(self,typestr):
-        newtype,newunit,newscaling = self._strToUnit(typestr)
-        print newtype,newunit,newscaling #DB
-        x,flux,err = self._convertType(self._phystype,newtype,self._scaling,newscaling)
-        
-        self._x[:] = x
-        self._flux[:] = flux
-        self._err[:] = err
-        self._phystype = newtype
-        self._unit = newunit
-        self._scaling = newscaling
-    unit = property(_getUnit,_setUnit)
+    
     
     #<----------------------Tests/Info--------------------------------->
     def __len__(self):
