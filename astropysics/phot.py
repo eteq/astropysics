@@ -9,6 +9,16 @@ Tends to be oriented towards optical techniques.
 from __future__ import division
 from math import pi
 import numpy as np
+try:
+    #requires Python 2.6
+    from abc import ABCMeta as _ABCMeta
+    from abc import abstractmethod as _abstractmethod
+    from abc import abstractproperty as _abstractproperty 
+except ImportError: #support for earlier versions
+    _abstractmethod = lambda x:x
+    _abstractproperty = property
+    _ABCMeta = type
+    
 
 #photometric band centers - B&M
 bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110}
@@ -17,86 +27,266 @@ bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,
 
 class Band(object):
     """
-    This class is the base of all photometric band objects
+    This class is the base of all photometric band objects.  Bands are expected
+    to be immutable once created except for changes of units.
     
-    subclasses should implement the following:
-    self._cen : center of band 
-    self._width : 
+    subclasses must implement the following functions:
+    *__init__ : initialize the object
+    *_getCen : return the center of band 
+    *_getFWHM : return the FWHM of the band
+    *_getx: return an array with the x-axis
+    *_getS: return the photon sensitivity (shape should match x)
     
-    subclasses should set the following arrays:
-    self._x (wavelength)
-    self._S (maximum should be 1)
-    
-    It is recommended that subclasses set the following values (otherwise they will be calculated on first access):
-    self._cenwl (center of the band)
-    self._widthwl (second moment of the band)
+    #the following can be optinally overriden:
+    *alignBand(x): return the sensitivity of the Band interpolated to the 
+                   provided x-array
+    *alignToBand(x,S): return the provided sensitivity interpolated onto the 
+                       x-array of the Band
     """
-    def __init__(self,x,S):
-        self._x = np.array(x)
-        self._S = np.array(S)
+    #TODO:add units support
+    __metaclass__ = _ABCMeta
+    
+    @_abstractmethod
+    def __init__(self):
+        raise NotImplementedError
+    
+    @_abstractmethod
+    def _getCen(self):
+        raise NotImplementedError
+    
+    @_abstractmethod
+    def _getFWHM(self):
+        raise NotImplementedError
+    
+    @_abstractmethod
+    def _getx(self):
+        raise NotImplementedError
+    
+    @_abstractmethod
+    def _getS(self):
+        raise NotImplementedError
+    
+    def alignBand(self,x,interpolation='linear'):
+        """
+        interpolates the Band sensitivity onto the provided x-axis
         
-        if len(self._x.shape) != 1 or len(self._S.shape) != 1:
-            raise ValueError('x and S must be 1D arrays')
+        x can either be an array with the wanted x-axis or a ``Spectrum``
         
-        if self._x.size != self._S.size:
-            raise ValueError('x and S do not match sizes')
-    
-    _cenwl = None
-    @property
-    def center(self):
+        interpolation can be 'linear' or 'spline'
         """
-        The center of the band
+        return self.__interp(x,self._x,self._S,interpolation)
+        
+    def alignToBand(self,*args,**kwargs):
         """
-        if self._cenwl is None:
-            from scipy.integrate import simps
-            cen = simps(self._x*self._S,self._x) #TODO:test
-            self._cenwl = cen
+        interpolates the provided function onto the Band x-axis
+        
+        args can be:
+        *alignToBand(arr): assume that the provided sequence fills the band and
+        interpolate it onto the band coordinates
+        *alignToBand(specobj): if specobj is of type ``Spectrum``, the ``Spectrum``
+        will flux will be returned aligned to the band
+        *alignToBand(x,y): the function with coordinates (x,y) will be aligned
+        to the Band x-axis
+        
+        keywords:
+        *interpolation:see Band.alignBand for interpolation types/options
+        """
+        if len(args) == 1:
+            from operator import isSequenceType
+            from .spec import Spectrum
+            if isSequenceType(args[0]):
+                y = np.array(args[0],copy=False)
+                x = linspace(self._x[0],self._x[-1])
+            elif isinstance(args[0],Spectrum):
+                x = args[0].x
+                y = args[0].flux
+        elif len(args) == 2:
+            x,y = args
         else:
-            return self._cenwl
+            raise TypeError('alignToBand() takes 1 or 2 arguments')
+        
+        if 'interpolation' not in kwargs:
+            kwargs['interpolation'] = 'linear'
+            
+        return self.__interp(self._x,x,y,kwargs['interpolation'])
     
-    _widthwl = None
-    @property
-    def width(self):
+    def computeFlux(self,spec,interpolation='linear',aligntoband=True):
         """
-        second centralized moment of the band
+        compute the flux in this band for the supplied Spectrum
+        
+        the Spectrum is aligned to the band if aligntoband is True, or vice 
+        versa, otherwise, using the specified interpolation (see Band.alignBand
+        for interpolation options)
         """
-        if self._widthwl is None:
-            from scipy.integrate import simps
-            wid = simps(self._x*self._x*self._S,self._x) #TODO:test
-            self._widthwl = wid
+        from scipy.integrate import simps as integralfunc
+        if aligntoband:
+            x = self._x
+            y = self._S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
         else:
-            return self._widthwl
+            x = spec.x
+            y = self.alignBand(spec)*spec.flux
+        return integralfunc(y,x)
     
-    @property
-    def lamb(self):
+    @staticmethod
+    def __interp(x,x0,y0,interpolation):
         """
-        wavelengths for the band
+        interpolate the function defined by x0 and y0 onto the coordinates in x
+        
+        see Band.alignBand for interpolation types/options
         """
-        return self._x
+        if interpolation == 'linear':
+            return np.interp(x,x0,y0)
+        elif interpolation == 'spline':
+            raise NotImplementedError
+            if not hasattr(self,'_splineobj'):
+                self._splineobj = None
+        else:
+            raise ValueError('unrecognized interpolation type')
     
-    @property
-    def response(self):
-        """
-        response function - e.g. probability a photon will be detected
-        """
-        return self.norm*self._S
     
-    norm = 1
+    cen = property(lambda self:self._getCen())
+    FWHM = property(lambda self:self._getFWHM())
+    x = property(lambda self:self._getx())
+    S = property(lambda self:self._getS())
 
 class GaussianBand(Band):
-    def __init__(self,center,width,sigs=6,n=100):
+    def __init__(self,center,width,A=1,sigs=6,n=100):
         """
-        center is the central wavelength of the band, while width is the sgima 
+        center is the central wavelength of the band, while width is the sigma 
         (if positive) or FWHM (if negative)
         """
-        self._cenwl = center
-        self._widthwl = sig = width if width > 0 else -width*(8*np.log(2))**-0.5#TODO:*?
+        self._cen = center
+        self._sigma = width if width > 0 else -width*(8*np.log(2))**-0.5
+        self._fwhm = self._sigma*(8*np.log(2))**0.5
+        self._A = A
         
-        self._x = np.linspace(-sigs,sigs,n)*width+center
-        xp = x - center
-        self._S = np.exp(-xp*xp/2/sig/sig)
+        self._n = n
+        self._sigs = sigs
+        self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
-class FileBand(Band):
+    def _updateXY(self,mu,sigma,A,n,sigs):
+        self._x = np.linspace(-sigs*sigma,sigs*sigma,n)+mu
+        xp = (self._x-mu)/sigma
+        self._y = A*np.exp(-xp*xp/2)
+        
+    def _getSigs(self):
+        return self._sigs
+    def _setSigs(self,val):
+        self._updateXY(self._cen,self._sigma,self._A,self._n,val)
+        self._sigs = val
+    sigs = property(_getSigs,_setSigs)
+    
+    def _getn(self):
+        return self._n
+    def _setn(self,val):
+        self._updateXY(self._cen,self._sigma,self._A,val,self._sigs)
+        self._n = val
+    n = property(_getn,_setn)
+
+    @property
+    def sigma(self):
+        return self._sigma
+    
+    def _getCen(self):
+        return self._cen
+    
+    def _getFWHM(self):
+        return self._fwhm #=sigma*(8*log(2))**0.5
+    
+    def _getx(self):
+        return self._x
+    
+    def _getS(self):
+        return self._y
+    
+    def alignBand(self,x):
+        xp = (x-self._cen)/self._sigma 
+        return self._A*np.exp(-xp*xp/2)
+        
+class ArrayBand(Band):
+    def __init__(self,x,S,copyonaccess=True,normalized=True):
+        """
+        generate a Band from a supplied quantum (e.g. photonic) response 
+        function 
+        
+        if the response function is ever negative, the band will be offset so
+        that the lowest point is 0 .  If the band x-axis is not sorted, it 
+        will be sorted from lowest to highest.
+        """
+        self._x = np.array(x,copy=True)
+        self._S = np.array(S,copy=True)
+        sorti = np.argsort(self._x)
+        self._x,self._S = self._x[sorti],self._S[sorti]
+
+        if self._x.shape != self._S.shape or len(self._x.shape) != 1:
+            raise ValueError('supplied x and S are not matching 1D arrays')
+        if self._S.min() < 0:
+            self._S -= self._S.min()
+        self._N = self._S.max()
+        if normalized:
+            self._S /= self._N
+        self.copyonaccess = copyonaccess
+        self._norm = normalized
+        
+        self._computeMoments()
+        
+    def _computeMoments(self):
+        from scipy.integrate import  simps as integralfunc
+        #trapz vs. simps: trapz faster by factor ~5,simps somewhat more accurate
+        x=self._x
+        y=self._S/self._S.max()
+        N=1/integralfunc(y,x)
+        yn = y*N #normalize so that overall integral is 1
+        self._cen = integralfunc(x*yn,x)
+        xp = x - self._cen
+        
+        
+        if y[0] > 0.5 or y[-1] > 0.5:
+            self._fwhm = (integralfunc(xp*xp*yn,xp)*8*np.log(2))**0.5 
+        else:
+            #from scipy.interpolation import interp1d
+            #from scipy.optimize import newton
+            #ier = interp1d(x,y-0.5)
+            #lval-uval=newton(ier,x[0])-newton(ier,x[-1])
+            #need peak to be 1 for this algorithm
+            yo = y-0.5
+            edgei = np.where(yo*np.roll(yo,1)<0)[0]-1
+            li,ui = edgei[0]+np.arange(2),edgei[1]+np.arange(2)
+            self._fwhm = np.interp(0,yo[ui],x[ui])-np.interp(0,yo[li],x[li])
+            
+    
+    def _getNorm(self):
+        return self._norm
+    def _setNorm(self,val):
+        val = bool(val)
+        if val != self._norm:
+            if self.norm:
+                self.S *= self._N
+            else:
+                self.S /= self._N
+        self._norm = val
+    normalized = property(_getNorm,_setNorm)
+        
+    def _getCen(self):
+        return self._cen
+    
+    def _getFWHM(self):
+        return self._fwhm
+    
+    def _getx(self):
+        if self.copyonaccess:
+            return self._x.copy()
+        else:
+            return self._x
+    
+    def _getS(self):
+        if self.copyonaccess:
+            return self._S.copy()
+        else:
+            return self._S
+        
+        
+class FileBand(ArrayBand):
     def __init__(self,fn,type=None):
         """
         type can be 'txt', or 'fits', or inferred from extension
@@ -105,6 +295,7 @@ class FileBand(Band):
         """
         from os import path
         
+        self.fn = fn
         if type is None:
             ext = path.splitext(fn)[-1].lower()
             if ext == 'fits' or ext == 'fit':
@@ -125,6 +316,43 @@ class FileBand(Band):
         else:
             raise ValueError('unrecognized type')
         
+        ArrayBand.__init__(self,x,S)
+        
+def plot_band(band,spec=None,**kwargs):
+    """
+    this plots the requested band and passes kwargs into matplotlib.pyplot.plot
+    OR
+    if spec is provided, the spectrum will be plotted along with the band and 
+    the convolution
+    
+    other kwargs:
+    *clf : clear the figure before plotting
+    *leg : show legend where appropriate
+    """
+    from matplotlib import pyplot as plt
+    if kwargs.pop('clf',True):
+            plt.clf()
+            
+    if spec:
+        from .spec import Spectrum
+        if not isinstance(spec,Spectrum):
+            raise ValueError('input not a Spectrum')
+        N = np.max(spec.flux)
+        convflux = band.alignToBand(spec)*band.S
+        
+        plt.plot(band.x,N*band.S,c='k',label='$S_{\\rm Band}$')
+        plt.plot(spec.x,spec.flux,c='g',ls=':',label='$f_{\\rm spec}$')
+        plt.plot(band.x,convflux,c='b',ls='--',label='$f_{\\rm spec}S_{\\rm Band}$')
+        
+        plt.ylabel('Spec flux or S*max(spec)')
+        if kwargs.pop('leg',True):
+            plt.legend(loc=0)
+    else:
+        plt.plot(band.x,band.S,**kwargs)
+        plt.ylabel('$S$')
+        plt.ylim(0,band.S.max())
+        
+    plt.xlabel('$\\lambda$')
         
 #<---------------------Procedural/utility functions---------------------------->
     
@@ -549,7 +777,7 @@ def __load_UBVRI():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'))) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
@@ -577,13 +805,17 @@ def __load_ugriz():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,FileBand(np.array(v[0]),np.array(v[1]))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'))) for k,v in d.iteritems()])
     for k,v in d.iteritems():
         if "'" in k:
             v.source = psrc
         else:
             v.source = src
-    return d
+    dp = {}
+    for k in d.keys():
+        if "'" in k: 
+            dp[k]=d.pop(k)
+    return d,dp
 
 def __load_human_eye():
     from .io import _get_package_data
@@ -595,14 +827,16 @@ def __load_human_eye():
         if ln.strip() == '':
             pass
         else:
-            t = ln.split(',')
+            t = ln.strip().split(',')
             d['cone_l'].append((t[0],t[1]))
             d['cone_m'].append((t[0],t[2]))
             if t[3]!='':
                 d['cone_s'].append((t[0],t[3]))
+                
     
-    d = dict([(k,array(v)) for k,v in d.iteritems()])
-    d = dict([(k,FileBand(v[:,0],v[:,1])) for k,v in d.iteritems()])
+    d = dict([(k,np.array(v,dtype='f8')) for k,v in d.iteritems()])
+    #logarithmic response data - must do 10**data
+    d = dict([(k,ArrayBand(v[:,0],10**v[:,1])) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
