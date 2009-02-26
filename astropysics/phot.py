@@ -20,8 +20,14 @@ except ImportError: #support for earlier versions
     _ABCMeta = type
     
 
-#photometric band centers - B&M
-bandwl={'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110}
+#photometric band centers - B&M ... deprecated, use bands[band].cen instead
+class _BwlAdapter(dict):
+    def __getitem__(self,key):
+        if key not in self:
+            return bands[key].cen
+        return dict.__getitem__(self,key)
+bandwl = _BwlAdapter()
+bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
 #<---------------------Classes------------------------------------------------->
 
@@ -65,6 +71,35 @@ class Band(object):
     @_abstractmethod
     def _getS(self):
         raise NotImplementedError
+    
+    #comparison operators TODO:unit matching
+    def __eq__(self,other):
+        try:
+            return np.all(self._x == other._x) and np.all(self._S == other._S)
+        except:
+            return False
+    def __ne__(self,other):
+        return not __eq__(self,other)
+    def __lt__(self,other):
+        try:
+            return self.cen < other.cen
+        except:
+            return NotImplemented
+    def __le__(self,other):
+        try:
+            return self.cen <= other.cen
+        except:
+            return NotImplemented
+    def __gt__(self,other):
+        try:
+            return self.cen > other.cen
+        except:
+            return NotImplemented
+    def __ge__(self,other):
+        try:
+            return self.cen >= other.cen
+        except:
+            return NotImplemented
     
     def alignBand(self,x,interpolation='linear'):
         """
@@ -148,6 +183,53 @@ class Band(object):
     FWHM = property(lambda self:self._getFWHM())
     x = property(lambda self:self._getx())
     S = property(lambda self:self._getS())
+    def _getSrc(self):
+        if not hasattr(self._src):
+            from .objcat import Source
+            self._src = Source(None)
+        return self._src
+    def _setSrc(self,val=None):
+        from .objcat import Source
+        self._src = Source(val)
+    source = property(self._getSrc,self._setSrc)
+    
+    def plot_band(self,spec=None,**kwargs):
+        """
+        this plots the requested band and passes kwargs into matplotlib.pyplot.plot
+        OR
+        if spec is provided, the spectrum will be plotted along with the band and 
+        the convolution
+        
+        other kwargs:
+        *clf : clear the figure before plotting
+        *leg : show legend where appropriate
+        """
+        from matplotlib import pyplot as plt
+        band = self
+        
+        if kwargs.pop('clf',True):
+                plt.clf()
+                
+        if spec:
+            from .spec import Spectrum
+            if not isinstance(spec,Spectrum):
+                raise ValueError('input not a Spectrum')
+            N = np.max(spec.flux)
+            convflux = band.alignToBand(spec)*band.S
+            
+            plt.plot(band.x,N*band.S,c='k',label='$S_{\\rm Band}$')
+            plt.plot(spec.x,spec.flux,c='g',ls=':',label='$f_{\\rm spec}$')
+            plt.plot(band.x,convflux,c='b',ls='--',label='$f_{\\rm spec}S_{\\rm Band}$')
+            
+            plt.ylabel('Spec flux or S*max(spec)')
+            if kwargs.pop('leg',True):
+                plt.legend(loc=0)
+        else:
+            plt.plot(band.x,band.S,**kwargs)
+            plt.ylabel('$S$')
+            plt.ylim(0,band.S.max())
+            
+        plt.xlabel('$\\lambda$')
 
 class GaussianBand(Band):
     def __init__(self,center,width,A=1,sigs=6,n=100):
@@ -318,41 +400,19 @@ class FileBand(ArrayBand):
         
         ArrayBand.__init__(self,x,S)
         
-def plot_band(band,spec=None,**kwargs):
+class CMDAnalyzer(object)
     """
-    this plots the requested band and passes kwargs into matplotlib.pyplot.plot
-    OR
-    if spec is provided, the spectrum will be plotted along with the band and 
-    the convolution
-    
-    other kwargs:
-    *clf : clear the figure before plotting
-    *leg : show legend where appropriate
+    This class is intended to take multi-band photometry and compare it
+    to fiducial models to find priorities/matches for a set of data from the
+    same bands
     """
-    from matplotlib import pyplot as plt
-    if kwargs.pop('clf',True):
-            plt.clf()
-            
-    if spec:
-        from .spec import Spectrum
-        if not isinstance(spec,Spectrum):
-            raise ValueError('input not a Spectrum')
-        N = np.max(spec.flux)
-        convflux = band.alignToBand(spec)*band.S
-        
-        plt.plot(band.x,N*band.S,c='k',label='$S_{\\rm Band}$')
-        plt.plot(spec.x,spec.flux,c='g',ls=':',label='$f_{\\rm spec}$')
-        plt.plot(band.x,convflux,c='b',ls='--',label='$f_{\\rm spec}S_{\\rm Band}$')
-        
-        plt.ylabel('Spec flux or S*max(spec)')
-        if kwargs.pop('leg',True):
-            plt.legend(loc=0)
-    else:
-        plt.plot(band.x,band.S,**kwargs)
-        plt.ylabel('$S$')
-        plt.ylim(0,band.S.max())
-        
-    plt.xlabel('$\\lambda$')
+    def __init__(self,fiducial,fbands):
+        """
+        fiducial is a B x N array where B is the number of bands/colors
+        and N is the number of fiducial points.  fbands specifies the band
+        or color name
+        """
+        raise NotImplementedError
         
 #<---------------------Procedural/utility functions---------------------------->
     
@@ -756,6 +816,62 @@ def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
         
     
 #<---------------------Load built-in data-------------------------------------->
+class _BandRegistry(dict):
+    def __init__(self):
+        dict.__init__(self)
+        self._groupdict = {}
+        
+    def __getitem__(self,val):
+        if val in self._groupdict:
+            bands = self._groupdict[val]
+            return dict([(b,self[b]) for b in bands])
+        else:
+            return dict.__getitem__(self,val)
+    def __delitem__(self,key):
+        dict.__delitem__(key)
+        for k,v in self._groupdict.items():
+            if key in v:
+                del self.groupdict[k]
+                
+    def __getattr__(self,name):
+        if name in self.keys():
+            return self[name]
+        else:
+            raise AttributeError('No band or attribute '+name+' in '+self.__class__.__name__)
+    
+    def register(bands,groupname=None):
+        """
+        register a set of bands in a group
+        
+        bands is a dictionary mapping the band name to a Band object
+        
+        setname is the name of the group to apply to the dictionary
+        """
+        from operator import isMappingType,isSequenceType
+        
+        if not isMappingType(bands):
+            raise ValueError('input must be a map of bands')
+        for k,v in bands.iteritems():
+            if not isinstance(v,Band):
+                raise ValueError('an object in the band set is not a Band')
+            self[str(k)]=v
+            
+        if groupname:
+            if type(groupname) is str:
+                self._groupdict[groupname] = bands.keys()
+            elif isSequenceType(groupname):
+                for s in groupname:
+                    self._groupdict[s] = bands.keys()
+            else:
+                raise ValueError('unrecognized group name type')
+            
+    def groupkeys(self):
+        return self._groupdict.keys()
+    
+    def groupiteritems(self):
+        for k in self.groupkeys():
+            yield (k,self[k])
+
 def __load_UBVRI():
     from .io import _get_package_data
     bandlines = _get_package_data('UBVRIbands.dat').split('\n')
@@ -840,3 +956,13 @@ def __load_human_eye():
     for v in d.itervalues():
         v.source = src
     return d
+
+
+            
+bands = _BandRegistry()
+bands.register(__load_human_eye(),'eye')
+d,dp = __load_ugriz()
+bands.register(d,'ugriz')
+bands.register(dp,'ugriz_prime')
+del d,dp
+bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
