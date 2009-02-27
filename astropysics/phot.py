@@ -10,6 +10,7 @@ from __future__ import division
 from math import pi
 import numpy as np
 
+from .spec import HasSpecUnits
 try:
     #requires Python 2.6
     from abc import ABCMeta
@@ -19,20 +20,11 @@ except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
-    
 
-#photometric band centers - B&M ... deprecated, use bands[band].cen instead
-class _BwlAdapter(dict):
-    def __getitem__(self,key):
-        if key not in self:
-            return bands[key].cen
-        return dict.__getitem__(self,key)
-bandwl = _BwlAdapter()
-bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
 #<---------------------Classes------------------------------------------------->
 
-class Band(object):
+class Band(HasSpecUnits):
     """
     This class is the base of all photometric band objects.  Bands are expected
     to be immutable once created except for changes of units.
@@ -50,8 +42,12 @@ class Band(object):
     *alignToBand(x,S): return the provided sensitivity interpolated onto the 
                        x-array of the Band
     """
-    #TODO:add units support
     __metaclass__ = ABCMeta
+    
+    #set default units to angstroms
+    _phystype = 'wavelength'
+    _unit = 'angstrom'
+    _scaling = 1e-8
     
     @abstractmethod
     def __init__(self):
@@ -102,6 +98,47 @@ class Band(object):
         except:
             return NotImplemented
     
+    def __interp(self,x,x0,y0,interpolation):
+        """
+        interpolate the function defined by x0 and y0 onto the coordinates in x
+        
+        see Band.alignBand for interpolation types/options
+        """
+        if interpolation == 'linear':
+            return np.interp(x,x0,y0)
+        elif interpolation == 'spline':
+            raise NotImplementedError
+            if not hasattr(self,'_splineobj'):
+                self._splineobj = None
+        else:
+            raise ValueError('unrecognized interpolation type')
+    
+    #units support
+    def _unitGetX(self):
+        return self._getx()
+    def _unitSetX(self,val):
+        raise NotImplementedError
+    def _unitGetY(self):
+        return self._getS()
+    def _unitSetY(self,val):
+        raise NotImplementedError
+    
+    cen = property(lambda self:self._getCen())
+    FWHM = property(lambda self:self._getFWHM())
+    x = property(lambda self:self._getx())
+    S = property(lambda self:self._getS())
+    def _getSrc(self):
+        if not hasattr(self._src):
+            from .objcat import Source
+            self._src = Source(None)
+        return self._src
+    def _setSrc(self,val=None):
+        from .objcat import Source
+        self._src = Source(val)
+    source = property(_getSrc,_setSrc)
+    
+    zeropoint = 0 #zeropoint can be freely modified
+    
     def alignBand(self,x,interpolation='linear'):
         """
         interpolates the Band sensitivity onto the provided x-axis
@@ -146,15 +183,19 @@ class Band(object):
             
         return self.__interp(self.x,x,y,kwargs['interpolation'])
     
-    def computeFlux(self,spec,interpolation='linear',aligntoband=True):
+    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
         """
         compute the flux in this band for the supplied Spectrum
         
         the Spectrum is aligned to the band if aligntoband is True, or vice 
         versa, otherwise, using the specified interpolation (see Band.alignBand
-        for interpolation options)
+        for interpolation options).  If aligntoband is None, the higher of the
+        two resolutions will be left unchanged 
         """
         from scipy.integrate import simps as integralfunc
+        if aligntoband is None:
+            aligntoband = self.x.size > spec.x.size
+        
         if aligntoband:
             x = self.x
             y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
@@ -163,35 +204,26 @@ class Band(object):
             y = self.alignBand(spec)*spec.flux
         return integralfunc(y,x)
     
-    def __interp(self,x,x0,y0,interpolation):
+    def computeMag(self,*args,**kwargs):
         """
-        interpolate the function defined by x0 and y0 onto the coordinates in x
+        Compute the magnitude of the supplied Spectrum in this band using the 
+        band's ``zeropoint`` attribute
         
-        see Band.alignBand for interpolation types/options
+        args and kwargs are the same as those for computeFlux
         """
-        if interpolation == 'linear':
-            return np.interp(x,x0,y0)
-        elif interpolation == 'spline':
-            raise NotImplementedError
-            if not hasattr(self,'_splineobj'):
-                self._splineobj = None
-        else:
-            raise ValueError('unrecognized interpolation type')
+        flux = self.computeFlux(*args,**kwargs)
+        return -2.5*np.log10(flux)-self.zeropoint
     
-    
-    cen = property(lambda self:self._getCen())
-    FWHM = property(lambda self:self._getFWHM())
-    x = property(lambda self:self._getx())
-    S = property(lambda self:self._getS())
-    def _getSrc(self):
-        if not hasattr(self._src):
-            from .objcat import Source
-            self._src = Source(None)
-        return self._src
-    def _setSrc(self,val=None):
-        from .objcat import Source
-        self._src = Source(val)
-    source = property(_getSrc,_setSrc)
+    def computeZptFromSpectrum(self,*args,**kwargs):
+        """
+        use the supplied Spectrum as a zero-point Spectrum to 
+        define the zero point of this band
+        
+        args and kwargs are the same as those for computeFlux
+        """
+        self.zeropoint = 0
+        mag = self.computeMag(*args,**kwargs)
+        self.zeropoint = mag
     
     def plot_band(self,spec=None,**kwargs):
         """
@@ -232,7 +264,7 @@ class Band(object):
         plt.xlabel('$\\lambda$')
 
 class GaussianBand(Band):
-    def __init__(self,center,width,A=1,sigs=6,n=100):
+    def __init__(self,center,width,A=1,sigs=6,n=100,unit='angstroms'):
         """
         center is the central wavelength of the band, while width is the sigma 
         (if positive) or FWHM (if negative)
@@ -245,6 +277,8 @@ class GaussianBand(Band):
         self._n = n
         self._sigs = sigs
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
+        
+        HasSpecUnits.__init__(self,unit)
         
     def _updateXY(self,mu,sigma,A,n,sigs):
         self._x = np.linspace(-sigs*sigma,sigs*sigma,n)+mu
@@ -286,7 +320,7 @@ class GaussianBand(Band):
         return self._A*np.exp(-xp*xp/2)
         
 class ArrayBand(Band):
-    def __init__(self,x,S,copyonaccess=True,normalized=True):
+    def __init__(self,x,S,copyonaccess=True,normalized=True,unit='angstroms'):
         """
         generate a Band from a supplied quantum (e.g. photonic) response 
         function 
@@ -311,6 +345,8 @@ class ArrayBand(Band):
         self._norm = normalized
         
         self._computeMoments()
+        
+        HasSpecUnits.__init__(self,unit)
         
     def _computeMoments(self):
         from scipy.integrate import  simps as integralfunc
@@ -951,8 +987,8 @@ def __load_human_eye():
                 
     
     d = dict([(k,np.array(v,dtype='f8')) for k,v in d.iteritems()])
-    #logarithmic response data - must do 10**data
-    d = dict([(k,ArrayBand(v[:,0],10**v[:,1])) for k,v in d.iteritems()])
+    #logarithmic response data - must do 10**data, also, convert x-axis to angstroms
+    d = dict([(k,ArrayBand(10*v[:,0],10**v[:,1])) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
@@ -967,4 +1003,14 @@ bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
 
-del ABCMeta,abstractmethod,abstractproperty #clean up namespace
+
+class _BwlAdapter(dict): 
+    def __getitem__(self,key):
+        if key not in self:
+            return bands[key].cen
+        return dict.__getitem__(self,key)
+bandwl = _BwlAdapter()
+#photometric band centers - B&M ... deprecated, use bands[band].cen instead
+bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
+
+del ABCMeta,abstractmethod,abstractproperty,HasSpecUnits #clean up namespace

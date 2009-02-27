@@ -20,8 +20,11 @@ except ImportError: #support for earlier versions
     abstractproperty = property
     ABCMeta = type
 
+#Spectrum related io module functions
+from .io import load_deimos_spectrum,load_deimos_templates,load_spylot_spectrum
 
-class FluxUnits(object):
+class HasSpecUnits(object):
+    #TODO:FIX!
     __metaclass__ = ABCMeta
     
     def __init__(self,unit):
@@ -83,12 +86,9 @@ class FluxUnits(object):
         return phystype,unit,scaling
         
     def _convertType(self,oldtype,newtype,oldscale,newscale):
-        #TODO:fix wl to freq
         from .constants import c,h
         
-        print oldtype,newtype,oldscale,newscale #DB
-        
-        x,flux = self._unitGetX()/oldscale,self._unitGetY()/oldscale # convert to cgs
+        x,flux = self._unitGetX()*oldscale,self._unitGetY()*oldscale # convert to cgs
     
         if newtype == 'energy': #TODO:check
             if oldtype == 'energy': 
@@ -127,15 +127,13 @@ class FluxUnits(object):
         else:
             raise ValueError('unrecognized newtype')
         
-        return x*newscale,flux*fluxscale*newscale
+        return x/newscale,flux*fluxscale/newscale
     
     def _getUnit(self):
         return self._phystype+'-'+self._unit
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToUnit(typestr)
-        print newtype,newunit,newscaling #DB
-        x,flux,err = self._convertType(self._phystype,newtype,self._scaling,newscaling)
-        
+        x,flux = self._convertType(self._phystype,newtype,self._scaling,newscaling)
         self._unitSetX(x)
         self._unitSetY(flux)
         #self._x[:] = x
@@ -146,7 +144,7 @@ class FluxUnits(object):
         self._scaling = newscaling
     unit = property(_getUnit,_setUnit)
 
-class Spectrum(object):
+class Spectrum(HasSpecUnits):
     """
     Represents a flux/luminosity/intensity
     
@@ -188,7 +186,7 @@ class Spectrum(object):
         else:
             raise ValueError("can't set both err and ivar at the same time")
         
-        FluxUnits.__init__(self,unit)
+        HasSpecUnits.__init__(self,unit)
         
         self._x = x
         self._flux = flux
@@ -211,9 +209,6 @@ class Spectrum(object):
     def _unitSetY(self,val):
         self._err[:] = self._err*val/self._flux
         self._flux[:] = val
-        
-        
-    
     
     
     #------------------------Properties--------------------------------->
@@ -470,6 +465,39 @@ class Spectrum(object):
         newx = np.logspace(np.log10(lower),np.log10(upper),self.npix)
         return self.resample(newx,**kwargs)
     
+    def computeMag(self,bands,**kwargs):
+        """
+        this computes the magnitude of the spectrum in the provided bands
+        
+        bands can be a sequence of band objects or strings which will be mapped
+        to bands through the phot.bands registry
+        
+        kwargs are passed into phot.Band.computeMag
+        """
+        kwargs['__domags']=True
+        return self.computeFlux(bands,**kwargs)
+        
+    
+    def computeFlux(self,bands,**kwargs):
+        """
+        this computes the flux of the spectrum in the provided bands
+        
+        bands can be a sequence of band objects or strings which will be mapped
+        to bands through the phot.bands registry
+        
+        kwargs are passed into phot.Band.computeFlux
+        """
+        from . import spec
+        if type(bands) == str or isinstance(bands,spec.Band):
+            bands = [bands]
+        
+        bands = [spec.bands[b] if type(b) is str else b for b in bands]
+        
+        if kwargs.pop('__domags',False):
+            return [b.computeMag(self,**kwargs) for b in bands]
+        else:
+            return [b.computeFlux(self,**kwargs) for b in bands]
+        
     def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,**kwargs):
         """
         uses matplotlib to plot the Spectrum object
@@ -508,7 +536,7 @@ class Spectrum(object):
         xl=xl.replace('frequency','\\nu')
         xl=xl.replace('energy','E')
         xl=xl.replace('angstrom','\\AA')
-        xl=xl.replace('micron','\\mu')
+        xl=xl.replace('micron','\\mu m')
         xl=tuple(xl.split('-'))
         plt.xlabel('$%s/{\\rm %s}$'%xl)
         
@@ -575,6 +603,8 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
         s.resample(x,interpolation)
     
     return specs
+
+ABSpec = Spectrum([1e14,3e15],np.ones(2)*10**(48.6/-2.5),unit='hz')
 
 
 def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verbose=True,interpolation = None):
@@ -715,131 +745,6 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     fitfluxes = [f.A[:,0] for f in fitfluxes]
     
     return besti,ls,cs,xs,fitfluxes,rchi2s
-        
-            
-    
-    
-#<---------------------Data loading functions---TODO:move to plugin-like?------>
 
-def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing=None):
-    """
-    extraction type can 'horne' or 'boxcar'
-    
-    returns Spectrum object with ivar, [bdata,rdata]
-    """
-    import pyfits
-    if 'spec1d' not in fn or 'fits' not in fn:
-        raise ValueError('loaded file must be a 1d spectrum from deep pipeline')
-    
-    if extraction == 'horne':
-        extname = 'HORNE'
-    elif extraction == 'boxcar':
-        extname = 'BXSPF'
-    else:
-        raise ValueError('unrecgnized extraction type %s'%extraction)
-    
-    f=pyfits.open(fn)
-    try:
-        extd = dict([(f[i].header['EXTNAME'],i) for i in range(1,len(f))])
-        bi,ri = extd[extname+'-B'],extd[extname+'-R']
-        bd,rd=f[bi].data,f[ri].data
-        x=np.concatenate((bd.LAMBDA[0],rd.LAMBDA[0]))
-        flux=np.concatenate((bd.SPEC[0],rd.SPEC[0]))
-        ivar=np.concatenate((bd.IVAR[0],rd.IVAR[0]))
-        sky=np.concatenate((bd.SKYSPEC[0],rd.SKYSPEC[0]))
-        
-        changei = len(bd.LAMBDA[0])
-        
-        fobj = Spectrum(x,flux,ivar)
-        fobj.sky = sky
-        
-        if smoothing:
-            fobj.smooth(smoothing,replace=True)
-        
-        if plot:
-#            from operator import isMappingType
-#            if not isMappingType(plot):
-#                plot={}
-            from matplotlib import pyplot as plt
-            plt.plot(fobj.x[:changei],fobj.flux[:changei],'-b')
-            plt.plot(fobj.x[changei:],fobj.flux[changei:],'-r')
-        
-        if retdata:
-            return fobj,bd,rd
-        else:
-            return fobj
-    finally:
-        f.close()
-        
-def load_deimos_templates(fns):
-    """
-    This will generate a dictionary of Spectrum objects from the specified  
-    templates 
-    fn can be a single file, a list of files, or a unix-style pattern
-    """
-    import pyfits
-    from operator import isSequenceType
-    from warnings import warn
-    
-    if type(fns) == str:
-        from glob import glob
-        fns = glob(fns)
-        
-    if not isSequenceType(fns):
-        raise ValueError('improper filename format')
-    
-    tempd={}
-    xd={}
-    for fn in fns:
-        f = pyfits.open(fn)
-        try:
-            h=f[0].header
-            d=f[0].data
-            if len(d.shape) == 1:
-                d = (d,)
-            if len(d) == 1:
-                if h.has_key('NAME0'):
-                    k=h['NAME0'].strip()
-                elif h.has_key('NAME'):
-                    k=h['NAME'].strip()
-                elif h.has_key('OBJECT'):
-                    k=h['OBJECT'].strip()
-                else:
-                    k = fn.strip()
-                    warn('could not infer spectrum name - using filename %s as key name'%k)
-                    
-                xd[k] = 10**(h['COEFF0']+h['COEFF1']*np.arange(d[0].shape[-1]))
-                tempd[k] = d[0].copy()
-            else:
-                x = 10**(h['COEFF0']+h['COEFF1']*np.arange(d.shape[-1]))
-                for i,spec in enumerate(d):
-                    if  h.has_key('NAME%i'%i):
-                        k=h['NAME%i'%i].strip()
-                    elif h.has_key('OBJECT') and h.has_key('EIGEN%i'%i):
-                        k = '%s%i'%(h['OBJECT'].strip(),h['EIGEN%i'%i])
-                    elif h.has_key('NAME'):
-                        k = '%s-%i'%(h['NAME'].strip(),i)
-                    elif h.has_key('OBJECT'):
-                        k = '%s-%i'%(h['OBJECT'].strip(),i)
-                    else:
-                        k = '%s-%i'%(fn.strip(),i)
-                        warn('could not infer spectrum name - using filename %s as key name'%k)
-                        
-                    xd[k] = x
-                    tempd[k]=spec.copy() #TODO: see if its better to not copy here
-                    
-        finally:
-            f.close()
-    
-    return dict(((k,Spectrum(xd[k],tempd[k])) for k in tempd))
-    
-def load_spylot_spectrum(s,bandi):
-    x=s.getCurrentXAxis()
-    f=s.getCurrentData(bandi=bandi)
-    if s.isContinuumSubtracted():
-        e=s.getContinuumError()
-    else:
-        e=s.getWindowedRMSError(bandi=bandi)
-    return Spectrum(x,f,e)
-         
+
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
