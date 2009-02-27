@@ -1,5 +1,13 @@
 #!/usr/bin/env python
 
+from  sys import argv
+try:
+    argv.pop(argv.index('ez_setup'))
+    from ez_setup import use_setuptools
+    use_setuptools()
+except ValueError:
+    pass
+
 try:
     from setuptools import setup
     stls=True
