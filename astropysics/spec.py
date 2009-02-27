@@ -12,17 +12,17 @@ from math import pi
 import numpy as np
 try:
     #requires Python 2.6
-    from abc import ABCMeta as _ABCMeta
-    from abc import abstractmethod as _abstractmethod
-    from abc import abstractproperty as _abstractproperty 
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
 except ImportError: #support for earlier versions
-    _abstractmethod = lambda x:x
-    _abstractproperty = property
-    _ABCMeta = type
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
 
 
 class FluxUnits(object):
-    __metaclass__ = _ABCMeta
+    __metaclass__ = ABCMeta
     
     def __init__(self,unit):
         self._phystype,self._unit,self._scaling = self._strToUnit(unit)
@@ -209,7 +209,7 @@ class Spectrum(object):
     def _unitGetY(self):
         return self._flux
     def _unitSetY(self,val):
-        self._err[:]=err*val/flux
+        self._err[:] = self._err*val/self._flux
         self._flux[:] = val
         
         
@@ -842,3 +842,4 @@ def load_spylot_spectrum(s,bandi):
         e=s.getWindowedRMSError(bandi=bandi)
     return Spectrum(x,f,e)
          
+del ABCMeta,abstractmethod,abstractproperty #clean up namespace

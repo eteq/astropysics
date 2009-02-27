@@ -17,13 +17,13 @@ from math import pi
 import numpy as np
 try:
     #requires Python 2.6
-    from abc import ABCMeta as _ABCMeta
-    from abc import abstractmethod as _abstractmethod
-    from abc import abstractproperty as _abstractproperty 
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
 except ImportError: #support for earlier versions
-    _abstractmethod = lambda x:x
-    _abstractproperty = property
-    _ABCMeta = type
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
 
 class _Parameter(object):
     
@@ -1467,7 +1467,7 @@ class SchecterModelLum(SchecterModel):
         #M,Mstar=l2m(L),l2m(Lstar)
         #return SchecterModel.f(self,M,Mstar,alpha,phistar)
         x = L/Lstar
-        return phistar*(x**alpha)*exp(-x)/Lstar
+        return phistar*(x**alpha)*np.exp(-x)/Lstar
     #TODO:check to make sure this is actually the right way
         
 class EinastoModel(FunctionModel1D):
@@ -1498,7 +1498,7 @@ class SersicModel(EinastoModel):
         from matplotlib import pyplot as plt
         
         if data is None and (lower is None or upper is None):
-            raise ValuError('need data for limits or lower/upper')
+            raise ValueError('need data for limits or lower/upper')
         if data is not None:
             if upper is None:
                 upper = np.max(data[0])
@@ -1544,3 +1544,5 @@ class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
 for o in locals().values():
     if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel:
         register_model(o)
+
+del ABCMeta,abstractmethod,abstractproperty #clean up namespace

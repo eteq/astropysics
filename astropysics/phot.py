@@ -9,15 +9,16 @@ Tends to be oriented towards optical techniques.
 from __future__ import division
 from math import pi
 import numpy as np
+
 try:
     #requires Python 2.6
-    from abc import ABCMeta as _ABCMeta
-    from abc import abstractmethod as _abstractmethod
-    from abc import abstractproperty as _abstractproperty 
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
 except ImportError: #support for earlier versions
-    _abstractmethod = lambda x:x
-    _abstractproperty = property
-    _ABCMeta = type
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
     
 
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
@@ -50,36 +51,36 @@ class Band(object):
                        x-array of the Band
     """
     #TODO:add units support
-    __metaclass__ = _ABCMeta
+    __metaclass__ = ABCMeta
     
-    @_abstractmethod
+    @abstractmethod
     def __init__(self):
         raise NotImplementedError
     
-    @_abstractmethod
+    @abstractmethod
     def _getCen(self):
         raise NotImplementedError
     
-    @_abstractmethod
+    @abstractmethod
     def _getFWHM(self):
         raise NotImplementedError
     
-    @_abstractmethod
+    @abstractmethod
     def _getx(self):
         raise NotImplementedError
     
-    @_abstractmethod
+    @abstractmethod
     def _getS(self):
         raise NotImplementedError
     
     #comparison operators TODO:unit matching
     def __eq__(self,other):
         try:
-            return np.all(self._x == other._x) and np.all(self._S == other._S)
+            return np.all(self.x == other.x) and np.all(self.S == other.S)
         except:
             return False
     def __ne__(self,other):
-        return not __eq__(self,other)
+        return not self.__eq__(other)
     def __lt__(self,other):
         try:
             return self.cen < other.cen
@@ -109,7 +110,7 @@ class Band(object):
         
         interpolation can be 'linear' or 'spline'
         """
-        return self.__interp(x,self._x,self._S,interpolation)
+        return self.__interp(x,self.x,self.S,interpolation)
         
     def alignToBand(self,*args,**kwargs):
         """
@@ -131,7 +132,7 @@ class Band(object):
             from .spec import Spectrum
             if isSequenceType(args[0]):
                 y = np.array(args[0],copy=False)
-                x = linspace(self._x[0],self._x[-1])
+                x = np.linspace(self.x[0],self.x[-1])
             elif isinstance(args[0],Spectrum):
                 x = args[0].x
                 y = args[0].flux
@@ -143,7 +144,7 @@ class Band(object):
         if 'interpolation' not in kwargs:
             kwargs['interpolation'] = 'linear'
             
-        return self.__interp(self._x,x,y,kwargs['interpolation'])
+        return self.__interp(self.x,x,y,kwargs['interpolation'])
     
     def computeFlux(self,spec,interpolation='linear',aligntoband=True):
         """
@@ -155,15 +156,14 @@ class Band(object):
         """
         from scipy.integrate import simps as integralfunc
         if aligntoband:
-            x = self._x
-            y = self._S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+            x = self.x
+            y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
         else:
             x = spec.x
             y = self.alignBand(spec)*spec.flux
         return integralfunc(y,x)
     
-    @staticmethod
-    def __interp(x,x0,y0,interpolation):
+    def __interp(self,x,x0,y0,interpolation):
         """
         interpolate the function defined by x0 and y0 onto the coordinates in x
         
@@ -191,7 +191,7 @@ class Band(object):
     def _setSrc(self,val=None):
         from .objcat import Source
         self._src = Source(val)
-    source = property(self._getSrc,self._setSrc)
+    source = property(_getSrc,_setSrc)
     
     def plot_band(self,spec=None,**kwargs):
         """
@@ -342,7 +342,7 @@ class ArrayBand(Band):
     def _setNorm(self,val):
         val = bool(val)
         if val != self._norm:
-            if self.norm:
+            if self._norm:
                 self.S *= self._N
             else:
                 self.S /= self._N
@@ -400,7 +400,7 @@ class FileBand(ArrayBand):
         
         ArrayBand.__init__(self,x,S)
         
-class CMDAnalyzer(object)
+class CMDAnalyzer(object):
     """
     This class is intended to take multi-band photometry and compare it
     to fiducial models to find priorities/matches for a set of data from the
@@ -839,7 +839,7 @@ class _BandRegistry(dict):
         else:
             raise AttributeError('No band or attribute '+name+' in '+self.__class__.__name__)
     
-    def register(bands,groupname=None):
+    def register(self,bands,groupname=None):
         """
         register a set of bands in a group
         
@@ -966,3 +966,5 @@ bands.register(d,'ugriz')
 bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
+
+del ABCMeta,abstractmethod,abstractproperty #clean up namespace
