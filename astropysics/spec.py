@@ -498,6 +498,27 @@ class Spectrum(HasSpecUnits):
         else:
             return [b.computeFlux(self,**kwargs) for b in bands]
         
+    def rgbEyeColor(self):
+        """
+        this uses the 'eye' group in phot.bands to convert a spectrum to
+        an (r,g,b) tuple
+        """
+        from .phot import bands
+        spec = self
+        
+        eyed = bands['eye']
+        if len(eyed) != 3:
+            raise ValueError('eye bands are not length 3')
+        eyefluxes = np.array([b.computeFlux(spec) for b in sorted(eyed.values())])
+        maxe = eyefluxes.max()
+        eyefluxes /= maxe
+        eyefluxes = eyefluxes[::-1] #b,g,r -> r,g,b
+        #now normalize by eye sensitivities computed by assuming a T=5800 
+        #blackbody should give (1,1,1)
+        eyefluxes *= (1,1.1601262238653733,1.6008274101905282) 
+        
+        return tuple(eyefluxes)
+        
     def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,**kwargs):
         """
         uses matplotlib to plot the Spectrum object

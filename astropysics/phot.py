@@ -36,7 +36,7 @@ class Band(HasSpecUnits):
     *_getx: return an array with the x-axis
     *_getS: return the photon sensitivity (shape should match x)
     
-    #the following can be optinally overriden:
+    #the following can be optionally overriden:
     *alignBand(x): return the sensitivity of the Band interpolated to the 
                    provided x-array
     *alignToBand(x,S): return the provided sensitivity interpolated onto the 
@@ -137,8 +137,10 @@ class Band(HasSpecUnits):
         self._src = Source(val)
     source = property(_getSrc,_setSrc)
     
+    name = None #default is nameless
     zeropoint = 0 #zeropoint can be freely modified
     
+    #TODO:units on alignment!
     def alignBand(self,x,interpolation='linear'):
         """
         interpolates the Band sensitivity onto the provided x-axis
@@ -147,6 +149,8 @@ class Band(HasSpecUnits):
         
         interpolation can be 'linear' or 'spline'
         """
+        if hasattr(x,'x') and hasattr(x,'flux'):
+            x = x.x
         return self.__interp(x,self.x,self.S,interpolation)
         
     def alignToBand(self,*args,**kwargs):
@@ -167,12 +171,15 @@ class Band(HasSpecUnits):
         if len(args) == 1:
             from operator import isSequenceType
             from .spec import Spectrum
-            if isSequenceType(args[0]):
-                y = np.array(args[0],copy=False)
+            
+            specin = args[0]
+            
+            if isSequenceType(specin):
+                y = np.array(specin,copy=False)
                 x = np.linspace(self.x[0],self.x[-1])
-            elif isinstance(args[0],Spectrum):
-                x = args[0].x
-                y = args[0].flux
+            elif hasattr(specin,'x') and hasattr(specin,'flux'):
+                x = specin.x
+                y = specin.flux
         elif len(args) == 2:
             x,y = args
         else:
@@ -193,15 +200,27 @@ class Band(HasSpecUnits):
         two resolutions will be left unchanged 
         """
         from scipy.integrate import simps as integralfunc
+        from .constants import c
+        
         if aligntoband is None:
             aligntoband = self.x.size > spec.x.size
         
         if aligntoband:
             x = self.x
             y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+            if 'wavelength' in self.unit:
+                y/=(x*c)
+            else:
+                y*=x
+                #TODO:check energy factor
         else:
             x = spec.x
             y = self.alignBand(spec)*spec.flux
+            if 'wavelength' in spec.unit:
+                y/=(x*c)
+            else:
+                y*=x
+                #TODO:check energy factor
         return integralfunc(y,x)
     
     def computeMag(self,*args,**kwargs):
@@ -225,7 +244,7 @@ class Band(HasSpecUnits):
         mag = self.computeMag(*args,**kwargs)
         self.zeropoint = mag
     
-    def plot_band(self,spec=None,**kwargs):
+    def plot(self,spec=None,**kwargs):
         """
         this plots the requested band and passes kwargs into matplotlib.pyplot.plot
         OR
@@ -260,11 +279,102 @@ class Band(HasSpecUnits):
             plt.plot(band.x,band.S,**kwargs)
             plt.ylabel('$S$')
             plt.ylim(0,band.S.max())
-            
+        plt.title('' if self.name is None else self.name)
         plt.xlabel('$\\lambda$')
+        
+def plot_band_group(bandgrp,**kwargs):
+    """
+    this will plot a group of bands on the same plot
+    
+    group can be a sequnce of bands, strings or a dictionary mapping names to
+    bands
+    
+    kwargs go into Band.plot except for:
+    *clf : clear figure before plotting
+    *leg : show legend with band names
+    *unit : unit to use on plots (defaults to angstroms)
+    *c : (do not use)
+    *spec : (do not use)
+    """
+    from matplotlib import pyplot as plt
+    from operator import isMappingType,isSequenceType
+    
+    
+    
+    if isMappingType(bandgrp):
+        names = bandgrp.keys()
+        bs = bandgrp.values()
+    else:
+        names,bs = [],[]
+        for b in bandgrp:
+            if type(b) is str:
+                names.append(b)
+                bs.append(bands[b])
+            else:
+                names.append('Band@%4.4g'%b.cen)
+                bs.append(b)
+    d = dict([(n,b) for n,b in  zip(names,bs)])
+    sortednames = sorted(d,key=d.get)
+    
+    clf = kwargs.pop('clf',True)
+    leg = kwargs.pop('leg',True)
+    kwargs.pop('spec',None)
+    cs = kwargs.pop('c',None)
+    unit = kwargs.pop('unit','wl')
+        
+    try:
+        oldunits = [b.unit for b in bs]
+        for b in bs:
+            b.unit = unit
+    except NotImplementedError:
+        pass
+    
+    
+    if clf:
+        plt.clf()
+    
+    bluetored = 'wavelength' in bs[0].unit
+    
+    if cs is None:
+        
+        x = np.arange(len(bs))
+        b = 1-x*2/(len(x)-1)
+        g = 1-2*np.abs(0.5-x/(len(x)-1))
+        g[g>0.5] = 0.5
+        r = (x*2/(len(x)-1)-1)
+        r[r<0] = b[b<0] = 0
+        
+        if not bluetored:
+            b,r = r,b
+        cs = np.c_[r,g,b]
+        
+        #custom coloring for UBVRI and ugriz
+        if len(sortednames) == 5:
+            if sortednames[:3] == ['U','B','V']:
+                cs = ['c','b','g','r','m']
+            elif np.all([(n in sortednames[i]) for i,n in enumerate(('u','g','r','i','z'))]):
+                cs = ['c','g','r','m','k']
+        
+    
+    kwargs['clf'] = False
+    for n,c in zip(sortednames,cs):
+        print n,c
+        kwargs['label'] = n
+        kwargs['c'] = c
+        d[n].plot(**kwargs)
+    
+    if leg:
+        plt.legend(loc=0)
+    
+    try:
+        for u,b in zip(oldunits,bs):
+            b.unit = u
+    except (NameError,NotImplementedError),e:
+        pass
+    
 
 class GaussianBand(Band):
-    def __init__(self,center,width,A=1,sigs=6,n=100,unit='angstroms'):
+    def __init__(self,center,width,A=1,sigs=6,n=100,unit='angstroms',name=None):
         """
         center is the central wavelength of the band, while width is the sigma 
         (if positive) or FWHM (if negative)
@@ -279,6 +389,8 @@ class GaussianBand(Band):
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
         HasSpecUnits.__init__(self,unit)
+        
+        self.name = name
         
     def _updateXY(self,mu,sigma,A,n,sigs):
         self._x = np.linspace(-sigs*sigma,sigs*sigma,n)+mu
@@ -320,7 +432,7 @@ class GaussianBand(Band):
         return self._A*np.exp(-xp*xp/2)
         
 class ArrayBand(Band):
-    def __init__(self,x,S,copyonaccess=True,normalized=True,unit='angstroms'):
+    def __init__(self,x,S,copyonaccess=True,normalized=True,unit='angstroms',name=None):
         """
         generate a Band from a supplied quantum (e.g. photonic) response 
         function 
@@ -347,6 +459,8 @@ class ArrayBand(Band):
         self._computeMoments()
         
         HasSpecUnits.__init__(self,unit)
+        
+        self.name = name
         
     def _computeMoments(self):
         from scipy.integrate import  simps as integralfunc
@@ -901,12 +1015,14 @@ class _BandRegistry(dict):
             else:
                 raise ValueError('unrecognized group name type')
             
-    def groupkeys(self):
+    def groupnames(self):
         return self._groupdict.keys()
     
     def groupiteritems(self):
         for k in self.groupkeys():
             yield (k,self[k])
+
+#TODO: check UBVRI/ugriz S function - energy or quantal?
 
 def __load_UBVRI():
     from .io import _get_package_data
@@ -929,7 +1045,7 @@ def __load_UBVRI():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'),name=k)) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d
@@ -957,7 +1073,7 @@ def __load_ugriz():
             xl.append(t[0])
             Rl.append(t[1])
             
-    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'))) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'),name=k)) for k,v in d.iteritems()])
     for k,v in d.iteritems():
         if "'" in k:
             v.source = psrc
@@ -988,7 +1104,7 @@ def __load_human_eye():
     
     d = dict([(k,np.array(v,dtype='f8')) for k,v in d.iteritems()])
     #logarithmic response data - must do 10**data, also, convert x-axis to angstroms
-    d = dict([(k,ArrayBand(10*v[:,0],10**v[:,1])) for k,v in d.iteritems()])
+    d = dict([(k,ArrayBand(10*v[:,0],10**v[:,1],name=k)) for k,v in d.iteritems()])
     for v in d.itervalues():
         v.source = src
     return d

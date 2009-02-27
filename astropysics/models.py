@@ -51,7 +51,7 @@ class _FuncMeta1D(ABCMeta):
         #called on import of astro.models
         from inspect import getargspec
         
-        ABCMeta.__init__(name,bases,dct)
+        super(_FuncMeta1D,cls).__init__(name,bases,dct)
         
         args,varargs,varkw,defaults=getargspec(dct['f'])
         if varkw is not None:
@@ -106,7 +106,7 @@ class _FuncMeta1D(ABCMeta):
             except IndexError:
                 IndexError('No # of parameters found for variable-size function')
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
-            obj = ABCMeta.__call__(cls,**objkwargs) #object __init__ is called here
+            obj = super(_FuncMeta1D,_FuncMeta1D).__call__(cls,**objkwargs) #object __init__ is called here
             pars = cls.__statargs
             del cls.__statargs
             for i in range(nparams):
@@ -116,7 +116,7 @@ class _FuncMeta1D(ABCMeta):
             cls._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
-            obj = ABCMeta.__call__(cls,**objkwargs) #object __init__ is called here
+            obj = super(_FuncMeta1D,_FuncMeta1D).__call__(cls,**objkwargs) #object __init__ is called here
             
         obj.f(np.array([0]),*obj.parvals) #try once to check for a real function
             
