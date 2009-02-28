@@ -136,8 +136,16 @@ class Band(HasSpecUnits):
         from .objcat import Source
         self._src = Source(val)
     source = property(_getSrc,_setSrc)
+    def _getName(self):
+        if self._name is None:
+            return 'Band@%4.4g'%self.cen
+        else:
+            return self._name
+    def _setName(self,val):
+        self._name = val
+    name = property(_getName,_setName)
+    _name = None #default is nameless
     
-    name = None #default is nameless
     zeropoint = 0 #zeropoint can be freely modified
     
     #TODO:units on alignment!
@@ -311,7 +319,7 @@ def plot_band_group(bandgrp,**kwargs):
                 names.append(b)
                 bs.append(bands[b])
             else:
-                names.append('Band@%4.4g'%b.cen)
+                names.append(b.name)
                 bs.append(b)
     d = dict([(n,b) for n,b in  zip(names,bs)])
     sortednames = sorted(d,key=d.get)
@@ -556,13 +564,217 @@ class CMDAnalyzer(object):
     to fiducial models to find priorities/matches for a set of data from the
     same bands
     """
-    def __init__(self,fiducial,fbands):
+    
+    def _dataAndBandsToDicts(bands,arr):
+        from warnings import warn
+        from operator import isSequenceType
+        
+        if len(bands) != arr.shape[0]:
+            raise ValueError('fbands does not match fiducial bands')
+        
+        n = arr.shape[1]
+        
+        bandnames,bandobjs,colors=[],[],[]
+        for b in bands:
+            if type(b) is str:
+                if '-' in b:
+                    bandnames.append(None)
+                    bandobjs.append(None)
+                    colors.append(b)
+                else:
+                    bnm.append(b)
+                    bandobjs.append(bands[b])
+                    colors.append(None)
+            elif hasattr(b,'name'):
+                bnm.append(None)
+                bandobjs.append(b)
+                colors.append(None)
+            else:
+                raise ValueError("Can't understand input band "+str(b))
+            
+        bd={}
+        datad={}
+        maskd = {}
+        for i,(n,b) in enumerate(zip(bandnames,bandobjs)):
+            if b is not None:
+                if n is None:
+                    bd[b.name] = b
+                    datad[b.name] = arr[i]
+                else:
+                    bd[n] = b
+                    datad[n] = arr[i]
+                    
+        for i,c in enumerate(colors):
+            b1,b2 = (b.strip() for b in c.split('-'))
+            if b1 in bd and not b2 in bd:
+                bd[b2] = bands[b2]
+                datad[b2] = datad[b1] - arr[i]
+                maskd[b2] = True
+            elif b2 in bd and not b1 in bd:
+                bd[b1] = bands[b1]
+                datad[b1] = arr[i] - datad[b2]
+                maskd[b1] = True
+            elif b1 in bd and b2 in bd:
+                warn('Bands %s and %s overedetermined due to color %s - using direct band measurements'%(b1,b2,c))
+                #do nothing because bands are already defined
+            else:
+                warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(c,b1))
+                bd[b1] = bands[b1]
+                datad[b1] = zeros(n)
+                maskd[b1] = False
+                bd[b2] = bands[b2]
+                datad[b2] = arr[i]
+                maskd[b2] = True
+                
+        return bd,datad,maskd
+    
+    def __init__(self,fiducial,fbands,ferrs=None):
         """
         fiducial is a B x N array where B is the number of bands/colors
-        and N is the number of fiducial points.  fbands specifies the band
-        or color name
+        and N is the number of fiducial points.  
+        
+        fbands specifies the band (either as a string or a Band object) or 
+        color name (seperated by "-") matching the fiducial
         """
+        from warnings import warn
+        from operator import isSequenceType
+        
+        
+        if ferrs is not None:
+            raise NotImplementedError('errors not yet implemented')
+        
+        arr = np.atleast_2d(arr)
+        bandd,datad,maskd = _dataAndBandsToDicts(fbands,arr)
+                
+        self._banddict = bandd
+        self._fdatadict = datad 
+        self._bandnames = tuple(sorted(bd.keys(),key=bd.get))
+        self._bandmask = [maskd[b] for b in self._bandnames]
+        self._nb = len(self._bandnames)
+        self._nfid = arr.shape[1]
+        
+        self._data = None
+        self._nd = 0
+        
+        self._offsets  = None
+        
+        self._dmod = 0
+        
+    def _calculateOffsets(self):
         raise NotImplementedError
+        #use self._bandmask and self._dmod to set self._offsets
+    
+    def getBand(self,i):
+        if isinstance(i,int):
+            return self._banddict[self._bandnames[i]]
+        elif isinstance(i,str):
+            return self._banddict[i]
+        raise TypeError('Band indecies must be band names or integers')
+    
+    def getFiducialData(self,i):
+        if isinstance(i,int):
+            return self._datadict[self._bandnames[i]]
+        elif isinstance(i,str):
+            return self._datadict[i]
+        raise TypeError('Band indecies must be band names or integers')
+    
+    @property
+    def bandnames(self):
+        return self._bandnames
+    
+    def getData(self):
+        return self._data
+    def setData(self,val):
+        """
+        This loads the data to be compared to the fiducial sequence - the input
+        can be an array (B X N) or an 
+        """
+        from operator import isMappingType:
+        if isMappingType(val):
+            bandd,datad,maskd = _dataAndBandsToDicts(val.keys(),np.atleast_2d(val.values()))
+            
+            arr = {}
+            currnd = None
+            for b,d in datad.iteritems():
+                if b in self._bandnames:
+                    bname = self._bandnames.index(b)
+                    if maskd[bname]:
+                        if currnd and len(d) != currnd:
+                            raise ValueError('Band %s does not match previous band sizes'%b)
+                        currnd = len(d)
+                        arr[bname] = d
+            arr = [arr.pop(i,None) for i in range(self._nb)]
+            mask = list(self._bandmask)
+            for i,a in enumerate(arr):
+                if a is None:
+                    mask[i] = False
+            self._bandmask = tuple(mask)
+        else:
+            if len(val) != self._bandnames:
+                raise ValueError('input sequence does not match number of bands')
+            arr = np.at_least2d(val)
+            self._nd = arr.shape[1]
+            
+        self._data = arr
+        
+    def getOffsets(self):
+        """
+        computes and returns the CMD offsets
+        """
+        if self._offsets is None:
+            self._calculateOffsets()
+        return self._offsets
+    def clearOffsets(self):
+        """
+        clears the offsets for setting of properties without recalculation
+        """
+        self._offsets = None
+    
+    def _getMask(self):
+        return self._bandmask
+    def _setMask(self,val):
+        if len(val) != len(self._bandmask):
+            raise ValueError('input mask size does not match number of bands')
+        
+        val = list((bool(v) for v in val))
+        
+        if self._data is not None:
+            for i,d in enumerate(self._data):
+                if val[i] and d is None:
+                    print 'Band #',i,'has no data, setting mask to False'
+                    val[i] = False
+                    
+        self._bandmask = tuple(val)
+        
+        if self._offsets is not None:
+            self._calculateOffsets()
+    bandmask=property(_getMask,_setMask,doc="""
+    the bands to use when calculating offsets
+    """)
+        
+    
+    def _getDist(self):
+        pass
+    def _setDist(self,val):
+        self._dist = val
+        if self._offsets is not None:
+            self._calculateOffsets()
+        
+    distance = property(_getDist,_setDist,doc="""
+    The distance to use in calculating the offset between the fiducial values 
+    and the data
+    """)
+    def _getDMod(self):
+        return distance_from_modulus(self._dmod)
+    def _setDMod(self,val):
+        self._dmod = distance_modulus(val)
+        if self._offsets is not None:
+            self._calculateOffsets()
+    distmod = property(_getDMod,_setDMod,doc="""
+    The distance modulusto use in calculating the offset 
+    between the fiducial values and the data 
+    """)
+        
         
 #<---------------------Procedural/utility functions---------------------------->
     
