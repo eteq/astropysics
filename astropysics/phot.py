@@ -565,6 +565,7 @@ class CMDAnalyzer(object):
     same bands
     """
     
+    @staticmethod
     def _dataAndBandsToDicts(bands,arr):
         from warnings import warn
         from operator import isSequenceType
@@ -582,11 +583,11 @@ class CMDAnalyzer(object):
                     bandobjs.append(None)
                     colors.append(b)
                 else:
-                    bnm.append(b)
+                    bandnames.append(b)
                     bandobjs.append(bands[b])
                     colors.append(None)
             elif hasattr(b,'name'):
-                bnm.append(None)
+                bandnames.append(None)
                 bandobjs.append(b)
                 colors.append(None)
             else:
@@ -620,7 +621,7 @@ class CMDAnalyzer(object):
             else:
                 warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(c,b1))
                 bd[b1] = bands[b1]
-                datad[b1] = zeros(n)
+                datad[b1] = np.zeros(n)
                 maskd[b1] = False
                 bd[b2] = bands[b2]
                 datad[b2] = arr[i]
@@ -643,27 +644,49 @@ class CMDAnalyzer(object):
         if ferrs is not None:
             raise NotImplementedError('errors not yet implemented')
         
-        arr = np.atleast_2d(arr)
-        bandd,datad,maskd = _dataAndBandsToDicts(fbands,arr)
+        arr = np.atleast_2d(fiducial)
+        bandd,datad,maskd = self._dataAndBandsToDicts(fbands,arr)
                 
         self._banddict = bandd
         self._fdatadict = datad 
-        self._bandnames = tuple(sorted(bd.keys(),key=bd.get))
-        self._bandmask = [maskd[b] for b in self._bandnames]
+        self._bandnames = tuple(sorted(bandd.keys(),key=bandd.get))
+        self._fidmask = np.array([maskd[b] for b in self._bandnames])
         self._nb = len(self._bandnames)
         self._nfid = arr.shape[1]
         
         self._data = None
         self._nd = 0
         
+        self._offbands = None
         self._offsets  = None
         
         self._dmod = 0
         
     def _calculateOffsets(self):
         raise NotImplementedError
-        #use self._bandmask and self._dmod to set self._offsets
-    
+        #use self._offbands and self._dmod to set self._offsets
+        if self._offbands is None:
+            bands = [self._bandnames[i] for i,b in enumerate(self._fidmask & self._datamask) if b]
+            fids = np.array([self._fdatadict[b]+self._dmod for b in bands],copy=False)
+            dats = np.array([self._data[b] for b in bands],copy=False)
+        else:
+            fids,dats = [],[]
+            for b in self._offbands:
+                if isinstance(b,tuple):
+                    fids.append(self._fdatadict[b[0]]-self._fdatadict[b[1]])
+                    dats.append(self._data[b[0]]-self._data[b[1]])
+                else:
+                    fids.append(self._fdatadict[b]+self._dmod)
+                    dats.append(self._data[b])
+            fids,data = np.array(fids,copy=False),np.array(dats,copy=False)
+            
+        #TODO:interpolate along fiducials to a reasonable density
+        #maybe need to transpose fids and data?  should be nfXnb and ndXnb
+        datat = np.tile(data,(fids.shape[0],1,1)).transpose((1,0,2))
+        diff = fids - data
+        sep = np.sum(diff*diff,axis=2)**0.5
+        self._offsets = np.min(sep,axis=1)
+        
     def getBand(self,i):
         if isinstance(i,int):
             return self._banddict[self._bandnames[i]]
@@ -673,9 +696,9 @@ class CMDAnalyzer(object):
     
     def getFiducialData(self,i):
         if isinstance(i,int):
-            return self._datadict[self._bandnames[i]]
+            return self._fdatadict[self._bandnames[i]]
         elif isinstance(i,str):
-            return self._datadict[i]
+            return self._fdatadict[i]
         raise TypeError('Band indecies must be band names or integers')
     
     @property
@@ -689,33 +712,132 @@ class CMDAnalyzer(object):
         This loads the data to be compared to the fiducial sequence - the input
         can be an array (B X N) or an 
         """
-        from operator import isMappingType:
+        from operator import isMappingType
         if isMappingType(val):
-            bandd,datad,maskd = _dataAndBandsToDicts(val.keys(),np.atleast_2d(val.values()))
+            bandd,datad,maskd = self._dataAndBandsToDicts(val.keys(),np.atleast_2d(val.values()))
             
             arr = {}
             currnd = None
             for b,d in datad.iteritems():
                 if b in self._bandnames:
-                    bname = self._bandnames.index(b)
+                    bname = list(self._bandnames).index(b)
                     if maskd[bname]:
                         if currnd and len(d) != currnd:
                             raise ValueError('Band %s does not match previous band sizes'%b)
                         currnd = len(d)
                         arr[bname] = d
-            arr = [arr.pop(i,None) for i in range(self._nb)]
-            mask = list(self._bandmask)
-            for i,a in enumerate(arr):
-                if a is None:
-                    mask[i] = False
-            self._bandmask = tuple(mask)
+                        
+            mask,dat = [],[]
+            for delem in [arr.pop(i,None) for i in range(self._nb)]:
+                if delem is None:
+                    mask.append(False)
+                    dat.append(np.NaN*np.empty(currnd))
+                else:
+                    mask.append(True)
+                    dat.append(delem)
+                    
+            self._data = np.array(dat)
+            self._datamask = np.array(mask)
+            self._nd = currnd
+            
         else:
             if len(val) != self._bandnames:
                 raise ValueError('input sequence does not match number of bands')
-            arr = np.at_least2d(val)
+            self._data = np.atleast_2d(val)
             self._nd = arr.shape[1]
+            self._datamask
             
-        self._data = arr
+        #check to make sure the offset bands are ok for the new data
+        try:
+            self.offsetbands = self.offsetbands
+        except ValueError:
+            print 'new data incompatible with current offset bands - setting to use all'
+            self._offbands = None
+            
+    def _getOffBands(self):
+        if self._offbands is None:
+            return None
+        return ['%s-%s'%e if isinstance(e,tuple) else e for e in self._offbands]
+    
+    def _setOffBands(self,val):
+        from operator import isSequenceType
+        
+        if val is None:
+            self._offbands = None
+        else:
+            op = []
+            lbn = list(self._bandnames)
+            for i,v in enumerate(val):
+                if isinstance(v,basestring):
+                    vs = v.split('-')
+                    if len(vs) == 2:
+                        b1,b2 = vs
+                        op.append((lbn.index(b1.strip()),lbn.index(b2.strip())))
+                    else:
+                        op.append(lbn.index(v.strip()))
+                elif isinstance(v,int):
+                    op.append(v)
+                else:
+                    try:
+                        b1,b2 = v
+                        if isinstance(b1,basestring):
+                            op.append(lbn.index(b1))
+                        else:
+                            op.append(b1)
+                        if isinstance(b2,basestring):
+                            op.append(lbn.index(b2))
+                        else:
+                            op.append(b2)
+                    except:
+                        raise ValueError('uninterpretable band type in position '+i)
+                    
+            def docheck(v,i,j):
+                #True indicates invalid, False is good
+                if not isinstance(v,int):
+                    raise TypeError('band index at position %i,%i is not an index'%(i,j))
+                if v < 0:
+                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
+                if v > self._nb:
+                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
+                if not self._datamask[v]:
+                    raise ValueError('data mask incompatible with band at position %i,%i'%(i,j))
+                if not self._fidmask[v]:
+                    raise ValueError('fiducial mask incompatible with band at position %i,%i'%(i,j))
+            
+            for i,v in enumerate(op):
+                if isinstance(v,tuple):
+                    #if ONE of the bands in a color is masked in the fiducial, it's still ok
+                    fidok = True
+                    try:
+                        docheck(v[0],i,1)
+                    except ValueError,e:
+                        if 'fiducial' in e.message:
+                            fidok = False
+                        else:
+                            raise e
+                    try:
+                        docheck(v[1],i,2)
+                    except ValueError,e:
+                        if 'fiducial' in e.message:
+                            if not fidok:
+                                raise e
+                        else:
+                            raise e
+                docheck(v,0,0)
+                    
+            bandkeys = []
+            for v in self._offbands:
+                if isinstance(v,tuple):
+                    bandkeys.append((self._bandnames[v[0]],self._bandnames[v[1]]))
+                else:
+                    bandkeys.append(self._bandnames[v])
+    
+            self._offbands = bandkeys
+    offsetbands = property(_getOffBands,_setOffBands,doc="""
+    this selects the bands or colors to use in determining offsets
+    as a list of band names/indecies (or for colors, 'b1-b2' or a 2-tuple)
+    if None, all the bands will be used directly.
+    """)
         
     def getOffsets(self):
         """
@@ -729,29 +851,6 @@ class CMDAnalyzer(object):
         clears the offsets for setting of properties without recalculation
         """
         self._offsets = None
-    
-    def _getMask(self):
-        return self._bandmask
-    def _setMask(self,val):
-        if len(val) != len(self._bandmask):
-            raise ValueError('input mask size does not match number of bands')
-        
-        val = list((bool(v) for v in val))
-        
-        if self._data is not None:
-            for i,d in enumerate(self._data):
-                if val[i] and d is None:
-                    print 'Band #',i,'has no data, setting mask to False'
-                    val[i] = False
-                    
-        self._bandmask = tuple(val)
-        
-        if self._offsets is not None:
-            self._calculateOffsets()
-    bandmask=property(_getMask,_setMask,doc="""
-    the bands to use when calculating offsets
-    """)
-        
     
     def _getDist(self):
         pass
@@ -1045,7 +1144,7 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     elif type(M) is not np.ndarray:
         M=np.array(M)
         
-    if type(Mzpt) == str:
+    if isinstance(Mzpt,basestring):
         Mzpt=_band_to_msun[Mzpt]
     elif isSequenceType(Mzpt):    
         Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
@@ -1076,7 +1175,7 @@ def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     elif type(L) is not np.ndarray:
         L=np.array(L)     
         
-    if type(Mzpt) == str:
+    if isinstance(Mzpt,basestring):
         Mzpt=_band_to_msun[Mzpt]
     elif isSequenceType(Mzpt):    
         Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
