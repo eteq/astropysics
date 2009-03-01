@@ -92,7 +92,7 @@ def load_deimos_templates(fns):
     from operator import isSequenceType
     from warnings import warn
     
-    if type(fns) == str:
+    if isinstance(fns,basestring):
         from glob import glob
         fns = glob(fns)
         

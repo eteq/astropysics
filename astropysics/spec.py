@@ -488,10 +488,10 @@ class Spectrum(HasSpecUnits):
         kwargs are passed into phot.Band.computeFlux
         """
         from . import spec
-        if type(bands) == str or isinstance(bands,spec.Band):
+        if isinstance(bands,basestring) or isinstance(bands,spec.Band):
             bands = [bands]
         
-        bands = [spec.bands[b] if type(b) is str else b for b in bands]
+        bands = [spec.bands[b] if isinstance(b,basestring) else b for b in bands]
         
         if kwargs.pop('__domags',False):
             return [b.computeMag(self,**kwargs) for b in bands]

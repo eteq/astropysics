@@ -199,7 +199,7 @@ class FunctionModel1D(object):
         else:
             method = kwargs.pop('method','brentq')
             
-        if type(method) is str:
+        if isinstance(method,basestring):
             f = getattr(scipy.optimize,method)
         else:
             f = method
@@ -762,7 +762,7 @@ class CompositeModel(FunctionModel1D):
         self.op = operation
         ms=[]
         for m in models:
-            if type(m) == str:
+            if isinstance(m,basestring):
                 m=get_model(m)
             if not issubclass(m,FunctionModel1D):
                 raise ValueError('Non FunctionModel1D provided')

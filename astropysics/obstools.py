@@ -49,7 +49,7 @@ class Extinction(object):
         """
         from .phot import bandwl
         #TODO:better band support
-        if type(band) is str:
+        if isinstance(band,basestring):
             wl = bandwl[band]
         else:
             wl = band
@@ -66,15 +66,15 @@ class Extinction(object):
         the band, or of the form 'bandname1-bandname2' or 'E(band1-band2)'
         """
         
-        if type(bands) is str:
+        if isinstance(bands,basestring):
             b1,b2=bands.replace('E(','').replace(')','').split(',')
         else:
             b1,b2=bands
             
         from .phot import bandwl
         #TODO:better band support
-        wl1 = bandwl[b1] if type(b1) is str else b1
-        wl2 = bandwl[b2] if type(b2) is str else b2
+        wl1 = bandwl[b1] if isinstance(b1,basestring) else b1
+        wl2 = bandwl[b2] if isinstance(b1,basestring) else b2
     
         return colors-self(wl1)+self(wl2)
     
@@ -108,7 +108,7 @@ class Extinction(object):
             'He':3970.07
             }
     def correctFlux(self,flux,lamb):
-        if type(lamb) is str and lamb in Extinction.__builtinlines:
+        if isinstance(lamb,basestring) and lamb in Extinction.__builtinlines:
             lamb = Extinction.__builtinlines[lamb]
         return flux*10**(self(lamb)/2.5)
     
@@ -145,13 +145,13 @@ class Extinction(object):
         
         returns A0,standard deviation of measurements
         """
-        if type(expected) is str:
+        if isinstance(expected,basestring):
             R = measured
             balmertuple = Extinction.__balmerratios[expected]
             R0=balmertuple[0]
             lambda1,lambda2=balmertuple[1],balmertuple[2]
-        elif type(expected[0]) is str:
-            if not np.all([type(e) is str for e in expected]):
+        elif isinstance(expected[0],basestring):
+            if not np.all([isinstance(e,basestring) for e in expected]):
                 raise ValueError('expected must be only transitions or only numerical')
             R0,lambda1,lambda2=[],[],[]
             for e in expected:
@@ -470,7 +470,7 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
         eo = SMCExtinction(EBmV=EBmV,Rv=Rv)
         return eo.correctFlux(lineflux,linewl)
     
-    if type(linewl) == str:
+    if isinstance(linewl,basestring):
         linewl=bandwl[linewl]
         
     if lineflux is None or lineflux is False:
@@ -582,7 +582,7 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
     'Hge':(2.95,4340.46,3970.07),
     'Hde':(1.62,4101.74,3970.07)
     }
-    if type(frexpect) == str:
+    if isinstance(frexpect,basestring):
         frexpect=hd[frexpect]
     
     fr0,l1,l2=frexpect
@@ -600,7 +600,7 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
         EBmV=EBmV[0]
         
     if outlambda:
-        if type(outlambda) == str:
+        if isinstance(outlambda,basestring):
             from .phot import bandwl
             outlambda=bandwl[outlambda]
         return extinction_correction(None,outlambda,EBmV,Rv)

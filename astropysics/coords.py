@@ -109,7 +109,7 @@ class AngularCoordinate(object):
         """
         if inpt.__class__.__name__=='AngularCoordinate':
             self.__decval=inpt.__decval
-        elif type(inpt)==str:
+        elif isinstance(inpt,basestring):
             hm=self.__purehre.match(inpt)
             hmsm=self.__hmsre.match(inpt)
             dm=self.__puredre.match(inpt)

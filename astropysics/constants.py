@@ -209,7 +209,7 @@ def choose_cosmology(nameorobj,*args,**kwargs):
     """
     global __current_cosmology
     
-    if type(nameorobj) is str:
+    if isinstance(nameorobj,basestring):
         c = __cosmo_registry[nameorobj.lower()](*args,**kwargs)
     elif isinstance(nameorobj,Cosmology):
         c = nameorobj

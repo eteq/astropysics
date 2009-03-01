@@ -131,7 +131,7 @@ class CCDImage(object):
         if inverse function is None, changes cannot be saved
         """
         if scalefunc:
-            if type(scalefunc) == str:
+            if isinstance(scalefunc,basestring):
                 if self._scaling == scalefunc: 
                     return #if same scaling as before, do nothing
                 else:
@@ -583,7 +583,7 @@ class CCDImage(object):
             
         res=plt.hist(vals.ravel(),**kwargs)
         if perc:
-            if type(perc) == str:
+            if isinstance(perc,basestring):
                 perc=[float(p) for p in perc.split(',')]
             if np.isscalar(perc):
                 perc=(perc,perc)
@@ -826,7 +826,7 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,
         radii=onev*radii
     if row is not None and not isSequenceType(row):
         row=onev*row
-    if type(images) is str or not isSequenceType(images):
+    if isinstance(images,basestring) or not isSequenceType(images):
         images=[images for i in onev]
         
     if not titles:
@@ -935,7 +935,7 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,re
     for i,im in enumerate(images):
         if isinstance(im,CCDImage):
             imobj.append(im)
-        elif type(im) is str:
+        elif isinstance(im,basestring):
             imobj.append(load_image_file(im))
         else:
             raise ValueError('image #%i is not a CCDImage or string'%i)
