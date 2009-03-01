@@ -557,7 +557,7 @@ class FileBand(ArrayBand):
             raise ValueError('unrecognized type')
         
         ArrayBand.__init__(self,x,S)
-        
+
 class CMDAnalyzer(object):
     """
     This class is intended to take multi-band photometry and compare it
@@ -566,17 +566,17 @@ class CMDAnalyzer(object):
     """
     
     @staticmethod
-    def _dataAndBandsToDicts(bands,arr):
+    def _dataAndBandsToDicts(bandsin,arr):
         from warnings import warn
         from operator import isSequenceType
         
-        if len(bands) != arr.shape[0]:
-            raise ValueError('fbands does not match fiducial bands')
+        if len(bandsin) != arr.shape[0]:
+            raise ValueError('bandsin does not match fiducial bands')
         
         n = arr.shape[1]
         
         bandnames,bandobjs,colors=[],[],[]
-        for b in bands:
+        for b in bandsin:
             if type(b) is str:
                 if '-' in b:
                     bandnames.append(None)
@@ -587,7 +587,7 @@ class CMDAnalyzer(object):
                     bandobjs.append(bands[b])
                     colors.append(None)
             elif hasattr(b,'name'):
-                bandnames.append(None)
+                bandnames.append(b.name)
                 bandobjs.append(b)
                 colors.append(None)
             else:
@@ -601,31 +601,34 @@ class CMDAnalyzer(object):
                 if n is None:
                     bd[b.name] = b
                     datad[b.name] = arr[i]
+                    maskd[b.name] = True
                 else:
                     bd[n] = b
                     datad[n] = arr[i]
+                    maskd[n] = True
                     
         for i,c in enumerate(colors):
-            b1,b2 = (b.strip() for b in c.split('-'))
-            if b1 in bd and not b2 in bd:
-                bd[b2] = bands[b2]
-                datad[b2] = datad[b1] - arr[i]
-                maskd[b2] = True
-            elif b2 in bd and not b1 in bd:
-                bd[b1] = bands[b1]
-                datad[b1] = arr[i] - datad[b2]
-                maskd[b1] = True
-            elif b1 in bd and b2 in bd:
-                warn('Bands %s and %s overedetermined due to color %s - using direct band measurements'%(b1,b2,c))
-                #do nothing because bands are already defined
-            else:
-                warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(c,b1))
-                bd[b1] = bands[b1]
-                datad[b1] = np.zeros(n)
-                maskd[b1] = False
-                bd[b2] = bands[b2]
-                datad[b2] = arr[i]
-                maskd[b2] = True
+            if c is not None:
+                b1,b2 = (b.strip() for b in c.split('-'))
+                if b1 in bd and not b2 in bd:
+                    bd[b2] = bands[b2]
+                    datad[b2] = datad[b1] - arr[i]
+                    maskd[b2] = True
+                elif b2 in bd and not b1 in bd:
+                    bd[b1] = bands[b1]
+                    datad[b1] = arr[i] - datad[b2]
+                    maskd[b1] = True
+                elif b1 in bd and b2 in bd:
+                    warn('Bands %s and %s overedetermined due to color %s - using direct band measurements'%(b1,b2,c))
+                    #do nothing because bands are already defined
+                else:
+                    warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(c,b1))
+                    bd[b1] = bands[b1]
+                    datad[b1] = np.zeros(n)
+                    maskd[b1] = False
+                    bd[b2] = bands[b2]
+                    datad[b2] = arr[i]
+                    maskd[b2] = True
                 
         return bd,datad,maskd
     
@@ -639,7 +642,6 @@ class CMDAnalyzer(object):
         """
         from warnings import warn
         from operator import isSequenceType
-        
         
         if ferrs is not None:
             raise NotImplementedError('errors not yet implemented')
@@ -663,12 +665,12 @@ class CMDAnalyzer(object):
         self._dmod = 0
         
     def _calculateOffsets(self):
-        raise NotImplementedError
         #use self._offbands and self._dmod to set self._offsets
         if self._offbands is None:
             bands = [self._bandnames[i] for i,b in enumerate(self._fidmask & self._datamask) if b]
-            fids = np.array([self._fdatadict[b]+self._dmod for b in bands],copy=False)
-            dats = np.array([self._data[b] for b in bands],copy=False)
+            fids = np.array([self._fdatadict[b]+self._dmod for b in bands],copy=False).T
+            lbds = list(self._bandnames)
+            data = np.array([self._data[lbds.index(b)] for b in bands],copy=False).T
         else:
             fids,dats = [],[]
             for b in self._offbands:
@@ -678,12 +680,13 @@ class CMDAnalyzer(object):
                 else:
                     fids.append(self._fdatadict[b]+self._dmod)
                     dats.append(self._data[b])
-            fids,data = np.array(fids,copy=False),np.array(dats,copy=False)
+            fids,data = np.array(fids,copy=False).T,np.array(dats,copy=False).T
             
         #TODO:interpolate along fiducials to a reasonable density
         #maybe need to transpose fids and data?  should be nfXnb and ndXnb
+        
         datat = np.tile(data,(fids.shape[0],1,1)).transpose((1,0,2))
-        diff = fids - data
+        diff = fids - datat
         sep = np.sum(diff*diff,axis=2)**0.5
         self._offsets = np.min(sep,axis=1)
         
@@ -737,15 +740,15 @@ class CMDAnalyzer(object):
                     dat.append(delem)
                     
             self._data = np.array(dat)
-            self._datamask = np.array(mask)
+            self._datamask = np.array(mask,dtype=bool)
             self._nd = currnd
             
         else:
-            if len(val) != self._bandnames:
+            if len(val) != self._nb:
                 raise ValueError('input sequence does not match number of bands')
-            self._data = np.atleast_2d(val)
+            self._data = arr = np.atleast_2d(val)
             self._nd = arr.shape[1]
-            self._datamask
+            self._datamask = np.ones(arr.shape[0],dtype=bool)
             
         #check to make sure the offset bands are ok for the new data
         try:
@@ -843,6 +846,8 @@ class CMDAnalyzer(object):
         """
         computes and returns the CMD offsets
         """
+        if self._data == None:
+            raise ValueError("data not set - can't compute offsets")
         if self._offsets is None:
             self._calculateOffsets()
         return self._offsets
@@ -873,6 +878,22 @@ class CMDAnalyzer(object):
     The distance modulusto use in calculating the offset 
     between the fiducial values and the data 
     """)
+    
+def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2):
+    from matplotlib import pyplot as plt
+    x=np.linspace(0,1,nf)
+    y=5-(x*2)**2+24
+    x=x*0.6+.15
+    
+    fdi = (np.random.rand(nd)*nf).astype(int)
+    dx = x[fdi]+xA*(2*np.random.rand(nd)-1)
+    dy = y[fdi]+yA*np.random.randn(nd)
+    
+    plt.clf()
+    plt.plot(x,y,c='r')
+    plt.scatter(dx,dy)
+    plt.ylim(*reversed(plt.ylim()))
+    return x,y,dx,dy
         
         
 #<---------------------Procedural/utility functions---------------------------->
