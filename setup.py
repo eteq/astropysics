@@ -29,12 +29,12 @@ setup(name='Astropysics',
       requires=['numpy','scipy'],
       provides=['astropysics'],
       long_description="""
-      ``astropysics`` contains a variety of utilities and algorithms for processing
-      and visualizing astronomical data.
+      ``astropysics`` contains a variety of utilities and algorithms for 
+      reducing, analyzing, and visualizing astronomical data.
       
-      while ``astropysics`` requres only ``numpy`` and ``scipy``, other packages are 
-      necessary for some of the functionality.  These include: ``Traits``, ``TraitsGUI``,
-      and ``pymc``
+      while ``astropysics`` requres only ``numpy`` and ``scipy``, other 
+      packages are necessary for some of the functionality.  These include: 
+      ``Traits``, ``TraitsGUI``, ``PyEphem``, and ``pymc``
       """,
       packages=['astropysics','astropysics.gui'],
       package_data={'astropysics':get_data_files()}
