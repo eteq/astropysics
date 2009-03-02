@@ -366,7 +366,6 @@ def plot_band_group(bandgrp,**kwargs):
     
     kwargs['clf'] = False
     for n,c in zip(sortednames,cs):
-        print n,c
         kwargs['label'] = n
         kwargs['c'] = c
         d[n].plot(**kwargs)
@@ -653,12 +652,15 @@ class CMDAnalyzer(object):
         self._fdatadict = datad 
         self._bandnames = tuple(sorted(bandd.keys(),key=bandd.get))
         self._fidmask = np.array([maskd[b] for b in self._bandnames])
+        self._fmaskd = maskd
         self._nb = len(self._bandnames)
         self._nfid = arr.shape[1]
         
         self._data = None
         self._datamask = np.zeros(self._nb,dtype=bool)
         self._nd = 0
+        self._cen = (0,0,0)
+        self._locs = None
         
         self._offbands = None
         self._offsets  = None
@@ -695,14 +697,28 @@ class CMDAnalyzer(object):
     def getBand(self,i):
         if isinstance(i,int):
             return self._banddict[self._bandnames[i]]
-        elif isinstance(i,str):
+        elif isinstance(i,basestring):
             return self._banddict[i]
         raise TypeError('Band indecies must be band names or integers')
     
     def getFiducialData(self,i):
         if isinstance(i,int):
             return self._fdatadict[self._bandnames[i]]
-        elif isinstance(i,str):
+        elif isinstance(i,basestring):
+            if '-' in i:
+                b1,b2 = i.split('-')
+                b1,b2 = b1.strip(),b2.strip()
+                if b1 not in self._fmaskd or not self._fmaskd[b1]:
+                    raise ValueError('%s is not a valid fiducial band'%b1)
+                if b2 not in self._fmaskd or not self._fmaskd[b2]:
+                    raise ValueError('%s is not a valid fiducial band'%b2)
+                return self._fdatadict[b1] - self._fdatadict[b2]
+            else:
+                b = i.strip()
+                if b not in self._fmaskd or not self._fmaskd[b]:
+                    raise ValueError('%s is not a valid fiducial band'%b)
+                return self._fdatadict[b]
+        else:
             return self._fdatadict[i]
         raise TypeError('Band indecies must be band names or integers')
     
@@ -710,8 +726,35 @@ class CMDAnalyzer(object):
     def bandnames(self):
         return self._bandnames
     
-    def getData(self):
-        return self._data
+    @property
+    def validbandnames(self):
+        return [b for i,b in enumerate(self._bandnames) if self._datamask[i] and self._fidmask[i]]
+    
+    @property
+    def validbandinds(self):
+        return [i for i,b in enumerate(self._bandnames) if self._datamask[i] and self._fidmask[i]]
+    
+    def getData(self,i=None):
+        if i is None:
+            return self._data
+        elif isinstance(i,int):
+            return self._data[i]
+        elif isinstance(i,basestring):
+            lbn=list(self._bandnames)
+            if '-' in i:
+                b1,b2 = i.split('-')
+                b1,b2=b1.strip(),b2.strip()
+                if b1 not in self.validbandnames:
+                    raise ValueError('%s is not a valid band'%b1)
+                if b2 not in self.validbandnames:
+                    raise ValueError('%s is not a valid band'%b2)
+                return self._data[lbn.index(b1)] - self._data[lbn.index(b2)]
+            else:
+                if i not in self.validbandnames:
+                    raise ValueError('%s is not a valid band'%i)
+                return self._data[lbn.index(i)]
+        else:
+            raise ValueError('unrecognized data type')
     def setData(self,val):
         """
         This loads the data to be compared to the fiducial sequence - the input
@@ -764,6 +807,42 @@ class CMDAnalyzer(object):
         
         #need to recalculate offsets with new data
         self._offsets = None 
+        #similarly for locs - assume new data means new objects
+        self._locs = None
+    data = property(getData,setData,doc='\nsee ``getData`` and ``setData``')
+        
+        
+    def _getLocs(self):
+        return self._locs
+    def _setLocs(self,val):
+        if val is None:
+            self._locs = None
+        else:
+            arr = np.atleast_2d(val)
+            if arr.shape[0] < 2 and arr.shape[0] > 3:
+                raise ValueError('locations must have either two componets or three')
+            if arr.shape[1] != self._nd:
+                raise ValueError('location data must match photometric data')
+            self._locs = arr
+    locs = property(_getLocs,_setLocs,doc="""
+    The physical location of the data for prioritizing based on distance
+    """)
+    
+    def _getCen(self):
+        return self._cen
+    def _setCen(self,val):
+        if val is None:
+            self._cen = (0,0,0)
+        else:
+            if len(val) == 2:
+                self._cen = (val[0],val[1],0)
+            elif len(val) == 3:
+                self._cen = tuple(val)
+            else:
+                raise ValueError('locations must have either two componets or three')
+    center = property(_getCen,_setCen,doc="""
+    The center of the data for prioritizing based on distance
+    """)
             
     def _getOffBands(self):
         if self._offbands is None:
@@ -890,7 +969,7 @@ class CMDAnalyzer(object):
     between the fiducial values and the data 
     """)
     
-def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2):
+def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
     from matplotlib import pyplot as plt
     x=np.linspace(0,1,nf)
     y=5-(x*2)**2+24
@@ -899,12 +978,18 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2):
     fdi = (np.random.rand(nd)*nf).astype(int)
     dx = x[fdi]+xA*(2*np.random.rand(nd)-1)
     dy = y[fdi]+yA*np.random.randn(nd)
-    
-    plt.clf()
-    plt.plot(x,y,c='r')
-    plt.scatter(dx,dy)
-    plt.ylim(*reversed(plt.ylim()))
-    return x,y,dx,dy
+    if plot:
+        plt.clf()
+        plt.plot(x,y,c='r')
+        plt.scatter(dx,dy)
+        plt.ylim(*reversed(plt.ylim()))
+        
+    cmda = CMDAnalyzer((x,y),('g-r','r'))
+    cmda.setData({'g-r':dx,'r':dy})
+    cmda.locs = np.random.randn(nd,nd)
+    cmda.offsetbands=['g-r','r']
+        
+    return x,y,dx,dy,cmda
         
         
 #<---------------------Procedural/utility functions---------------------------->
