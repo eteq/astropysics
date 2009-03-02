@@ -102,20 +102,32 @@ class AngularCoordinate(object):
     __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+))(?:d|deg).*')
     #__dmsre=_re.compile(r'.*?([+-]?\s*\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d+))(?:s|sec).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
-    def __init__(self,inpt=None):
+    __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3}):(\d{1,2}):(\d+(?:.\d+)?).*')
+    def __init__(self,inpt=None,sghms=None):
         """
         If an undecorated 3-element iterator, inpt is taken to be deg,min,sec, 
         othewise, input is cast to a float and treated as decimal degrees
+        
+        if sexigesimal, input will be interpreted as h:m:s if sghms
+        is True, or d:m:s if sghms is False.  If None, a +/- will indicate
+        d:m:s and nothing indicates r:m:s
         """
         if inpt.__class__.__name__=='AngularCoordinate':
             self.__decval=inpt.__decval
         elif isinstance(inpt,basestring):
+            sexig=self.__sexre.match(inpt)
             hm=self.__purehre.match(inpt)
             hmsm=self.__hmsre.match(inpt)
             dm=self.__puredre.match(inpt)
             dmsm=self.__dmsre.match(inpt)
-            
-            if hmsm:
+            if sexig:
+                t=sexig.group(2,3,4)
+                if sexig.group(1) is None:
+                    self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
+                else:
+                    sgn = 1 if sexig.group(1) == '+' else -1
+                    self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+            elif hmsm:
                 t=hmsm.group(1,2,3)
                 self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
             elif hm:
@@ -266,6 +278,16 @@ class AngularCoordinate(object):
         """
         from math import cos
         return distance*(2-2*cos(self.radians))**0.5
+    
+def angular_string_to_dec(instr,hms=True):
+    """
+    convinience function to convert a sexigesimal angular position to a decimal
+    value.
+    
+    if hms is True, the coordinate will be assumed to be h:m:s, otherwise d:m:s
+    """
+    ac = AngularCoordinate(instr)
+    return ac.degrees
     
 class AngularPosition(object):
     __slots__=('__ra','__dec','__raerr','__decerr','__epoch')
@@ -418,7 +440,9 @@ class AngularPosition(object):
         return AngularPosition(self.__ra/other,self.__dec/other)
     def __pow__(self,other):
         return AngularPosition(self.__ra**other,self.__dec**other)
+
     
+
     
 def seperation3d(d1,d2,ap1,ap2):
     from numpy import sin,cos
