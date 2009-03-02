@@ -687,10 +687,18 @@ class CMDAnalyzer(object):
             fids,data = np.array(fids,copy=False).T,np.array(dats,copy=False).T
             
         #TODO:interpolate along fiducials to a reasonable density
-        #maybe need to transpose fids and data?  should be nfXnb and ndXnb
-        
+        #dims: fids = nfXnb and data = ndXnb
         datat = np.tile(data,(fids.shape[0],1,1)).transpose((1,0,2))
-        diff = fids - datat
+        diff = (fids - datat)
+        
+        if self._offws is not None:
+            ws = self._offws
+            m = ws<0
+            if np.any(m):
+                ws = ws.copy().astype(float)
+                ws[m] = -ws[m]/(diff[:,:,m].max(axis=1).max(axis=0)-diff[:,:,m].min(axis=1).min(axis=0))
+            diff *= ws
+        
         sep = np.sum(diff*diff,axis=2)**0.5
         self._offsets = np.min(sep,axis=1)
         
@@ -926,6 +934,10 @@ class CMDAnalyzer(object):
             self._offbands = bandkeys
         #need to recalculate offsets with new data
         self._offsets = None 
+        #offset weights are now invalid
+        self._offws = None
+        
+        
     offsetbands = property(_getOffBands,_setOffBands,doc="""
     this selects the bands or colors to use in determining offsets
     as a list of band names/indecies (or for colors, 'b1-b2' or a 2-tuple)
@@ -968,6 +980,65 @@ class CMDAnalyzer(object):
     The distance modulusto use in calculating the offset 
     between the fiducial values and the data 
     """)
+    def _getOffWs(self):
+        return self._offws
+    def _setOffWs(self,val):
+        if val is None:
+            self._offws = None
+            return
+        if (self._offbands is None and len(val) != self._nb) or (len(val)!=len(self._offbands)):
+            raise ValueError('offset length does not match weights')
+        self._offws = np.array(val)
+        self._offsets = None
+    offsetweights = property(_getOffWs,_setOffWs,doc="""
+    Weights to apply to bands well calculating the offset. 
+    Note that this will be invalidated whenever the offsetbands
+    change
+    
+    if None, no weighting will be done.  otherwise, offsetweights
+    must be a sequence of length equal to offsetbands.  positibe
+    values will be interpreted as raw scalings (i.e. offset=w*(dat-fid) )
+    and negative values will be compared to the total range (i.e. 
+    offset=-w*(dat-fid)/(max-min) )
+    """)
+    
+    def plot(self,bx,by,clf=True,skwargs={},lkwargs={}):
+        """
+        this plots the two bands specified by bx and by
+        
+        clf determines if the figure should be cleared before plotting
+        
+        skwargs are passed into pylab.scatter and lkwargs are passed
+        into pylab.plot
+        """
+        from matplotlib import pyplot as plt
+            
+        fx,fy = self.getFiducialData(bx),self.getFiducialData(by)
+        dx,dy = self.getData(bx),self.getData(by)
+        
+        if clf:
+            plt.clf()
+        
+        if 'c' not in skwargs:
+            skwargs['c'] = 'b'
+        if 'c' not in lkwargs:
+            skwargs['c'] = 'r'
+        plt.scatter(dx,dy,**skwargs)
+        plt.plot(fx,fy,**lkwargs)
+        
+        if isinstance(bx,int):
+            bx = self._bandnames[bx]
+        if isinstance(by,int):
+            by = self._bandnames[by]
+        
+        plt.xlabel(bx)
+        plt.ylabel(by)
+        
+        if '-' not in bx:
+            plt.xlim(*reversed(plt.xlim()))
+        if '-' not in by:
+            plt.ylim(*reversed(plt.ylim()))
+        
     
 def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
     from matplotlib import pyplot as plt
