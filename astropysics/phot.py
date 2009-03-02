@@ -616,7 +616,7 @@ class CMDAnalyzer(object):
                     maskd[b2] = True
                 elif b2 in bd and not b1 in bd:
                     bd[b1] = bands[b1]
-                    datad[b1] = arr[i] - datad[b2]
+                    datad[b1] = arr[i] + datad[b2]
                     maskd[b1] = True
                 elif b1 in bd and b2 in bd:
                     warn('Bands %s and %s overedetermined due to color %s - using direct band measurements'%(b1,b2,c))
@@ -657,6 +657,7 @@ class CMDAnalyzer(object):
         self._nfid = arr.shape[1]
         
         self._data = None
+        self._datamask = np.zeros(self._nb,dtype=bool)
         self._nd = 0
         
         self._offbands = None
@@ -673,13 +674,14 @@ class CMDAnalyzer(object):
             data = np.array([self._data[lbds.index(b)] for b in bands],copy=False).T
         else:
             fids,dats = [],[]
+            lbns=list(self._bandnames)
             for b in self._offbands:
                 if isinstance(b,tuple):
                     fids.append(self._fdatadict[b[0]]-self._fdatadict[b[1]])
-                    dats.append(self._data[b[0]]-self._data[b[1]])
+                    dats.append(self._data[lbns.index(b[0])]-self._data[lbns.index(b[1])])
                 else:
                     fids.append(self._fdatadict[b]+self._dmod)
-                    dats.append(self._data[b])
+                    dats.append(self._data[lbns.index(b)])
             fids,data = np.array(fids,copy=False).T,np.array(dats,copy=False).T
             
         #TODO:interpolate along fiducials to a reasonable density
@@ -719,19 +721,22 @@ class CMDAnalyzer(object):
         if isMappingType(val):
             bandd,datad,maskd = self._dataAndBandsToDicts(val.keys(),np.atleast_2d(val.values()))
             
-            arr = {}
+            arrinddict = {}
             currnd = None
             for b,d in datad.iteritems():
                 if b in self._bandnames:
-                    bname = list(self._bandnames).index(b)
-                    if maskd[bname]:
+                    bi = list(self._bandnames).index(b)
+                    if maskd[b]:
                         if currnd and len(d) != currnd:
                             raise ValueError('Band %s does not match previous band sizes'%b)
                         currnd = len(d)
-                        arr[bname] = d
+                        arrinddict[bi] = d
+                else:
+                    from warnings import warn
+                    warn('input data includes band %s not present in fiducial'%b)
                         
             mask,dat = [],[]
-            for delem in [arr.pop(i,None) for i in range(self._nb)]:
+            for delem in [arrinddict.pop(i,None) for i in range(self._nb)]:
                 if delem is None:
                     mask.append(False)
                     dat.append(np.NaN*np.empty(currnd))
@@ -756,6 +761,9 @@ class CMDAnalyzer(object):
         except ValueError:
             print 'new data incompatible with current offset bands - setting to use all'
             self._offbands = None
+        
+        #need to recalculate offsets with new data
+        self._offsets = None 
             
     def _getOffBands(self):
         if self._offbands is None:
@@ -826,16 +834,19 @@ class CMDAnalyzer(object):
                                 raise e
                         else:
                             raise e
-                docheck(v,0,0)
+                else:
+                    docheck(v,i,0)
                     
             bandkeys = []
-            for v in self._offbands:
+            for v in op:
                 if isinstance(v,tuple):
                     bandkeys.append((self._bandnames[v[0]],self._bandnames[v[1]]))
                 else:
                     bandkeys.append(self._bandnames[v])
     
             self._offbands = bandkeys
+        #need to recalculate offsets with new data
+        self._offsets = None 
     offsetbands = property(_getOffBands,_setOffBands,doc="""
     this selects the bands or colors to use in determining offsets
     as a list of band names/indecies (or for colors, 'b1-b2' or a 2-tuple)
@@ -861,8 +872,8 @@ class CMDAnalyzer(object):
         pass
     def _setDist(self,val):
         self._dist = val
-        if self._offsets is not None:
-            self._calculateOffsets()
+        #need to recalculate offsets with new data
+        self._offsets = None 
         
     distance = property(_getDist,_setDist,doc="""
     The distance to use in calculating the offset between the fiducial values 
