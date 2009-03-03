@@ -5,13 +5,43 @@ This package contains the internals for the SpecTarget gui.
 from __future__ import division
 import numpy as np
 
-from enthought.traits.api import HasTraits,on_trait_change,Instance,Float,String,ListStr
-from enthought.traits.ui.api import View,Group,HGroup,HFlow,Item
+from enthought.traits.api import HasTraits,on_trait_change,Instance,Float,\
+                                 String,ListStr,ListFloat,Button
+from enthought.traits.ui.api import View,Group,HGroup,HFlow,Item,Handler
+from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData
 from enthought.enable.component_editor import ComponentEditor
 
 from ..phot import CMDAnalyzer
 
+class ODHandler(Handler):
+    def apply(self,info):
+        o = info.object
+        o.cmda.offsetbands = o.offsetbands
+        o.cmda.offsetweights = o.offsetweights if bool(o.offsetweights) else None
+        o.st.update_pri()
+        
+    def closed(self,info, is_ok):
+        if is_ok:
+            self.apply(info)
+        Handler.closed(self,info,is_ok)
+
+class OffsetDialog(HasTraits):
+    offsetbands = ListStr
+    offsetweights = ListFloat
+    
+    view = View(Group(Item('offsetbands'),
+                      Item('offsetweights'),
+                      layout='normal'),
+                resizable=True,title='Offset Settings',handler=ODHandler(),
+                buttons = ModalButtons,kind='modal')
+    
+    def __init__(self,cmda,st):
+        self.cmda = cmda
+        self.st = st
+        self.offsetbands = cmda.offsetbands if cmda.offsetbands is not None else []
+        self.offsetweights = cmda.offsetweights if cmda.offsetweights is not None else []
+            
 class SpecTarget(HasTraits):
     distance = Float(10)
     distmod = Float(0)
@@ -22,7 +52,8 @@ class SpecTarget(HasTraits):
     locs = ArrayPlotData
     xax = String
     yax = String
-    offsetbands = ListStr
+    offsetset = Button
+    pyrafbutton = Button
     
     view = View(Group(HGroup(Item('locplot',editor=ComponentEditor(),show_label=False),
                              Item('cmplot',editor=ComponentEditor(),show_label=False)),
@@ -30,7 +61,8 @@ class SpecTarget(HasTraits):
                             Item('distmod',label='Distance Modulus'),
                             Item('xax',label='CMD x-axis'),
                             Item('yax',label='CMD y-axis'),
-                            Item('offsetbands',label='Bands for Calculating Offsets'),
+                            Item('offsetset',label='Offset Settings'),
+                            Item('pyrafbutton',label='Run Pyraf'),
                             layout='normal'),
                       ),
                 resizable=True,title='Spectra Targeter')
@@ -61,10 +93,12 @@ class SpecTarget(HasTraits):
             setattr(cmda,k,v)
         self.cmda = cmda
         
-        offsetbands = cmda.offsetbands if cmda.offsetbands is not None else []
+        self._distinner = False
         
-        if len(offsetbands) > 1:
-            self.xax,self.yax = offsetbands[0],offsetbands[1]
+        ob = cmda.offsetbands
+        
+        if len(ob) > 1:
+            self.xax,self.yax = ob[0],ob[1]
         else:
             bi1,bi2 = cmda.validbandinds[0],cmda.validbandinds[1]
             self.xax,self.yax = cmda.bandnames[bi1],cmda.bandnames[bi2]
@@ -94,24 +128,46 @@ class SpecTarget(HasTraits):
         self.on_trait_change(self._yax_late_changed,'yax')
         
         self._cmda_late_changed() #clean things up in case random stuff changes
-    
-    def _dist_changed(self):
-        self.cmda.distance = dist
-        self.distmod = self.cmda.distmod
+
+    def _distance_changed(self,old,new):
+        if self._distinner:
+            self._distinner = False
+        else:
+            self.cmda.distance = self.distance
+            self._distinner = True
+            self.distmod = self.cmda.distmod
+            self.update_data()
         
-    def _distmod_changed(self):
-        self.cmda.distmod = distmod
-        self.distance = self.cmda.distance
+    def _distmod_changed(self,old,new):
+        if self._distinner:
+            self._distinner = False
+        else:
+            self.cmda.distmod = self.distmod
+            self._distinner = True
+            self.distance = self.cmda.distance
+            self.update_data()
+            self.offsetset = True
+            
+#    def _get_distance(self):
+#        return self.cmda.distance
+#    def _set_distance(self,val):
+#        self.cmda.distance = val
+#        self.update_data()
+#        self.test = 1
         
-    def _offsetbands_changed(self):
-        self.cmda.offsetbands = self.offsetbands
+#    def _get_distmod(self):
+#        return self.cmda.distmod
+#    def _set_distmod(self,val):
+#        self.cmda.distmod = val
+#        self.update_data()
+
     
     def _cmda_late_changed(self):
         self.dist = self.cmda.distance
-        self._update_data()
-        self.offsetbands = self.cmda.offsetbands if self.cmda.offsetbands is not None else []
+        self.update_data()
+        
     
-    def _update_data(self):
+    def update_data(self):
         try:
             self._xax_late_changed()
             self._yax_late_changed()
@@ -174,6 +230,16 @@ class SpecTarget(HasTraits):
         self.locs.set_data('dec',dec)
         self.locs.set_data('centerx',(cen[0],))
         self.locs.set_data('centery',(cen[1],))
+        
+    def _offsetset_fired(self):
+        od = OffsetDialog(self.cmda,self)
+        od.edit_traits()
+        
+    def _pyraf_fired(self):
+        do_dsim()
+        
+    def update_pri(self):
+        print 'do pri'
         
     
 def do_dsim():

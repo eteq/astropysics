@@ -650,6 +650,8 @@ class CMDAnalyzer(object):
                 
         self._banddict = bandd
         self._fdatadict = datad 
+        self._dm0fdd = datad #distance modulus 0 data
+        self._dmod = 0
         self._bandnames = tuple(sorted(bandd.keys(),key=bandd.get))
         self._fidmask = np.array([maskd[b] for b in self._bandnames])
         self._fmaskd = maskd
@@ -665,7 +667,7 @@ class CMDAnalyzer(object):
         self._offbands = None
         self._offsets  = None
         
-        self._dmod = 0
+        
         
     def _calculateOffsets(self):
         #use self._offbands and self._dmod to set self._offsets
@@ -960,22 +962,30 @@ class CMDAnalyzer(object):
         self._offsets = None
     
     def _getDist(self):
-        pass
+        return distance_from_modulus(self.distmod)
     def _setDist(self,val):
-        self._dist = val
+        self.distmod = distance_modulus(val)
         #need to recalculate offsets with new data
         self._offsets = None 
-        
     distance = property(_getDist,_setDist,doc="""
     The distance to use in calculating the offset between the fiducial values 
     and the data
     """)
     def _getDMod(self):
-        return distance_from_modulus(self._dmod)
+        return self._dmod
     def _setDMod(self,val):
-        self._dmod = distance_modulus(val)
-        if self._offsets is not None:
-            self._calculateOffsets()
+        if val == 0:
+            self._fdatadict = self._dm0fdd
+        else:
+            newd = {}
+            for b,arr in self._dm0fdd.iteritems():
+                newd[b] =  arr+val
+            self._fdatadict = newd
+            
+        self._dmod = val
+        
+        #need to recalculate offsets with new data
+        self.__offsets = None
     distmod = property(_getDMod,_setDMod,doc="""
     The distance modulusto use in calculating the offset 
     between the fiducial values and the data 
