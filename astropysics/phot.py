@@ -631,19 +631,20 @@ class CMDAnalyzer(object):
                 
         return bd,datad,maskd
     
-    def __init__(self,fiducial,fbands,ferrs=None):
+    def __init__(self,fiducial,fbands,fidname='fiducial'):
         """
         fiducial is a B x N array where B is the number of bands/colors
         and N is the number of fiducial points.  
         
         fbands specifies the band (either as a string or a Band object) or 
         color name (seperated by "-") matching the fiducial
+        
+        fidname is a string or a dictionary that maps fiducial names to 
+        indecies in the fidcuial array.  If a dictionary, each index must 
+        be in one of the values (but not in more than one)
         """
         from warnings import warn
         from operator import isSequenceType
-        
-        if ferrs is not None:
-            raise NotImplementedError('errors not yet implemented')
         
         arr = np.atleast_2d(fiducial)
         bandd,datad,maskd = self._dataAndBandsToDicts(fbands,arr)
@@ -657,6 +658,18 @@ class CMDAnalyzer(object):
         self._fmaskd = maskd
         self._nb = len(self._bandnames)
         self._nfid = arr.shape[1]
+        
+        if isinstance(fidname,basestring):
+            self._fidnamedict={fidname:np.arange(self._nfid)}
+        else:
+            d,vals = {},[]
+            vals = []
+            for k,v in fidname.iteritems():
+                d[k] =  np.array(v,dtype=int)
+                vals.extend(d[k])
+            if not np.all(np.sort(vals) == np.arange(self._nfid)):
+                raise ValueError('fidname dictionary does not account for all fiducial array elements or duplicate names')
+            self._fidnamedict = d
         
         self._data = None
         self._datamask = np.zeros(self._nb,dtype=bool)
@@ -711,9 +724,21 @@ class CMDAnalyzer(object):
             return self._banddict[i]
         raise TypeError('Band indecies must be band names or integers')
     
-    def getFiducialData(self,i):
+    def getFiducialData(self,i,fidname=None):
+        """
+        Retreives fiducial data values in a particular band.  
+        
+        i is either an index into the bands, or a band name.
+    
+        fidname specifies which fiducial sequence to use (or if None,
+        the full array for the requested band will be returned)
+        """
+        if fidname is None:
+            mask = np.arange(self._nfid)
+        else:
+            mask = self._fidnamedict[fidname]
         if isinstance(i,int):
-            return self._fdatadict[self._bandnames[i]]
+            return self._fdatadict[self._bandnames[i]][mask]
         elif isinstance(i,basestring):
             if '-' in i:
                 b1,b2 = i.split('-')
@@ -722,15 +747,19 @@ class CMDAnalyzer(object):
                     raise ValueError('%s is not a valid fiducial band'%b1)
                 if b2 not in self._fmaskd or not self._fmaskd[b2]:
                     raise ValueError('%s is not a valid fiducial band'%b2)
-                return self._fdatadict[b1] - self._fdatadict[b2]
+                return self._fdatadict[b1][mask] - self._fdatadict[b2][mask]
             else:
                 b = i.strip()
                 if b not in self._fmaskd or not self._fmaskd[b]:
                     raise ValueError('%s is not a valid fiducial band'%b)
-                return self._fdatadict[b]
+                return self._fdatadict[b][mask]
         else:
-            return self._fdatadict[i]
+            return self._fdatadict[i][mask]
         raise TypeError('Band indecies must be band names or integers')
+    
+    @property
+    def fidnames(self):
+        return self._fidnamedict.keys()
     
     @property
     def bandnames(self):
@@ -825,11 +854,12 @@ class CMDAnalyzer(object):
     def _getLocs(self):
         return self._locs
     def _setLocs(self,val):
+        
         if val is None:
             self._locs = None
         else:
             arr = np.atleast_2d(val)
-            if arr.shape[0] < 2 and arr.shape[0] > 3:
+            if arr.shape[0] < 2 or arr.shape[0] > 3:
                 raise ValueError('locations must have either two componets or three')
             if arr.shape[1] != self._nd:
                 raise ValueError('location data must match photometric data')
@@ -1065,9 +1095,10 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
         plt.scatter(dx,dy)
         plt.ylim(*reversed(plt.ylim()))
         
-    cmda = CMDAnalyzer((x,y),('g-r','r'))
+    cmda = CMDAnalyzer((x,y),('g-r','r'),{'a':np.arange(50),'b':np.arange(50)+50})
     cmda.setData({'g-r':dx,'r':dy})
-    cmda.locs = np.random.randn(nd,nd)
+    cmda.center = (10,10)
+    cmda.locs = np.random.randn(2,nd)/10+cmda.center[0]
     cmda.offsetbands=['g-r','r']
         
     return x,y,dx,dy,cmda
