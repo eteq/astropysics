@@ -676,6 +676,7 @@ class CMDAnalyzer(object):
         self._nd = 0
         self._cen = (0,0,0)
         self._locs = None
+        self._dnames = None
         
         self._offbands = None
         self._offsets  = None
@@ -846,8 +847,9 @@ class CMDAnalyzer(object):
         
         #need to recalculate offsets with new data
         self._offsets = None 
-        #similarly for locs - assume new data means new objects
+        #similarly for locs and names - assume new data means new objects
         self._locs = None
+        self._dnames = None
     data = property(getData,setData,doc='\nsee ``getData`` and ``setData``')
         
         
@@ -866,6 +868,17 @@ class CMDAnalyzer(object):
             self._locs = arr
     locs = property(_getLocs,_setLocs,doc="""
     The physical location of the data for prioritizing based on distance
+    """)
+    def _getDName(self):
+        if self._dnames is None:
+            return [str(i+1) for i in range(self._nd) ]
+        else return list(self._dnames)
+    def _setDName(self,val):
+        if len(val) != self._nd:
+            raise ValueError('number of names do not match number of data points')
+        self._dnames = tuple(val)
+    datanames = property(_getDName,_setDName,doc="""
+    Names for the objects - default is in numerical order starting at 1
     """)
     
     def _getCen(self):
@@ -995,8 +1008,6 @@ class CMDAnalyzer(object):
         return distance_from_modulus(self.distmod)
     def _setDist(self,val):
         self.distmod = distance_modulus(val)
-        #need to recalculate offsets with new data
-        self._offsets = None 
     distance = property(_getDist,_setDist,doc="""
     The distance to use in calculating the offset between the fiducial values 
     and the data
@@ -1011,17 +1022,18 @@ class CMDAnalyzer(object):
             for b,arr in self._dm0fdd.iteritems():
                 newd[b] =  arr+val
             self._fdatadict = newd
-            
         self._dmod = val
-        
         #need to recalculate offsets with new data
-        self.__offsets = None
+        self._offsets = None
     distmod = property(_getDMod,_setDMod,doc="""
     The distance modulusto use in calculating the offset 
     between the fiducial values and the data 
     """)
     def _getOffWs(self):
-        return self._offws
+        if self._offws is None:
+            return np.ones(len(self._offbands))
+        else:
+            return self._offws
     def _setOffWs(self,val):
         if val is None:
             self._offws = None
