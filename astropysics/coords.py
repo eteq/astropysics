@@ -471,9 +471,20 @@ class AngularPosition(object):
     def __pow__(self,other):
         return AngularPosition(self.__ra**other,self.__dec**other)
 
+def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
+    ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
+    ra2,dec2 = np.array(ra2,copy=False),np.array(dec2,copy=False)
     
+    x1,y1,z1 = spherical_to_cartesian(1.0,90-dec1 if degrees else dec1,ra1,degrees)
+    x2,y2,z2 = spherical_to_cartesian(1.0,90-dec2 if degrees else dec2,ra2,degrees)
+    
+    dp = x1*x2+y1*y2+z1*z2
+    
+    sep = np.arccos(dp)
+    if degrees:
+        sep = np.degrees(sep)
+    return sep
 
-    
 def seperation3d(d1,d2,ap1,ap2):
     from numpy import sin,cos
     if type(ap1) != AngularPosition:
