@@ -56,7 +56,18 @@ class Extinction(object):
         
         return mags-self(wl)
         
-    
+    def Alambda(self,band):
+        """
+        determines the extinction for this extinction law in a given band or bands
+        
+        band can be a wavelength or a string specifying a band 
+        """
+        from operator import isSequenceType
+        if isSequenceType(band) and not isinstance(band,basestring):
+            return -1*np.array([self.correctPhotometry(0,b) for b in band])
+        else:
+            return -1*self.correctPhotometry(0,band)
+        
     def correctColor(self,colors,bands):
         """
         Uses the supplied extinction law to correct a color (or array of colors)
