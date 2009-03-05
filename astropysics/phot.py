@@ -872,7 +872,8 @@ class CMDAnalyzer(object):
     def _getDName(self):
         if self._dnames is None:
             return [str(i+1) for i in range(self._nd) ]
-        else return list(self._dnames)
+        else:
+            return list(self._dnames)
     def _setDName(self,val):
         if len(val) != self._nd:
             raise ValueError('number of names do not match number of data points')

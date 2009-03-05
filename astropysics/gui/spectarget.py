@@ -2,7 +2,7 @@
 """
 This package contains the internals for the SpecTarget gui.
 """
-from __future__ import division
+from __future__ import division,with_statement
 import numpy as np
 
 from enthought.traits.api import HasTraits,on_trait_change,Instance,Float,\
@@ -20,11 +20,16 @@ class MaskMaker(object):
     """
     base class for objects that make masks - subclasses should:
     *replace name with a name for the mask-making operation
-    *override makeMask(self,filename,spectargobj)
+    *shortlen: maximum length of shortname
+    *override makeMask(self,filename)
     """
     name = 'Default mask-maker'
-    def makeMask(self,filename,spectargobj):
+    shortlen = None
+    def makeMask(self,filename):
         raise NotImplementedError
+    
+    def __init__(self,spectargobj):
+        self.sto = spectargobj
 
 class ODHandler(Handler):
     def apply(self,info):
@@ -75,6 +80,8 @@ class SpecTarget(HasTraits):
     masktype = Enum(['DEIMOS'])
     maskmaker = Instance(MaskMaker) 
     maskfn = String('spectarg-1')
+    maskshortname = ('Noname')
+    masklongname = ('')
     makemaskbutton = Button
     
     updatepri = Event
@@ -95,7 +102,9 @@ class SpecTarget(HasTraits):
                             Item('offsetset',label='Offset Settings'),
                             Group(Item('masktype',label='Mask Type'),
                                   Item('maskfn',label='Mask File(base)'),
-                                  Item('makemaskbutton'),#,label='Make Mask'),
+                                  Item('makemaskbutton',label='Make Mask'),
+                                  Item('maskshortname',label='Mask Name(short)'),
+                                  Item('masklongname',label='Mask Name(long)'),
                                   columns=3)),
                       layout='normal'),
                 resizable=True,title='Spectra Targeter')
@@ -130,7 +139,7 @@ class SpecTarget(HasTraits):
         
         ob = cmda.offsetbands
         
-        if len(ob) > 1:
+        if ob is not None and len(ob) > 1:
             self.xax,self.yax = ob[0],ob[1]
         else:
             bi1,bi2 = cmda.validbandinds[0],cmda.validbandinds[1]
@@ -146,10 +155,10 @@ class SpecTarget(HasTraits):
         self.updategastars = True
                                   
         cmdplot = Plot(self.data,resizable='hv')
-        cmdplot.plot(('x','y','pri'),name='target_mags',type='cmap_scatter',marker='dot',marker_size=2,color_mapper=jet)
+        cmdplot.plot(('x','y','pri'),name='target_mags',type='cmap_scatter',marker='dot',marker_size=1,color_mapper=jet)
         cmdplot.plot(('fidx','fidy'),name='fid_mags',type='line',color='black')
-        cmdplot.plot(('gx','gy'),name='guide_mags',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=3)  
-        cmdplot.plot(('ax','ay'),name='align_mags',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=3)
+        cmdplot.plot(('gx','gy'),name='guide_mags',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=5)  
+        cmdplot.plot(('ax','ay'),name='align_mags',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=4)
         cmdplot.tools.append(PanTool(cmdplot))
         cmdplot.tools.append(ZoomTool(cmdplot))  
         
@@ -216,7 +225,7 @@ class SpecTarget(HasTraits):
 
     
     def _cmda_late_changed(self):
-        self.dist = self.cmda.distance
+        self.distance = self.cmda.distance
         self.updatedata = True
         
     
@@ -309,9 +318,7 @@ class SpecTarget(HasTraits):
     
     def _updategastars_fired(self,val):
         if self.agband:
-            mdat = self.cmda.getData(self.agband)
-            mg = mdat < self.gstarcut
-            ma = (mdat < self.astarcut) & ~mg
+            mg,ma = self._guidealignmasks()
             
             if val is True or val == 'loc':
                 if self.cmda.locs is None:
@@ -342,6 +349,12 @@ class SpecTarget(HasTraits):
             self.locs.set_data('gy',[])
             self.locs.set_data('ax',[])
             self.locs.set_data('ay',[])
+    def _guidealignmasks(self):
+        mdat = self.cmda.getData(self.agband)
+        mg = mdat < self.gstarcut
+        ma = (mdat < self.astarcut) & ~mg
+        
+        return mg,ma
         
     def _offsetset_fired(self):
         od = OffsetDialog(self.cmda,self)
@@ -349,18 +362,24 @@ class SpecTarget(HasTraits):
         
     def _masktype_changed(self,newval):
         if newval == 'DEIMOS':
-            self.maskmaker = DEIMOSMaskMaker()
+            self.maskmaker = DEIMOSMaskMaker(self)
         else:
             raise TraitError('Unrecognized Mask Type')
         
+    def _maskshortname_changed(self,newval):
+        maxn = self.maskmaker.shortlen
+        if len(newval) > maxn:
+            self.maskshortname = newval[:maxn]
+        
     def _makemaskbutton_fired(self):
-        self.maskmaker.makeMask(self.maskfn,self)
+        self.maskmaker.makeMask(self.maskfn)
         
         
     def _get_priorities(self):
         off = self.cmda.getOffsets()
         off = 1-off/off.max()
-        return off**4
+        
+        return 1000*off**4
         
     def _updatepri_fired(self):
         #pri = np.arange(len(self.data.get_data('x')))
@@ -369,17 +388,71 @@ class SpecTarget(HasTraits):
         self.locs.set_data('pri',self.priorities)
         
 class DEIMOSMaskMaker(MaskMaker):
-    import pyraf #do this to make sure pyraf is installed
+    #import pyraf #do this to make sure pyraf is installed
     
     name = 'Dsim'
-    def makeMask(self,fn,st):
+    shortlen = 6
+    def makeMask(self,fn):
         from pyraf import iraf
+        import os
         from os import path
+        from warnings import warn
         
         
         fn = fn if fn.endswith('.in') else fn+'.in'
+        basefn = path.splitext(fn)[0]
         print 'making',fn
+        if path.exists(fn):
+            warn('path %s exists, overwriting'%fn)
+        self.writeInFile(fn)
         
         
-    def writeInFile(self,fn)
+        dskw={}
+        dskw['output'] = basefn+'.dsim'
+        dskw['mdf'] = basefn+'.fits'
+        dskw['plotfile'] = basefn+'.ps'
+        dskw['ra'] = self.sto.cmda.center[0]*24.0/360.0
+        dskw['dec'] = self.sto.cmda.center[1]
+        dskw['equinox'] = 2000
+        dskw['guiname'] = self.sto.maskshortname
+        dskw['maskid'] =  self.sto.masklongname if self.sto.masklongname else self.sto.maskshortname
+        print dskw
+        for k in ('output','mdf','plotfile'):
+            kfn = dskw[k]
+            print 'deleteing',kfn
+            if path.exists(kfn):
+                os.remove(kfn)
+        print 'running dsimulator'
+        iraf.dsimulator(fn,**dskw)
+        print 'dsimulator complete!'
+        print 'TODO:sky pa vs slit pa'
+        
+        
+    def writeInFile(self,fn):
+        from astropysics.coords import AngularCoordinate
+        
+        pri = self.sto.priorities
+        ni = len(pri)
+        mg,ma = self.sto._guidealignmasks()
+        pri[mg] = -1
+        pri[ma] = -2
+        
+        ra,dec = self.sto.cmda.locs
+        magband = self.sto.agband
+        mags = self.sto.cmda.getData(magband)
+        
+        samp = np.ones(ni)*1
+        #pa = np.ones(ni)*90
+        presel = np.zeros(ni)
+        with open(fn,'w') as f:
+            for i,n in enumerate(self.sto.cmda.datanames):
+                rao,deco = AngularCoordinate(ra[i]),AngularCoordinate(dec[i])
+                ras,decs = rao.getHmsStr(canonical = True),deco.getDmsStr(canonical = True)
+                t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i])
+                f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\n'%t)
+                #t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
+                #f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
+        
+        
+        
     
