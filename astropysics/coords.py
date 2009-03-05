@@ -122,11 +122,18 @@ class AngularCoordinate(object):
             dmsm=self.__dmsre.match(inpt)
             if sexig:
                 t=sexig.group(2,3,4)
-                if sexig.group(1) is None:
-                    self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
+                if sghms is None:
+                    if sexig.group(1) is None:
+                        self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
+                    else:
+                        sgn = 1 if sexig.group(1) == '+' else -1
+                        self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2])
                 else:
-                    sgn = 1 if sexig.group(1) == '+' else -1
-                    self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+                    sgn = -1 if sexig.group(1) == '-' else 1
+                    if sghms:
+                        self.hrsminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+                    else:
+                        self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2]) 
             elif hmsm:
                 t=hmsm.group(1,2,3)
                 self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
@@ -196,7 +203,7 @@ class AngularCoordinate(object):
         return self.degrees
         
         
-    def getDmsStr(self,secform = None,sep = None):
+    def getDmsStr(self,secform = None,sep = None, sign=True, canonical=False):
         """
         gets the string representation of this AngularCoordinate as degrees,
         minutes, and seconds
@@ -205,16 +212,27 @@ class AngularCoordinate(object):
         
         sep is the seperator between components - defaults to degree symbol,
         ' and " symbols 
+        
+        sign forces sign to be present before degree component
+        
+        canonical forces [+/-]dd:mm:ss.ss , overriding other arguments
         """
         d,m,s = self.degminsec
         
+        if canonical:
+            return '%0+3.i:%02.i:%05.2f'%(d,m,s)
+        
         d,m=str(d),str(m)
+        
         if secform is None:
             s = str(s)
         else:
             s = secform%s
         
         tojoin = []
+        
+        if sign:
+            d='+'+d if d >= 0 else d
         
         if d is not '0':
             tojoin.append(d)
@@ -234,7 +252,7 @@ class AngularCoordinate(object):
             sep = ''
         return sep.join(tojoin)
         
-    def getHmsStr(self,secform = None,sep = None):
+    def getHmsStr(self,secform = None,sep = None, canonical = False):
         """
         gets the string representation of this AngularCoordinate as hours,
         minutes, and seconds
@@ -242,9 +260,14 @@ class AngularCoordinate(object):
         secform is the formatter for the seconds component
         
         sep is the seperator between components - defaults to h, m, and s
+        
+        canonical forces [+/-]dd:mm:ss.ss , overriding other arguments
         """
         
         h,m,s = self.hrsminsec
+        
+        if canonical:
+            return '%02.i:%02.i:%05.2f'%(h,m,s)
         
         h,m=str(h),str(m)
         if secform is None:
@@ -254,15 +277,22 @@ class AngularCoordinate(object):
         
         tojoin = []
         
-        if h is not '0':
-            tojoin.append(h)
-            if sep is None:
-                tojoin.append('h')
+        tojoin.append(h)
+        if sep is None:
+            tojoin.append('h')
+            
+        tojoin.append(m)
+        if sep is None:
+            tojoin.append('m')
+#        if h is not '0':
+#            tojoin.append(h)
+#            if sep is None:
+#                tojoin.append('h')
                 
-        if m is not '0':
-            tojoin.append(m)
-            if sep is None:
-                tojoin.append('m')
+#        if m is not '0':
+#            tojoin.append(m)
+#            if sep is None:
+#                tojoin.append('m')
                 
         tojoin.append(s)
         if sep is None:
@@ -314,22 +344,22 @@ class AngularPosition(object):
             aspl = args[0].split()
             #TODO: make smarter
             kwargs['ra'] = AngularCoordinate(aspl[0])
-            kwargs['dec'] = AngularCoordinate(aspl[1])
+            kwargs['dec'] = AngularCoordinate(aspl[1],sghms=False)
         elif len(args) == 2:
             kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1])
+            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
         elif len(args) == 3:
             kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1])
+            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
             kwargs['epoch'] = args[2]
         elif len(args) == 4:
             kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1])
+            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
             kwargs['raerr'] = AngularCoordinate(args[2])
             kwargs['decerr'] = AngularCoordinate(args[3])
         elif len(args) == 5:
             kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1])
+            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
             kwargs['raerr'] = AngularCoordinate(args[2])
             kwargs['decerr'] = AngularCoordinate(args[3])
             kwargs['epoch'] = args[4]
