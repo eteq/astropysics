@@ -36,7 +36,7 @@ class ODHandler(Handler):
         o = info.object
         o.cmda.offsetbands = o.offsetbands
         o.cmda.offsetweights = 1.0/o.offsetscales
-        o.cmda.locweight = 1.0/o.locscale
+        o.cmda.locweight = 1.0/o.locscale if o.locscale != 0 else 0
         o.st.updatepri = True
         
     def closed(self,info, is_ok):
@@ -61,7 +61,7 @@ class OffsetDialog(HasTraits):
         self.st = st
         self.offsetbands = cmda.offsetbands if cmda.offsetbands is not None else []
         self.offsetscales = 1.0/cmda.offsetweights
-        self.locscale = 1.0/cmda.locweight
+        self.locscale = 1.0/cmda.locweight if cmda.locweight != 0 else 0
             
 class SpecTarget(HasTraits):
     distance = Float(10)
@@ -168,7 +168,7 @@ class SpecTarget(HasTraits):
         
         locplot = Plot(self.locs,resizable='hv')
         locplot.plot(('ra','dec','pri'),name='target_locs',type='cmap_scatter',marker_size=2,color_mapper=jet)
-        locplot.plot(('centerx','centery'),name='fid_locs',type='scatter',color='black',marker='cross',marker_size=10,line_width=4)
+        locplot.plot(('centerx','centery'),name='cen_locs',type='scatter',color='black',marker='cross',marker_size=10,line_width=4)
         locplot.plot(('gra','gdec'),name='guide_locs',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=5)
         locplot.plot(('ara','adec'),name='align_locs',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=5)
         locplot.tools.append(PanTool(locplot))
@@ -383,7 +383,7 @@ class SpecTarget(HasTraits):
         off = self.cmda.getOffsets()
         off = 1-off/off.max()
         
-        return 1000*off**4
+        return off**4
         
     def _updatepri_fired(self):
         #pri = np.arange(len(self.data.get_data('x')))
@@ -435,7 +435,7 @@ class DEIMOSMaskMaker(MaskMaker):
     def writeInFile(self,fn):
         from astropysics.coords import AngularCoordinate
         
-        pri = self.sto.priorities
+        pri = 1000*self.sto.priorities
         ni = len(pri)
         mg,ma = self.sto._guidealignmasks()
         pri[mg] = -1

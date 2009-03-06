@@ -621,12 +621,12 @@ class CMDAnalyzer(object):
                     warn('Bands %s and %s overedetermined due to color %s - using direct band measurements'%(b1,b2,c))
                     #do nothing because bands are already defined
                 else:
-                    warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(c,b1))
+                    warn('Bands %s and %s underdetermined with only color %s - assuming zeros for band %s'%(b1,b2,c,b1))
                     bd[b1] = bands[b1]
-                    datad[b1] = np.zeros(n)
+                    datad[b1] = np.zeros(len(arr[i]))
                     maskd[b1] = False
                     bd[b2] = bands[b2]
-                    datad[b2] = arr[i]
+                    datad[b2] = -1*arr[i]
                     maskd[b2] = True
                 
         return bd,datad,maskd
@@ -678,8 +678,11 @@ class CMDAnalyzer(object):
         self._locs = None
         self._dnames = None
         
-        self._offbands = None
         self._offsets  = None
+        
+        self._offbands = None
+        self._offws = None
+        self._locw = 1
         
         
         
@@ -688,6 +691,7 @@ class CMDAnalyzer(object):
         if self._offbands is None:
             bands = [self._bandnames[i] for i,b in enumerate(self._fidmask & self._datamask) if b]
             fids = np.array([self._fdatadict[b]+self._dmod for b in bands],copy=False).T
+            #fids = np.array([self.getFiducialData(b) for b in bands],copy=False).T
             lbds = list(self._bandnames)
             data = np.array([self._data[lbds.index(b)] for b in bands],copy=False).T
         else:
@@ -699,6 +703,7 @@ class CMDAnalyzer(object):
                     dats.append(self._data[lbns.index(b[0])]-self._data[lbns.index(b[1])])
                 else:
                     fids.append(self._fdatadict[b]+self._dmod)
+                    #fids.append(self.getFiducialData(b))
                     dats.append(self._data[lbns.index(b)])
             fids,data = np.array(fids,copy=False).T,np.array(dats,copy=False).T
             
@@ -715,8 +720,12 @@ class CMDAnalyzer(object):
                 ws[m] = -ws[m]/(diff[:,:,m].max(axis=1).max(axis=0)-diff[:,:,m].min(axis=1).min(axis=0))
             diff *= ws
         
-        sep = np.sum(diff*diff,axis=2)**0.5
-        self._offsets = np.min(sep,axis=1)
+        sepsq = np.sum(diff*diff,axis=2)
+        sepsq = np.min(sepsq,axis=1) #CMD offset
+        if self._locw and self._locs is not None:
+            locsep = self.locs.T-self.center[:self.locs.shape[0]]
+            sepsq = sepsq + self._locw*np.sum(locsep*locsep,axis=1)
+        self._offsets = sepsq**0.5
         
     def getBand(self,i):
         if isinstance(i,int):
@@ -739,23 +748,23 @@ class CMDAnalyzer(object):
         else:
             mask = self._fidnamedict[fidname]
         if isinstance(i,int):
-            return self._fdatadict[self._bandnames[i]][mask]
+            return self._fdatadict[self._bandnames[i]][mask]+self._dmod
         elif isinstance(i,basestring):
             if '-' in i:
                 b1,b2 = i.split('-')
                 b1,b2 = b1.strip(),b2.strip()
-                if b1 not in self._fmaskd or not self._fmaskd[b1]:
-                    raise ValueError('%s is not a valid fiducial band'%b1)
-                if b2 not in self._fmaskd or not self._fmaskd[b2]:
-                    raise ValueError('%s is not a valid fiducial band'%b2)
-                return self._fdatadict[b1][mask] - self._fdatadict[b2][mask]
+                if (b1 not in self._fmaskd and b2 not in self._fmaskd) or (not self._fmaskd[b1] and not self._fmaskd[b2]):
+                    raise ValueError('%s and %s are not valid fiducial bands'%(b1,b2))
+                
+                c = self._fdatadict[b1][mask] - self._fdatadict[b2][mask]
+                return c
             else:
                 b = i.strip()
                 if b not in self._fmaskd or not self._fmaskd[b]:
                     raise ValueError('%s is not a valid fiducial band'%b)
-                return self._fdatadict[b][mask]
+                return self._fdatadict[b][mask]+self._dmod
         else:
-            return self._fdatadict[i][mask]
+            return self._fdatadict[i][mask]+self._dmod
         raise TypeError('Band indecies must be band names or integers')
     
     @property
@@ -784,10 +793,10 @@ class CMDAnalyzer(object):
             if '-' in i:
                 b1,b2 = i.split('-')
                 b1,b2=b1.strip(),b2.strip()
-                if b1 not in self.validbandnames:
-                    raise ValueError('%s is not a valid band'%b1)
-                if b2 not in self.validbandnames:
-                    raise ValueError('%s is not a valid band'%b2)
+                if b1 not in self.validbandnames and b2 not in self.validbandnames:
+                    raise ValueError('%s and %s are not valid bands'%(b1,b2))
+                #if b2 not in self.validbandnames:
+                #    raise ValueError('%s is not a valid band'%b2)
                 return self._data[lbn.index(b1)] - self._data[lbn.index(b2)]
             else:
                 if i not in self.validbandnames:
@@ -1016,13 +1025,13 @@ class CMDAnalyzer(object):
     def _getDMod(self):
         return self._dmod
     def _setDMod(self,val):
-        if val == 0:
-            self._fdatadict = self._dm0fdd
-        else:
-            newd = {}
-            for b,arr in self._dm0fdd.iteritems():
-                newd[b] =  arr+val
-            self._fdatadict = newd
+#        if val == 0:
+#            self._fdatadict = self._dm0fdd
+#        else:
+#            newd = {}
+#            for b,arr in self._dm0fdd.iteritems():
+#                newd[b] =  arr+val
+#            self._fdatadict = newd
         self._dmod = val
         #need to recalculate offsets with new data
         self._offsets = None
@@ -1044,7 +1053,7 @@ class CMDAnalyzer(object):
         self._offws = np.array(val)
         self._offsets = None
     offsetweights = property(_getOffWs,_setOffWs,doc="""
-    Weights to apply to bands well calculating the offset. 
+    Weights to apply to bands while calculating the offset. 
     Note that this will be invalidated whenever the offsetbands
     change
     
@@ -1054,6 +1063,18 @@ class CMDAnalyzer(object):
     and negative values will be compared to the total range (i.e. 
     offset=-w*(dat-fid)/(max-min) )
     """)
+    def _getLocW(self):
+        if self._locw is None:
+            return 0
+        return self._locw
+    
+    def _setLocW(self,val):
+        self._locw = val
+        self._offsets = None
+    locweight = property(_getLocW,_setLocW,doc="""
+    Weights to apply to the location while calculating the offset. 
+    """)
+    
     
     def plot(self,bx,by,clf=True,skwargs={},lkwargs={}):
         """
