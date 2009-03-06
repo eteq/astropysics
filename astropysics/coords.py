@@ -127,13 +127,15 @@ class AngularCoordinate(object):
                         self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
                     else:
                         sgn = 1 if sexig.group(1) == '+' else -1
-                        self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+                        self.degminsec=int(t[0]),int(t[1]),float(t[2])
+                        self.__decval *= sgn
                 else:
                     sgn = -1 if sexig.group(1) == '-' else 1
                     if sghms:
-                        self.hrsminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+                        self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
                     else:
-                        self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2]) 
+                        self.degminsec=int(t[0]),int(t[1]),float(t[2]) 
+                    self.__decval *= sgn
             elif hmsm:
                 t=hmsm.group(1,2,3)
                 self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
@@ -142,7 +144,8 @@ class AngularCoordinate(object):
             elif dmsm:
                 sgn = -1 if dmsm.group(1) =='-' else 1
                 t=dmsm.group(2,3,4)
-                self.degminsec=sgn*int(t[0]),int(t[1]),float(t[2])
+                self.degminsec=int(t[0]),int(t[1]),float(t[2])
+                self.__decval *= sgn
             elif dm:
                 self.degrees=float(hm.group(1))
             else:
@@ -220,7 +223,8 @@ class AngularCoordinate(object):
         d,m,s = self.degminsec
         
         if canonical:
-            return '%0+3.i:%02.i:%05.2f'%(d,m,s)
+            sgn = '-' if self.__decval < 0 else '+'
+            return '%s%02.i:%02.i:%05.2f'%(sgn,d,m,s)
         
         d,m=str(d),str(m)
         
