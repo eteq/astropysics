@@ -677,6 +677,7 @@ class CMDAnalyzer(object):
         self._cen = (0,0,0)
         self._locs = None
         self._dnames = None
+        self._dgrp = None
         
         self._offsets  = None
         
@@ -695,8 +696,27 @@ class CMDAnalyzer(object):
             lbds = list(self._bandnames)
             data = np.array([self._data[lbds.index(b)] for b in bands],copy=False).T
         else:
-            fids,dats = [],[]
             lbns=list(self._bandnames)
+            
+            #first check to make sure offset bands are valid
+            checkb=[]
+            for b in self._offbands:
+                if isinstance(b,tuple):
+                    checkb.append(lbns.index(b[0]))
+                    checkb.append(lbns.index(b[1]))
+                else:
+                    checkb.append(lbns.index(b))
+            for i in checkb:
+                assert isinstance(i,int) and i >=0 and i < self._nb,i
+                if not self._datamask[i]:
+                    raise ValueError('data mask incompatible with band at position %i'%i)
+                if not self._fidmask[i]:
+                    raise ValueError('fiducial mask incompatible with band at position %i'%i)
+            
+            
+            #now do the calculations
+            fids,dats = [],[]
+            
             for b in self._offbands:
                 if isinstance(b,tuple):
                     fids.append(self._fdatadict[b[0]]-self._fdatadict[b[1]])
@@ -708,7 +728,7 @@ class CMDAnalyzer(object):
             fids,data = np.array(fids,copy=False).T,np.array(dats,copy=False).T
             
         #TODO:interpolate along fiducials to a reasonable density
-        #dims: fids = nfXnb and data = ndXnb
+        #dims here: fids = nfXnb and data = ndXnb
         datat = np.tile(data,(fids.shape[0],1,1)).transpose((1,0,2))
         diff = (fids - datat)
         
@@ -891,6 +911,22 @@ class CMDAnalyzer(object):
     Names for the objects - default is in numerical order starting at 1
     """)
     
+    def _getDGrp(self):
+        return self._dgrp
+    def _setDGrp(self,val):
+        if val is None:
+            self._dgrp = None
+            return
+        if len(val) != self._nd:
+            raise ValueError('number of group numbers do not match number of data points')
+        self._dgrp = np.array(val,dtype=int)
+    datagroups = property(_getDGrp,_setDGrp,doc="""
+    Group numbers for the objects - will be cast to ints.
+    Typical meanings:
+    0 -> don't use in spectrum
+    -1 -> alignment or guide star
+    """)
+    
     def _getCen(self):
         return self._cen
     def _setCen(self,val):
@@ -922,12 +958,15 @@ class CMDAnalyzer(object):
             lbn = list(self._bandnames)
             for i,v in enumerate(val):
                 if isinstance(v,basestring):
-                    vs = v.split('-')
-                    if len(vs) == 2:
-                        b1,b2 = vs
-                        op.append((lbn.index(b1.strip()),lbn.index(b2.strip())))
-                    else:
-                        op.append(lbn.index(v.strip()))
+                    try:
+                        vs = v.split('-')
+                        if len(vs) == 2:
+                            b1,b2 = vs
+                            op.append((lbn.index(b1.strip()),lbn.index(b2.strip())))
+                        else:
+                            op.append(lbn.index(v.strip()))
+                    except:
+                        raise ValueError('uninterpretable band type in position %i'%i)
                 elif isinstance(v,int):
                     op.append(v)
                 else:
@@ -942,42 +981,42 @@ class CMDAnalyzer(object):
                         else:
                             op.append(b2)
                     except:
-                        raise ValueError('uninterpretable band type in position '+i)
+                        raise ValueError('uninterpretable band type in position %i'%i)
                     
-            def docheck(v,i,j):
-                #True indicates invalid, False is good
-                if not isinstance(v,int):
-                    raise TypeError('band index at position %i,%i is not an index'%(i,j))
-                if v < 0:
-                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
-                if v > self._nb:
-                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
-                if not self._datamask[v]:
-                    raise ValueError('data mask incompatible with band at position %i,%i'%(i,j))
-                if not self._fidmask[v]:
-                    raise ValueError('fiducial mask incompatible with band at position %i,%i'%(i,j))
+#            def docheck(v,i,j):
+#                #True indicates invalid, False is good
+#                if not isinstance(v,int):
+#                    raise TypeError('band index at position %i,%i is not an index'%(i,j))
+#                if v < 0:
+#                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
+#                if v > self._nb:
+#                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
+#                if not self._datamask[v]:
+#                    raise ValueError('data mask incompatible with band at position %i,%i'%(i,j))
+#                if not self._fidmask[v]:
+#                    raise ValueError('fiducial mask incompatible with band at position %i,%i'%(i,j))
             
-            for i,v in enumerate(op):
-                if isinstance(v,tuple):
-                    #if ONE of the bands in a color is masked in the fiducial, it's still ok
-                    fidok = True
-                    try:
-                        docheck(v[0],i,1)
-                    except ValueError,e:
-                        if 'fiducial' in e.message:
-                            fidok = False
-                        else:
-                            raise e
-                    try:
-                        docheck(v[1],i,2)
-                    except ValueError,e:
-                        if 'fiducial' in e.message:
-                            if not fidok:
-                                raise e
-                        else:
-                            raise e
-                else:
-                    docheck(v,i,0)
+#            for i,v in enumerate(op):
+#                if isinstance(v,tuple):
+#                    #if ONE of the bands in a color is masked in the fiducial, it's still ok
+#                    fidok = True
+#                    try:
+#                        docheck(v[0],i,1)
+#                    except ValueError,e:
+#                        if 'fiducial' in e.message:
+#                            fidok = False
+#                        else:
+#                            raise e
+#                    try:
+#                        docheck(v[1],i,2)
+#                    except ValueError,e:
+#                        if 'fiducial' in e.message:
+#                            if not fidok:
+#                                raise e
+#                        else:
+#                            raise e
+#                else:
+#                    docheck(v,i,0)
                     
             bandkeys = []
             for v in op:

@@ -75,6 +75,10 @@ class SpecTarget(HasTraits):
     locs = ArrayPlotData
     xax = String
     yax = String
+    priband = String('')
+    pribandw = Float(0)
+    pripower = Float(2)
+    groupcutoff = Float(100)
     agband = String
     astarcut = Float(18)
     gstarcut = Float(18)
@@ -103,7 +107,12 @@ class SpecTarget(HasTraits):
                                   Item('gstarcut',label='Guide Star Cutoff'),
                                   Item('astarcut',label='Alignment Star Cutoff'),
                                   columns=3),
-                            Item('offsetset',label='Offset Settings'),
+                            HGroup(Item('priband',label='Priority Band'),
+                                   Item('pribandw',label='Band Priority Weight'),
+                                   Item('offsetset',label='Offset Settings'),
+                                   Item('pripower',label='Power for converting offsets into priorities'),
+                                   Item('groupcutoff',label='Last Group Cutoff')
+                                   ),
                             Group(Item('masktype',label='Mask Type'),
                                   Item('maskfn',label='Mask File(base)'),
                                   Item('makemaskbutton',label='Make Mask'),
@@ -189,6 +198,8 @@ class SpecTarget(HasTraits):
         self.on_trait_change(self._yax_late_changed,'yax')
         self.on_trait_change(self._late_dogastars,'agband,gstarcut,astarcut')
         
+        
+        self.priband = self.yax #must be done after data is set
         self._cmda_late_changed() #clean things up in case random stuff changes
         self._masktype_changed(self.masktype) #call to intialize default mask maker
         
@@ -212,6 +223,17 @@ class SpecTarget(HasTraits):
             self._distinner = True
             self.distance = self.cmda.distance
             self.updatedata = True
+            
+    def _priband_changed(self,old,new):
+        if new not in self.cmda.validbandnames:
+            print 'band',new,'not valid'
+            self.priband = old if new != old else ''
+        else:
+            self.updatepri = True
+            
+    def _pribandw_changed(self):
+        if self.priband:
+            self.updatepri = True
             
 #    def _get_distance(self):
 #        return self.cmda.distance
@@ -380,10 +402,20 @@ class SpecTarget(HasTraits):
         
         
     def _get_priorities(self):
-        off = self.cmda.getOffsets()
-        off = 1-off/off.max()
         
-        return off**4
+        off = self.cmda.getOffsets()
+        pri = 1-off/off.max()
+        
+        if self.priband and self.pribandw:
+            data = self.cmda.getData(self.priband)
+            if self.pribandw < 0:
+                data = (data-data.min())/(data.max()-data.min())
+            else:
+                data = (data.max()-data)/(data.max()-data.min())
+            pri = pri+self.pribandw*data
+            pri = (pri - pri.min())/(pri.max()-pri.min())
+        
+        return pri**self.pripower
         
     def _updatepri_fired(self):
         #pri = np.arange(len(self.data.get_data('x')))
@@ -415,12 +447,12 @@ class DEIMOSMaskMaker(MaskMaker):
         dskw['output'] = basefn+'.dsim'
         dskw['mdf'] = basefn+'.fits'
         dskw['plotfile'] = basefn+'.ps'
-        dskw['ra'] = self.sto.cmda.center[0]*24.0/360.0
-        dskw['dec'] = self.sto.cmda.center[1]
+        dskw['ra0'] = self.sto.cmda.center[0]*24.0/360.0
+        dskw['dec0'] = self.sto.cmda.center[1]
         dskw['equinox'] = 2000
         dskw['guiname'] = self.sto.maskshortname
         dskw['maskid'] =  self.sto.masklongname if self.sto.masklongname else self.sto.maskshortname
-        print dskw
+        print dskw['ra0'],dskw['dec0'],iraf.dsimulator.PA0
         for k in ('output','mdf','plotfile'):
             kfn = dskw[k]
             print 'deleteing',kfn
@@ -428,11 +460,21 @@ class DEIMOSMaskMaker(MaskMaker):
                 os.remove(kfn)
         print 'running dsimulator'
         iraf.dsimulator(fn,**dskw)
-        print 'dsimulator complete!'
-        print 'TODO:sky pa vs slit pa'
+        print 'dsimulator 1 complete!'
+        fn2 = fn.replace('.in','.in2')
+        dskw['ra0'],dskw['dec0'],dskw['PA0'] = self.fixPaFile(dskw['output'],fn2)
+        print 'deleting intermediate files'
+        for k in ('output','mdf','plotfile'):
+            kfn = dskw[k]
+            print 'deleteing',kfn
+            if path.exists(kfn):
+                os.remove(kfn)
+        print 'Running with offset pa'
+        iraf.dsimulator(fn2,**dskw)
+        print 'all done!'
         
         
-    def writeInFile(self,fn):
+    def writeInFile(self,fn,pa=None):
         from astropysics.coords import AngularCoordinate
         
         pri = 1000*self.sto.priorities
@@ -442,21 +484,51 @@ class DEIMOSMaskMaker(MaskMaker):
         pri[ma] = -2
         
         ra,dec = self.sto.cmda.locs
-        magband = self.sto.agband
-        mags = self.sto.cmda.getData(magband)
+        magband = self.sto.priband if self.sto.priband else self.sto.agband
         
-        samp = np.ones(ni)*1
-        #pa = np.ones(ni)*90
+        mags = self.sto.cmda.getData(magband)
+        self.sto.groupcutoff
+        if self.sto.cmda.datagroups is None:
+            samp = np.ones(ni)
+            samp[mags > self.sto.groupcutoff] = 2
+        else:
+            samp = sto.cmda.datagroups
+            pri[(samp==-1) & ~ma] = -1
+            pri[samp==0] = 0
+            samp[mags > self.sto.groupcutoff] = 5
+        if pa is not None:
+            pa = np.ones(ni)*pa
+    
         presel = np.zeros(ni)
         with open(fn,'w') as f:
             for i,n in enumerate(self.sto.cmda.datanames):
                 rao,deco = AngularCoordinate(ra[i]),AngularCoordinate(dec[i])
                 ras,decs = rao.getHmsStr(canonical = True),deco.getDmsStr(canonical = True)
-                t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i])
-                f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\n'%t)
-                #t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
-                #f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
+                if pa is None:
+                    t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i])
+                    f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\n'%t)
+                else:
+                    t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
+                    f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
         
+    def fixPaFile(self,fn1,fn2,degoffset=5):
+        #fn1 is th dsim output of the first dsim run, fn2 is the target file name
+        from astropysics.coords import AngularPosition
         
-        
+        with open(fn1,'r') as fr:
+            with open(fn2,'w') as fw:
+                for l in fr:
+                    if 'PA' in l:
+                        name,ras,decs,epochs,pas,hunk=l.split()
+                        panum = float(pas.replace('PA=',''))
+                        fw.write(l)
+                    else:
+                        ls = l.strip()
+                        if ls.startswith('#') or ls == '':
+                            fw.write(l)
+                        else:
+                            fw.write(ls)
+                            fw.write('  %i\n'%(panum+degoffset))
+        ap = AngularPosition(ras,decs)
+        return ap.ra.d,ap.dec.d,panum
     
