@@ -699,19 +699,21 @@ class CMDAnalyzer(object):
             lbns=list(self._bandnames)
             
             #first check to make sure offset bands are valid
-            checkb=[]
             for b in self._offbands:
                 if isinstance(b,tuple):
-                    checkb.append(lbns.index(b[0]))
-                    checkb.append(lbns.index(b[1]))
+                    i1 = lbns.index(b[0])
+                    i2 = lbns.index(b[1])
+                    assert (isinstance(i1,int) and i1 >=0 and i1 < self._nb),(i1,b1)
+                    assert (isinstance(i2,int) and i2 >=0 and i2 < self._nb),(i2,b2)
+                    if not ((self._fidmask[i1] and self._datamask[i1]) or  (self._fidmask[i2] and self._datamask[i2])):
+                        raise ValueError('masks incompatible with bands at positions %i and %i'%(i1,i2))
                 else:
-                    checkb.append(lbns.index(b))
-            for i in checkb:
-                assert isinstance(i,int) and i >=0 and i < self._nb,i
-                if not self._datamask[i]:
-                    raise ValueError('data mask incompatible with band at position %i'%i)
-                if not self._fidmask[i]:
-                    raise ValueError('fiducial mask incompatible with band at position %i'%i)
+                    i = lbns.index(b)
+                    assert (isinstance(i,int) and i >=0 and i < self._nb),(i,b)
+                    if not self._datamask[i]:
+                        raise ValueError('data mask incompatible with band at position %i'%i)
+                    if not self._fidmask[i]:
+                        raise ValueError('fiducial mask incompatible with band at position %i'%i)
             
             
             #now do the calculations

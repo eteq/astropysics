@@ -81,15 +81,15 @@ class SpecTarget(HasTraits):
     groupcutoff = Float(100)
     agband = String
     astarcut = Float(18)
-    gstarcut = Float(18)
+    gstarcut = Float(16)
     offsetset = Button
     priorities = Property(depends_on='distmod,offsetset')
     
     masktype = Enum(['DEIMOS'])
     maskmaker = Instance(MaskMaker) 
-    maskfn = String('spectarg-1')
-    maskshortname = ('Noname')
-    masklongname = ('')
+    maskfn = String('spectarg1')
+    maskshortname = String('Nonam1')
+    masklongname = String('')
     makemaskbutton = Button
     
     updatepri = Event
@@ -234,6 +234,9 @@ class SpecTarget(HasTraits):
     def _pribandw_changed(self):
         if self.priband:
             self.updatepri = True
+            
+    def _pripower_changed(self):
+        self.updatepri = True
             
 #    def _get_distance(self):
 #        return self.cmda.distance
@@ -392,13 +395,38 @@ class SpecTarget(HasTraits):
         else:
             raise TraitError('Unrecognized Mask Type')
         
-    def _maskshortname_changed(self,newval):
+    def _maskshortname_changed(self,new,old):
         maxn = self.maskmaker.shortlen
-        if len(newval) > maxn:
-            self.maskshortname = newval[:maxn]
+        if len(new) > maxn:
+            self.maskshortname = new[:maxn]
         
     def _makemaskbutton_fired(self):
         self.maskmaker.makeMask(self.maskfn)
+        
+        #increment number if there is one in the name
+        name = self.maskshortname
+        for cut in range(len(name)+1):
+            try:
+                print name[cut:]
+                num = int(name[cut:])
+                num+=1
+                print 'setting to',name[:cut]+str(num),num
+                self.maskshortname = name[:cut]+str(num)
+                print self.maskshortname,name[:cut]+str(num)
+                break
+            except ValueError:
+                pass
+        #do the same for the file name
+        name = self.maskfn
+        for cut in range(len(name)+1):
+            try:
+                num = int(name[cut:])
+                num+=1
+                self.maskfn = name[:cut]+str(num)
+                break
+            except ValueError:
+                pass
+            
         
         
     def _get_priorities(self):
@@ -471,8 +499,9 @@ class DEIMOSMaskMaker(MaskMaker):
                 os.remove(kfn)
         print 'Running with offset pa'
         iraf.dsimulator(fn2,**dskw)
+        print 'setting selected objects to 0 group'
+        self.doneToG0(dskw['output'],self.sto.cmda)
         print 'all done!'
-        
         
     def writeInFile(self,fn,pa=None):
         from astropysics.coords import AngularCoordinate
@@ -492,9 +521,12 @@ class DEIMOSMaskMaker(MaskMaker):
             samp = np.ones(ni)
             samp[mags > self.sto.groupcutoff] = 2
         else:
-            samp = sto.cmda.datagroups
+            samp = self.sto.cmda.datagroups
             pri[(samp==-1) & ~ma] = -1
+            pri[(samp==-2) & ~mg] = -2
             pri[samp==0] = 0
+            samp[samp==-1] = 6
+            samp[samp==-2] = 6
             samp[mags > self.sto.groupcutoff] = 5
         if pa is not None:
             pa = np.ones(ni)*pa
@@ -505,8 +537,8 @@ class DEIMOSMaskMaker(MaskMaker):
                 rao,deco = AngularCoordinate(ra[i]),AngularCoordinate(dec[i])
                 ras,decs = rao.getHmsStr(canonical = True),deco.getDmsStr(canonical = True)
                 if pa is None:
-                    t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i])
-                    f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\n'%t)
+                    t = (n[:16],ras,decs,2000,mags[i],magband,int(pri[i]),samp[i],presel[i])
+                    f.write('%s\t%s %s %i %2.2f %s %4i %i %i INDEF\n'%t)
                 else:
                     t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
                     f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
@@ -519,7 +551,7 @@ class DEIMOSMaskMaker(MaskMaker):
             with open(fn2,'w') as fw:
                 for l in fr:
                     if 'PA' in l:
-                        name,ras,decs,epochs,pas,hunk=l.split()
+                        ras,decs,epochs,pas = l.split()[-5:-1]
                         panum = float(pas.replace('PA=',''))
                         fw.write(l)
                     else:
@@ -531,4 +563,29 @@ class DEIMOSMaskMaker(MaskMaker):
                             fw.write('  %i\n'%(panum+degoffset))
         ap = AngularPosition(ras,decs)
         return ap.ra.d,ap.dec.d,panum
+    
+    @staticmethod
+    def doneToG0(fn,cmda):
+        objs=[]
+        
+        with open(fn) as f:
+            watch = False
+            for l in f:
+                if watch and l.strip() and not l.lstrip().startswith('#'):
+                    objs.append(int(l.split()[0]))
+                if 'Selected Objects' in l:
+                    watch = True
+                if 'Selected Guide' in l:
+                    #watch = False
+                    break
+        objs = np.array(objs)
+        
+        if cmda.datagroups is not None:
+            g = cmda.datagroups
+        else:
+            g = np.ones(cmda._nd)
+        if len(objs) > 0:
+            g[objs-1] = 0
+            cmda.datagroups = g
+                
     
