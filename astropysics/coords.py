@@ -271,7 +271,7 @@ class AngularCoordinate(object):
         h,m,s = self.hrsminsec
         
         if canonical:
-            return '%02.i:%02.i:%05.2f'%(h,m,s)
+            return '%02.i:%02.i:%06.3f'%(h,m,s)
         
         h,m=str(h),str(m)
         if secform is None:
@@ -473,39 +473,7 @@ class AngularPosition(object):
     def __truediv__(self,other):
         return AngularPosition(self.__ra/other,self.__dec/other)
     def __pow__(self,other):
-        return AngularPosition(self.__ra**other,self.__dec**other)
-
-def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
-    ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
-    ra2,dec2 = np.array(ra2,copy=False),np.array(dec2,copy=False)
-    
-    x1,y1,z1 = spherical_to_cartesian(1.0,90-dec1 if degrees else dec1,ra1,degrees)
-    x2,y2,z2 = spherical_to_cartesian(1.0,90-dec2 if degrees else dec2,ra2,degrees)
-    
-    dp = x1*x2+y1*y2+z1*z2
-    
-    sep = np.arccos(dp)
-    if degrees:
-        sep = np.degrees(sep)
-    return sep
-
-def seperation3d(d1,d2,ap1,ap2):
-    from numpy import sin,cos
-    if type(ap1) != AngularPosition:
-        ap1=AngularPosition(ap1)
-    if type(ap2) != AngularPosition:
-        ap2=AngularPosition(ap2)
-    
-    theta1,phi1=(pi/2-ap1.dec.radians,ap1.ra.radians)
-    theta2,phi2=(pi/2-ap2.dec.radians,ap2.ra.radians)
-    
-    from math import degrees
-    dx=d2*sin(theta2)*cos(phi2)-d1*sin(theta1)*cos(phi1)
-    dy=d2*sin(theta2)*sin(phi2)-d1*sin(theta1)*sin(phi1)
-    dz=d2*cos(theta2)-d1*cos(theta1)
-    
-    return (dx*dx+dy*dy+dz*dz)**0.5
-    
+        return AngularPosition(self.__ra**other,self.__dec**other)    
 
 
 def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
@@ -737,6 +705,55 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
     decp=np.arcsin(zp)
     
     return rap,decp
+
+#<-------------convinience functions------------------------------------------->
+
+def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
+    ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
+    ra2,dec2 = np.array(ra2,copy=False),np.array(dec2,copy=False)
+    
+    x1,y1,z1 = spherical_to_cartesian(1.0,90-dec1 if degrees else dec1,ra1,degrees)
+    x2,y2,z2 = spherical_to_cartesian(1.0,90-dec2 if degrees else dec2,ra2,degrees)
+    
+    dp = x1*x2+y1*y2+z1*z2
+    
+    sep = np.arccos(dp)
+    if degrees:
+        sep = np.degrees(sep)
+    return sep
+
+def seperation3d(d1,d2,ap1,ap2):
+    from numpy import sin,cos
+    if type(ap1) != AngularPosition:
+        ap1=AngularPosition(ap1)
+    if type(ap2) != AngularPosition:
+        ap2=AngularPosition(ap2)
+    
+    theta1,phi1=(pi/2-ap1.dec.radians,ap1.ra.radians)
+    theta2,phi2=(pi/2-ap2.dec.radians,ap2.ra.radians)
+    
+    from math import degrees
+    dx=d2*sin(theta2)*cos(phi2)-d1*sin(theta1)*cos(phi1)
+    dy=d2*sin(theta2)*sin(phi2)-d1*sin(theta1)*sin(phi1)
+    dz=d2*cos(theta2)-d1*cos(theta1)
+    
+    return (dx*dx+dy*dy+dz*dz)**0.5
+
+def match_coords(a1,b1,a2,b2,eps=1):
+    """
+    e.g. ra1,dec1,ra2,dec2
+    """
+    def find_sep(A,B):
+        At = np.tile(A,(len(B),1))
+        Bt = np.tile(B,(len(A),1))
+        return At.T-Bt
+    sep1=find_sep(a1,a2)
+    sep2=find_sep(b1,b2)
+    #return sep1,sep2
+    
+    matches = (sep1*sep1+sep2*sep2)**0.5 < eps
+    
+    return np.any(matches,axis=1),np.any(matches,axis=0)
 
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
