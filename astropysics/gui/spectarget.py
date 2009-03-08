@@ -111,7 +111,7 @@ class SpecTarget(HasTraits):
                                   Item('astarcut',label='Alignment Star Cutoff'),
                                   Item('astarcut2',label='Alignment Star Cutoff 2'),
                                   Item('agigpri',label='A/G Ignore priority'),
-                                  columns=4),
+                                  columns=5),
                             HGroup(Item('priband',label='Priority Band'),
                                    Item('pribandw',label='Band Priority Weight'),
                                    Item('offsetset',label='Offset Settings'),
