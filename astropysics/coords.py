@@ -739,6 +739,26 @@ def seperation3d(d1,d2,ap1,ap2):
     
     return (dx*dx+dy*dy+dz*dz)**0.5
 
+def radec_str_to_decimal(ra,dec):
+    if isinstance(ra,basestring):
+        if not isinstance(dec,basestring):
+            raise ValueError('either both ra and dec must be a strings or neither')
+        
+        ra = AngularCoordinate(ra,sghms=True).d
+        dec = AngularCoordinate(dec,sghms=False).d
+    else:
+        if isinstance(dec,basestring):
+            raise ValueError('either both ra and dec must be a strings or neither')   
+        if len(ra) != len(dec):
+            raise ValueError("length of ra and dec don't match")
+        
+        ras,decs=[],[]
+        for r,d in zip(ra,dec):
+            ras.append(AngularCoordinate(r,sghms=True).d)
+            decs.append(AngularCoordinate(d,sghms=False).d)
+        ra,dec = ras,decs
+    return ra,dec
+
 def match_coords(a1,b1,a2,b2,eps=1):
     """
     e.g. ra1,dec1,ra2,dec2
