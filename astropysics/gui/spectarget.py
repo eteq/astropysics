@@ -81,7 +81,10 @@ class SpecTarget(HasTraits):
     groupcutoff = Float(100)
     agband = String
     astarcut = Float(18)
+    astarcut2 = Float(20)
     gstarcut = Float(16)
+    agigpri = Float(0.5)
+    hideg0 = Bool(True)
     offsetset = Button
     priorities = Property(depends_on='distmod,offsetset')
     
@@ -106,12 +109,15 @@ class SpecTarget(HasTraits):
                             Group(Item('agband',label='Alignment/Guide Star Band'),
                                   Item('gstarcut',label='Guide Star Cutoff'),
                                   Item('astarcut',label='Alignment Star Cutoff'),
-                                  columns=3),
+                                  Item('astarcut2',label='Alignment Star Cutoff 2'),
+                                  Item('agigpri',label='A/G Ignore priority'),
+                                  columns=4),
                             HGroup(Item('priband',label='Priority Band'),
                                    Item('pribandw',label='Band Priority Weight'),
                                    Item('offsetset',label='Offset Settings'),
                                    Item('pripower',label='Power for converting offsets into priorities'),
-                                   Item('groupcutoff',label='Last Group Cutoff')
+                                   Item('groupcutoff',label='Last Group Cutoff'),
+                                   Item('hideg0',label='Set Group 0 priority to 0?')
                                    ),
                             Group(Item('masktype',label='Mask Type'),
                                   Item('maskfn',label='Mask File(base)'),
@@ -196,7 +202,7 @@ class SpecTarget(HasTraits):
         self.on_trait_change(self._cmda_late_changed,'cmda')
         self.on_trait_change(self._xax_late_changed,'xax')
         self.on_trait_change(self._yax_late_changed,'yax')
-        self.on_trait_change(self._late_dogastars,'agband,gstarcut,astarcut')
+        self.on_trait_change(self._late_dogastars,'agband,gstarcut,astarcut,agigpri')
         
         
         self.priband = self.yax #must be done after data is set
@@ -235,8 +241,19 @@ class SpecTarget(HasTraits):
         if self.priband:
             self.updatepri = True
             
+    def _agigpri_changed(self):
+        self.updatepri = True
+            
     def _pripower_changed(self):
         self.updatepri = True
+        
+    def _hideg0_changed(self):
+        self.updatedata = True
+        #m = self._get_g0m()
+        #for v in  self.locplot.plots.itervalues():
+        #    v = v[0]
+        #    v.index.set_mask(m)
+            
             
 #    def _get_distance(self):
 #        return self.cmda.distance
@@ -275,7 +292,13 @@ class SpecTarget(HasTraits):
         self._update_x_data()
         self.cmplot.x_axis.title = self.xax
         
+    def _get_g0m(self):
+        if self.hideg0 and self.cmda.datagroups is not None:
+            return self.cmda.datagroups !=0
+        else:
+            return slice(None)
         
+            
     def _update_x_data(self):
         try:
             x = self.cmda.getData(self.xax)
@@ -330,6 +353,7 @@ class SpecTarget(HasTraits):
         if self.cmda.locs is None:
             ra,dec = np.zeros(self.cmda._nd),np.zeros(self.cmda._nd)
         else:
+            
             ra = self.cmda.locs[0]
             dec = self.cmda.locs[1]
             
@@ -348,7 +372,6 @@ class SpecTarget(HasTraits):
     def _updategastars_fired(self,val):
         if self.agband:
             mg,ma = self._guidealignmasks()
-            
             if val is True or val == 'loc':
                 if self.cmda.locs is None:
                     ra,dec = np.zeros(self.cmda._nd),np.zeros(self.cmda._nd)
@@ -380,8 +403,9 @@ class SpecTarget(HasTraits):
             self.locs.set_data('ay',[])
     def _guidealignmasks(self):
         mdat = self.cmda.getData(self.agband)
-        mg = mdat < self.gstarcut
-        ma = (mdat < self.astarcut) & ~mg
+        pricut = self.agigpri > self.priorities
+        mg = (mdat < self.gstarcut) & pricut
+        ma = (mdat < self.astarcut) & pricut & ~mg
         
         return mg,ma
         
@@ -443,19 +467,26 @@ class SpecTarget(HasTraits):
             pri = pri+self.pribandw*data
             pri = (pri - pri.min())/(pri.max()-pri.min())
         
-        return pri**self.pripower
+        pri = pri**self.pripower
+        if self.hideg0:
+            pri[~self._get_g0m()] = 0
+            
+        return pri
         
     def _updatepri_fired(self):
         #pri = np.arange(len(self.data.get_data('x')))
         #pri = self.cmda.getOffsets()
         self.data.set_data('pri',self.priorities)
         self.locs.set_data('pri',self.priorities)
+        if self.agigpri < 1:
+            self.updategastars = True
         
 class DEIMOSMaskMaker(MaskMaker):
     #import pyraf #do this to make sure pyraf is installed
     
     name = 'Dsim'
     shortlen = 6
+    exporttoiraf = False
     def makeMask(self,fn):
         from pyraf import iraf
         import os
@@ -490,7 +521,7 @@ class DEIMOSMaskMaker(MaskMaker):
         iraf.dsimulator(fn,**dskw)
         print 'dsimulator 1 complete!'
         fn2 = fn.replace('.in','.in2')
-        dskw['ra0'],dskw['dec0'],dskw['PA0'] = self.fixPaFile(dskw['output'],fn2)
+        dskw['ra0'],dskw['dec0'],dskw['PA0'] = self.secondFile(dskw['output'],fn2)
         print 'deleting intermediate files'
         for k in ('output','mdf','plotfile'):
             kfn = dskw[k]
@@ -502,6 +533,13 @@ class DEIMOSMaskMaker(MaskMaker):
         print 'setting selected objects to 0 group'
         self.doneToG0(dskw['output'],self.sto.cmda)
         print 'all done!'
+        if self.exporttoiraf:
+            print 'exporting settings to iraf'
+            for k,v in dskw.iteritems():
+                setattr(iraf.dsimulator,k,v)
+                iraf.dsimulator.output = ''
+                iraf.dsimulator.mdf = ''
+                iraf.dsimulator.plotfile = ''
         
     def writeInFile(self,fn,pa=None):
         from astropysics.coords import AngularCoordinate
@@ -509,8 +547,7 @@ class DEIMOSMaskMaker(MaskMaker):
         pri = 1000*self.sto.priorities
         ni = len(pri)
         mg,ma = self.sto._guidealignmasks()
-        pri[mg] = -1
-        pri[ma] = -2
+        
         
         ra,dec = self.sto.cmda.locs
         magband = self.sto.priband if self.sto.priband else self.sto.agband
@@ -520,11 +557,17 @@ class DEIMOSMaskMaker(MaskMaker):
         if self.sto.cmda.datagroups is None:
             samp = np.ones(ni)
             samp[mags > self.sto.groupcutoff] = 2
+            pri[mg] = -1
+            pri[ma] = -2
         else:
             samp = self.sto.cmda.datagroups
+            ssamp = set(samp)
+            keepbright = samp==1 if (1 in ssamp and 2 in ssamp) else False
             pri[(samp==-1) & ~ma] = -1
             pri[(samp==-2) & ~mg] = -2
-            pri[samp==0] = 0
+            #pri[samp==0] = 0 #do this automatically or not from the GUI 
+            pri[mg & ~keepbright] = -1
+            pri[ma & ~keepbright] = -2
             samp[samp==-1] = 6
             samp[samp==-2] = 6
             samp[mags > self.sto.groupcutoff] = 5
@@ -543,7 +586,28 @@ class DEIMOSMaskMaker(MaskMaker):
                     t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
                     f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
         
-    def fixPaFile(self,fn1,fn2,degoffset=5):
+#    def fixPaFile(self,fn1,fn2,degoffset=5):
+#        #fn1 is th dsim output of the first dsim run, fn2 is the target file name
+#        from astropysics.coords import AngularPosition
+        
+#        with open(fn1,'r') as fr:
+#            with open(fn2,'w') as fw:
+#                for l in fr:
+#                    if 'PA' in l:
+#                        ras,decs,epochs,pas = l.split()[-5:-1]
+#                        panum = float(pas.replace('PA=',''))
+#                        fw.write(l)
+#                    else:
+#                        ls = l.strip()
+#                        if ls.startswith('#') or ls == '':
+#                            fw.write(l)
+#                        else:
+#                            fw.write(ls)
+#                            fw.write('  %i\n'%(panum+degoffset))
+#        ap = AngularPosition(ras,decs)
+#        return ap.ra.d,ap.dec.d,panum
+    
+    def secondFile(self,fn1,fn2,degoffset=5):
         #fn1 is th dsim output of the first dsim run, fn2 is the target file name
         from astropysics.coords import AngularPosition
         
@@ -559,33 +623,57 @@ class DEIMOSMaskMaker(MaskMaker):
                         if ls.startswith('#') or ls == '':
                             fw.write(l)
                         else:
-                            fw.write(ls)
-                            fw.write('  %i\n'%(panum+degoffset))
+                            #fw.write(ls)
+                            #fw.write('  %i\n'%(panum+degoffset))
+                            name,ra,dec,epoch,mag,band,pri,grp,presel = ls.split()[:9]
+                            if int(presel):
+                                pri = int(pri)
+                            else:
+                                pri = -2 if float(mag) < self.sto.astarcut2 else int(pri)
+                            t=(name,ra,dec,epoch,mag,band,pri,grp,presel,panum+degoffset)
+                            fw.write('%s\t%s  %s  %s %s %s %4.i %s %s %i\n'%t)
+                            
         ap = AngularPosition(ras,decs)
         return ap.ra.d,ap.dec.d,panum
     
     @staticmethod
-    def doneToG0(fn,cmda):
+    def doneToG0(fn,cmda,forcceradec=False):
         objs=[]
+        ras,decs=[],[]
         
         with open(fn) as f:
             watch = False
             for l in f:
                 if watch and l.strip() and not l.lstrip().startswith('#'):
-                    objs.append(int(l.split()[0]))
+                    ls=l.split()
+                    if int(ls[6]) >= 0:
+                        objs.append(int(ls[0]))
+                        ras.append(ls[1])
+                        decs.append(ls[2])
                 if 'Selected Objects' in l:
                     watch = True
                 if 'Selected Guide' in l:
                     #watch = False
                     break
-        objs = np.array(objs)
+        objs = np.array(objs)-1
         
         if cmda.datagroups is not None:
             g = cmda.datagroups
         else:
             g = np.ones(cmda._nd)
-        if len(objs) > 0:
-            g[objs-1] = 0
+            
+        
+        if forcceradec or objs.max() >= len(g):
+            #if necessary, do ra/dec matching instead of direct indexing
+            from ..coords import match_coords,radec_str_to_decimal
+            rao,deco = cmda.locs
+            ras,decs = radec_str_to_decimal(ras,decs)
+            mask = match_coords(rao,deco,ras,decs)[0]
+            g[mask] = 0
+        else:
+            if len(objs) > 0:
+                g[objs] = 0
+        if not all(g):
             cmda.datagroups = g
                 
     
