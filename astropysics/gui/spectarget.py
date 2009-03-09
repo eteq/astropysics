@@ -22,9 +22,11 @@ class MaskMaker(object):
     *replace name with a name for the mask-making operation
     *shortlen: maximum length of shortname
     *override makeMask(self,filename)
+    *size: approximate dimensions of a mask as (len,width) in degrees
     """
     name = 'Default mask-maker'
     shortlen = None
+    size = None
     def makeMask(self,filename):
         raise NotImplementedError
     
@@ -296,7 +298,7 @@ class SpecTarget(HasTraits):
         if self.hideg0 and self.cmda.datagroups is not None:
             return self.cmda.datagroups !=0
         else:
-            return slice(None)
+            return np.ones(self.cmda._nd,dtype=bool)
         
             
     def _update_x_data(self):
@@ -406,7 +408,6 @@ class SpecTarget(HasTraits):
         pricut = self.agigpri > self.priorities
         mg = (mdat < self.gstarcut) & pricut
         ma = (mdat < self.astarcut) & pricut & ~mg
-        
         return mg,ma
         
     def _offsetset_fired(self):
@@ -431,7 +432,6 @@ class SpecTarget(HasTraits):
         name = self.maskshortname
         for cut in range(len(name)+1):
             try:
-                print name[cut:]
                 num = int(name[cut:])
                 num+=1
                 print 'setting to',name[:cut]+str(num),num
@@ -469,6 +469,11 @@ class SpecTarget(HasTraits):
         
         pri = pri**self.pripower
         if self.hideg0:
+#            if self.hideg0 and self.cmda.datagroups is not None:
+#                m = self.cmda.datagroups ==1
+#            else:
+#                m =  slice(None)
+#            pri[m] = 1
             pri[~self._get_g0m()] = 0
             
         return pri
@@ -486,6 +491,8 @@ class DEIMOSMaskMaker(MaskMaker):
     
     name = 'Dsim'
     shortlen = 6
+    size = (16.0/60,5.0/60)
+    
     exporttoiraf = False
     def makeMask(self,fn):
         from pyraf import iraf
@@ -537,9 +544,10 @@ class DEIMOSMaskMaker(MaskMaker):
             print 'exporting settings to iraf'
             for k,v in dskw.iteritems():
                 setattr(iraf.dsimulator,k,v)
-                iraf.dsimulator.output = ''
-                iraf.dsimulator.mdf = ''
-                iraf.dsimulator.plotfile = ''
+                #iraf.dsimulator.output = ''
+                #iraf.dsimulator.mdf = ''
+                #iraf.dsimulator.plotfile = ''
+                iraf.dsimulator.saveParList()
         
     def writeInFile(self,fn,pa=None):
         from astropysics.coords import AngularCoordinate
