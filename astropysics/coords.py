@@ -149,7 +149,7 @@ class AngularCoordinate(object):
             elif dm:
                 self.degrees=float(hm.group(1))
             else:
-                raise Exception('Unrecognized string format')
+                raise ValueError('Unrecognized string format '+inpt)
             
         elif hasattr(inpt,'__iter__') and len(inpt)==3:
             self.degminsec=inpt
@@ -759,9 +759,19 @@ def radec_str_to_decimal(ra,dec):
         ra,dec = ras,decs
     return ra,dec
 
-def match_coords(a1,b1,a2,b2,eps=1):
+def match_coords(a1,b1,a2,b2,eps=1,multi = False):
     """
+    Match one set of coordinates to another within a tolerance eps
     e.g. ra1,dec1,ra2,dec2
+    
+    returns (mask of matches for array 1, mask of matches for array 2)
+    
+    if multi is 'warn', a arning will be issued if more than 1 match is found
+    if multi is 'print', a statement will be printed  if more than 1 match is found
+    if multi is 'full', the 2D array with matches as booleans along the axes will be returned
+    if multi is 'count', a count of matches will be returned instead of a mask
+    if multi is 'index', a list of match indecies will be returned instead of a mask
+    if it otherwise evaluates to True, an exception will be raised
     """
     def find_sep(A,B):
         At = np.tile(A,(len(B),1))
@@ -769,11 +779,36 @@ def match_coords(a1,b1,a2,b2,eps=1):
         return At.T-Bt
     sep1=find_sep(a1,a2)
     sep2=find_sep(b1,b2)
-    #return sep1,sep2
     
     matches = (sep1*sep1+sep2*sep2)**0.5 < eps
-    
-    return np.any(matches,axis=1),np.any(matches,axis=0)
+    if multi:
+        if multi == 'full':
+            return matches.T
+        elif multi == 'count':
+            return np.sum(matches,axis=1),np.sum(matches,axis=0) 
+        elif multi == 'index':
+            return [np.where(m)[0] for m in matches],[np.where(m)[0] for m in matches.T]
+        elif multi == 'warn':
+            s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
+            from warnings import warn
+            
+            for i in np.where(s1>1)[0]:
+                warn('1st index %i has %i matches!'%(i,s1[i]))
+            for j in np.where(s2>1)[0]:
+                warn('2nd index %i has %i matches!'%(j,s2[j]))
+            return s1>0,s2>0
+        elif multi == 'print':
+            s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
+            
+            for i in np.where(s1>1)[0]:
+                print '1st index',i,'has',s1[i],'matches!'
+            for j in np.where(s2>1)[0]:
+                print '2nd index',j,'has',s2[j],'matches!'
+            return s1>0,s2>0
+        else:
+            raise ValueError('unrecognized multi mode')
+    else:
+        return np.any(matches,axis=1),np.any(matches,axis=0)
 
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
