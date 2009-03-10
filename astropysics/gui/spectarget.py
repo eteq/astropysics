@@ -23,6 +23,11 @@ class MaskMaker(object):
     *shortlen: maximum length of shortname
     *override makeMask(self,filename)
     *size: approximate dimensions of a mask as (len,width) in degrees
+    
+    expectations for special priority groups:
+    -1: alignment stars
+    -2: guide stars
+    -9: remove from list unless guide/align star
     """
     name = 'Default mask-maker'
     shortlen = None
@@ -82,11 +87,12 @@ class SpecTarget(HasTraits):
     pripower = Float(2)
     groupcutoff = Float(100)
     agband = String
-    astarcut = Float(18)
+    astarcut = Float(18.5)
     astarcut2 = Float(20)
     gstarcut = Float(16)
     agigpri = Float(0.5)
     hideg0 = Bool(True)
+    agigg1 = Bool(False)
     offsetset = Button
     priorities = Property(depends_on='distmod,offsetset')
     
@@ -113,7 +119,8 @@ class SpecTarget(HasTraits):
                                   Item('astarcut',label='Alignment Star Cutoff'),
                                   Item('astarcut2',label='Alignment Star Cutoff 2'),
                                   Item('agigpri',label='A/G Ignore priority'),
-                                  columns=5),
+                                  Item('agigg1',label='A/G Ignore if group 1?'),
+                                  columns=6),
                             HGroup(Item('priband',label='Priority Band'),
                                    Item('pribandw',label='Band Priority Weight'),
                                    Item('offsetset',label='Offset Settings'),
@@ -186,6 +193,7 @@ class SpecTarget(HasTraits):
         locplot = Plot(self.locs,resizable='hv')
         locplot.plot(('ra','dec','pri'),name='target_locs',type='cmap_scatter',marker_size=2,color_mapper=jet)
         locplot.plot(('centerx','centery'),name='cen_locs',type='scatter',color='black',marker='cross',marker_size=10,line_width=4)
+        locplot.plot(('boxx','boxy'),name='box_locs',type='line',color='black',line_width=2)
         locplot.plot(('gra','gdec'),name='guide_locs',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=5)
         locplot.plot(('ara','adec'),name='align_locs',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=5)
         locplot.tools.append(PanTool(locplot))
@@ -365,6 +373,14 @@ class SpecTarget(HasTraits):
         self.locs.set_data('dec',dec)
         self.locs.set_data('centerx',(cen[0],))
         self.locs.set_data('centery',(cen[1],))
+        if self.maskmaker is not None:
+            l,w = self.maskmaker.size
+            l2,w2=l/2.0,w/2.0
+            self.locs.set_data('boxx',np.array([-w2,w2,w2,-w2,-w2])+cen[0])
+            self.locs.set_data('boxy',np.array([-l2,-l2,l2,l2,-l2])+cen[1])
+        else:
+            self.locs.set_data('boxx',np.array(tuple()))
+            self.locs.set_data('boxy',np.array(tuple()))
         
         self.updategastars = 'loc'
     
@@ -420,6 +436,8 @@ class SpecTarget(HasTraits):
         else:
             raise TraitError('Unrecognized Mask Type')
         
+        self.updatelocs = True
+        
     def _maskshortname_changed(self,new,old):
         maxn = self.maskmaker.shortlen
         if len(new) > maxn:
@@ -434,9 +452,8 @@ class SpecTarget(HasTraits):
             try:
                 num = int(name[cut:])
                 num+=1
-                print 'setting to',name[:cut]+str(num),num
                 self.maskshortname = name[:cut]+str(num)
-                print self.maskshortname,name[:cut]+str(num)
+                self.masklongname = self.maskshortname
                 break
             except ValueError:
                 pass
@@ -491,7 +508,7 @@ class DEIMOSMaskMaker(MaskMaker):
     
     name = 'Dsim'
     shortlen = 6
-    size = (16.0/60,5.0/60)
+    size = (5.0/60,16.0/60)
     
     exporttoiraf = False
     def makeMask(self,fn):
@@ -506,18 +523,19 @@ class DEIMOSMaskMaker(MaskMaker):
         print 'making',fn
         if path.exists(fn):
             warn('path %s exists, overwriting'%fn)
+            os.remove(fn)
         self.writeInFile(fn)
         
         
         dskw={}
         dskw['output'] = basefn+'.dsim'
         dskw['mdf'] = basefn+'.fits'
-        dskw['plotfile'] = basefn+'.ps'
+        dskw['plotfile'] = basefn+'.plot'
         dskw['ra0'] = self.sto.cmda.center[0]*24.0/360.0
         dskw['dec0'] = self.sto.cmda.center[1]
         dskw['equinox'] = 2000
         dskw['guiname'] = self.sto.maskshortname
-        dskw['maskid'] =  self.sto.masklongname if self.sto.masklongname else self.sto.maskshortname
+        dskw['maskid'] =  self.sto.masklongname.replace(' ','_') if self.sto.masklongname else self.sto.maskshortname
         print dskw['ra0'],dskw['dec0'],iraf.dsimulator.PA0
         for k in ('output','mdf','plotfile'):
             kfn = dskw[k]
@@ -539,7 +557,11 @@ class DEIMOSMaskMaker(MaskMaker):
         iraf.dsimulator(fn2,**dskw)
         print 'setting selected objects to 0 group'
         self.doneToG0(dskw['output'],self.sto.cmda)
-        print 'all done!'
+        print 'saving iraf parameters'
+        with open(basefn+'.irafpars','w') as f:
+            f.write('input:%s\n'%fn2)
+            for t in dskw.iteritems():
+                f.write('%s\t=\t%s\n'%t)
         if self.exporttoiraf:
             print 'exporting settings to iraf'
             for k,v in dskw.iteritems():
@@ -548,6 +570,7 @@ class DEIMOSMaskMaker(MaskMaker):
                 #iraf.dsimulator.mdf = ''
                 #iraf.dsimulator.plotfile = ''
                 iraf.dsimulator.saveParList()
+        print 'all done!'
         
     def writeInFile(self,fn,pa=None):
         from astropysics.coords import AngularCoordinate
@@ -568,31 +591,35 @@ class DEIMOSMaskMaker(MaskMaker):
             pri[mg] = -1
             pri[ma] = -2
         else:
-            samp = self.sto.cmda.datagroups
+            samp = self.sto.cmda.datagroups.copy()
             ssamp = set(samp)
-            keepbright = samp==1 if (1 in ssamp and 2 in ssamp) else False
+            keepbright = samp==1 if self.sto.agigg1 else np.zeros(samp.shape,dtype=bool)
             pri[(samp==-1) & ~ma] = -1
             pri[(samp==-2) & ~mg] = -2
             #pri[samp==0] = 0 #do this automatically or not from the GUI 
             pri[mg & ~keepbright] = -1
             pri[ma & ~keepbright] = -2
-            samp[samp==-1] = 6
-            samp[samp==-2] = 6
-            samp[mags > self.sto.groupcutoff] = 5
+            samp[(samp==-1) | (pri==-1)] = 6
+            samp[(samp==-2) | (pri==-2)] = 6
+            samp[(mags > self.sto.groupcutoff) & (samp>0)] = 5
+            #samp[pri==0] = 5
         if pa is not None:
             pa = np.ones(ni)*pa
+        
+        #pri[pri==0]=1 #avoid priority-0 cases due to dsim weirdness
     
         presel = np.zeros(ni)
         with open(fn,'w') as f:
             for i,n in enumerate(self.sto.cmda.datanames):
                 rao,deco = AngularCoordinate(ra[i]),AngularCoordinate(dec[i])
                 ras,decs = rao.getHmsStr(canonical = True),deco.getDmsStr(canonical = True)
-                if pa is None:
-                    t = (n[:16],ras,decs,2000,mags[i],magband,int(pri[i]),samp[i],presel[i])
-                    f.write('%s\t%s %s %i %2.2f %s %4i %i %i INDEF\n'%t)
-                else:
-                    t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
-                    f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
+                if samp[i] != -9 or pri[i]==-1 or pri[i] == -2: #-9 is a code to not write at all
+                    if pa is None:
+                        t = (n[:16],ras,decs,2000,mags[i],magband,int(pri[i]),samp[i],presel[i])
+                        f.write('%s\t%s %s %i %2.2f %s %4i %i %i INDEF\n'%t)
+                    else:
+                        t = (n[:16],ras,decs,2000.0,mags[i],magband,int(pri[i]),samp[i],presel[i],pa[i])
+                        f.write('%s\t%s\t%s\t%06.1f\t%2.2f\t%s\t%i\t%i\t%i\t%i\n'%t)
         
 #    def fixPaFile(self,fn1,fn2,degoffset=5):
 #        #fn1 is th dsim output of the first dsim run, fn2 is the target file name
@@ -617,13 +644,21 @@ class DEIMOSMaskMaker(MaskMaker):
     
     def secondFile(self,fn1,fn2,degoffset=5):
         #fn1 is th dsim output of the first dsim run, fn2 is the target file name
-        from astropysics.coords import AngularPosition
+        from astropysics.coords import AngularPosition,AngularCoordinate
         
         with open(fn1,'r') as fr:
             with open(fn2,'w') as fw:
                 for l in fr:
                     if 'PA' in l:
-                        ras,decs,epochs,pas = l.split()[-5:-1]
+                        ls = l.split()
+                        for i in range(len(ls)-1):
+                            try:
+                                raac = AngularCoordinate(ls[i],sghms=True)
+                                decac = AngularCoordinate(ls[i+1],sghms=False)
+                                break
+                            except ValueError:
+                                pass
+                        pas = ls[-2]
                         panum = float(pas.replace('PA=',''))
                         fw.write(l)
                     else:
@@ -637,15 +672,15 @@ class DEIMOSMaskMaker(MaskMaker):
                             if int(presel):
                                 pri = int(pri)
                             else:
-                                pri = -2 if float(mag) < self.sto.astarcut2 else int(pri)
+                                pri = -2 if (float(mag) < self.sto.astarcut2) else int(pri)
                             t=(name,ra,dec,epoch,mag,band,pri,grp,presel,panum+degoffset)
-                            fw.write('%s\t%s  %s  %s %s %s %4.i %s %s %i\n'%t)
+                            fw.write('%s\t%s  %s  %s %s %s %4.1i %s %s %i\n'%t)
                             
-        ap = AngularPosition(ras,decs)
+        ap = AngularPosition(raac,decac)
         return ap.ra.d,ap.dec.d,panum
     
     @staticmethod
-    def doneToG0(fn,cmda,forcceradec=False):
+    def doneToG0(fn,cmda,forceradec=False):
         objs=[]
         ras,decs=[],[]
         
@@ -654,7 +689,7 @@ class DEIMOSMaskMaker(MaskMaker):
             for l in f:
                 if watch and l.strip() and not l.lstrip().startswith('#'):
                     ls=l.split()
-                    if int(ls[6]) >= 0:
+                    if int(ls[6]) >= 0 and int(ls[8]) >= 0:
                         objs.append(int(ls[0]))
                         ras.append(ls[1])
                         decs.append(ls[2])
@@ -671,12 +706,12 @@ class DEIMOSMaskMaker(MaskMaker):
             g = np.ones(cmda._nd)
             
         
-        if forcceradec or objs.max() >= len(g):
+        if forceradec or objs.max() >= len(g):
             #if necessary, do ra/dec matching instead of direct indexing
             from ..coords import match_coords,radec_str_to_decimal
             rao,deco = cmda.locs
             ras,decs = radec_str_to_decimal(ras,decs)
-            mask = match_coords(rao,deco,ras,decs)[0]
+            mask = match_coords(rao,deco,ras,decs,0.5/3600)[0]
             g[mask] = 0
         else:
             if len(objs) > 0:
