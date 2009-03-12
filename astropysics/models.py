@@ -1138,121 +1138,44 @@ class TwoPowerModel(FunctionModel1D):
     
     fxs=property(fget=_getFxs,fset=_setFxs)
     
-class BlackbodyModel(FunctionModel1D):
+class BlackbodyModel(FunctionModel1D,HasSpectrumUnits):
     """
-    a Planck blackbody radiation model
-    
-    inunit can be set to a variety of energy, wavelength, or frequency options
+    a Planck blackbody radiation model.  
+
+    y-axis is assumed to be specific intensity
     """
     from .constants import h,c,kb
     
-    def __init__(self,inunit='wl',outunit='erg'):
-        self.inunit = inunit
-        self.outunit = outunit
+    def __init__(self,unit='wavelength'):
+        HasSpectrumUnits.__init__(self,unit)
+        self.unit = unit #need to explicitly set the unit to initialize the correct f
         self.stephanBoltzmannLaw = self._instanceSBLaw
-    
+        
     def f(self,x,A=1,T=5800):
         raise NotImplementedError
     
     def _flambda(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
-        x=self._scaling*x
-        return A*self._enscale*self._scaling*2*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
+        return A*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
     
     def _fnu(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
-        x=self._scaling*x
-        return A*self._enscale*self._scaling*2*h/c/c*x**3/(np.exp(h*x/(k*T))-1)
+        return A*2*h/c/c*x**3/(np.exp(h*x/(k*T))-1)
     
     def _fen(self,x,A=1,T=5800):
-        x=self._scaling*x
-        raise NotImplementedError
+        return self._fnu(x,A,T)/self.h
     
-    def _getInunit(self):
-        return self._inunit
-    def _setInunit(self,inunit):
-        u = inunit.lower()
-        if inunit == 'wl' or inunit == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
-            self._inunit = 'wavelength-angstrom'
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        if self._phystype == 'wavelength': #TODO:check
             self.f = self._flambda
-            self._scaling=1e-8
-        elif u == 'nm' or inunit == 'wavelength-nm':
-            self._inunit = 'wavelength-nm'
-            self.f = self._flambda
-            self._scaling=1e-7
-        elif u == 'microns' or u == 'um' or u == 'wavelength-micron':
-            self._inunit = 'wavelength-micron'
-            self.f = self._flambda
-            self._scaling=1e-4
-        elif inunit == 'm' or u == 'wavelength-m':
-            self._inunit = 'wavelength-m'
-            self.f = self._flambda
-            self._scaling=1e2
-        elif inunit == 'cm' or u == 'wavelength-cm':
-            self._inunit = 'wavelength-cm'
-            self.f = self._flambda
-            self._scaling=1
-        elif inunit == 'f' or inunit == 'nu' or u == 'hz' or u == 'frequency-hz':
-            self._inunit = 'frequency-Hz'
+        elif self._phystype == 'frequency':
             self.f = self._fnu
-            self._scaling=1
-        elif u == 'thz' or inunit == 'frequency-THz':
-            self._inunit = 'frequency-THz'
-            self.f = self._fnu
-            self._scaling=1e12
-        elif u == 'e' or inunit == 'energy-eV':
-            from .constants import ergperev
-            self._inunit = 'energy-eV'
+        elif self._phystype == 'energy':
             self.f = self._fen
-            self._scaling=ergperev
-        elif u == 'erg' or inunit == 'energy-erg':
-            self._inunit = 'energy-erg'
-            self.f = self._fen    
-            self._scaling=1
-        elif inunit == 'J' or inunit == 'energy-J':
-            self._inunit = 'energy-J'
-            self.f = self._fen    
-            self._scaling=1e-7
         else:
-            raise ValueError('unrecognized inunit')
-    inunit = property(_getInunit,_setInunit)
+            raise ValueError('unrecognized physical unit type!')
     
-    def _getOutunit(self):
-        return self._outunit
-    def _setOutunit(self,outunit):
-        outunit=' '.join(outunit.split()[:2])
-        u=outunit.lower()
-        if 'J' in outunit or 'joule' in u:
-            self._outunit='J'
-            self._enscale=1e-7
-        elif 'ev' in u or 'electronvolt' in u:
-            from .constants import ergperev
-            self._outunit='eV'
-            self._enscale=1/ergperev
-        elif 'surface brightness' in u or 'mag' in u or 'sb' in u:
-            raise NotImplementedError
-            self._outunit='mag'
-        else: # assume ergs as default for cgs
-            self._outunit='erg'
-            self._enscale=1
-            
-        if 'ang' in u:
-            self._outunit+=' angstroms^-2'
-            self._enscale*=1e-16
-        elif 'm' in u.replace('mag','').replace('nm','').replace('angstrom','').replace('cm',''):
-            self._outunit+=' m^-2'
-            self._enscale*=1e4
-        elif 'nm' in u:
-            self._outunit+=' nm^-2'
-            self._enscale*=1e-14
-        else: #assume cm for cgs as default
-            self._outunit+=' cm^-2'
-            self._enscale*=1
-            
-        self._outunit+=' %s^-1 s^-1'%self._inunit.split('-')[1]
         
-    outunit = property(_getOutunit,_setOutunit)
-    
     def _getArea(self):
         return self.A/4/pi
     def _setArea(self,area):
@@ -1262,17 +1185,36 @@ class BlackbodyModel(FunctionModel1D):
     def setFlux(self,radius,distance):
         """
         sets A so that the output is the flux at the specified distance from
-        a blackbody with the surface given by "area"
+        a spherical blackbody with the specified radius
         """
         ratio=radius/distance
         self.A=pi*ratio*ratio
+        
+    def getFlux(self,x,radius=None,distance=None):
+        if distance is None:
+            if radius is None:
+                pass
+            else:
+                distance = self.getFluxDistance(radius)
+                self.setFlux(radius,distance)
+        else:
+            if radius is None:
+                radius = self.getFluxRadius(distance)
+                self.setFlux(radius,distance)
+        
+            else:
+                self.setFlux(radius,distance)
+        
+        return self(x)
+        
     def getFluxRadius(self,distance):
         """
         determines the radius of a spherical blackbody at the specified distance
         assuming the flux is given by the model at the given temperature
         """
-        return (self.A*distance*distance/pi)**0.5 
-    def getFluxdistance(self,radius):
+        return (self.A*distance*distance/pi)**0.5
+     
+    def getFluxDistance(self,radius):
         """
         determines the distance to a spherical blackbody of the specified radius
         assuming the flux is given by the model at the given temperature
@@ -1311,8 +1253,6 @@ class BlackbodyModel(FunctionModel1D):
             a=2.821439 #constant from optimizing BB function
             peakval=a/h*k*self.T/self._scaling
             T=peakval*self._scaling*h/a/k
-        elif self.f == self._fen:
-            raise NotImplementedError
         else:
             raise RuntimeError('Should never see this - bug in BB code')
         if updatepars:

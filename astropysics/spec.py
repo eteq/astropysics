@@ -220,11 +220,12 @@ class HasSpecUnits(object):
             self.__newtype = newtype
             self.__oldtype = self._phystype
             
+            self._phystype = newtype
+            self._scaling = newscaling
+            self._unit = newunit
+            
             self._applyUnits(self.__xtrans,self.__xitrans,self.__xftrans,self.__xfinplace)
             
-            self._phystype = newtype
-            self._unit = newunit
-            self._scaling = newscaling
     unit = property(_getUnit,_setUnit)
 
 class Spectrum(HasSpecUnits):
