@@ -35,6 +35,7 @@ class Band(HasSpecUnits):
     *_getFWHM : return the FWHM of the band
     *_getx: return an array with the x-axis
     *_getS: return the photon sensitivity (shape should match x)
+    *_applyUnits: units support (see ``astrpoysics.spec.HasSpecUnits``)
     
     #the following can be optionally overriden:
     *alignBand(x): return the sensitivity of the Band interpolated to the 
@@ -113,15 +114,6 @@ class Band(HasSpecUnits):
         else:
             raise ValueError('unrecognized interpolation type')
     
-    #units support
-    def _unitGetX(self):
-        return self._getx()
-    def _unitSetX(self,val):
-        raise NotImplementedError
-    def _unitGetY(self):
-        return self._getS()
-    def _unitSetY(self,val):
-        raise NotImplementedError
     
     cen = property(lambda self:self._getCen())
     FWHM = property(lambda self:self._getFWHM())
@@ -396,13 +388,21 @@ class GaussianBand(Band):
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
         HasSpecUnits.__init__(self,unit)
+        self._unittrans = (lambda t:t,lambda t:t)
         
         self.name = name
         
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        self._unittrans = (xtrans,xftrans,xitrans)
+        self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
+        
     def _updateXY(self,mu,sigma,A,n,sigs):
-        self._x = np.linspace(-sigs*sigma,sigs*sigma,n)+mu
+        xtrans,xftrans,xitrans = self._unittrans
+        
+        x = np.linspace(-sigs*sigma,sigs*sigma,n)+mu
         xp = (self._x-mu)/sigma
-        self._y = A*np.exp(-xp*xp/2)
+        y = A*np.exp(-xp*xp/2)
+        self._x,self._y = xftrans(x,y)
         
     def _getSigs(self):
         return self._sigs
@@ -420,13 +420,13 @@ class GaussianBand(Band):
 
     @property
     def sigma(self):
-        return self._sigma
+        return self.unittrans[0](self._sigma)
     
     def _getCen(self):
-        return self._cen
+        return self.unittrans[0](self._cen)
     
     def _getFWHM(self):
-        return self._fwhm #=sigma*(8*log(2))**0.5
+        return self.unittrans[0](self._fwhm) #=sigma*(8*log(2))**0.5
     
     def _getx(self):
         return self._x
@@ -435,8 +435,10 @@ class GaussianBand(Band):
         return self._y
     
     def alignBand(self,x):
+        xtrans,xftrans,xitrans = self._unittrans
+        oldx = xitrans(x)
         xp = (x-self._cen)/self._sigma 
-        return self._A*np.exp(-xp*xp/2)
+        return xftrans(oldx,self._A*np.exp(-xp*xp/2))[1]
         
 class ArrayBand(Band):
     def __init__(self,x,S,copyonaccess=True,normalized=True,unit='angstroms',name=None):
@@ -468,6 +470,10 @@ class ArrayBand(Band):
         HasSpecUnits.__init__(self,unit)
         
         self.name = name
+        
+    #units support
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        sfinplace(self._x,self._S) #TODO:test
         
     def _computeMoments(self):
         from scipy.integrate import  simps as integralfunc

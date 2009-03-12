@@ -24,26 +24,38 @@ except ImportError: #support for earlier versions
 from .io import load_deimos_spectrum,load_deimos_templates,load_spylot_spectrum
 
 class HasSpecUnits(object):
-    #TODO:FIX!
+    """
+    Use this class as a mixin superclass for objects that have spectrum-like 
+    units (e.g. flux spectral density f_lambda/f_nu, luminosity spectral 
+    density, etc.).  It adds a property 'unit' that can be set 
+    
+    The following must be done by subclasses:
+    *override method _applyUnits(self,xtrans,xitrans,xftrans,xfinplace) - see method doc for details
+    *call HasSpecUnits.__init__(self,unit) in the class 
+    initializer where unit is the units of the initial input data
+    """
     __metaclass__ = ABCMeta
     
     def __init__(self,unit):
         self._phystype,self._unit,self._scaling = self._strToUnit(unit)
     
     @abstractmethod
-    def _unitGetX(self):
-        raise NotImplementedError
-    
-    @abstractmethod
-    def _unitSetX(self,val):
-        raise NotImplementedError
-    
-    @abstractmethod
-    def _unitGetY(self):
-        raise NotImplementedError
-    
-    @abstractmethod
-    def _unitSetY(self,val):
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        """
+        This method must be overridden by subclasses.  The overriding method
+        should use the xftrans OR xfinplace (not both) to convert
+        the old x-axis and flux axis into new x axes and flux values
+        
+        xtrans and xitrans are of the form newx = xtrans(oldx)
+        and oldx = xtrans(newx)
+        
+        xftrans is a function with the signature newx,newf = xftrans(oldx,oldf)
+        x is expected to be 1D, and f is expected to be either 1D or must have
+        last dimension equal to len(x)
+        
+        xfinplace(x,f) returns None but uses in-place operators to 
+        adjust the values of x and f
+        """
         raise NotImplementedError
     
     def _strToUnit(self,typestr):
@@ -129,19 +141,90 @@ class HasSpecUnits(object):
         
         return x/newscale,flux*fluxscale/newscale
     
+    def __convertUnitType(self,oldx,oldf,oldtype,newtype):
+        """
+        takes in x and f and returns a new x and f
+        """
+        from .constants import h,c
+        
+        if newtype == 'wavelength':
+            if oldtype == 'wavelength':
+                newf = oldf
+                newx = oldx
+            elif oldtype == 'frequency':
+                newf = oldx*oldx*oldf/c
+                newx = c/oldx
+            elif oldtype == 'energy':
+                newf = oldx*oldx*oldf/h/c
+                newx = h*c/oldx
+            else:
+                raise RuntimeError('Invalid newtype - this should be an unreachable code point')
+        elif newtype == 'frequency':
+            if oldtype == 'wavelength':
+                newf = oldx*oldx*oldf/c
+                newx = c/oldx
+            elif oldtype == 'frequency':
+                newf = oldf
+                newx = oldx
+            elif oldtype == 'energy':
+                newf = h*oldf
+                newx = oldx/h
+            else:
+                raise RuntimeError('Invalid newtype - this should be an unreachable code point')
+        elif newtype == 'energy':
+            if oldtype == 'wavelength':
+                newf = oldx*oldx*oldf/h/c
+                newx = h*c/oldx
+            elif oldtype == 'frequency':
+                newf = oldf/h
+                newx = h*oldx
+            elif oldtype == 'energy':
+                newf = oldf
+                newx = oldx
+            else:
+                raise RuntimeError('Invalid newtype - this should be an unreachable code point')
+        else:
+            raise RuntimeError('Invalid newtype - this should be an unreachable code point')
+        
+        return newx,newf
+    
+    def __xtrans(self,x):
+        newx,newf = self.__convertUnitType(x*self.__oldscale,0,self.__oldtype,self.__newtype)
+        return newx/self.__newscale
+    
+    def __xitrans(self,x):
+        newx,newf = self.__convertUnitType(x*self.__newscale,0,self.__newtype,self.__oldtype)
+        return newx/self.__oldscale
+    
+    def __xftrans(self,x,f):
+        newx,newf = self.__convertUnitType(x*self.__oldscale,f/self.__oldscale,self.__oldtype,self.__newtype)
+        #TODO: figure out why in-place doesnt work
+        #newx *= self.__rescalefactor
+        #newf /= self.__rescalefactor
+        return newx/self.__newscale,newf*self.__newscale
+    
+    def __xfinplace(self,x,f):
+        newx,newf = self.__convertUnitType(x*self.__oldscale,f/self.__oldscale,self.__oldtype,self.__newtype)
+        #newx *= self.__rescalefactor
+        #newf /= self.__rescalefactor
+        x[:] = newx/self.__newscale
+        f[:] = newf*self.__newscale
+    
     def _getUnit(self):
         return self._phystype+'-'+self._unit
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToUnit(typestr)
-        x,flux = self._convertType(self._phystype,newtype,self._scaling,newscaling)
-        self._unitSetX(x)
-        self._unitSetY(flux)
-        #self._x[:] = x
-        #self._flux[:] = flux
-        #self._err[:] = err
-        self._phystype = newtype
-        self._unit = newunit
-        self._scaling = newscaling
+        if not (newunit == self._unit and newscaling == self._scaling):
+            self.__newscale = newscaling
+            self.__oldscale = self._scaling
+            self.__newtype = newtype
+            self.__oldtype = self._phystype
+            
+            self._applyUnits(self.__xtrans,self.__xitrans,self.__xftrans,self.__xfinplace)
+            
+            self._phystype = newtype
+            self._unit = newunit
+            self._scaling = newscaling
     unit = property(_getUnit,_setUnit)
 
 class Spectrum(HasSpecUnits):
@@ -199,16 +282,14 @@ class Spectrum(HasSpecUnits):
         from copy import deepcopy
         return deepcopy(self)
     
-    #Units mapping methods
-    def _unitGetX(self):
-        return self._x
-    def _unitSetX(self,val):
-        self._x[:] = val
-    def _unitGetY(self):
-        return self._flux
-    def _unitSetY(self,val):
-        self._err[:] = self._err*val/self._flux
-        self._flux[:] = val
+    #units support
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        x,err = xftrans(self._x,self._err)
+        #x,flux = xftrans(self._x,self._flux)
+        xfinplace(self._x,self._flux)
+        self._err[:] = err
+        #self._x[:] = x
+        #self._flux[:] = flux
     
     
     #------------------------Properties--------------------------------->
