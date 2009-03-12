@@ -10,7 +10,7 @@ from __future__ import division
 from math import pi
 import numpy as np
 
-from .spec import HasSpecUnits
+from .spec import HasSpecUnits as _HasSpecUnits
 try:
     #requires Python 2.6
     from abc import ABCMeta
@@ -24,7 +24,7 @@ except ImportError: #support for earlier versions
 
 #<---------------------Classes------------------------------------------------->
 
-class Band(HasSpecUnits):
+class Band(_HasSpecUnits):
     """
     This class is the base of all photometric band objects.  Bands are expected
     to be immutable once created except for changes of units.
@@ -35,7 +35,7 @@ class Band(HasSpecUnits):
     *_getFWHM : return the FWHM of the band
     *_getx: return an array with the x-axis
     *_getS: return the photon sensitivity (shape should match x)
-    *_applyUnits: units support (see ``astrpoysics.spec.HasSpecUnits``)
+    *_applyUnits: units support (see ``astrpoysics.spec._HasSpecUnits``)
     
     #the following can be optionally overriden:
     *alignBand(x): return the sensitivity of the Band interpolated to the 
@@ -387,7 +387,7 @@ class GaussianBand(Band):
         self._sigs = sigs
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
-        HasSpecUnits.__init__(self,unit)
+        _HasSpecUnits.__init__(self,unit)
         self._unittrans = (lambda t:t,lambda t:t)
         
         self.name = name
@@ -467,7 +467,7 @@ class ArrayBand(Band):
         
         self._computeMoments()
         
-        HasSpecUnits.__init__(self,unit)
+        _HasSpecUnits.__init__(self,unit)
         
         self.name = name
         
@@ -1185,7 +1185,7 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
     return x,y,dx,dy,cmda
         
         
-#<---------------------Procedural/utility functions---------------------------->
+#<------------------------conversion functions--------------------------------->
     
 def UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed=False):
     """
@@ -1399,6 +1399,24 @@ def area_to_surface_brightness(m,area):
     mag/sq arc seconds
     """
     return m+2.5*np.log10(area)
+
+def intensity_to_flux(radius,distance):
+    """
+    this converts a specific intensity measurement to a flux assuming 
+    the source is a sphere of a specified radius at a specified
+    distance (in the same units)
+    """
+    ratio=radius/distance
+    return pi*ratio*ratio
+
+def flux_to_intensity(radius,distance):
+    """
+    this converts a flux measurement to a specific intensity assuming 
+    the source is a sphere of a specified radius at a specified
+    distance (in the same units)
+    """
+    ratio=radius/distance
+    return 1.0/(pi*ratio*ratio)
 
 ##Bell&DeJong & Blanton 03
 #_band_to_msun={'B':5.47,
@@ -1750,4 +1768,4 @@ bandwl = _BwlAdapter()
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
 bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
-del ABCMeta,abstractmethod,abstractproperty,HasSpecUnits #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,_HasSpecUnits #clean up namespace

@@ -40,9 +40,7 @@ secperyr=365.25*secperday#3.15576926e7
 secpergyr=secperyr*1e9
 pcpercm=1/3.08568025e18
 pcperly=1/3.26
-msolar=1.98892e33 #grams
-mearth=5.9742e27 #grams
-mjup=1.8986e30 #grams
+cmperau=1.49598e13
 
 
 #TODO:rethink flux units and adapt to BlackbodyModel

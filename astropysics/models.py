@@ -24,6 +24,8 @@ except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
+from .spec import HasSpecUnits as _HasSpecUnits
+
 
 class _Parameter(object):
     
@@ -1138,7 +1140,7 @@ class TwoPowerModel(FunctionModel1D):
     
     fxs=property(fget=_getFxs,fset=_setFxs)
     
-class BlackbodyModel(FunctionModel1D,HasSpectrumUnits):
+class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
     """
     a Planck blackbody radiation model.  
 
@@ -1146,17 +1148,26 @@ class BlackbodyModel(FunctionModel1D,HasSpectrumUnits):
     """
     from .constants import h,c,kb
     
-    def __init__(self,unit='wavelength'):
-        HasSpectrumUnits.__init__(self,unit)
+    def __init__(self,unit='wl'):
+        _HasSpecUnits.__init__(self,unit)
         self.unit = unit #need to explicitly set the unit to initialize the correct f
         self.stephanBoltzmannLaw = self._instanceSBLaw
         
     def f(self,x,A=1,T=5800):
-        raise NotImplementedError
+        x = x*self._scaling
+        if self._phystype == 'wavelength': 
+            val = self._flambda(x,A,T)
+        elif self._phystype == 'frequency':
+            val = self._fnu(x,A,T)
+        elif self._phystype == 'energy':
+            val = self._fen(x,A,T)
+        else:
+            raise ValueError('unrecognized physical unit type!')
+        return val*self._scaling
     
     def _flambda(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
-        return A*h*c*c*x**-5/(np.exp((h*c/(k*T*x)))-1)
+        return A*2*h*c*c*x**-5/(np.exp(h*c/(k*T*x))-1)
     
     def _fnu(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
@@ -1166,29 +1177,30 @@ class BlackbodyModel(FunctionModel1D,HasSpectrumUnits):
         return self._fnu(x,A,T)/self.h
     
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
-        if self._phystype == 'wavelength': #TODO:check
-            self.f = self._flambda
-        elif self._phystype == 'frequency':
-            self.f = self._fnu
-        elif self._phystype == 'energy':
-            self.f = self._fen
-        else:
-            raise ValueError('unrecognized physical unit type!')
+        pass #do nothing because the checking is done in the f-function
+#        if self._phystype == 'wavelength': #TODO:check
+#            self.f = self._flambda
+#        elif self._phystype == 'frequency':
+#            self.f = self._fnu
+#        elif self._phystype == 'energy':
+#            self.f = self._fen
+#        else:
+#            raise ValueError('unrecognized physical unit type!')
     
-        
-    def _getArea(self):
-        return self.A/4/pi
-    def _setArea(self,area):
-        self.A=area*4*pi
-    area = property(_getArea,_setArea)
+    
+    def setIntensity(self):
+        """
+        sets A so that the output is specific intensity/surface brightness
+        """
+        self.A = 1
     
     def setFlux(self,radius,distance):
         """
         sets A so that the output is the flux at the specified distance from
         a spherical blackbody with the specified radius
         """
-        ratio=radius/distance
-        self.A=pi*ratio*ratio
+        from .phot import intensity_to_flux
+        self.A = intensity_to_flux(radius,distance)
         
     def getFlux(self,x,radius=None,distance=None):
         if distance is None:
