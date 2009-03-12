@@ -10,8 +10,9 @@ from enthought.traits.api import HasTraits,on_trait_change,Instance,Float,\
                                  Property,Event,Array,Enum,TraitError
 from enthought.traits.ui.api import View,Group,HGroup,HFlow,Item,Handler
 from enthought.traits.ui.menu import ModalButtons
-from enthought.chaco.api import Plot,ArrayPlotData,HPlotContainer,ColorBar,LinearMapper,jet
-from enthought.chaco.tools.api import PanTool, ZoomTool
+from enthought.chaco.api import Plot,ArrayPlotData,HPlotContainer,ColorBar,\
+                            LinearMapper,jet,LassoOverlay,ColormappedSelectionOverlay
+from enthought.chaco.tools.api import PanTool, ZoomTool,LassoSelection
 from enthought.enable.component_editor import ComponentEditor
 
 from ..phot import CMDAnalyzer
@@ -183,23 +184,41 @@ class SpecTarget(HasTraits):
         self.updategastars = True
                                   
         cmdplot = Plot(self.data,resizable='hv')
-        cmdplot.plot(('x','y','pri'),name='target_mags',type='cmap_scatter',marker='dot',marker_size=1,color_mapper=jet)
+        objplotcmd = cmdplot.plot(('x','y','pri'),name='target_mags',type='cmap_scatter',marker='dot',marker_size=1,color_mapper=jet)[0]
         cmdplot.plot(('fidx','fidy'),name='fid_mags',type='line',color='black')
         cmdplot.plot(('gx','gy'),name='guide_mags',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=5)  
         cmdplot.plot(('ax','ay'),name='align_mags',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=4)
-        cmdplot.tools.append(PanTool(cmdplot))
-        cmdplot.tools.append(ZoomTool(cmdplot))  
+        cmdplot.tools.append(PanTool(cmdplot,drag_button='right'))
+        cmdplot.tools.append(ZoomTool(cmdplot)) 
+        
+        
+        
         
         locplot = Plot(self.locs,resizable='hv')
-        locplot.plot(('ra','dec','pri'),name='target_locs',type='cmap_scatter',marker_size=2,color_mapper=jet)
+        objplotloc = locplot.plot(('ra','dec','pri'),name='target_locs',type='cmap_scatter',marker_size=2,color_mapper=jet)[0]
         locplot.plot(('centerx','centery'),name='cen_locs',type='scatter',color='black',marker='cross',marker_size=10,line_width=4)
         locplot.plot(('boxx','boxy'),name='box_locs',type='line',color='black',line_width=2)
         locplot.plot(('gra','gdec'),name='guide_locs',type='scatter',color='gray',marker='inverted_triangle',outline_color='red',marker_size=5)
         locplot.plot(('ara','adec'),name='align_locs',type='scatter',color='black',marker='diamond',outline_color='red',marker_size=5)
-        locplot.tools.append(PanTool(locplot))
+        locplot.tools.append(PanTool(locplot,drag_button='right'))
         locplot.tools.append(ZoomTool(locplot))  
         
         cb = ColorBar(index_mapper=LinearMapper(range=cmdplot.color_mapper.range),color_mapper=cmdplot.color_mapper,resizable='v',width=30,padding=5)
+        
+        ls1 = LassoSelection(objplotcmd,selection_datasource=objplotcmd.color_data)
+        objplotcmd.tools.append(ls1)
+        objplotcmd.overlays.append(LassoOverlay(objplotcmd,lasso_selection=ls1))
+        objplotcmd.active_tool = ls1
+        ls1.on_trait_change(self._selection_changed,'selection_changed')
+        ls1.on_trait_change(self._selection_completed,'selection_completed')
+        objplotcmd.overlays.append(ColormappedSelectionOverlay(objplotcmd,selection_type='mask',selection_datasource=objplotcmd.color_data))
+        
+        ls2 = LassoSelection(objplotloc,selection_datasource=objplotloc.index)
+        objplotloc.tools.append(ls2)
+        objplotloc.overlays.append(LassoOverlay(objplotloc,lasso_selection=ls2))
+        objplotloc.active_tool = ls2
+        ls2.on_trait_change(self._selection_changed,'selection_changed')
+        ls2.on_trait_change(self._selection_completed,'selection_completed')
         
         self.plotcontainer = HPlotContainer(use_backbuffer=True)
         self.locplot = locplot
@@ -218,6 +237,21 @@ class SpecTarget(HasTraits):
         self.priband = self.yax #must be done after data is set
         self._cmda_late_changed() #clean things up in case random stuff changes
         self._masktype_changed(self.masktype) #call to intialize default mask maker
+        
+    def _selection_changed(self,obj,name,new):
+        cds = (self.cmplot.plots['target_mags'][0].color_data,self.locplot.plots['target_locs'][0].color_data)
+        datasource = obj.selection_datasource   
+        targds = cds[1] if cds[0] == datasource else cds[0]
+        
+        mask = datasource.metadata['selection'].astype(bool)
+        targds.set_mask(mask)
+        
+    def _selection_completed(self,obj,name,new):
+        cds = (self.cmplot.plots['target_mags'][0].color_data,self.locplot.plots['target_locs'][0].color_data)
+        datasource = obj.selection_datasource   
+        targds = cds[1] if cds[0] == datasource else cds[0]
+        
+        targds.set_mask(None)
         
     def _maskfn_changed(self):
         self.dsimready = False
