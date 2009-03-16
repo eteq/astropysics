@@ -759,7 +759,7 @@ def radec_str_to_decimal(ra,dec):
         ra,dec = ras,decs
     return ra,dec
 
-def match_coords(a1,b1,a2,b2,eps=1,multi = False):
+def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     """
     Match one set of coordinates to another within a tolerance eps
     e.g. ra1,dec1,ra2,dec2
@@ -785,9 +785,9 @@ def match_coords(a1,b1,a2,b2,eps=1,multi = False):
         if multi == 'full':
             return matches.T
         elif multi == 'count':
-            return np.sum(matches,axis=1),np.sum(matches,axis=0) 
+            return np.sum(np.any(matches,axis=1)),np.sum(np.any(matches,axis=0)) 
         elif multi == 'index':
-            return [np.where(m)[0] for m in matches],[np.where(m)[0] for m in matches.T]
+            return np.where(matches)
         elif multi == 'warn':
             s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
             from warnings import warn
