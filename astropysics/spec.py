@@ -579,7 +579,10 @@ class Spectrum(HasSpecUnits):
             return [b.computeMag(self,**kwargs) for b in bands]
         else:
             return [b.computeFlux(self,**kwargs) for b in bands]
-        
+    
+    
+    _rgbsensitivity = (1,1,1) #this is adjusted to a blackbody after the Spectrum class is created
+    
     def rgbEyeColor(self):
         """
         this uses the 'eye' group in phot.bands to convert a spectrum to
@@ -592,12 +595,14 @@ class Spectrum(HasSpecUnits):
         if len(eyed) != 3:
             raise ValueError('eye bands are not length 3')
         eyefluxes = np.array([b.computeFlux(spec) for b in sorted(eyed.values())])
+        eyefluxes = eyefluxes[::-1] #b,g,r -> r,g,b
+        
+        #now normalize by eye sensitivities -- default is computed by assuming
+        #a T=5800 blackbody gives (1,1,1)
+        eyefluxes /= self._rgbsensitivity
+        
         maxe = eyefluxes.max()
         eyefluxes /= maxe
-        eyefluxes = eyefluxes[::-1] #b,g,r -> r,g,b
-        #now normalize by eye sensitivities computed by assuming a T=5800 
-        #blackbody should give (1,1,1)
-        eyefluxes *= (1,1.1601262238653733,1.6008274101905282) 
         
         return tuple(eyefluxes)
         
@@ -646,8 +651,7 @@ class Spectrum(HasSpecUnits):
         plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
             
         return res
-        
-    
+
     
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """

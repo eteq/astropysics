@@ -189,6 +189,7 @@ class Band(_HasSpecUnits):
             kwargs['interpolation'] = 'linear'
             
         return self.__interp(self.x,x,y,kwargs['interpolation'])
+        
     
     def computeFlux(self,spec,interpolation='linear',aligntoband=None):
         """
@@ -200,7 +201,43 @@ class Band(_HasSpecUnits):
         two resolutions will be left unchanged 
         """
         from scipy.integrate import simps as integralfunc
-        from .constants import c
+        
+        if aligntoband is None:
+            aligntoband = self.x.size > spec.x.size
+        
+        if aligntoband:
+            x = self.x
+            S = self.S
+            flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+            units = self.unit
+            
+        else:
+            x = spec.x
+            S = self.alignBand(spec)
+            flux = spec.flux
+            units = spec.unit
+            
+        y = S*flux
+        if 'wavelength' in units:
+            y /= x
+            Snorm = S/x
+        else:
+            y *= x
+            Snorm = S*x
+                
+        return integralfunc(y,x)/integralfunc(Snorm,x)
+    
+    def computeMag(self,spec,interpolation='linear',aligntoband=None):
+        """
+        Compute the magnitude of the supplied Spectrum in this band using the 
+        band's ``zeropoint`` attribute
+        
+        the Spectrum is aligned to the band if aligntoband is True, or vice 
+        versa, otherwise, using the specified interpolation (see Band.alignBand
+        for interpolation options).  If aligntoband is None, the higher of the
+        two resolutions will be left unchanged 
+        """
+        from scipy.integrate import simps as integralfunc
         
         if aligntoband is None:
             aligntoband = self.x.size > spec.x.size
@@ -208,30 +245,20 @@ class Band(_HasSpecUnits):
         if aligntoband:
             x = self.x
             y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
-            if 'wavelength' in self.unit:
-                y/=(x*c)
-            else:
-                y*=x
-                #TODO:check energy factor
+            units = self.unit
+            
         else:
             x = spec.x
             y = self.alignBand(spec)*spec.flux
-            if 'wavelength' in spec.unit:
-                y/=(x*c)
-            else:
-                y*=x
-                #TODO:check energy factor
-        return integralfunc(y,x)
-    
-    def computeMag(self,*args,**kwargs):
-        """
-        Compute the magnitude of the supplied Spectrum in this band using the 
-        band's ``zeropoint`` attribute
+            units = spec.unit
+            
+        if 'wavelength' in units:
+            y/=x
+        else:
+            y*=x
+            #TODO:check energy factor
         
-        args and kwargs are the same as those for computeFlux
-        """
-        flux = self.computeFlux(*args,**kwargs)
-        return -2.5*np.log10(flux)-self.zeropoint
+        return -2.5*np.log10(integralfunc(y,x))-self.zeropoint
     
     def computeZptFromSpectrum(self,*args,**kwargs):
         """
@@ -1749,7 +1776,7 @@ def __load_human_eye():
     return d
 
 
-            
+#register all the built-in bands
 bands = _BandRegistry()
 bands.register(__load_human_eye(),'eye')
 d,dp = __load_ugriz()
@@ -1758,6 +1785,19 @@ bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
 
+#set the blackbody eye sensitivity assuming a T=5800 blackbody
+from .spec import Spectrum
+def __generateRGBSensTuple():
+        from .models import BlackbodyModel
+        from .phot import bands
+
+        x=np.linspace(3000,9000,1024)
+        bm = BlackbodyModel(T=5800)
+        spec = Spectrum(x,bm(x))
+        eyefluxes = np.array(spec.rgbEyeColor())
+        return tuple(eyefluxes)
+Spectrum._rgbsensitivity = __generateRGBSensTuple()
+del Spectrum
 
 class _BwlAdapter(dict): 
     def __getitem__(self,key):
