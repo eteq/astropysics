@@ -1154,7 +1154,7 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
         self.stephanBoltzmannLaw = self._instanceSBLaw
         
     def f(self,x,A=1,T=5800):
-        x = x*self._scaling
+        x = x*self._xscaling
         if self._phystype == 'wavelength': 
             val = self._flambda(x,A,T)
         elif self._phystype == 'frequency':
@@ -1163,7 +1163,7 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
             val = self._fen(x,A,T)
         else:
             raise ValueError('unrecognized physical unit type!')
-        return val*self._scaling
+        return val*self._xscaling
     
     def _flambda(self,x,A=1,T=5800):
         h,c,k=self.h,self.c,self.kb
@@ -1237,10 +1237,10 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
         h,k = self.h,self.kb
         if 'wavelength' in self.unit:
             b = .28977685 #cm * K
-            peakval = b/self.T/self._scaling
+            peakval = b/self.T/self._xscaling
         elif 'frequency' in self.unit:
             a=2.821439 #constant from optimizing BB function
-            peakval=a/h*k*self.T/self._scaling
+            peakval=a/h*k*self.T/self._xscaling
         elif 'energy' in self.unit:
             raise NotImplementedError
         else:
@@ -1260,11 +1260,11 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
         h,k = self.h,self.kb
         if self.f == self._flambda:
             b = .28977685 #cm * K
-            T = b/peakval/self._scaling
+            T = b/peakval/self._xscaling
         elif self.f == self._fnu:
             a=2.821439 #constant from optimizing BB function
-            peakval=a/h*k*self.T/self._scaling
-            T=peakval*self._scaling*h/a/k
+            peakval=a/h*k*self.T/self._xscaling
+            T=peakval*self._xscaling*h/a/k
         else:
             raise RuntimeError('Should never see this - bug in BB code')
         if updatepars:

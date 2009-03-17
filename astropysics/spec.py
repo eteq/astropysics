@@ -37,7 +37,7 @@ class HasSpecUnits(object):
     __metaclass__ = ABCMeta
     
     def __init__(self,unit):
-        self._phystype,self._unit,self._scaling = self._strToUnit(unit)
+        self._phystype,self._unit,self._xscaling = self._strToUnit(unit)
     
     @abstractmethod
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
@@ -214,14 +214,14 @@ class HasSpecUnits(object):
         return self._phystype+'-'+self._unit
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToUnit(typestr)
-        if not (newunit == self._unit and newscaling == self._scaling):
+        if not (newunit == self._unit and newscaling == self._xscaling):
             self.__newscale = newscaling
-            self.__oldscale = self._scaling
+            self.__oldscale = self._xscaling
             self.__newtype = newtype
             self.__oldtype = self._phystype
             
             self._phystype = newtype
-            self._scaling = newscaling
+            self._xscaling = newscaling
             self._unit = newunit
             
             self._applyUnits(self.__xtrans,self.__xitrans,self.__xftrans,self.__xfinplace)
@@ -392,6 +392,23 @@ class Spectrum(HasSpecUnits):
             self.unit = oldunit
         
         return res
+    
+    def getPhotonFlux(self):
+        """
+        returns flux adjusted to represent photons s^-1 cm^-2 xunit^-1
+        """
+        from .constants import h,c
+        x = self.x*self._xscaling
+        if 'wavelength' in self.unit:
+            factor = x/h/c
+        elif 'fasd' in self.unit:
+            factor = 1/h/x
+        elif 'energy' in self.unit:
+            factor = 1/x
+        else:
+            raise ValueError('Unrecognized unit for photon conversion')
+        
+        return factor*self.flux
             
     def getDx(self,mean=True):
         """

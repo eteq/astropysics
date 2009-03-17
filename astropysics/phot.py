@@ -48,7 +48,7 @@ class Band(_HasSpecUnits):
     #set default units to angstroms
     _phystype = 'wavelength'
     _unit = 'angstrom'
-    _scaling = 1e-8
+    _xscaling = 1e-8
     
     @abstractmethod
     def __init__(self):
