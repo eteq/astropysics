@@ -14,6 +14,9 @@ except ImportError:
     from warnings import warn
     warn('pyfits not found - all FITS-related IO will not work')
     
+    
+#<-----------------------Internal to package----------------------------------->
+    
 def _get_package_data(dataname):
     """
     Use this function to load data files distributed with astropysics in the 
@@ -29,6 +32,11 @@ def _get_package_data(dataname):
     path = dirname(rootfile)+'/data/'+dataname
     return get_loader(rootname).get_data(path)
 
+#<------------------------Classes---------------------------------------------->
+
+
+
+#<--------------------------Spectrum loaders----------------------------------->
 
 def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing=None):
     """
@@ -39,7 +47,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     import pyfits
     from .spec import Spectrum
     if 'spec1d' not in fn or 'fits' not in fn:
-        raise ValueError('loaded file must be a 1d spectrum from deep pipeline')
+        raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
     
     if extraction == 'horne':
         extname = 'HORNE'
@@ -141,7 +149,7 @@ def load_deimos_templates(fns):
                     
         finally:
             f.close()
-    
+            
     return dict(((k,Spectrum(xd[k],tempd[k])) for k in tempd))
     
 def load_spylot_spectrum(s,bandi):

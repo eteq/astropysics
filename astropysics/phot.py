@@ -138,20 +138,29 @@ class Band(_HasSpecUnits):
     name = property(_getName,_setName)
     _name = None #default is nameless
     
-    zeropoint = 0 #zeropoint can be freely modified
+    zeropoint = 0 #magnitude zeropoint
+    zpflux = 1 #flux from an object with mag=0
     
-    #TODO:units on alignment!
     def alignBand(self,x,interpolation='linear'):
         """
         interpolates the Band sensitivity onto the provided x-axis
         
         x can either be an array with the wanted x-axis or a ``Spectrum``
+        if it is a spectrum, the units for the band will be converted to 
+        the Spectrum units before alignment
         
         interpolation can be 'linear' or 'spline'
         """
-        if hasattr(x,'x') and hasattr(x,'flux'):
+        if hasattr(x,'x') and hasattr(x,'unit'):
+            units = x.unit
             x = x.x
-        return self.__interp(x,self.x,self.S,interpolation)
+        oldunit = self.unit
+        try:
+            self.unit = units
+            sorti = np.argsort(self.x)
+            return self.__interp(x,self.x[sorti],self.S[sorti],interpolation)
+        finally:
+            self.unit = oldunit
         
     def alignToBand(self,*args,**kwargs):
         """
@@ -161,7 +170,7 @@ class Band(_HasSpecUnits):
         *alignToBand(arr): assume that the provided sequence fills the band and
         interpolate it onto the band coordinates
         *alignToBand(specobj): if specobj is of type ``Spectrum``, the ``Spectrum``
-        will flux will be returned aligned to the band
+        flux will be returned aligned to the band, in the units of the Band
         *alignToBand(x,y): the function with coordinates (x,y) will be aligned
         to the Band x-axis
         
@@ -178,8 +187,9 @@ class Band(_HasSpecUnits):
                 y = np.array(specin,copy=False)
                 x = np.linspace(self.x[0],self.x[-1])
             elif hasattr(specin,'x') and hasattr(specin,'flux'):
-                x = specin.x
-                y = specin.flux
+                x,y = specin.getUnitFlux(self.unit)
+                #x = specin.x
+                #y = specin.flux
         elif len(args) == 2:
             x,y = args
         else:
@@ -187,56 +197,57 @@ class Band(_HasSpecUnits):
         
         if 'interpolation' not in kwargs:
             kwargs['interpolation'] = 'linear'
-            
-        return self.__interp(self.x,x,y,kwargs['interpolation'])
+        
+        sorti = np.argsort(x)    
+        return self.__interp(self.x,x[sorti],y[sorti],kwargs['interpolation'])
         
     
-    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
+    def computeFlux(self,*args,**kwargs):
         """
         compute the flux in this band for the supplied Spectrum
         
-        the Spectrum is aligned to the band if aligntoband is True, or vice 
-        versa, otherwise, using the specified interpolation (see Band.alignBand
-        for interpolation options).  If aligntoband is None, the higher of the
-        two resolutions will be left unchanged 
+        the flux is inferred from the ``Band.zpflux`` value - the 
+        total flux in the band in an object with mag = 0
+        
+        args and kwargs go into Band.computeMag
         """
-        from scipy.integrate import simps as integralfunc
+        return (10**(self.computeMag(*args,**kwargs)/-2.5))/self.zpflux
         
-        if aligntoband is None:
-            aligntoband = self.x.size > spec.x.size
+#    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
+#        """
+#        compute the flux in this band for the supplied Spectrum
         
-        if aligntoband:
-            units = self.unit
-            oldunit = spec.unit
-            try:
-                spec.unit = units
-                x = self.x
-                S = self.S
-                flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
-            finally:
-                spec.unit = oldunit
+#        the Spectrum is aligned to the band if aligntoband is True, or vice 
+#        versa, otherwise, using the specified interpolation (see Band.alignBand
+#        for interpolation options).  If aligntoband is None, the higher of the
+#        two resolutions will be left unchanged 
+#        """
+#        from scipy.integrate import simps as integralfunc
+        
+#        if aligntoband is None:
+#            aligntoband = self.x.size > spec.x.size
+        
+#        if aligntoband:
+#            x = self.x
+#            S = self.S
+#            flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+#            units = self.unit
+#        else:
+#            x = spec.x
+#            S = self.alignBand(spec)
+#            flux = spec.flux
+#            units = spec.unit
             
-        else:
-            units = spec.unit
-            oldunit = self.unit
-            try:
-                self.unit = units
-                x = spec.x
-                S = self.alignBand(spec)
-                flux = spec.flux
-            finally:
-                self.unit = oldunit
+#        y = S*flux
+#        if 'wavelength' in units:
+#            y *= x
+#            Snorm = S*x
+#        else:
+#            y /= x
+#            Snorm = S/x
             
-        y = S*flux
-        if 'wavelength' in units:
-            y *= x
-            Snorm = S*x
-        else:
-            y /= x
-            Snorm = S/x
-            
-        sorti=np.argsort(x)        
-        return integralfunc(y[sorti],x[sorti])/integralfunc(Snorm[sorti],x[sorti])
+#        sorti=np.argsort(x)        
+#        return integralfunc(y[sorti],x[sorti])/integralfunc(Snorm[sorti],x[sorti])
     
     def computeMag(self,spec,interpolation='linear',aligntoband=None):
         """
@@ -247,35 +258,41 @@ class Band(_HasSpecUnits):
         versa, otherwise, using the specified interpolation (see Band.alignBand
         for interpolation options).  If aligntoband is None, the higher of the
         two resolutions will be left unchanged 
+        
+        the spectrum units will be converted to match those of th band
+        
+        the spectrum can be an array, but then aligntoband and 
+        interpolation are ignored and must match the band's x-axis
         """
+        from operator import isSequenceType
         from scipy.integrate import simps as integralfunc
-        
-        if aligntoband is None:
-            aligntoband = self.x.size > spec.x.size
-        
-        if aligntoband:
+        if isSequenceType(spec):
+            x = self.x
+            y = np.array(spec)
+            if y.shape != x.shape:
+                raise ValueError('input array shape does not match Band x-axis')
             units = self.unit
-            oldunit = spec.unit
+        elif hasattr(spec,'x') and hasattr(spec,'flux'):
+            oldunits = spec.unit
             try:
-                spec.unit = units
-                x = self.x
-                y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+                spec.unit = self.unit
+                if aligntoband is None:
+                    lx,px = self.x,spec.x
+                    aligntoband = lx.size/(lx.max()-lx.min()) > px.size/(px.max()-px.min())
+                
+                if aligntoband:
+                    x = self.x
+                    y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+                    
+                else:
+                    x = spec.x.copy()
+                    y = self.alignBand(spec)*spec.flux
             finally:
-                spec.unit = oldunit
-            
-            
+                spec.unit=oldunits
         else:
-            units = spec.unit
-            oldunit = self.unit
-            try:
-                self.unit = units
-                x = spec.x
-                y = self.alignBand(spec)*spec.flux
-            finally:
-                self.unit = oldunit
+            raise ValueError('unrecognized input spectrum')
             
-            
-        if 'wavelength' in units:
+        if 'wavelength' in self.unit:
             y*=x
         else:
             y/=x
@@ -287,13 +304,21 @@ class Band(_HasSpecUnits):
     def computeZptFromSpectrum(self,*args,**kwargs):
         """
         use the supplied Spectrum as a zero-point Spectrum to 
-        define the zero point of this band
+        define the zero point of this band as well as the flux 
+        for that zero-point
         
         args and kwargs are the same as those for computeMag
         """
         self.zeropoint = 0
+        self.zptflux = 1
+        fluxfactor = self.computeFlux(np.ones_like(self.x)) #scale by this factor to get actual flux
+        
         mag = self.computeMag(*args,**kwargs)
+        flux = 10**(mag/-2.5)
+        
         self.zeropoint = mag
+        self.zptflux = flux/fluxfactor
+        
     
     def plot(self,spec=None,**kwargs):
         """
@@ -439,7 +464,11 @@ class ArrayBand(Band):
         
     #units support
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
-        sfinplace(self._x,self._S) #TODO:test
+        xfinplace(self._x,self._S) 
+        mx = self._S.max()
+        self._S/=mx
+        if not self._norm:
+            self._S/=self._N
         
     def _computeMoments(self):
         from scipy.integrate import  simps as integralfunc
@@ -1900,7 +1929,7 @@ bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
 #default all to AB mags
-set_standard_zeropoints('AB','all')
+set_zeropoint_system('AB','all')
 
 #set the Spectrum eye sensitivity assuming a T=5800 blackbody
 from .spec import Spectrum

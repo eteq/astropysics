@@ -1235,13 +1235,13 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
     
     def _getPeak(self):
         h,k = self.h,self.kb
-        if self.f == self._flambda:
+        if 'wavelength' in self.unit:
             b = .28977685 #cm * K
             peakval = b/self.T/self._scaling
-        elif self.f == self._fnu:
+        elif 'frequency' in self.unit:
             a=2.821439 #constant from optimizing BB function
             peakval=a/h*k*self.T/self._scaling
-        elif self.f == self._fen:
+        elif 'energy' in self.unit:
             raise NotImplementedError
         else:
             raise RuntimeError('Should never see this - bug in BB code')

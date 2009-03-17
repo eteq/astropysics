@@ -368,6 +368,31 @@ class Spectrum(HasSpecUnits):
         except AttributeError:
             return False
     
+    def getUnitFlux(self,units,err=False):
+        """
+        returns x and flux of this spectrum in a new unit system without 
+        changing the selected unit
+        
+        err can be False, True or 'ivar'
+        
+        if err is False, returns x,flux
+        if err is True, returns x,flux,err
+        if err is 'ivar', returns x,flux,ivar
+        """
+        oldunit = self.unit
+        try:
+            self.unit = units
+            if err == 'ivar':
+                res = self.x.copy(),self.flux.copy(),self.ivar.copy()
+            elif err:
+                res = self.x.copy(),self.flux.copy(),self.err.copy()
+            else:
+                res = self.x.copy(),self.flux.copy()
+        finally:
+            self.unit = oldunit
+        
+        return res
+            
     def getDx(self,mean=True):
         """
         get the spacing of the x-axis, which is always 1 element shorter than x
