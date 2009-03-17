@@ -38,9 +38,12 @@ ergperev=1.60217646e-12
 secperday=86400 #IAU standard
 secperyr=365.25*secperday#3.15576926e7
 secpergyr=secperyr*1e9
-pcpercm=1/3.08568025e18
-pcperly=1/3.26
+cmperpc=3.08568025e18
+pcpercm=1.0/cmperpc
+lyperpc=3.26
+pcperly=1.0/lyperpc
 cmperau=1.49598e13
+aupercm=1.0/cmperau
 
 
 #TODO:rethink flux units and adapt to BlackbodyModel

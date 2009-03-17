@@ -206,26 +206,37 @@ class Band(_HasSpecUnits):
             aligntoband = self.x.size > spec.x.size
         
         if aligntoband:
-            x = self.x
-            S = self.S
-            flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
             units = self.unit
+            oldunit = spec.unit
+            try:
+                spec.unit = units
+                x = self.x
+                S = self.S
+                flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+            finally:
+                spec.unit = oldunit
             
         else:
-            x = spec.x
-            S = self.alignBand(spec)
-            flux = spec.flux
             units = spec.unit
+            oldunit = self.unit
+            try:
+                self.unit = units
+                x = spec.x
+                S = self.alignBand(spec)
+                flux = spec.flux
+            finally:
+                self.unit = oldunit
             
         y = S*flux
         if 'wavelength' in units:
-            y /= x
-            Snorm = S/x
-        else:
             y *= x
             Snorm = S*x
-                
-        return integralfunc(y,x)/integralfunc(Snorm,x)
+        else:
+            y /= x
+            Snorm = S/x
+            
+        sorti=np.argsort(x)        
+        return integralfunc(y[sorti],x[sorti])/integralfunc(Snorm[sorti],x[sorti])
     
     def computeMag(self,spec,interpolation='linear',aligntoband=None):
         """
@@ -243,29 +254,42 @@ class Band(_HasSpecUnits):
             aligntoband = self.x.size > spec.x.size
         
         if aligntoband:
-            x = self.x
-            y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
             units = self.unit
+            oldunit = spec.unit
+            try:
+                spec.unit = units
+                x = self.x
+                y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
+            finally:
+                spec.unit = oldunit
+            
             
         else:
-            x = spec.x
-            y = self.alignBand(spec)*spec.flux
             units = spec.unit
+            oldunit = self.unit
+            try:
+                self.unit = units
+                x = spec.x
+                y = self.alignBand(spec)*spec.flux
+            finally:
+                self.unit = oldunit
+            
             
         if 'wavelength' in units:
-            y/=x
-        else:
             y*=x
+        else:
+            y/=x
             #TODO:check energy factor
-        
-        return -2.5*np.log10(integralfunc(y,x))-self.zeropoint
+            
+        sorti=np.argsort(x)
+        return -2.5*np.log10(integralfunc(y[sorti],x[sorti]))-self.zeropoint
     
     def computeZptFromSpectrum(self,*args,**kwargs):
         """
         use the supplied Spectrum as a zero-point Spectrum to 
         define the zero point of this band
         
-        args and kwargs are the same as those for computeFlux
+        args and kwargs are the same as those for computeMag
         """
         self.zeropoint = 0
         mag = self.computeMag(*args,**kwargs)
@@ -302,102 +326,17 @@ class Band(_HasSpecUnits):
             plt.ylabel('Spec flux or S*max(spec)')
             if kwargs.pop('leg',True):
                 plt.legend(loc=0)
+            mi,ma=band.x.min(),band.x.max()
+            rng = ma-mi
+            plt.xlim(mi-rng/3,ma+rng/3)
         else:
             plt.plot(band.x,band.S,**kwargs)
             plt.ylabel('$S$')
             plt.ylim(0,band.S.max())
+            
         plt.title('' if self.name is None else self.name)
         plt.xlabel('$\\lambda$')
-        
-def plot_band_group(bandgrp,**kwargs):
-    """
-    this will plot a group of bands on the same plot
-    
-    group can be a sequnce of bands, strings or a dictionary mapping names to
-    bands
-    
-    kwargs go into Band.plot except for:
-    *clf : clear figure before plotting
-    *leg : show legend with band names
-    *unit : unit to use on plots (defaults to angstroms)
-    *c : (do not use)
-    *spec : (do not use)
-    """
-    from matplotlib import pyplot as plt
-    from operator import isMappingType,isSequenceType
-    
-    
-    
-    if isMappingType(bandgrp):
-        names = bandgrp.keys()
-        bs = bandgrp.values()
-    else:
-        names,bs = [],[]
-        for b in bandgrp:
-            if type(b) is str:
-                names.append(b)
-                bs.append(bands[b])
-            else:
-                names.append(b.name)
-                bs.append(b)
-    d = dict([(n,b) for n,b in  zip(names,bs)])
-    sortednames = sorted(d,key=d.get)
-    
-    clf = kwargs.pop('clf',True)
-    leg = kwargs.pop('leg',True)
-    kwargs.pop('spec',None)
-    cs = kwargs.pop('c',None)
-    unit = kwargs.pop('unit','wl')
-        
-    try:
-        oldunits = [b.unit for b in bs]
-        for b in bs:
-            b.unit = unit
-    except NotImplementedError:
-        pass
-    
-    
-    if clf:
-        plt.clf()
-    
-    bluetored = 'wavelength' in bs[0].unit
-    
-    if cs is None:
-        
-        x = np.arange(len(bs))
-        b = 1-x*2/(len(x)-1)
-        g = 1-2*np.abs(0.5-x/(len(x)-1))
-        g[g>0.5] = 0.5
-        r = (x*2/(len(x)-1)-1)
-        r[r<0] = b[b<0] = 0
-        
-        if not bluetored:
-            b,r = r,b
-        cs = np.c_[r,g,b]
-        
-        #custom coloring for UBVRI and ugriz
-        if len(sortednames) == 5:
-            if sortednames[:3] == ['U','B','V']:
-                cs = ['c','b','g','r','m']
-            elif np.all([(n in sortednames[i]) for i,n in enumerate(('u','g','r','i','z'))]):
-                cs = ['c','g','r','m','k']
-        
-    
-    kwargs['clf'] = False
-    for n,c in zip(sortednames,cs):
-        kwargs['label'] = n
-        kwargs['c'] = c
-        d[n].plot(**kwargs)
-    
-    if leg:
-        plt.legend(loc=0)
-    
-    try:
-        for u,b in zip(oldunits,bs):
-            b.unit = u
-    except (NameError,NotImplementedError),e:
-        pass
-    
+            
 
 class GaussianBand(Band):
     def __init__(self,center,width,A=1,sigs=6,n=100,unit='angstroms',name=None):
@@ -589,6 +528,157 @@ class FileBand(ArrayBand):
             raise ValueError('unrecognized type')
         
         ArrayBand.__init__(self,x,S)
+        
+        
+def plot_band_group(bandgrp,**kwargs):
+    """
+    this will plot a group of bands on the same plot
+    
+    group can be a sequnce of bands, strings or a dictionary mapping names to
+    bands
+    
+    kwargs go into Band.plot except for:
+    *clf : clear figure before plotting
+    *leg : show legend with band names
+    *unit : unit to use on plots (defaults to angstroms)
+    *c : (do not use)
+    *spec : (do not use)
+    """
+    from matplotlib import pyplot as plt
+    from operator import isMappingType,isSequenceType
+    
+    
+    
+    if isMappingType(bandgrp):
+        names = bandgrp.keys()
+        bs = bandgrp.values()
+    else:
+        names,bs = [],[]
+        for b in bandgrp:
+            if type(b) is str:
+                names.append(b)
+                bs.append(bands[b])
+            else:
+                names.append(b.name)
+                bs.append(b)
+    d = dict([(n,b) for n,b in  zip(names,bs)])
+    sortednames = sorted(d,key=d.get)
+    
+    clf = kwargs.pop('clf',True)
+    leg = kwargs.pop('leg',True)
+    kwargs.pop('spec',None)
+    cs = kwargs.pop('c',None)
+    unit = kwargs.pop('unit','wl')
+        
+    try:
+        oldunits = [b.unit for b in bs]
+        for b in bs:
+            b.unit = unit
+    except NotImplementedError:
+        pass
+    
+    
+    if clf:
+        plt.clf()
+    
+    bluetored = 'wavelength' in bs[0].unit
+    
+    if cs is None:
+        
+        x = np.arange(len(bs))
+        b = 1-x*2/(len(x)-1)
+        g = 1-2*np.abs(0.5-x/(len(x)-1))
+        g[g>0.5] = 0.5
+        r = (x*2/(len(x)-1)-1)
+        r[r<0] = b[b<0] = 0
+        
+        if not bluetored:
+            b,r = r,b
+        cs = np.c_[r,g,b]
+        
+        #custom coloring for UBVRI and ugriz
+        if len(sortednames) == 5:
+            if sortednames[:3] == ['U','B','V']:
+                cs = ['c','b','g','r','m']
+            elif np.all([(n in sortednames[i]) for i,n in enumerate(('u','g','r','i','z'))]):
+                cs = ['c','g','r','m','k']
+        
+    
+    kwargs['clf'] = False
+    for n,c in zip(sortednames,cs):
+        kwargs['label'] = n
+        kwargs['c'] = c
+        d[n].plot(**kwargs)
+    
+    if leg:
+        plt.legend(loc=0)
+    
+    try:
+        for u,b in zip(oldunits,bs):
+            b.unit = u
+    except (NameError,NotImplementedError),e:
+        pass
+    
+    
+def compute_band_zpts(specoroffset,bands):
+    """
+    this will use the supplied spectrum to determine the magnitude zero points
+    for the specified bands 
+    OR
+    offset the zero point of all the bands by a specified value
+    """
+    bnds = str_to_bands(bands)
+    
+    if np.isscalar(specoroffset):
+        for b in bnds:
+            b.zeropoint += specoroffset
+    else:
+        for b in bnds:
+            b.computeZptFromSpectrum(specoroffset)
+            
+def set_zeropoint_system(system,bands='all'):
+    """
+    this uses a standard system to apply the zeropoints for the specified band
+    names.
+    
+    system can be:
+    * 'AB' - use AB magnitudes
+    * 'vega' - use vega=0 magnitudes based on Kurucz '93 Alpha Lyrae models
+    * 'vega##' - use vega=## magnitudes based on Kurucz '93 Alpha Lyrae models
+    """
+    
+    from .spec import Spectrum
+    bands = str_to_bands(bands)
+    
+    if system == 'AB':
+        for b in bands:
+            s = Spectrum(b.x,np.ones_like(b.x),unit=b.unit)
+            s.unit = 'hz'
+            s = Spectrum(s.x,np.ones_like(s.x)*10**(48.6/-2.5),unit='hz')
+            s.unit= 'ang'
+            b.computeZptFromSpectrum(s,aligntoband=True,interpolation='linear')
+        del s,Spectrum,b
+        
+    elif 'vega' in system.lower():
+        from cPickle import loads
+        from .io import _get_package_data
+        
+        try:
+            offset = float(system.lower().replace('vega',''))
+        except ValueError:
+            offset = 0
+#        import pyfits
+#        from cStringIO import StringIO
+#        vegad = pyfits.open(StringIO(_get_package_data('vega_k93.fits')))[1].data
+        
+        vegad = loads(_get_package_data('vega_k93.pydict'))['data']
+        s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX'])
+        
+        for b in bands:
+            b.computeZptFromSpectrum(s)
+    else:
+        raise ValueError('unrecognized magnitude system')
+    
 
 class CMDAnalyzer(object):
     """
@@ -1687,7 +1777,32 @@ class _BandRegistry(dict):
     def groupiteritems(self):
         for k in self.groupkeys():
             yield (k,self[k])
-
+            
+def str_to_bands(bnds):
+    """
+    this translates a string or sequence of strings into a sequence of Band
+    objects using the phot.bands band registry
+    """
+    from operator import isMappingType,isSequenceType
+    global bands
+    
+    if isinstance(bnds,basestring):
+        if bnds.lower() == 'all':
+            bnds = bands.values()
+        else:
+            bnds = bands[bnds]
+            if isMappingType(bnds):
+                bnds = bnds.values()
+            else:
+                bnds = (bnds,)
+    elif isSequenceType(bnds):
+        bnds = [bands[b] if isinstance(b,basestring) else b for b in bnds] 
+    elif isinstance(bnds,Band):
+        bnds = (Band,)
+    else:
+        raise ValueError('unrecognized band types')
+    
+    return bnds
 #TODO: check UBVRI/ugriz S function - energy or quantal?
 
 def __load_UBVRI():
@@ -1784,8 +1899,10 @@ bands.register(d,'ugriz')
 bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
+#default all to AB mags
+set_standard_zeropoints('AB','all')
 
-#set the blackbody eye sensitivity assuming a T=5800 blackbody
+#set the Spectrum eye sensitivity assuming a T=5800 blackbody
 from .spec import Spectrum
 def __generateRGBSensTuple():
         from .models import BlackbodyModel
@@ -1797,7 +1914,7 @@ def __generateRGBSensTuple():
         eyefluxes = np.array(spec.rgbEyeColor())
         return tuple(eyefluxes)
 Spectrum._rgbsensitivity = __generateRGBSensTuple()
-del Spectrum
+
 
 class _BwlAdapter(dict): 
     def __getitem__(self,key):

@@ -569,17 +569,38 @@ class Spectrum(HasSpecUnits):
         
         kwargs are passed into phot.Band.computeFlux
         """
-        from . import spec
-        if isinstance(bands,basestring) or isinstance(bands,spec.Band):
-            bands = [bands]
+        from operator import isMappingType
+        from .phot import str_to_bands
         
-        bands = [spec.bands[b] if isinstance(b,basestring) else b for b in bands]
+#        if isinstance(bands,basestring) or isinstance(bands,phot.Band):
+#            bands = [bands]
+#            scalarout = True
+#        else:
+#            scalarout = False
+        
+#        bands = [phot.bands[b] if isinstance(b,basestring) else b for b in bands]
+#        bl = []
+#        for b in bands:
+#            if isMappingType(b):
+#                bl.extend(b.values())
+#            else:
+#                bl.append(b)
+#        bands = bl
+        
+        scalarout = isinstance(bands,basestring) or isinstance(bands,phot.Band)
+        bands = str_to_bands(bands)
         
         if kwargs.pop('__domags',False):
-            return [b.computeMag(self,**kwargs) for b in bands]
+            res = [b.computeMag(self,**kwargs) for b in bands]
         else:
-            return [b.computeFlux(self,**kwargs) for b in bands]
-    
+            res = [b.computeFlux(self,**kwargs) for b in bands]
+        
+        if scalarout and len(res) == 1:
+            return res[0]
+        else:
+            return res
+        
+        
     
     _rgbsensitivity = (1,1,1) #this is adjusted to a blackbody after the Spectrum class is created
     
