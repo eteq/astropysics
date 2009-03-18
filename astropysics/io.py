@@ -32,9 +32,74 @@ def _get_package_data(dataname):
     path = dirname(rootfile)+'/data/'+dataname
     return get_loader(rootname).get_data(path)
 
-#<------------------------Classes---------------------------------------------->
+#<------------------------VOTable classes-------------------------------------->
+class VOTable(object):
+    """
+    This class represents a VOTable.  Currently, it is read-only.
+    """
+    from xml.dom import pulldom
+    
+    def __init__(self,s,filename=True):
+        if filename:
+            events = pulldom.parse(s)
+        else:
+            events = pulldom.parseString(s)
+            
+        for n,e in events:
+            raise NotImplementedError
+        
+#class VOTableElem(object):
+#    pass
 
+#class VOTable(VOTableElem):
+#    description=''
+#    infos=[]
+#    groups=[]
+#    params=[]
+#    resources=[]
+    
+#class Resource(VOTableElem):
+#    description=''
+#    infos=[]
+#    groups=[]
+#    params=[]
+#    resources=[]
+#    links=[]
+#    tables=[]
+    
+#class Table(VOTableElem):
+#    description=''
+#    infos=[]
+#    groups=[]
+#    params=[]
+#    links=[]
+#    fields=[]
+#    data=None
+    
+#class Field(VOTableElem):
+#    description=''
+#    values=None
+#    links=[]
+    
+#class Data(VOTableElem):
+#    pass
 
+#class Group(VOTableElem):
+#    description=''
+#    fieldrefs=[]
+#    params=[]
+#    paramrefs=[]
+#    groups=[]
+    
+#class Info(VOTableElem):
+#    description=''
+#    values=None
+#    links=[]
+
+#class Values(VOTableElem):
+#    min=None
+#    max=None
+#    options=[]
 
 #<--------------------------Spectrum loaders----------------------------------->
 
