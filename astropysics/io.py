@@ -222,12 +222,12 @@ class VOTable(object):
     def getTableFieldDtypes(self,table=0):
         nm = self._tableToName(table)
         fs = self._fields[nm]
-        return [str(f[1]) for f in fs]
+        return dict([(str(f[0]),str(f[1])) for f in fs])
     
     def getTableFieldExtras(self,table=0):
         nm = self._tableToName(table)
         fs = self._fields[nm]
-        return [f[2] for f in fs]
+        return dict([(str(f[0]),f[2]) for f in fs])
     
     def getTableArray(self,table=0):
         nm = self._tableToName(table)
@@ -271,7 +271,7 @@ class VOTable(object):
             
         #val = n.getElementsByTagName('VALUES') #not using this
         
-        extrad={}
+        extrad={'DESCRIPTION':desc}
         keys = n.attributes.keys()
         for k in ('name','arraysize','datatype'):
             if k in keys:
@@ -298,7 +298,7 @@ class VOTable(object):
         npval = np.array(val,dtype=dtype)
         #val = n.getElementsByTagName('VALUES') #not using this
         
-        extrad={}
+        extrad={'DESCRIPTION':desc}
         keys = n.attributes.keys()
         for k in ('name','arraysize','datatype'):
             if k in keys:
