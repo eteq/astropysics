@@ -71,6 +71,7 @@ class VOTable(object):
         self._resnames = {} #keys are table names
         self._fields = {} #keys are table names
         self._pars = {} #keys are table names
+        self._parexts = {}
         self._tabdescs = {} #keys are table names
         self._resdescs = {} #keys are resource names from resnames
         self._res = []
@@ -148,7 +149,6 @@ class VOTable(object):
                 elif nm == 'FITS':
                     raise NotImplementedError('FITS data not implemented')
                     
-                    
                 elif nm == 'PARAM':
                     events.expandNode(n)
                     if inres and not intab:
@@ -182,9 +182,10 @@ class VOTable(object):
                 if nm == 'RESOURCE':
                     inres = None
                 elif nm == 'TABLE':
+                    
                     self._resnames[intab] = inres
                     self._fields[intab] = fields
-                    self._pars[intab] = params
+                    self._applyParams(intab,params)
                     self._tables[intab] = array
                     self._masks[intab] = mask
                     intab = None
@@ -193,6 +194,10 @@ class VOTable(object):
                     indat = False
             if ev == 'CHARACTERS':
                 pass
+            
+    def _applyParams(self,intab,params):
+        self._pars[intab] = dict([(str(p[0]),p[1]) for p in params])
+        self._parexts[intab] = dict([(str(p[0]),p[2]) for p in params])
             
     def getTableNames(self):
         return self._tables.keys()
@@ -203,11 +208,26 @@ class VOTable(object):
     
     def getTableParams(self,table=0):
         nm = self._tableToName(table)
-        return self._pars[nm]
-    
-    def getTableFields(self,table=0):
+        fs = self._pars[nm]
+        
+    def getTableParamExtras(self,table=0):
         nm = self._tableToName(table)
-        return self._fields[nm]
+        fs = self._parexts[nm]
+    
+    def getTableFieldNames(self,table=0):
+        nm = self._tableToName(table)
+        fs = self._fields[nm]
+        return [str(f[0]) for f in fs]
+    
+    def getTableFieldDtypes(self,table=0):
+        nm = self._tableToName(table)
+        fs = self._fields[nm]
+        return [str(f[1]) for f in fs]
+    
+    def getTableFieldExtras(self,table=0):
+        nm = self._tableToName(table)
+        fs = self._fields[nm]
+        return [f[2] for f in fs]
     
     def getTableArray(self,table=0):
         nm = self._tableToName(table)
