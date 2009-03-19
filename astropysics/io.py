@@ -35,18 +35,297 @@ def _get_package_data(dataname):
 #<------------------------VOTable classes-------------------------------------->
 class VOTable(object):
     """
-    This class represents a VOTable.  Currently, it is read-only.
+    This class represents a VOTable.  Currently, it is read-only, although 
+    later re-designs may change this
     """
-    from xml.dom import pulldom
+    
+    dtypemap = {"boolean":'b',
+                "bit":None,
+                "unsignedByte":'u1',
+                "short":'i2',
+                "int":'i4',
+                "long":'i8',
+                "char":'a',
+                "unicodeChar":'U',
+                "float":'f4',
+                "double":'f8',
+                "floatComplex":'c8',
+                "doubleComplex":'c16'} #maps VOTable data types to numpy
     
     def __init__(self,s,filename=True):
+        """
+        instantiate a VOTable object from an XML VOTable
+        
+        If filename is True, the input string will be interpreted as 
+        a filename for a VOTable, otherwise s will be interpreted as 
+        an XML-formatted string with the VOTable data
+        """
+        from xml.dom import pulldom
         if filename:
             events = pulldom.parse(s)
         else:
             events = pulldom.parseString(s)
             
-        for n,e in events:
-            raise NotImplementedError
+        self._tables = {} #keys are table names
+        self._masks = {} #keys are table names
+        self._resnames = {} #keys are table names
+        self._fields = {} #keys are table names
+        self._pars = {} #keys are table names
+        self._tabdescs = {} #keys are table names
+        self._resdescs = {} #keys are resource names from resnames
+        self._res = []
+        self.description=''
+        
+        namesep = ':'
+        
+        rcounter=0
+        tcounter=0
+        voparams=[]
+        inres=None
+        intab=None
+        indat=None
+        
+        
+        for ev,n in events:
+            if ev == 'START_ELEMENT':
+                nm = n.tagName
+                if nm == 'RESOURCE':
+                    if inres:
+                        raise NotImplementedError('no support for nested resources')
+                    
+                    rcounter+=1
+                    resparams = []
+                    
+                    if n.attributes.has_key('name'):
+                        inres = n.attributes['name'].value
+                    else:
+                        inres = 'res%i'%rcounter
+                    
+                elif nm == 'TABLE':
+                    if not inres:
+                        raise RuntimeError('table outside of resource - invalid VOTable?')
+                    
+                    tcounter+=1
+                    tabparams = []
+                    fields = []
+                    
+                    if intab:
+                        raise RuntimeError('nested tables - invalid VOTable?')
+                    
+                    if n.attributes.has_key('ref'):
+                        raise NotImplementedError('table refs not yet implemented')
+                    
+                    if n.attributes.has_key('name'):
+                        intab = inres+namesep+n.attributes['name'].value
+                    else:
+                        intab = 'tab%i'%tcounter
+                    if intab in self._tables:
+                        intab = intab+'_'+str(tcounter)
+                        
+                    if n.attributes.has_key('nrows'):
+                        nrows = n.attributes['nrows'].value
+                    else:
+                        nrows = None
+                        
+                elif nm == 'DATA':
+                    if not intab:
+                        raise RuntimeError('Data not in a table - invalid VOTable?')
+                    params = []
+                    params.extend(voparams)
+                    params.extend(resparams)
+                    params.extend(tabparams)
+                    
+                    indat = True
+                
+                #data types
+                elif nm == 'TABLEDATA':
+                    events.expandNode(n)
+                    array,mask = self._processTabledata(n,fields,params,nrows)
+                
+                elif nm == 'BINARY':
+                    raise NotImplementedError('Binary data not implemented')
+                
+                elif nm == 'FITS':
+                    raise NotImplementedError('FITS data not implemented')
+                    
+                    
+                elif nm == 'PARAM':
+                    events.expandNode(n)
+                    if inres and not intab:
+                        resparams.append(self._extractParam(n))
+                    elif intab:
+                        tabparams.append(self._extractParam(n))
+                    else:
+                        voparams.append(self._extractParam(n))
+                elif nm == 'FIELD':
+                    if not intab:
+                        raise RuntimeError('nested tables - invalid VOTable?')
+                    events.expandNode(n)
+                    fields.append(self._extractField(n))
+                elif nm == 'GROUP':
+                    raise NotImplementedError('Groups not implemented')
+                elif nm == 'DESCRIPTION':
+                    events.expandNode(n)
+                    n.normalize()
+                    desc = n.firstChild.nodeValue
+                    if inres:
+                        if intab:
+                            self._tabdescs[intab] = desc
+                        else:
+                            self._resdescs[inres] = desc
+                    else:
+                        self.description = desc
+                        
+                
+            elif ev == 'END_ELEMENT':
+                nm = n.tagName
+                if nm == 'RESOURCE':
+                    inres = None
+                elif nm == 'TABLE':
+                    self._resnames[intab] = inres
+                    self._fields[intab] = fields
+                    self._pars[intab] = params
+                    self._tables[intab] = array
+                    self._masks[intab] = mask
+                    intab = None
+                    del array,mask,params,fields #do this to insure nothing funny happens in parsing - perhaps remove later?
+                elif nm == 'DATA':
+                    indat = False
+            if ev == 'CHARACTERS':
+                pass
+            
+    def getTableNames(self):
+        return self._tables.keys()
+    
+    def getTableResource(self,table=0):
+        nm = self._tableToName(table)
+        return self._resnames[nm]
+    
+    def getTableParams(self,table=0):
+        nm = self._tableToName(table)
+        return self._pars[nm]
+    
+    def getTableFields(self,table=0):
+        nm = self._tableToName(table)
+        return self._fields[nm]
+    
+    def getTableArray(self,table=0):
+        nm = self._tableToName(table)
+        return self._tables[nm]
+        
+    def getTableMask(self,table=0):
+        nm = self._tableToName(table)
+        return self._masks[nm]
+    
+    def _tableToName(self,table):
+        if isinstance(table,basestring):
+            if table not in self._tables:
+                raise KeyError('table %s not found'%table)
+            return table
+        else:
+            i = int(table)
+            return self._tables.keys()[i]
+        
+    def _extractField(self,n):
+        n.normalize()
+        name = n.attributes['name'].value
+        desc = n.getElementsByTagName('DESCRIPTION')
+        if len(desc) == 0:
+            desc = ''
+        elif len(desc) == 1:
+            desc = desc[0].firstChild.nodeValue
+        else:
+            raise RuntimeError('multiple DESCRIPTIONs found in field %s - invalid VOTable?'%name)
+        
+        dtype = self.dtypemap[n.attributes['datatype'].value]
+        if n.attributes.has_key('arraysize'):
+            szs = n.attributes['arraysize'].value.strip()
+            if dtype == 'a' or dtype == 'U':
+                if 'x' in szs:
+                    raise NotImplementedError('multidimensional strings not yet supported')
+                elif szs == '*':
+                    raise NotImplementedError('unlimited length strings not yet supported') 
+                dtype = dtype+szs.replace('*','') #fixed length strings
+            else:
+                raise NotImplementedError('array primitives not yet supported')
+            
+        #val = n.getElementsByTagName('VALUES') #not using this
+        
+        extrad={}
+        keys = n.attributes.keys()
+        for k in ('name','arraysize','datatype'):
+            if k in keys:
+                keys.remove(k)
+        for k in keys:
+            extrad[k] = n.attributes[k].value
+        if len(extrad)==0:
+            extrad = None
+                
+        return name,dtype,extrad
+    
+    def _extractParam(self,n):
+        n.normalize()
+        name = n.attributes['name'].value
+        desc = n.getElementsByTagName('DESCRIPTION')
+        if len(desc) == 0:
+            desc = ''
+        elif len(desc) == 1:
+            desc = desc[0].firstChild.nodeValue
+        else:
+            raise RuntimeError('multiple DESCRIPTIONs found in param %s - invalid VOTable?'%name)
+        dtype = self.dtypemap[n.attributes['datatype'].value]
+        val = n.attributes['value'].value
+        npval = np.array(val,dtype=dtype)
+        #val = n.getElementsByTagName('VALUES') #not using this
+        
+        extrad={}
+        keys = n.attributes.keys()
+        for k in ('name','arraysize','datatype'):
+            if k in keys:
+                keys.remove(k)
+        for k in keys:
+            extrad[k] = n.attributes[k].value
+        if len(extrad)==0:
+            extrad = None
+        
+        return name,val,extrad
+    
+    def _processTabledata(self,n,fields,params,nrows):
+        n.normalize()
+        dt = np.dtype([(str(f[0]),str(f[1]))for f in fields])
+        if not nrows:
+            nrows = 0
+            for c in n.childNodes:
+                if c.nodeName == 'TR':
+                    nrows+=1
+                    
+        arr = np.ndarray(nrows,dtype=dt)
+        mask = np.ones((nrows,len(dt)),dtype=bool)
+        
+        i = 0
+        for c in n.childNodes:
+            if c.nodeName == 'TR':
+                j = 0
+                for d in c.childNodes:
+                    if d.nodeName == 'TD':
+                        if d.hasChildNodes():
+                            arr[i][j] = d.firstChild.nodeValue
+                        else:
+                            arr[i][j] = 0
+                            mask[i][j] = False
+                    elif c.nodeType == 3 and c.nodeValue.strip()=='':
+                        pass #ignore whitespace text
+                    else:
+                        raise RuntimeError('non-TD inside TR - invalid VOTable?')
+                    j+=1
+                i+=1
+            elif c.nodeType == 3 and c.nodeValue.strip()=='':
+                pass #ignore whitespace text
+            else:
+                raise RuntimeError('non-TR inside Tabledata - invalid VOTable?')
+                
+        return arr,mask
+            
         
 #class VOTableElem(object):
 #    pass
