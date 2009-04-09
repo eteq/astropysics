@@ -715,7 +715,9 @@ class Spectrum(HasSpecUnits):
             
         return res
 
-    
+#ABSpectrum set to match system for AB Magnitudes
+ABSpec = Spectrum([1e14,3e15],np.ones(2)*10**(48.6/-2.5),unit='hz')
+
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """
     resample the spectra in the sequence specs so that they all have the same 
@@ -774,8 +776,42 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     
     return specs
 
-ABSpec = Spectrum([1e14,3e15],np.ones(2)*10**(48.6/-2.5),unit='hz')
-
+class SpectralFeature(HasSpecUnits):
+    """
+    This class represents a Spectral Feature.
+    
+    All SpecralFeatures have a rest value,observed value (possibly with
+    error), flux value (possibly with error), and equivalent width (possibly
+    with error)
+    
+    Note that equivalent width is always expected to be in angstroms
+    """
+    def __init__(self,unit='wavelength'):
+        HasSpecUnits.__init__(self,unit)
+        
+        self.rest = 1
+        self.observed = None
+        self.observederr = None
+        self.flux = 0
+        self.fluxerr = 0
+        self.ew = None
+        self.ewerr = None
+    
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        self.rest = xtrans(self.rest)
+            
+        if observed is not None:
+            oldobs = self.observed
+            self.observed = newobs = xtrans(self.observed)
+            if self.observederr is not None:
+                op = oldobs+self.observederr
+                om = oldobs-self.observederr
+                op,om = xtrans(op),xtrans(om)
+                self.observederr = (op+om)/2
+    
+    @property
+    def name(self):
+        raise NotImplementedError
 
 def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verbose=True,interpolation = None):
     """
