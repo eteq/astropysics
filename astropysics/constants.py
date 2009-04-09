@@ -131,11 +131,22 @@ class FRWCosmology(Cosmology):
         a=1/(1+z)
         H=self.H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
     
-    def rhoC(self):
+    def rhoC(self,units='cgs'):
         """
         critical density
+        
+        units can be 'cgs' or 'cosmological' (Mpc,Msun,km/s)
+        TODO:check
         """
-        return 3*self.H0*self.H0/(8*pi*G)
+        if units == 'cgs':
+            H0=self.H0*1e5*1e-6*pcpercm
+            global G
+        elif units == 'cosmological':
+            H0=self.H0
+            G=4.301e-9
+        else:
+            raise ValueError('unrecognized units')
+        return 3*H0*H0/(8*pi*G)
     
     def rho(self):
         """

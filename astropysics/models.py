@@ -142,6 +142,7 @@ class FunctionModel1D(object):
     Subclassing:
     The following method MUST be overridden in a subclass:
     *f(self,x,...)
+    
     The following methods may be overridden for speed of some operations - pars
     should be accessed with self.pardict, self.parvals, or by properties/name :
     *integrate(self,lower,upper)
@@ -170,7 +171,7 @@ class FunctionModel1D(object):
         call the function on the input x with the current parameters and return
         the result
         """
-        arr = np.array(x,copy=False)
+        arr = np.array(x,copy=False,dtype=float)
         res = self.f(np.atleast_1d(arr),*self.parvals)
         if len(arr.shape) > 0:
             return res
@@ -659,7 +660,7 @@ class FunctionModel1D(object):
             plt.xlabel(self.xAxisName)
         if self.yAxisName:
             plt.ylabel(self.yAxisName)
-        
+    
     #Can Override:
     def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
         """
@@ -734,7 +735,28 @@ class FunctionModel1D(object):
         
         self.lastIntegrate = res
         return res if np.isscalar(res) else res[0]
+    def integrateCircular(self,*args,**kwargs):
+        """
+        This is an alias for self.integrate with jacobian set for a azimuthally
+        symmetric 2D radial profile
+        """
+        if 'jac' in kwargs:
+            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x/2.0/pi
+        else:
+            kwargs['jac'] = lambda x,*params:x/2.0/pi
+        return self.integrate(*args,**kwargs)
     
+    def integrateSpherical(self,*args,**kwargs):
+        """
+        This is an alias for self.integrate with jacobian set for a spherically
+        symmetric 3D radial profile
+        """
+        if 'jac' in kwargs:
+            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*x/4.0/pi
+        else:
+            kwargs['jac'] = lambda x,*params:x*x/4.0/pi
+        return self.integrate(*args,**kwargs)
+        
     def derivative(self,x,dx=1):
         """
         the derivative at x
@@ -1353,10 +1375,30 @@ class NFWModel(TwoPowerModel):
     """
     A Navarro, Frenk, and White 1996 profile
     """
+    def __init__(self):
+        TwoPowerModel.__init__(self)
+        self.a = -1
+        self.b = -3
+        
     def f(self,x,rho0=1,rc=1): #TODO: see if its better to handcode the A->rho0
         return TwoPowerModel.f(self,x,rho0*rc*rc,rc,-1,-3)
     
     
+    def getRv(self,z=0):
+        """
+        get the virial radius at a given redshift (uses NFWModel.Delta(z))
+        """
+        from scipy.optimize import newton
+    
+        try:
+            from .constants import get_cosmology
+            rhoC = get_cosmology().rhoC()
+        except:
+            raise ValueError('current cosmology does not support critical density')
+        
+        rhov = self.Delta(z)*rhoC
+        return self.inv(rhov,1)
+        
     @staticmethod
     def Delta(z):
         """
