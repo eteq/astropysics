@@ -406,6 +406,9 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     """
     extraction type can 'horne' or 'boxcar'
     
+    if smoothing is positive, it is gaussian sigmas, if negative, 
+    boxcar pixels
+    
     returns Spectrum object with ivar, [bdata,rdata]
     """
     import pyfits
@@ -436,7 +439,10 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
         fobj.sky = sky
         
         if smoothing:
-            fobj.smooth(smoothing,replace=True)
+            if smoothing < 0:
+                fobj.smooth(smoothing*-1,filtertype='boxcar')
+            else:
+                fobj.smooth(smoothing,replace=True)
         
         if plot:
 #            from operator import isMappingType
