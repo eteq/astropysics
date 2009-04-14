@@ -1162,6 +1162,17 @@ class TwoPowerModel(FunctionModel1D):
     
     fxs=property(fget=_getFxs,fset=_setFxs)
     
+class TwoSlopeModel(FunctionModel1D):
+    """
+    This model smoothly transitions from linear with one slope to linear with
+    a different slope. It is the linearized equivalent of TwoPowerModel.
+    
+    specifically, a*x+(b-a)*log(1+exp(x))+c
+    """
+    def f(self,x,a=1,b=2,c=0,xs=0):
+        z = x-xs
+        return a*z+(b-a)*np.log(1+np.exp(z))+c
+    
 class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
     """
     a Planck blackbody radiation model.  
