@@ -245,7 +245,7 @@ class FunctionModel1D(object):
         
         
     def fitData(self,x,y,method=None,fixedpars=(),contraction='sumsq',
-                 updatepars=True,timer=None,**kwargs):
+                 updatepars=True,savedata=True,timer=None,**kwargs):
         """
         This will use the data to adjust the parameters to fit using any of a
         variety of methods from scipy.optimize
@@ -274,6 +274,9 @@ class FunctionModel1D(object):
         if updatepars is True
         
         the full output is available is self.lastFit
+        
+        if savedata os true, the input fit data will be available in 
+        self.fitteddata as an (x,y) tuple
         
         see also:getMCMC
         """
@@ -391,6 +394,9 @@ class FunctionModel1D(object):
         if updatepars:
             for par,newv in zip(ps,v):
                 setattr(self,par,newv)
+                
+        if savedata: 
+            self.fitteddata = (x,y)
         
         return v
     
@@ -569,7 +575,7 @@ class FunctionModel1D(object):
         return pymc.MCMC(d)
         
     def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
-              powerx=False,powery=False,deriv=None,data=None,fit = False,*args,**kwargs):
+              powerx=False,powery=False,deriv=None,data='auto',fit = False,*args,**kwargs):
         """
         plot the model function from lower to upper with n samples
         
@@ -581,7 +587,9 @@ class FunctionModel1D(object):
         
         data is either an x,y pair of data points or a dictionary of kwargs into 
         scatter fit determines if the model should be fit to the data before
-        plotting.
+        plotting. If it is 'auto', the last data input to fitData will be used
+        (if savedata was true).  If it evaluates to False, no data will be 
+        plotted and lower and upper must be set
         
         logplot determines whether or not to plot on a log scale, and powerx and
         poweru determine if the model points should be used as powers (base 10)
@@ -590,8 +598,6 @@ class FunctionModel1D(object):
         from matplotlib import pyplot as plt
         from operator import isMappingType
         
-        if (lower is None or upper is None) and data is None:
-            raise ValueError("Can't choose limits for plotting without specifying or providing data")
         if fit:
             from operator import isMappingType
             if not isMappingType(fit):
@@ -599,11 +605,20 @@ class FunctionModel1D(object):
             if data is None:
                 raise ValueError("Need to supply data to perform fit before plot")
             self.fitData(*data,**fit)
+            
+        if data is 'auto':
+            if hasattr(self,'fitteddata') and self.fitteddata:
+                data = self.fitteddata
+            else:
+                data = None
         if data is not None:
             if lower is None:
                 lower=np.min(data[0])
             if upper is None:
                 upper=np.max(data[0])
+                
+        if (lower is None or upper is None) and data is None:
+            raise ValueError("Can't choose limits for plotting without specifying or providing data")
         
         if 'x' in logplot:
             x = np.logspace(np.log10(lower),np.log10(upper),n)
