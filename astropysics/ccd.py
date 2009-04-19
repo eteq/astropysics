@@ -10,6 +10,15 @@ see the phot and spec packages.
 
 from __future__ import division
 import numpy as np
+try:
+    #requires Python 2.6
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
+except ImportError: #support for earlier versions
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
 
 class CCDImage(object):
     """
@@ -23,13 +32,15 @@ class CCDImage(object):
     corresponding to the range (xlower,xupper,ylower,yupper) or None for entire 
     image.  Raise IndexError if the range is not valid
     
-    *_applyRange(self,range,data) -- should take the provided range and apply 
+    *_applyArray(self,range,data) -- should take the provided range and apply 
     the data to whatever the base store is for that range.  Raise IndexError if
     the range is not valid, or AttributeError if the data should be read-only.
     
     MAY implement:    
     * close(self) do any necessary file cleanup (default does nothing)
     """
+    __metaclass__ = ABCMeta
+    
     def __init__(self,range=None,scaling=None):
         #informational property attributes
         self._pixscale = None
@@ -108,10 +119,12 @@ class CCDImage(object):
         self._changed = False
         self._lstatd.clear() 
         self._gstatd.clear()
-        
+    
+    @abstractmethod    
     def _extractArray(self,range):
         raise NotImplementedError
-        
+    
+    @abstractmethod        
     def _applyArray(self,range,data):
         raise NotImplementedError
     
@@ -974,3 +987,5 @@ def kcorrect_images(images,bands,z,range=None,zeropoints=None,pixelareas=None,re
         return dams,dkcs,chi2s
     else:
         return ams,kcs,chi2s
+    
+del ABCMeta,abstractmethod,abstractproperty #clean up namespace
