@@ -581,7 +581,9 @@ class FunctionModel1D(object):
         
         integrate controls whether or not to plot the integral of the function -
         if True, the base of the integral is taken to be lower, if False, upper,
-        no integration if None, and otherwise, the base is the argument value
+        no integration if None, and otherwise, the base is the argument value.
+        It can also be 's', 'spherical','c',or 'circular' for the 
+        appropriate types of integration
         
         extra args and kwargs go into the matplotlib plot function
         
@@ -635,13 +637,23 @@ class FunctionModel1D(object):
                 raise ValueError("can't do derivative and integral simultaneously")
             y=np.array([self.derivative(v,np.abs(upper-lower)/(10*n)) for v in x])
         else: #integrate is not None
+            intfunc = self.integrate
             if integrate is True:
                 base = lower
             elif integrate is False:
                 base = upper
+            elif isinstance(integrate,basestring):
+                if integrate.startswith('s'): #spherical
+                    intfunc = self.integrateSpherical
+                    base = 0
+                elif integrate.startswith('c'): #circular
+                    intfunc = self.integrateCircular
+                    base = 0
+                else:
+                    raise ValueError('unrecognized integrate string')
             else:
                 base = float(integrate)
-            y=np.array([self.integrate(base,v) for v in x])
+            y=np.array([intfunc(base,v) for v in x])
             
         if powery:
             y= 10**y
@@ -657,7 +669,7 @@ class FunctionModel1D(object):
         else:
             plt.plot(x,y,*args,**kwargs)
         
-        if data:
+        if np.any(data):
             if isMappingType(data):
                 if clf and 'c' not in data:
                     data['c']='g'
@@ -756,9 +768,9 @@ class FunctionModel1D(object):
         symmetric 2D radial profile
         """
         if 'jac' in kwargs:
-            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x/2.0/pi
+            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*2.0*pi
         else:
-            kwargs['jac'] = lambda x,*params:x/2.0/pi
+            kwargs['jac'] = lambda x,*params:x*2.0*pi
         return self.integrate(*args,**kwargs)
     
     def integrateSpherical(self,*args,**kwargs):
@@ -767,9 +779,9 @@ class FunctionModel1D(object):
         symmetric 3D radial profile
         """
         if 'jac' in kwargs:
-            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*x/4.0/pi
+            kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*x*4.0*pi
         else:
-            kwargs['jac'] = lambda x,*params:x*x/4.0/pi
+            kwargs['jac'] = lambda x,*params:x*x*4.0*pi
         return self.integrate(*args,**kwargs)
         
     def derivative(self,x,dx=1):
@@ -906,8 +918,11 @@ class ConstantModel(FunctionModel1D):
     def derivative(self,x,dx=1):
         return np.zeros_like(x)
     
-    def integrate(self,lower,upper):
-        return self.C*(upper-lower)
+    def integrate(self,lower,upper,**kwargs):
+        if 'jac' in kwargs and kwargs['jac'] is not None:
+            return FunctionModel1D.integrate(self,lower,upper,**kwargs)
+        else:
+            return self.C*(upper-lower)
     
 class LinearModel(FunctionModel1D):
     """
@@ -1407,15 +1422,41 @@ class NFWModel(TwoPowerModel):
         self.b = -3
         
     def f(self,x,rho0=1,rc=1): #TODO: see if its better to handcode the A->rho0
-        return TwoPowerModel.f(self,x,rho0*rc*rc,rc,-1,-3)
+        return TwoPowerModel.f(self,x,rho0*rc*rc*rc,rc,self.a,self.b)
     
+    def integrateSpherical(self,*args,**kwargs):
+        """
+        NFW Has an analytic form for the spherical integral - if the inner 
+        is not 0 or the form is anything other than integrateSpherical(0,r) 
+        fall back to FunctionModel1D.integrateSpherical (or if the keyword
+        'numerical' is true)
+        """
+        
+        if kwargs.pop('numerical',False) or len(kwargs)>0 or len(args)!=2 or args[0]!=0.0:
+            return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
+        else:
+            x=args[1]/self.rc
+            return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
+    def setRc(self,Rs,c,M):
+        """
+        sets the model parameters according to the given Rs/rc, concentration
+        and mass enclosed
+        """
+        self.rc = Rs
+        Router = c*Rs
+        
+        self.rho0 = 1
+        a0 = self.integrateSpherical(0,Router)
+        self.rho0 = M/a0
     
     def getRv(self,z=0):
         """
         get the virial radius at a given redshift (uses NFWModel.Delta(z))
+        
+        WARNING: may not be working right unit-wise
         """
         from scipy.optimize import newton
-    
+        
         try:
             from .constants import get_cosmology
             rhoC = get_cosmology().rhoC()
