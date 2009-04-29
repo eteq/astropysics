@@ -965,24 +965,44 @@ def cosmo_z_to_H(z,zerr=None):
         lower=c.H(z-zerr)
         return H,upper-H,lower-H
 
-def angular_to_physical_size(angsize,z,**kwargs):
+def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     """
-    converts an observed angular size (in arcsec) to a physical size (in kpc)
+    converts an observed angular size (in arcsec) to a physical size (in pc)
     
-    (assumes small angle approximation)
-    
-    kwargs go into cosmo_z_to_dist
+    if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
+    is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
+    otherwise, zord is taken directly as a angular diameter distance (in pc) 
+    and kwargs should be absent
     """
-    d=cosmo_z_to_dist(z,disttype=2,**kwargs)*1e3 #kpc
-    return angsize*d/206265
+    if usez:
+        d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
+    else:
+        if len(kwargs)>0:
+            raise TypeError('if not using redshift, kwargs should not be provided')
+        d = zord
+    
+    
+    sintheta = np.sin(angsize/206265)
+    return d*(1/sintheta/sintheta-1)**-0.5
+    #return angsize*d/206265
 
-def physical_to_angular_size(physize,z,**kwargs):
+def physical_to_angular_size(physize,zord,usez=True,**kwargs):
     """
-    converts a physical size (in kpc) to an observed angular size (in arcsec)
+    converts a physical size (in pc) to an observed angular size (in arcsec)
     
-    (assumes small angle approximation)
-    
-    kwargs go into cosmo_z_to_dist
+    if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
+    is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
+    otherwise, zord is taken directly as a angular diameter distance (in pc) 
+    and kwargs should be absent
     """
-    d=cosmo_z_to_dist(z,disttype=2,**kwargs)*1e3 #kpc
-    return physize*206265/d
+    if usez:
+        d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
+    else:
+        if len(kwargs)>0:
+            raise TypeError('if not using redshift, kwargs should not be provided')
+        d = zord
+        
+    r=physize
+    return 206265*np.arcsin(r*(d*d+r*r)**-0.5)
+    
+    #return physize*206265/d
