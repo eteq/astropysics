@@ -13,9 +13,11 @@ from __future__ import division
 from math import pi
 import numpy as np
 
+from .utils import PipelineElement
+
 #<----------------------Extinction and dust-related---------------------------->
 
-class Extinction(object):
+class Extinction(PipelineElement):
     """
     This is the base class for extinction-law objects. Extinction laws can be
     passed in as a function to the initializer, or subclasses should override 
@@ -34,6 +36,8 @@ class Extinction(object):
             else:
                 raise ValueError('function must be a callable')
         self.A0 = A0
+        
+        self._plbuffer = None
     
     def f(self,lamb):
         raise NotImplementedError('must specify an extinction function ')
@@ -185,6 +189,45 @@ class Extinction(object):
         self.A0 = contractionf(A0)
         return contractionf(A0),np.std(A0)
     
+    #PipelineElement methods
+    def _plFeed(self,data,src):
+        from .utils import  PipelineError
+        from .spec import Spectrum
+        if self._plbuffer is None:
+            self._plbuffer = {'in':[],'out':[]} 
+    
+        if isinstance(data,Spectrum):
+            self._plbuffer['in'].append(('spec',data))
+        else:
+            raise PipelineError('unrecognized Extinction correction input data')
+        
+    def _plProcess(self):
+        from .utils import  PipelineError
+        if self._plbuffer is None:
+            self._plbuffer = {'in':[],'out':[]} 
+        
+        type,data = self._plbuffer['in'].pop(0)
+        try:
+            if type=='spec':
+                newspec = self.correctSpectrum(data)
+                self._plbuffer['out'].append(newspec)
+            else:
+                assert False,'Impossible point - code error in Extinction pipeline'
+        except:
+            self.insert(0,spec(type,data))
+            
+    def _plExtract(self):
+        if self._plbuffer is None:
+            self._plbuffer = {'in':[],'out':[]} 
+            
+        if len(self._plbuffer['out']<1):
+            return None
+        else:
+            return self._plbuffer['out'].pop(0)
+        
+    def _plClear(self):
+        self._plbuffer = None
+    
 class CalzettiExtinction(Extinction):
     """
     This is the average extinction law derived in Calzetti et al. 1994:
@@ -193,7 +236,7 @@ class CalzettiExtinction(Extinction):
     """
     _poly=np.poly1d((0.011,-0.198,1.509,-2.156)) 
     def __init__(self,A0=1):
-        Extinction.__init__(self,A0=A0)
+        super(CalzettiExtinction,self).__init__(A0=A0)
         
     def f(self,lamb):
         return (-2.5/np.log(10))*self._poly(1e4/lamb)
@@ -207,7 +250,7 @@ class _EBmVExtinction(Extinction):
     del bandwl
     
     def __init__(self,EBmV=1,Rv=3.1):
-        Extinction.__init__(self,None,1)
+        super(_EBmVExtinction,self).__init__(f=None,A0=1)
         self.Rv=Rv
         self.EBmV=EBmV
     
@@ -235,7 +278,7 @@ class FMExtinction(_EBmVExtinction):
         self.C3 = C3
         self.C4 = C4
         
-        _EBmVExtinction.__init__(self,EBmV,Rv)
+        super(FMExtinction,self).__init__(EBmV=EBmV,Rv=Rv)
         
     def f(self,lamb):
         x=1e4/np.array(lamb,copy=False)
@@ -309,14 +352,14 @@ class LMCExtinction(FMExtinction):
     LMC Extinction law from Gordon et al. 2003 LMC Average Sample
     """
     def __init__(self,EBmV=.3,Rv=3.41):
-        FMExtinction.__init__(self,-.890,0.998,2.719,0.400,4.579,0.934,EBmV,Rv)
+        super(LMCExtinction,self).__init__(-.890,0.998,2.719,0.400,4.579,0.934,EBmV,Rv)
     
 class SMCExtinction(FMExtinction):
     """
     SMC Extinction law from Gordon et al. 2003 SMC Bar Sample
     """
     def __init__(self,EBmV=.2,Rv=2.74):
-        FMExtinction.__init__(self,-4.959,2.264,0.389,0.461,4.6,1,EBmV,Rv)
+        super(SMCExtinction,self).__init__(-4.959,2.264,0.389,0.461,4.6,1,EBmV,Rv)
 
 def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
     """
