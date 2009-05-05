@@ -25,21 +25,104 @@ class Pipeline(object):
     """
     This class represents a pipeline, composed of PipelineElements joined
     together as a data analysis or reduction pipeline
+    
+    dochecks validates the components as PipelineElements before accepting them
+    into the pipeline
+    
+    TODO: conditional interrupts
     """
-    def __init__(self,components):
-        for c in components:
-            if not isinstance(c,PipelineElement):
-                raise ValueError('object %s is not a PipelineElement'%str(c))
-        raise NotImplementedError
+    def __init__(self,components,joins=None,dochecks=True):
+        if joins is not None:
+            raise NotImplementedError('non-linear pipelines not yet ready')
+        
+        if dochecks:
+            for c in components:
+                if not isinstance(c,PipelineElement):
+                    raise ValueError('object %s is not a PipelineElement'%str(c))
+                
+        self.components = list(components)
     
-    def feed(self,data):
-        raise NotImplementedError
+    def feed(self,data,iterate=False):
+        """
+        feed initial data into the first stage of the pipeline
+        
+        if iterate is True, the input will be taken as an iterator to feed
+        each element into the first stage
+        """
+        if not iterate:
+            data = [data]
+            
+        for dat in data:
+            self.components[0]._plFeed(dat,None)
     
-    def extract(self):
-        raise NotImplementedError
+    def extract(self,autoprocess=True,extractall=False):
+        """
+        extract from the last stage of the pipeline.  
+        
+        If autoprocess is True, the stages will be processed 
+        so that at least one item is in the final stage
+        
+        if extractall is True, this will continue until None is returned
+        """                
+        
+        if extractall:
+            results = []
+            if autoprocess:
+                self.processToStage(-1,True)
+            results.append(self.components[-1]._plExtract())
+            while results[-1] is not None:
+                results.append(self.components[-1]._plExtract())
+            return results
+        
+        else:
+            extracted = self.components[-1]._plExtract()
+            if autoprocess and extracted is None:
+                self.processToStage(-1,False)
+                extracted = self.components[-1]._plExtract()
+            return extracted
     
-    def setInterrupt(self,val):
-        raise NotImplementedError
+    def processToStage(stagenum,fullyprocess=False):
+        """
+        stage numbers are 0-indexed or can be negative to go from end
+        
+        if fullyprocess is True, processing continue until all earlier
+        stages are empty
+        
+        returns the number of times the stage was fed and processed
+        """
+        prestages = self.components[:stagenum]
+        finalstage = self.components[stagenum]
+        
+        count = 0
+        fed = True
+        while fed:
+            tofeed = lastst = fed = None
+            for st in prestages:
+                if tofeed is not None:
+                    st._plFeed(tofeed,lastst)
+                st._plProcess()
+                tofeed = st._plextract()
+                if fullyprocess and tofeed is not None:
+                    fed = True
+                lastst = st
+                    
+            if tofeed is not None:
+                count+=1
+                finalstage._plFeed(tofeed,lastst)
+                finalstage._plProcess()
+        return count
+    
+    def clear(self,stages=None):
+        """
+        clears the stage(s) requested (all of them if None)
+        """
+        from operator import isSequenceType
+        if stages is None:
+            stages=range(len(self.components))
+        if not isSequenceType(stages):
+            stages = [stages]
+        for st in stages:
+            self.components[stages]._plClear()
     
 class PipelineElement(object):
     """
@@ -62,7 +145,7 @@ class PipelineElement(object):
         
         data is the data from the earlier stage (interpretation is up to the
         object), while src is a refernce to the object that is feeding in the 
-        data
+        data (or None if it is the first stage)
         """
         raise NotImplementedError
     
