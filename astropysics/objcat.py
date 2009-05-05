@@ -4,75 +4,185 @@
 This module contains objects and functions for generating catalogs of objects
 where derived quantities are dynamically updated as they are changed.
 
-The eventual plan is to include modules to also dynamically update via a web
-server.
+The basic view is a tree with the root always a Catalog object 
 
-(this package is currently not in a useable state - heavy development is under 
-way)
+TODO: modules to also dynamically update via a web server.
+*This package is currently under heavy development and subject to major change
+without notice
 """
 
 from __future__ import division
 from math import pi
 import numpy as np
-from .coords import AngularPosition,AngularCoordinate
+
+try:
+    #requires Python 2.6
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
+except ImportError: #support for earlier versions
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
+
+class _CatalogElement(object):
+    pass
+
+class Catalog(_CatalogElement):
+    """
+    This class represents a catalog of objects or catalogs.
+    
+    A Catalog is essentially a node in the object tree that does not contain 
+    fields, but rather 
+    """
+    def __init__(self):
+        super(Catalog,self).__init__()
+        raise NotImplementedError
+    
+    
+    
 
 class _SourceMeta(type):
+    #TODO: improve Source Singletons
     def __call__(cls,*args,**kwargs):
         obj = type.__call__(cls,*args,**kwargs)
         if not obj._str in Source._singdict:
             Source._singdict[obj._str] = obj
         return Source._singdict[obj._str]
-            
 
 class Source(object):
-    """
-    This class represents a data source - typically a paper, but possibly a
-    web site or other sort of bibliographic record.
-    """
-    #TODO:improve singleton?
     __metaclass__ = _SourceMeta
     _singdict = {}
     
     def __init__(self,src):
         self._str = str(src)
         
-        
     def __str__(self):
         return 'Source: ' + self._str
+    
+    
+    
+    
+class Field(object):
+    """
+    This class represents an attribute/characteristic/property of the
+    CatalogObject it is associated with.  I stores the current value
+    as well as all the possible recorded values.
+    """
+    def __init__(self):
+        raise NotImplementedError
+    
+class FieldValue(object):
+    __metaclass__ = ABCMeta
+    
+    @abstractmethod
+    def __init__(self):
+        raise NotImplementedError
+    
+class ObservedValue(FieldValue):
+    """
+    This value is a observed or otherwise measured value for the field
+    with the associated Source.
+    """
+    def __init__(self,value,source):
+        super(ObservedValue,self).__init__()
+    
+class DerivedValue(FieldValue):
+    """
+    This value is derived from a set of other fields (possibly on other 
+    objects).  Currently it does not support cycles (where e.g. 
+    DerivedValue A depends on DerivedValue B which depends on A)
+    """
+    def __init__(self,func,dependson=None):
+        super(DerivedValue,self).__init__()
+        
 
-class Datum(object):
+
+class LabelValue(FieldValue):
     """
-    Base for all forms of data
+    This value is a catch-all for all fields that are not dependent on 
+    anything (e.g. names, classifiers, or arbitrary selections)
     """
-    def __init__(self):
-        raise NotImplementedError
+    def __init__(self,value):
+        super(LabelValue,self).__init__()
+
+class _CatalogObjectMeta(ABCMeta):
+    def __call__(cls,*args,**kwargs):
+        obj = ABCMeta.__call__(cls,*args,**kwargs)
+        return obj
+
+class CatalogObject(_CatalogElement):
+    __metaclass__ = _CatalogObjectMeta
     
-class DerivedDatum(Datum):
-    """
-    This is a data point derived from other datum.
-    """
     def __init__(self):
+        super(CatalogObject,self).__init__()
         raise NotImplementedError
+
     
-class MeasuredDatum(Datum):
-    """
-    This is a measured data point with a source.
-    """
-    def __init__(self):
-        raise NotImplementedError
+del ABCMeta,abstractmethod,abstractproperty #clean up namespace
+
+#from .coords import AngularPosition,AngularCoordinate
+
+#class _SourceMeta(type):
+#    def __call__(cls,*args,**kwargs):
+#        obj = type.__call__(cls,*args,**kwargs)
+#        if not obj._str in Source._singdict:
+#            Source._singdict[obj._str] = obj
+#        return Source._singdict[obj._str]
+            
+
+#class Source(object):
+#    """
+#    This class represents a data source - typically a paper, but possibly a
+#    web site or other sort of bibliographic record.
+#    """
+#    #TODO:improve singleton?
+#    __metaclass__ = _SourceMeta
+#    _singdict = {}
     
-class DataItem(object):
-    """
-    This represents a particular property of an object as a set of Datum objects.
-    """
-    def __init__(self):
-        raise NotImplementedError
+#    def __init__(self,src):
+#        self._str = str(src)
+        
+        
+#    def __str__(self):
+#        return 'Source: ' + self._str
+
+#class Datum(object):
+#    """
+#    Base for all forms of data
+#    """
+#    def __init__(self):
+#        raise NotImplementedError
+    
+#class DerivedDatum(Datum):
+#    """
+#    This is a data point derived from other datum.
+#    """
+#    def __init__(self):
+#        raise NotImplementedError
+    
+#class MeasuredDatum(Datum):
+#    """
+#    This is a measured data point with a source.
+#    """
+#    def __init__(self):
+#        raise NotImplementedError
+    
+#class DataItem(object):
+#    """
+#    This represents a particular property of an object as a set of Datum objects.
+#    """
+#    def __init__(self):
+#        raise NotImplementedError
     
 
     
-class AstronomicalObject(object):
-    def __init__(self):
-        raise NotImplementedError
+#class AstronomicalObject(object):
+#    def __init__(self):
+#        raise NotImplementedError
+
+
+
 
 
 #class MeasuredValue(object):    
