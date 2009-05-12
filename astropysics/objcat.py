@@ -66,11 +66,43 @@ class Source(object):
 class Field(object):
     """
     This class represents an attribute/characteristic/property of the
-    CatalogObject it is associated with.  I stores the current value
-    as well as all the possible recorded values.
+    CatalogObject it is associated with.  It stores the current value
+    as well as all the other possible values.
     """
-    def __init__(self):
-        raise NotImplementedError
+    __slots__=('name','type','value','_vals','_current','__weakref__')
+    
+    def __init__(self,name,type=None):
+        """
+        The field must have a name, and can optionally be given a type
+                
+        #TODO:auto-determine name from class
+        """
+        self.name = name
+        self.type = type
+        self._vals = []
+        
+    def __call__(self):
+        return self.value
+        
+    def _getValue(self):
+         try:
+             return self._vals[self._current]
+         except IndexError:
+             return None
+    def _setValue(self,val):
+         raise NotImplementedError
+    def _delValue(self):
+        try:
+            del self._vals[self._current]
+            self._current = 0
+        except IndexError:
+            raise IndexError('deleting from empty Field')
+    value = property(_getValue,_setValue,_delValue,docs="""
+    The current value can be set by setting to a Source object,
+    a string matching a Source, or a new FieldValue (adding the value and
+    setting it as current.  The current value can also be deleted
+    or retrieved using this property)
+    """)
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
