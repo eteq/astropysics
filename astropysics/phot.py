@@ -709,6 +709,8 @@ def set_zeropoint_system(system,bands='all'):
         raise ValueError('unrecognized magnitude system')
     
 
+#<---------------------Analysis Classes/Tools---------------------------------->
+
 class CMDAnalyzer(object):
     """
     This class is intended to take multi-band photometry and compare it
@@ -1137,41 +1139,6 @@ class CMDAnalyzer(object):
                     except:
                         raise ValueError('uninterpretable band type in position %i'%i)
                     
-#            def docheck(v,i,j):
-#                #True indicates invalid, False is good
-#                if not isinstance(v,int):
-#                    raise TypeError('band index at position %i,%i is not an index'%(i,j))
-#                if v < 0:
-#                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
-#                if v > self._nb:
-#                    raise IndexError('band index at position %i,%i is invalid'%(i,j))
-#                if not self._datamask[v]:
-#                    raise ValueError('data mask incompatible with band at position %i,%i'%(i,j))
-#                if not self._fidmask[v]:
-#                    raise ValueError('fiducial mask incompatible with band at position %i,%i'%(i,j))
-            
-#            for i,v in enumerate(op):
-#                if isinstance(v,tuple):
-#                    #if ONE of the bands in a color is masked in the fiducial, it's still ok
-#                    fidok = True
-#                    try:
-#                        docheck(v[0],i,1)
-#                    except ValueError,e:
-#                        if 'fiducial' in e.message:
-#                            fidok = False
-#                        else:
-#                            raise e
-#                    try:
-#                        docheck(v[1],i,2)
-#                    except ValueError,e:
-#                        if 'fiducial' in e.message:
-#                            if not fidok:
-#                                raise e
-#                        else:
-#                            raise e
-#                else:
-#                    docheck(v,i,0)
-                    
             bandkeys = []
             for v in op:
                 if isinstance(v,tuple):
@@ -1329,7 +1296,53 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
     cmda.offsetbands=['g-r','r']
         
     return x,y,dx,dy,cmda
+
+
+
+class AperturePhotometry(object):
+    """
+    This class 
+    """
+    def __init__(self):
+        self.circular = True
+        self.band = None
+        self.mags = True
         
+    def _magorfluxToFlux(self,magorflux):
+        if self.mags:
+            flux = -2.5*np.log10(magorflux)
+        else:
+            flux = magorflux
+        if band is not None:
+            raise NotImplementedError
+        return flux 
+        
+    def pointSourcePhotometry(self,x,y,magorflux):
+        x = np.array(x,copy=False)
+        y = np.array(x,copy=False)
+        flux = _magorfluxToFlux(np.array(magorflux,copy=False))
+        
+        if x.shape != y.shape != flux.shape:
+            raise ValueError("shapes don't match!")
+        
+        raise NotImplementedError
+    
+    def imagePhotometry(self,input):
+        """
+        input must be a 2D array or a CCD
+        """
+        from .ccd import CCDImage
+        
+        if isinstance(input,CCDImage):
+            raise NotImplementedError
+        
+        magorflux = np.array(input,copy=True)
+        if len(magorflux.shape) != 2:
+            raise ValueError('input not 2D')
+        flux = self._magorfluxToFlux(magorflux)
+        
+        
+        raise NotImplementedError
         
 #<------------------------conversion functions--------------------------------->
     
