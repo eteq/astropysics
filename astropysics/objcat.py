@@ -92,7 +92,20 @@ class Field(MutableSequence):
         return len(self._vals)
     def __getitem__(self,key):
         if isinstance(key,basestring):
-            pass
+            if 'depends' in key.lower():
+                depre = key.lower().replace('depends','').strip()
+                if depre=='':
+                    depnum=0
+                else:
+                    depnum=int(depre)
+                try:
+                    return [v for v in self._vals if v.depends is not None][depnum]
+                except IndexError:
+                    raise IndexError('dependent value key %i does not exist'%depnum)
+        elif isinstance(key,Source):
+            for v in self._vals:
+                if key==v.source:
+                    return self._vals
         else:
             try:
                 return self._vals[key]
@@ -101,6 +114,8 @@ class Field(MutableSequence):
     def __setitem__(self,key,val):
         raise NotImplementedError
     def __delitem__(self,key):
+        del self.vals[self._vals.index(self[key])]
+    def insert(self,key,item):
         raise NotImplementedError
         
     def _getValue(self):
@@ -135,38 +150,52 @@ class Field(MutableSequence):
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
+    __slots__ = ('source','dependson')
     
     @abstractmethod
     def __init__(self):
-        raise NotImplementedError
+        self.source = None
+        self.dependson = None
+        
+    value = abstractproperty()
+    
     
 class ObservedValue(FieldValue):
     """
     This value is a observed or otherwise measured value for the field
     with the associated Source.
     """
+    __slots__=('_value')
     def __init__(self,value,source):
         super(ObservedValue,self).__init__()
+        self.source = source
+        self._value = value
     
+    @property    
+    def value(self):
+        return self._value
+        
 class DerivedValue(FieldValue):
     """
     This value is derived from a set of other fields (possibly on other 
     objects).  Currently it does not support cycles (where e.g. 
     DerivedValue A depends on DerivedValue B which depends on A)
     """
-    def __init__(self,func,dependson=None):
+    __slots__=('_f','_val')
+    def __init__(self,func,dependson=None,source=None):
         super(DerivedValue,self).__init__()
-        
-
-
-class LabelValue(FieldValue):
-    """
-    This value is a catch-all for all fields that are not dependent on 
-    anything (e.g. names, classifiers, or arbitrary selections)
-    """
-    def __init__(self,value):
-        super(LabelValue,self).__init__()
-
+        self.dependson = dependson
+        self._f = f
+        self._val = None
+        self.source = source
+        #TODO:more intelligently work out argument bindings
+    @property
+    def value(self):
+        if self._val is None:
+            self._val = self._f(*(field() for field in dependson))
+        return self._val
+    
+    
 class _CatalogObjectMeta(ABCMeta):
     def __call__(cls,*args,**kwargs):
         obj = ABCMeta.__call__(cls,*args,**kwargs)
