@@ -1301,23 +1301,80 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
 
 class AperturePhotometry(object):
     """
-    This class 
+    This class generates radial surface brightness profiles from
+    various sources and provides plotting and fitting of those 
+    profiles   
     """
-    def __init__(self):
-        self.circular = True
-        self.band = None
-        self.mags = True
+    def __init__(self,band = None,unit='arcsec',binsize=1,usemags=True,circular=True):
+        self.circular = circular
+        self.usemags = usemags
+        self.binsize = binsize #in specified units
+        
+        self.band = band
+        self.unit = unit
+        
+        
+    def _getUnit(self):
+        return self._sunit
+    def _setUnit(self,unit):
+        if unit == 'arcsec':
+            self._sunit = 'arcsec'
+            self._unitconv = 1
+        elif unit == 'radians' or unit == 'sterradians' or unit == 'sr':
+            self._sunit = 'radians'
+            self._unitconv = 60*60*360/2/pi
+        elif 'deg' in unit:
+            self._sunit = 'degrees'
+            self._unitconv = 60*60
+        else:
+            raise ValueError('unrecognized unit')
+    units = property(_getUnit,_setUnit)
+    
+    def _getBand(self):
+        return self._band
+    def _setBand(self,band):
+        if isinstance(band,basestring):
+            global bands
+            self._band = bands[band]
+        elif isinstance(band,Band)
+            self._band = band
+        elif band is None:
+            self._band = None
+        else:
+            raise ValueError("input band was not a Band or registered band name")
+    band = property(_getBand,_setBand)
         
     def _magorfluxToFlux(self,magorflux):
-        if self.mags:
+        if self.usemags:
             flux = -2.5*np.log10(magorflux)
         else:
             flux = magorflux
         if band is not None:
             raise NotImplementedError
         return flux 
+    
+    def _fitPhot(self,x,y,flux,cen):
+        """
+        input x,y,cen should be in un-converted units
+        """
+        if not self.circular:
+            raise NotImplementedError('elliptical fitting not supported yet')
+        r = self._unitconv*np.sum(array((x,y),copy=False).T-cen,axis=1)
+        rap = np.arange(0,np.max(r),self._unitconv*self.binsize)
+        apmask = r.reshape((r.size,1)) < rap.reshape((1,rap.size))
+        choices = apmask.T*(arange(flux.size)+1)
+        fluxarrs = choose(choices,np.concatenate(([0],flux)))
+        fluxes = sum(fluxarrs,axis=0) #TODO:check dimensions through these operations
         
-    def pointSourcePhotometry(self,x,y,magorflux):
+        raise NotImplementedError
+        
+    def pointSourcePhotometry(self,x,y,magorflux,cen='centroid'):
+        """
+        x,y,and magorflux are arrays of matching shape 
+        
+        cen is 'centroid' to use tjhe raw centroid, 'weighted' to weight the
+        centroid by the flux, or a 2-sequence to manually assign a center
+        """
         x = np.array(x,copy=False)
         y = np.array(x,copy=False)
         flux = _magorfluxToFlux(np.array(magorflux,copy=False))
@@ -1325,11 +1382,25 @@ class AperturePhotometry(object):
         if x.shape != y.shape != flux.shape:
             raise ValueError("shapes don't match!")
         
-        raise NotImplementedError
+        if isinstance(cen,basestring):
+            if cen == 'centroid':
+                cen = np.array((np.average(x),np.average(y)))
+            elif cen == 'weighted':
+                cen = np.array((np.average(x,weights=flux),np.average(y,weights=flux)))
+            else:
+                raise ValueError('unrecognized cen string')
+        else:
+            cen = np.array(cen,copy=False)
+            if cen.shape != (2,):
+                raise ValueError('cen not a 2-sequence')
+        
+        return _fitPhot(x,y,flux,cen)
     
-    def imagePhotometry(self,input):
+    def imagePhotometry(self,input,platescale):
         """
         input must be a 2D array or a CCD
+        
+        platescale is linear units as specified by the units property per pixel
         """
         from .ccd import CCDImage
         
@@ -1343,6 +1414,29 @@ class AperturePhotometry(object):
         
         
         raise NotImplementedError
+        return _fitPhot(x,y,flux,cen)
+    
+    def plot(self,fmt='o-',logx=False,**kwargs):
+        """
+        plot the surface brightness profile (must be generated)
+        using matplotlib
+        
+        kwargs go into matplotlib.plot
+        """
+        
+        from matplotlib import pyplot as plt
+        if logx:
+            semilogx()
+        if 'fmt'
+        plt.plot(self.rap,self.mu,fmt,**kwargs)
+        
+        plt.xlabel('$r \\, [{\\rm arcsec}]$')
+        if self.band is None:
+            plt.ylabel('$\\mu$')
+        else:
+            plt.ylabel('$\\mu_{%s}$'%self.band.name)
+            
+        
         
 #<------------------------conversion functions--------------------------------->
     
