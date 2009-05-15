@@ -90,8 +90,22 @@ class Field(MutableSequence):
     
     def __len__(self):
         return len(self._vals)
+    
+    def _checkValue(self,val):
+        if not (isinstance(val,FieldValue) or (hasattr(val,'source') and hasattr(val,'value') and hasattr(val,'dependson'))):
+            raise TypeError('Input not FieldValue-compatible')
+        if self.type is not None:
+            if not isinstance(val.value,self.type):
+                raise TypeError('Input value is not of type %s'%str(self.type))
+        
     def __getitem__(self,key):
-        if isinstance(key,basestring):
+        if isinstance(key,Source):
+            for v in self._vals:
+                #TODO: == -> is performance tests
+                if key==v.source:
+                    return self._vals
+            raise KeyError('Could not find requested Source')
+        elif isinstance(key,basestring):
             if 'depends' in key.lower():
                 depre = key.lower().replace('depends','').strip()
                 if depre=='':
@@ -102,28 +116,34 @@ class Field(MutableSequence):
                     return [v for v in self._vals if v.depends is not None][depnum]
                 except IndexError:
                     raise IndexError('dependent value key %i does not exist'%depnum)
-        elif isinstance(key,Source):
-            for v in self._vals:
-                if key==v.source:
-                    return self._vals
+            else:
+                #TODO:test performance loss
+                return self.__getitem__(Source(key))
         else:
             try:
                 return self._vals[key]
             except TypeError:
                 raise TypeError('Field keys must be strings or list indecies')
     def __setitem__(self,key,val):
-        raise NotImplementedError
+        self._checkValue(val)
+        i = self._vals.index(self[key])
+        self._vals[i] = val
+        
     def __delitem__(self,key):
         del self.vals[self._vals.index(self[key])]
-    def insert(self,key,item):
-        raise NotImplementedError
+    def insert(self,key,val):
+        self._checkValue(val)
+        i = self._vals.index(self[key])
+        self._vals.insert(i,val)
+        if self._currenti >= i:
+            self._currenti+=1
         
     def _getValue(self):
         try:
             return self._vals[self._currenti]
         except IndexError:
             raise IndexError('Field empty')
-             #return None
+            #return None
     def _setValue(self,val):
         try:
             currval = self[val]
