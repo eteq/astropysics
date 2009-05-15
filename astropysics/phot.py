@@ -1304,14 +1304,22 @@ class AperturePhotometry(object):
     This class generates radial surface brightness profiles from
     various sources and provides plotting and fitting of those 
     profiles   
+    
+    specifying a Band results in use of that band's zero point
+    
+    apertures can be a positive number to specify a fixed number of
+    apertures, a negative number specifying the spacing between
+    apertures in the specified units, or a sequence for fixed 
+    aperture sizes in the specified units
+    #TODO:TEST!
     """
-    def __init__(self,band = None,unit='arcsec',binsize=1,usemags=True,circular=True):
+    def __init__(self,band = None,units='arcsec',apertures=10,usemags=True,circular=True):
         self.circular = circular
         self.usemags = usemags
-        self.binsize = binsize #in specified units
+        self.apertures = apertures
         
         self.band = band
-        self.unit = unit
+        self.units = units
         
         
     def _getUnit(self):
@@ -1336,7 +1344,7 @@ class AperturePhotometry(object):
         if isinstance(band,basestring):
             global bands
             self._band = bands[band]
-        elif isinstance(band,Band)
+        elif isinstance(band,Band):
             self._band = band
         elif band is None:
             self._band = None
@@ -1346,27 +1354,60 @@ class AperturePhotometry(object):
         
     def _magorfluxToFlux(self,magorflux):
         if self.usemags:
-            flux = -2.5*np.log10(magorflux)
+            zpt = 0 if (self._band is None) else self.band.zeropoint
+            flux = 10**((magorflux+zpt)/-2.5)
         else:
             flux = magorflux
-        if band is not None:
-            raise NotImplementedError
         return flux 
     
-    def _fitPhot(self,x,y,flux,cen):
+    def _outFluxConv(self,flux):
+        """
+        convert flux back into mags if necessary and set zero-points appropriately
+        """
+        if self.usemags:
+            zpt = 0 if (self._band is None) else self.band.zeropoint
+            out = -2.5*np.log10(flux)-zpt
+        else:
+            out = flux
+        return out
+    
+    def _fitPhot(self,x,y,flux,cen,aps=''):
         """
         input x,y,cen should be in un-converted units
-        """
+        """        
         if not self.circular:
             raise NotImplementedError('elliptical fitting not supported yet')
-        r = self._unitconv*np.sum(array((x,y),copy=False).T-cen,axis=1)
-        rap = np.arange(0,np.max(r),self._unitconv*self.binsize)
-        apmask = r.reshape((r.size,1)) < rap.reshape((1,rap.size))
-        choices = apmask.T*(arange(flux.size)+1)
-        fluxarrs = choose(choices,np.concatenate(([0],flux)))
-        fluxes = sum(fluxarrs,axis=0) #TODO:check dimensions through these operations
+        r = np.sum((np.array((x,y),copy=False).T-cen)**2,axis=1)**0.5
         
-        raise NotImplementedError
+        if np.isscalar(self.apertures):
+            if self.apertures<0:
+                rap = np.arange(0,np.max(r),self.apertures)+self.apertures
+            else:
+                rap = np.linspace(0,np.max(r),self.apertures+1)[1:]
+        else:    
+            rap = np.array(self.apertures)
+            
+        r,rap = self._unitconv*r,self._unitconv*rap
+        
+        apmask = r.reshape((1,r.size)) <= rap.reshape((rap.size,1)) #new shape (rap.size,r.size)
+        fluxap = np.sum(apmask*flux,axis=1)
+        fluxann = fluxap-np.roll(fluxap,1)
+        fluxann[0] = fluxap[0] 
+        A = pi*rap*rap
+        A = A - np.roll(A,1)
+        A[0] = pi*rap[0]**2
+        sbap = fluxann/A
+        #TODO:better/correct SB?
+        
+#        valid = sbap > 0
+#        self.enclosed = self._outFluxConv(fluxap[valid])
+#        self.mu = self._outFluxConv(sbap[valid])
+#        self.rap = rap   [valid]
+
+        highest = np.min(np.where(np.concatenate((sbap,(0,)))<=0))
+        self.enclosed = self._outFluxConv(fluxap[:highest])
+        self.mu = self._outFluxConv(sbap[:highest])
+        self.rap = rap[:highest]/self._unitconv
         
     def pointSourcePhotometry(self,x,y,magorflux,cen='centroid'):
         """
@@ -1377,7 +1418,7 @@ class AperturePhotometry(object):
         """
         x = np.array(x,copy=False)
         y = np.array(x,copy=False)
-        flux = _magorfluxToFlux(np.array(magorflux,copy=False))
+        flux = self._magorfluxToFlux(np.array(magorflux,copy=False))
         
         if x.shape != y.shape != flux.shape:
             raise ValueError("shapes don't match!")
@@ -1394,7 +1435,7 @@ class AperturePhotometry(object):
             if cen.shape != (2,):
                 raise ValueError('cen not a 2-sequence')
         
-        return _fitPhot(x,y,flux,cen)
+        return self._fitPhot(x,y,flux,cen)
     
     def imagePhotometry(self,input,platescale):
         """
@@ -1414,7 +1455,7 @@ class AperturePhotometry(object):
         
         
         raise NotImplementedError
-        return _fitPhot(x,y,flux,cen)
+        return self._fitPhot(x,y,flux,cen)
     
     def plot(self,fmt='o-',logx=False,**kwargs):
         """
@@ -1426,9 +1467,12 @@ class AperturePhotometry(object):
         
         from matplotlib import pyplot as plt
         if logx:
-            semilogx()
-        if 'fmt'
-        plt.plot(self.rap,self.mu,fmt,**kwargs)
+            plt.semilogx()
+        if 'fmt':
+
+            plt.plot(self.rap,self.mu,fmt,**kwargs)
+        
+        plt.ylim(*reversed(plt.ylim()))
         
         plt.xlabel('$r \\, [{\\rm arcsec}]$')
         if self.band is None:
