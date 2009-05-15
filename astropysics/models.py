@@ -148,7 +148,7 @@ class FunctionModel1D(object):
     *integrate(self,lower,upper)
     *derivative(self,x,dx)
     *inv(yval,*args,**kwargs)
-    *_customFit(x,y,fixedpars=(),**kwargs)
+    *_customFit(x,y,fixedpars=(),weights=None,**kwargs)
     The following attributes may be set for additional information:
     xAxisName
     yAxisName
@@ -244,7 +244,7 @@ class FunctionModel1D(object):
         return res[0]
         
         
-    def fitData(self,x,y,method=None,fixedpars=(),contraction='sumsq',
+    def fitData(self,x,y,method=None,fixedpars=(),weights=None,contraction='sumsq',
                  updatepars=True,savedata=True,timer=None,**kwargs):
         """
         This will use the data to adjust the parameters to fit using any of a
@@ -295,9 +295,10 @@ class FunctionModel1D(object):
         ps=list(self.params)
         v=list(self.parvals) #initial guess
         
+        w = 1 if weights is None else weights
         
         if method == 'custom':
-            res = self._customFit(x,y,fixedpars=fixedpars,**kwargs) 
+            res = self._customFit(x,y,fixedpars=fixedpars,weights=weights,**kwargs) 
             #ensure that res is at least a tuple with parameters in elem 0
             from operator import isSequenceType
             if not isSequenceType(res[0]):
@@ -319,13 +320,13 @@ class FunctionModel1D(object):
                 
             if method == 'leastsq':
                 if 'frac' in contraction:
-                    g=lambda v,x,y:1-f(x,v)/y
+                    g=lambda v,x,y:w*(1-f(x,v)/y)
                 else:
-                    g=lambda v,x,y:y-f(x,v)
+                    g=lambda v,x,y:w*(y-f(x,v))
                 res=opt.leastsq(g,v,(x,y),full_output=1,**kwargs)
             else:
                 if not contraction:
-                    f=lambda v,x,y:y-f(x,v)
+                    g=lambda v,x,y:w*(y-f(x,v))
                 else:
                     if 'frac' in contraction:
                         if 'sq' in contraction:
@@ -354,11 +355,11 @@ class FunctionModel1D(object):
                                 diff=y-f(x,v)
                                 return diff
                     if 'sum' in contraction:
-                        g=lambda v,x,y:np.sum(g1(v,x,y))
+                        g=lambda v,x,y:np.sum(w*g1(v,x,y))
                     elif 'mean' in contraction:
-                        g=lambda v,x,y:np.mean(g1(v,x,y))
+                        g=lambda v,x,y:np.mean(w*g1(v,x,y))
                     elif 'median' in contraction:
-                        g=lambda v,x,y:np.median(g1(v,x,y))
+                        g=lambda v,x,y:np.median(w*g1(v,x,y))
                     
                 if method == 'fmin':
                     res=opt.fmin(g,v,(x,y),full_output=1)
@@ -400,7 +401,7 @@ class FunctionModel1D(object):
         
         return v
     
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    def _customFit(self,x,y,fixedpars=(),weights=None,**kwargs):
         """
         Must be overridden to use 'custom' fit technique
         
@@ -932,7 +933,7 @@ class LinearModel(FunctionModel1D):
     def f(self,x,m=1,b=0):
         return m*x+b
     
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    def _customFit(self,x,y,fixedpars=(),weights=None,**kwargs):
         """
         does least-squares fit on the x,y data
         
@@ -941,6 +942,12 @@ class LinearModel(FunctionModel1D):
         
         lastFit stores ((m,b),dm,db,dy)
         """  
+        if weights is not None:
+            if fixedpars or len(kwargs)>0:
+                raise NotImplementedError("can't fix pars with weighted linear fit yes")
+            m,b,dm,db = self.weightedFit(x,y,1/weights,False)
+            dy = (y-m*x-b).std(ddof=1)
+            return (np.array((m,b)),dm,db,dy)
         
         fixslope = 'm' in fixedpars
         fixint = 'b' in fixedpars
