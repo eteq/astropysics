@@ -2105,4 +2105,4 @@ bandwl = _BwlAdapter()
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
 bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
-del ABCMeta,abstractmethod,abstractproperty,_HasSpecUnits #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,_HasSpecUnits,pi,division #clean up namespace
