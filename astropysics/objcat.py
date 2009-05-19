@@ -7,8 +7,6 @@ where derived quantities are dynamically updated as they are changed.
 The basic idea is a tree/DAG with the root typically a Catalog object
 
 TODO: modules to also dynamically update via a web server.
-*This package is currently under heavy development and subject to major change
-without notice
 """
 
 from __future__ import division
@@ -78,12 +76,20 @@ class CatalogElement(object):
     def addField(self,field):
         if not isinstance(field,Field):
             raise ValueError('input value is not a Field')
-        setattr(field.name,field)
-        self._fieldsnames.append(field.name)
+        if field.name in self._fieldnames:
+            raise ValueError('Field name "%s" already present'%field.name)
+        setattr(self,field.name,field)
+        self._fieldnames.append(field.name)
         
     def delField(self,fieldname):
-        del self._fields[fieldname]
-        delattr(self,fieldname)
+        try:
+            self._fieldnames.remove(fieldname)
+            if hasattr(self.__class__,fieldname):
+                setattr(self,fieldname,None)
+            else:
+                delattr(self,fieldname)
+        except ValueError:
+            raise KeyError('Field "%s" not found'%fieldname)
         
     @property
     def fieldNames(self):
@@ -358,7 +364,9 @@ class Field(MutableSequence):
     """)
     
     def _getDefault(self):
-        return self._defaultValue
+        if self._defaultValue is None:
+            return None
+        return self._defaultValue.value
     def _setDefault(self,val):
         if val is None:
             defval = None
@@ -514,14 +522,12 @@ class CatalogObject(CatalogElement):
         super(CatalogObject,self).__init__(parent)
         self._altered = False
         
-        #TODO:add all classes in hierarchy
+        #apply Fields from class into new object as new Fields
         for k,v in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)): #TODO:faster way than lambda?
             if v.name != k: #TODO: figure out if this can be done at "compile-time"
                 raise KeyError('Name of Field (%s) does not match name in class attribute (%s)'%(v.name,k))
-            objf = Field(v.name,v.type,None if v.defaultValue is None else v.defaultValue.value)
-            if len(v) != 0:
-                objf.value = v.value
-            setattr(self,k,objf)
+            fobj = Field(v.name,v.type,None if v.defaultValue is None else v.defaultValue.value)
+            setattr(self,k,fobj)
             self._fieldnames.append(k)
             
          
@@ -545,36 +551,34 @@ class CatalogObject(CatalogElement):
         TODO:test
         """
         import inspect
+        import new
         
-        #replace any delted Fields with defaults and keep track of which should be kept
+        #replace any deleted Fields with defaults and keep track of which should be kept
         fields=[]
-        for k,v in inspect.getmembers(obj.__class__,lambda x:isinstance(x,Field)):
+        for k,v in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)):
             fields.append(k)
             if not hasattr(self,k) or not isinstance(getattr(self,k),Field):
-                fobj = Field(name=n.name,type=v.type,defaultValue=v.defaultValue)
-                if len(v) != 0:
-                    fobj.value = v.value
+                fobj = Field(name=v.name,type=v.type,defaultValue=v.defaultValue)
                 setattr(self,k,fobj)
                 
-        for k,v in inspect.getmembers(obj,lambda x:isinstance(x,Field)):
+        for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
             if k not in fields:
                 delattr(self,k)
                 
         self._fieldnames = fields
         self._altered = False
-        self.addField = CatalogObject.addField
-        self.delField = CatalogObject.delField
+        self.addField = new.instancemethod(CatalogObject.addField,self,CatalogObject)
+        self.delField = new.instancemethod(CatalogObject.delField,self,CatalogObject)
     
-    def addField(self,key,val):
+    def addField(self,field):
         self._altered = True
-        #super(CatalogObject,self).addField(key,val)
         self.addField = super(CatalogObject,self).addField
-        self.addField(key,val)
+        self.addField(field)
         
-    def delField(self,key):
+    def delField(self,fieldname):
         self._altered = True
         self.delField = super(CatalogObject,self).delField
-        self.delField(key,val)
+        self.delField(fieldname)
         
         
 #<--------------------builtin catalog types------------------------------------>
@@ -582,7 +586,11 @@ class CatalogObject(CatalogElement):
 class AstronomicalObject(CatalogObject):
     from .coords import AngularPosition
     
-    name = Field('name',basestring,'default Name')
+    def __init__(self,parent=None,name='default Name'):
+        super(AstronomicalObject,self).__init__(parent)
+        self.name.defaultValue=name
+    
+    name = Field('name',basestring)
     loc = Field('loc',AngularPosition)
     
     
