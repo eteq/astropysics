@@ -21,7 +21,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 
 #Spectrum related io module functions
-from .io import load_deimos_spectrum,load_deimos_templates,load_spylot_spectrum
+from .io import load_deimos_spectrum,load_spylot_spectrum
 
 class HasSpecUnits(object):
     """
@@ -669,11 +669,16 @@ class Spectrum(HasSpecUnits):
         
         return tuple(eyefluxes)
         
-    def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,**kwargs):
+    def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,colors=('b','g','r'),**kwargs):
         """
         uses matplotlib to plot the Spectrum object
         
-        kwargs go into 
+        if the linestyle is 'steps' (the default), the spectrum will
+        be offset so that the steps are centered on the pixels
+        
+        colors should be a 3-tuple that applies to 
+        (spectrum,error,invaliderror) and kwargs go into spectrum
+        and error plots
         """
         import matplotlib.pyplot as plt
         
@@ -685,9 +690,14 @@ class Spectrum(HasSpecUnits):
         if 'ls' not in kwargs and 'linestyle' not in kwargs:
             kwargs['ls']='steps'
             
+        if kwargs['ls']=='steps' and len(x)>=4:
+            x = np.hstack((1.5*x[0]-x[1]/2,np.convolve(x,[0.5,0.5],mode='valid'),1.5*x[-1]-x[-2]/2))
+            y = np.hstack((y[0],y))
+            e = np.hstack((e[0],e))
         if clf:
             plt.clf()
-        
+            
+        kwargs['c'] = colors[0]
         if fmt is None:
             res = [plt.plot(x,y,**kwargs)]
         else:
@@ -699,7 +709,12 @@ class Spectrum(HasSpecUnits):
                 ploterrs = {}
             ploterrs.setdefault('ls','-')
             
-            res.append(plt.plot(x,e,**ploterrs))
+            m = (e < np.max(y)*2) & np.isfinite(e)
+            if sum(m) > 0:
+                kwargs['c'] = colors[1]
+                res.append(plt.plot(x[m],e[m],**kwargs))
+            if sum(~m) > 0:
+                res.append(plt.plot(x[~m],np.mean(e[m])*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
         plt.xlim(np.min(x),np.max(x))
         
         xl=self.unit
