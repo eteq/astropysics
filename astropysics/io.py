@@ -32,6 +32,43 @@ def _get_package_data(dataname):
     path = dirname(rootfile)+'/data/'+dataname
     return get_loader(rootname).get_data(path)
 
+#<-----------------------General IO utilities---------------------------------->
+
+def loadtxt_text_fields(fn,fieldline=0,typedelim=':',**kwargs):
+    """
+    this uses numpy.loadtxt to load a text file into a numpy record 
+    array where the field names are inferred from a commented text line.
+    
+    the format for the field line is:
+    
+    #field1:typecode1 field2:typecode2 (... )
+    
+    with the character in place of the : optionally selected with the 
+    typedelim keyword.  Any comments in the line will be removed. 
+    type codes are the same as those used in numpy.dtype
+    
+    fieldline tells which line of the file to use to find the line with
+    field information
+    
+    kwargs are passed into numpy.loadtxt
+    """
+    if 'dtype' in kwargs:
+        raise ValueError("can't use field lines")
+    
+    comments = kwargs['comments'] if 'comments' in kwargs else '#'
+    delimiter = kwargs['delimiter'] if 'delimiter' in kwargs else None
+    
+    with open(fn,'r') as f:
+        for i,l in enumerate(f):
+            if i >= fieldline:
+                l = l.replace(comments,'')
+                fields = l.split(delimiter)
+                break
+            
+    dtype = np.dtype([tuple(fi.split(typedelim)) for fi in fields])
+    return np.loadtxt(fn,dtype=dtype,**kwargs)
+
+
 #<------------------------VOTable classes-------------------------------------->
 class VOTable(object):
     """
@@ -459,68 +496,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     finally:
         f.close()
         
-def load_deimos_templates(fns):
-    """
-    This will generate a dictionary of Spectrum objects from the specified  
-    templates 
-    fn can be a single file, a list of files, or a unix-style pattern
-    """
-    import pyfits
-    from .spec import Spectrum
-    from operator import isSequenceType
-    from warnings import warn
-    
-    if isinstance(fns,basestring):
-        from glob import glob
-        fns = glob(fns)
-        
-    if not isSequenceType(fns):
-        raise ValueError('improper filename format')
-    
-    tempd={}
-    xd={}
-    for fn in fns:
-        f = pyfits.open(fn)
-        try:
-            h=f[0].header
-            d=f[0].data
-            if len(d.shape) == 1:
-                d = (d,)
-            if len(d) == 1:
-                if h.has_key('NAME0'):
-                    k=h['NAME0'].strip()
-                elif h.has_key('NAME'):
-                    k=h['NAME'].strip()
-                elif h.has_key('OBJECT'):
-                    k=h['OBJECT'].strip()
-                else:
-                    k = fn.strip()
-                    warn('could not infer spectrum name - using filename %s as key name'%k)
-                    
-                xd[k] = 10**(h['COEFF0']+h['COEFF1']*np.arange(d[0].shape[-1]))
-                tempd[k] = d[0].copy()
-            else:
-                x = 10**(h['COEFF0']+h['COEFF1']*np.arange(d.shape[-1]))
-                for i,spec in enumerate(d):
-                    if  h.has_key('NAME%i'%i):
-                        k=h['NAME%i'%i].strip()
-                    elif h.has_key('OBJECT') and h.has_key('EIGEN%i'%i):
-                        k = '%s%i'%(h['OBJECT'].strip(),h['EIGEN%i'%i])
-                    elif h.has_key('NAME'):
-                        k = '%s-%i'%(h['NAME'].strip(),i)
-                    elif h.has_key('OBJECT'):
-                        k = '%s-%i'%(h['OBJECT'].strip(),i)
-                    else:
-                        k = '%s-%i'%(fn.strip(),i)
-                        warn('could not infer spectrum name - using filename %s as key name'%k)
-                        
-                    xd[k] = x
-                    tempd[k]=spec.copy() #TODO: see if its better to not copy here
-                    
-        finally:
-            f.close()
-            
-    return dict(((k,Spectrum(xd[k],tempd[k])) for k in tempd))
+
     
 def load_spylot_spectrum(s,bandi):
     from .spec import Spectrum
