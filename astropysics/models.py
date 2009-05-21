@@ -1542,12 +1542,37 @@ class EinastoModel(FunctionModel1D):
     def f(self,r,A=1,rs=1,alpha=.2):
         return A*np.exp(-(r/rs)**alpha)
 
-class SersicModel(EinastoModel):
-    #TODO:better normalizations and rs
-    def f(self,r,A=1,rs=1,n=2):
+class SersicModel(FunctionModel1D):
+    """
+    Sersic surface brightness profile:
+    A*exp(-b_n[(R/Re)^(1/n)-1])
+    """
+    def f(self,r,A=1,re=1,n=2):
         #return EinastoModel.f(self,r,A,rs,1/n)
-        return A*np.exp(-(r/rs)**(1/n))
+        #return A*np.exp(-(r/rs)**(1/n))
+        return A*np.exp(-self.bn(n)*((r/re)**(1.0/n)-1))
     
+    _bncache={}
+    _bnpoly1=np.poly1d([-2194697/30690717750,131/1148175,46/25515,4/405,-1/3])
+    _bnpoly2=np.poly1d([13.43,-19.67,10.95,-0.8902,0.01945])
+    def bn(self,n,usecache=True):
+        """
+        bn is used to get the appropriate half-light radius
+        
+        the form is a fit from MacArthur, Courteau, and Holtzman 2003 
+        and is claimed to be good to ~O(10^-5)
+        
+        if usecache is True, the cache will be searched, if False it will
+        be saved but not used, if None, ignored
+        """
+        if n  in SersicModel._bncache and usecache:
+            val = SersicModel._bncache[n]
+        else:
+            val = (2*n+SersicModel._bnpoly1(1/n)) if n>0.36 else SersicModel._bnpoly2(n)
+            if usecache is not None:
+                SersicModel._bncache[n] = val
+        return val
+        
     def sbfit(self,r,sb,zpt=0,**kwargs):
         """
         fit surface brightness using the SersicModel
@@ -1587,14 +1612,14 @@ class SersicModel(EinastoModel):
         plt.xlim(lower,upper)
 
 class ExponentialDiskModel(SersicModel):
-    def f(self,rz,A=1,rs=1,zs=.3):
+    def f(self,rz,A=1,re=1,zs=.3):
         r=rz[0]
         z=rz[1]
-        return SersicModel.f(self,r,A,rs,1)*np.exp(np.abs(z)/zs)
+        return SersicModel.f(self,r,A,re,1)*np.exp(np.abs(z)/zs)
     
-class DeVauculeursModel(SersicModel):
-    def f(self,r,A=1,rs=1):
-        return SersicModel.f(self,r,A,rs,4)
+class DeVaucouleursModel(SersicModel):
+    def f(self,r,A=1,re=1):
+        return SersicModel.f(self,r,A,re,4)
 
 class MaxwellBoltzmannModel(FunctionModel1D):
     from .constants import me #electron
