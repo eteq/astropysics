@@ -275,7 +275,7 @@ class FunctionModel1D(object):
         
         the full output is available is self.lastFit
         
-        if savedata os true, the input fit data will be available in 
+        if savedata is true, the input fit data will be available in 
         self.fitteddata as an (x,y) tuple
         
         see also:getMCMC
@@ -1373,25 +1373,21 @@ class BlackbodyOffsetModel(BlackbodyModel):
     def _fen(self,x,A=1,T=5800,xoff=0,yoff=0):
         return BlackbodyModel._fen(self,x+xoff,A,T)+yoff
     
+   
+class SmoothSplineModel(FunctionModel1D):
+    """
+    this uses a B-spline as a model for the function.  Note that by
+    default the parameters are not tuned - the input smoothing and 
+    degree are left alone when fitting
     
-class SplineModel(FunctionModel1D):
+    the scipy.interpolate.UnivariateSpline class is used to
+    do the calculation (in the "spline" attribute) 
     """
-    this uses the scipy.interpolate.UnivariateSpline class as a model for the function
-    """
-    def __init__(self,xdata=None,ydata=None,degree=3):
-        from warnings import warn
-        if xdata is None and ydata is None:
-            warn('Spline models should be provided with initial xdata and ydata (initializing to (0,0 and 1,1))')
-            self._x,self._y = np.array((0,1)),np.array((0,1))
-        elif xdata is None or ydata is None:
-            raise ValueError('need both xdata and ydata')
+    def __init__(self):
+        super(SmoothSplineModel,self).__init__()
         
-        self._x,self._y = np.array(xdata),np.array(ydata)
-        if xdata.shape != ydata.shape:
-            raise ValueError("xdata and ydata don't match")
-        self.s = xdata.size
-        self._olds=None
-        self.degree = degree
+        self._oldd=self._olds=None
+        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
             
     def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
@@ -1400,24 +1396,93 @@ class SplineModel(FunctionModel1D):
         """
         from scipy.interpolate import UnivariateSpline
         
-        self.spline = UnivariateSpline(self._x,self._y,s=self.s,k=self.degree)
+        self.spline = UnivariateSpline(x,y,s=self.s,k=self.degree)
+        
         self._olds = self.s
-        return np.array([self.s])
+        self._oldd = self.degree
         
-    def fitData(self,x,y,*args,**kwargs):
-        self._x=x
-        self._y=y
-        self._olds=None
-        return FunctionModel1D.fitData(x,y,*args,**kwargs)
+        return np.array([self.s,self.degree])
+        
+    def fitData(self,x,y,**kwargs):
+        self._oldd=self._olds=None
+        if 'savedata' in kwargs and not kwargs['savedata']:
+            raise ValueError('data must be saved for spline models')
+        else:
+            kwargs['savedata']=True
+            
+        sorti = np.argsort(x)    
+        return super(SmoothSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
     
-    def f(self,x,s=2):
-        from scipy.interpolate import UnivariateSpline
-        
-        if self._olds != s:
-            self.spline = UnivariateSpline(self._x,self._y,s=s,k=self.degree)
-            self._olds = s
+    def f(self,x,s=2,degree=3):        
+        if self._olds != s or self._oldd != degree:
+            xd,yd = self.fitteddata
+            self._customFit(xd,yd)
         
         return self.spline(x)
+    
+    
+class KnotSplineModel(FunctionModel1D):
+    """
+    this uses a B-spline as a model for the function.  The knots
+    parameter specifies the number of INTERIOR knots to use for the
+    fit 
+    
+    locmethod can be:
+    'cdf':the locations of the knots will be determined 
+    by evenly sampling the cdf of the x-points
+    'even':the knots are evenly spaced in x
+    
+    the scipy.interpolate.UnivariateSpline class is used to
+    do the calculation (in the "spline" attribute) 
+    """
+    def __init__(self,locmethod='even'):
+        super(KnotSplineModel,self).__init__()
+        
+        self._oldd=self._oldk=None
+        self.locmethod = locmethod
+        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+            
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
+        """
+        just fits the spline with the current s-value - if s is not changed,
+        it will execute very quickly after
+        """
+        from scipy.interpolate import LSQUnivariateSpline
+        if self.locmethod == 'evencdf':
+            cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
+            mask = cdf!=0
+            cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
+            cdf = np.hstack((0,np.cumsum(cdf)/np.sum(cdf)))
+            self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
+        elif self.locmethod == 'even':
+            self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
+        else:
+            raise ValueError('unrecognized locmethod %s'%self.locmethod)
+        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=self.degree)
+        
+        self._oldk = self.nknots
+        self._oldd = self.degree
+        
+        return np.array([self.nknots,self.degree])
+        
+    def fitData(self,x,y,**kwargs):
+        self._oldd=self._olds=None
+        if 'savedata' in kwargs and not kwargs['savedata']:
+            raise ValueError('data must be saved for spline models')
+        else:
+            kwargs['savedata']=True
+            
+        sorti = np.argsort(x)    
+        return super(KnotSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
+    
+    def f(self,x,nknots=1,degree=3):        
+        if self._oldk != nknots or self._oldd != degree:
+            xd,yd = self.fitteddata
+            self._customFit(xd,yd)
+        
+        return self.spline(x)
+    
+    
     
 class NFWModel(TwoPowerModel):
     """
