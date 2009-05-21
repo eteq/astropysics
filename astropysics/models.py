@@ -244,7 +244,7 @@ class FunctionModel1D(object):
         return res[0]
         
         
-    def fitData(self,x,y,method=None,fixedpars=(),weights=None,contraction='sumsq',
+    def fitData(self,x,y,method=None,fixedpars=None,weights=None,contraction='sumsq',
                  updatepars=True,savedata=True,timer=None,**kwargs):
         """
         This will use the data to adjust the parameters to fit using any of a
@@ -254,7 +254,8 @@ class FunctionModel1D(object):
         scalar optimizers) or 'custom'
         default is custom, or if not present, leastsq
         
-        fixedpars is a sequence of parameter names to leave fixed
+        fixedpars is a sequence of parameter names to leave fixed.  If it is
+        None, the fixed parameters are inferred from self.fixedpars
         
         contraction applies for all except the 'leastsq' method  (for which only
         'frac' is meaningful) and is the technique used to convert vectors to
@@ -285,6 +286,9 @@ class FunctionModel1D(object):
         if method is None:
             #TODO: figure out a less hackish way than matching the docs
             method = 'leastsq' if self._customFit.__doc__ is FunctionModel1D._customFit.__doc__ else 'custom'
+            
+        if fixedpars is None:
+            fixedpars = self.fixedpars if hasattr(self,'fixedpars') else ()
             
         if x.shape != y.shape:
             raise ValueError("x and y don't match")
