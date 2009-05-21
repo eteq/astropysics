@@ -295,7 +295,9 @@ class Spectrum(HasSpecUnits):
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         if hasattr(self,'_contop'):
             raise ValueError('continuum operation applied - revert before changing units')
-        if callable(self.continuum):
+        if self.continuum is None:
+            pass
+        elif callable(self.continuum):
             self.continuum = None
         else:
             self.continuum = xftrans(self._x,self.continuum)[1]

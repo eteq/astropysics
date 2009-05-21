@@ -681,6 +681,7 @@ def set_zeropoint_system(system,bands='all'):
     
     if system == 'AB':
         for b in bands:
+            #TODO:constant function spectrum
             s = Spectrum(b.x,np.ones_like(b.x),unit=b.unit)
             s.unit = 'hz'
             s = Spectrum(s.x,np.ones_like(s.x)*10**(48.6/-2.5),unit='hz')
