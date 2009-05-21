@@ -37,7 +37,7 @@ class HasSpecUnits(object):
     __metaclass__ = ABCMeta
     
     def __init__(self,unit):
-        self._phystype,self._unit,self._xscaling = self._strToUnit(unit)
+        self._phystype,self._unit,self._xscaling = self._strToUnit(unit) 
     
     @abstractmethod
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
@@ -215,6 +215,8 @@ class HasSpecUnits(object):
     def _setUnit(self,typestr):
         newtype,newunit,newscaling = self._strToUnit(typestr)
         if not (newunit == self._unit and newscaling == self._xscaling):
+            
+            oldsettings = self._xscaling,self._phystype,self._unit
             self.__newscale = newscaling
             self.__oldscale = self._xscaling
             self.__newtype = newtype
@@ -223,8 +225,12 @@ class HasSpecUnits(object):
             self._phystype = newtype
             self._xscaling = newscaling
             self._unit = newunit
-            
-            self._applyUnits(self.__xtrans,self.__xitrans,self.__xftrans,self.__xfinplace)
+                
+            try:    
+                self._applyUnits(self.__xtrans,self.__xitrans,self.__xftrans,self.__xfinplace)
+            except:
+                self._xscaling,self._phystype,self._unit = oldsettings
+                raise
             
     unit = property(_getUnit,_setUnit)
 
@@ -276,6 +282,8 @@ class Spectrum(HasSpecUnits):
         self._flux = flux
         self._err = err
         
+        self.continuum = None
+        
     def copy(self):
         """
         Generates a deep copy of this Spectrum
@@ -285,7 +293,14 @@ class Spectrum(HasSpecUnits):
     
     #units support
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
-        x,err = xftrans(self._x,self._err)
+        if hasattr(self,'_contop'):
+            raise ValueError('continuum operation applied - revert before changing units')
+        if callable(self.continuum):
+            self.continuum = None
+        else:
+            self.continuum = xftrans(self._x,self.continuum)[1]
+        
+        err = xftrans(self._x,self._err)[1]
         #x,flux = xftrans(self._x,self._flux)
         xfinplace(self._x,self._flux)
         self._err[:] = err
@@ -401,7 +416,7 @@ class Spectrum(HasSpecUnits):
         x = self.x*self._xscaling
         if 'wavelength' in self.unit:
             factor = x/h/c
-        elif 'fasd' in self.unit:
+        elif 'frequency' in self.unit:
             factor = 1/h/x
         elif 'energy' in self.unit:
             factor = 1/x
@@ -500,7 +515,7 @@ class Spectrum(HasSpecUnits):
     
     def resample(self,newx,interpolation='linear',replace=True,**kwargs):
         """
-        this interpolates the flux to populate the supplies x-axis
+        this interpolates the flux to populate the supplied x-axis
         
         kwargs go into the interpolation routine as described below
         
@@ -575,7 +590,7 @@ class Spectrum(HasSpecUnits):
     
     def logify(self,lower=None,upper=None,**kwargs):
         """
-        convinience function for resampling to an x-axis that is equally spaced
+        convinience function for resampling to an x-axis that is evenly spaced
         in logarithmic bins.  Note that lower and upper are the x-axis values 
         themselves, NOT log(xvalue)
         
@@ -643,9 +658,7 @@ class Spectrum(HasSpecUnits):
             return res
         
         
-    
-    _rgbsensitivity = (1,1,1) #this is adjusted to a blackbody after the Spectrum class is created
-    
+    _rgbsensitivity = (1,1,1) #this is adjusted to a 5800 K blackbody after the Spectrum class is created
     def rgbEyeColor(self):
         """
         this uses the 'eye' group in phot.bands to convert a spectrum to
@@ -668,8 +681,93 @@ class Spectrum(HasSpecUnits):
         eyefluxes /= maxe
         
         return tuple(eyefluxes)
+    
+    def fitContinuum(self,model='knotspline',weighted=False,evaluate=False,**kwargs):
+        """
+        this method computes a continuum fit to the spectrum using a model
+        from astropysics.models (list_models will give all options) or
+        an callable with a fitData(x,y) function
         
-    def plot(self,fmt=None,ploterrs=True,smoothing=None,clf=True,colors=('b','g','r'),**kwargs):
+        kwargs are passed into the constructor for the model
+        
+        if weighted, the inverse variance will be used as weights to the 
+        continuum fit
+        
+        the fitted model is assigned to self.continuum or evaluated at the
+        spectrum points if evaluate is True and the results are set to 
+        self.continuum
+        """
+        if isinstance(model,basestring):
+            from .models import get_model
+            model = get_model(model)(**kwargs)
+        
+        if not (callable(model) and hasattr(model,'fitData')):
+            raise ValueError('provided model object cannot fit data')
+        
+        model.fitData(self.x,self.flux,weights=self.ivar if weighted else None)
+        
+        self.continuum = model(self.x) if evaluate else model
+        
+    def subtractContinuum(self):
+        """
+        Subtract the continuum from the flux
+        """
+        if hasattr(self,'_contop'):
+            raise ValueError('%s already performed on continuum'%self._contop)
+        
+        if self.continuum is None:
+            raise ValueError('no continuum defined')
+        elif callable(self.continuum):
+            cont = self.continuum(self.x)
+        else:
+            cont = self.continuum
+            
+        self.flux = self.flux - cont
+        self._contop = 'subtraction'
+            
+    def normalizeByContinuum(self):
+        """
+        Divide by the flux by the continuum
+        """
+        if hasattr(self,'_contop'):
+            raise ValueError('%s already performed on continuum'%self._contop)
+        
+        if self.continuum is None:
+            raise ValueError('no continuum defined')
+        elif callable(self.continuum):
+            cont = self.continuum(self.x)
+        else:
+            cont = self.continuum
+            
+        self.flux = self.flux/cont
+        self._contop = 'normalize'
+        
+    def rejectOutliersFromContinuum(self,sig=3):
+        raise NotImplementedError
+            
+    def revertContinuum(self):
+        """
+        Revert to flux before continuum subtraction
+        """
+        if self.continuum is None:
+            raise ValueError('no continuum defined')
+        elif callable(self.continuum):
+            cont = self.continuum(self.x)
+        else:
+            cont = self.continuum
+            
+        if hasattr(self,'_contop'):
+            if self._contop == 'subtraction':
+                self.flux = self.flux+cont
+            elif self._contop == 'normalize':
+                self.flux = self.flux*cont
+            else:
+                raise RuntimeError('invalid continuum operation')
+            del self._contop
+        else:
+            raise ValueError('no continuum action performed')
+        
+    def plot(self,fmt=None,ploterrs=True,plotcontinuum=True,smoothing=None,clf=True,colors=('b','g','r','k'),**kwargs):
         """
         uses matplotlib to plot the Spectrum object
         
@@ -680,6 +778,7 @@ class Spectrum(HasSpecUnits):
         (spectrum,error,invaliderror) and kwargs go into spectrum
         and error plots
         """
+        
         import matplotlib.pyplot as plt
         
         if smoothing:
@@ -694,6 +793,17 @@ class Spectrum(HasSpecUnits):
             x = np.hstack((1.5*x[0]-x[1]/2,np.convolve(x,[0.5,0.5],mode='valid'),1.5*x[-1]-x[-2]/2))
             y = np.hstack((y[0],y))
             e = np.hstack((e[0],e))
+        elif len(x)==3:
+            dx1 = x[1]-x[0]
+            dx2 = x[2]-x[1]
+            x = np.array((x[0]-dx1/2,x[0]+dx1/2,x[1]+dx2/2,x[2]+dx2/2))
+            y = np.array((y[0],y[1],y[2],y[2]))
+            e = np.array((e[0],e[1],e[2],e[2]))
+        elif len(x)==2:
+            dx = x[1]-x[0]
+            x = np.array((x[0]-dx/2,x[0]+dx/2,x[1]+dx/2))
+            y=np.array((y[0],y[1],y[1]))
+            y=np.array((e[0],e[1],e[1]))
         if clf:
             plt.clf()
             
@@ -715,6 +825,17 @@ class Spectrum(HasSpecUnits):
                 res.append(plt.plot(x[m],e[m],**kwargs))
             if sum(~m) > 0:
                 res.append(plt.plot(x[~m],np.mean(e[m])*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+        
+        if plotcontinuum and self.continuum is not None:
+            if callable(self.continuum):
+                cont = self.continuum(self.x)
+            else:
+                cont = self.continuum
+            kwargs['c'] = colors[3]
+            kwargs['ls'] =  '--'
+            res.append(plt.plot(self.x,cont,**kwargs))
+                
+                
         plt.xlim(np.min(x),np.max(x))
         
         xl=self.unit

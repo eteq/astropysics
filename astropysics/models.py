@@ -1390,7 +1390,7 @@ class SmoothSplineModel(FunctionModel1D):
     def __init__(self):
         super(SmoothSplineModel,self).__init__()
         
-        self._oldd=self._olds=None
+        self._oldd=self._olds=self._ws=None
         self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
             
     def _customFit(self,x,y,fixedpars=(),**kwargs):
@@ -1400,7 +1400,7 @@ class SmoothSplineModel(FunctionModel1D):
         """
         from scipy.interpolate import UnivariateSpline
         
-        self.spline = UnivariateSpline(x,y,s=self.s,k=self.degree)
+        self.spline = UnivariateSpline(x,y,s=self.s,k=self.degree,w=kwargs['weights'] if 'weights' in kwargs else None)
         
         self._olds = self.s
         self._oldd = self.degree
@@ -1414,13 +1414,18 @@ class SmoothSplineModel(FunctionModel1D):
         else:
             kwargs['savedata']=True
             
+        if 'weights' in kwargs:
+            self._ws = kwargs['weights']
+        else:
+            self._ws = None
+            
         sorti = np.argsort(x)    
         return super(SmoothSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
     
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd)
+            self._customFit(xd,yd,weights=self._ws)
         
         return self.spline(x)
     
@@ -1442,7 +1447,7 @@ class KnotSplineModel(FunctionModel1D):
     def __init__(self,locmethod='even'):
         super(KnotSplineModel,self).__init__()
         
-        self._oldd=self._oldk=None
+        self._oldd=self._oldk=self._ws=None
         self.locmethod = locmethod
         self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
             
@@ -1462,7 +1467,7 @@ class KnotSplineModel(FunctionModel1D):
             self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
         else:
             raise ValueError('unrecognized locmethod %s'%self.locmethod)
-        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=self.degree)
+        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=self.degree,w=kwargs['weights'] if 'weights' in kwargs else None)
         
         self._oldk = self.nknots
         self._oldd = self.degree
@@ -1476,13 +1481,18 @@ class KnotSplineModel(FunctionModel1D):
         else:
             kwargs['savedata']=True
             
+        if 'weights' in kwargs:
+            self._ws = kwargs['weights']
+        else:
+            self._ws = None
+            
         sorti = np.argsort(x)    
         return super(KnotSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
     
-    def f(self,x,nknots=1,degree=3):        
+    def f(self,x,nknots=3,degree=3):        
         if self._oldk != nknots or self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd)
+            self._customFit(xd,yd,weights=self._ws)
         
         return self.spline(x)
     
