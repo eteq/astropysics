@@ -676,18 +676,16 @@ def set_zeropoint_system(system,bands='all'):
     * 'vega##' - use vega=## magnitudes based on Kurucz '93 Alpha Lyrae models
     """
     
-    from .spec import Spectrum
+    from .spec import FunctionSpectrum
     bands = str_to_bands(bands)
     
     if system == 'AB':
+        s = FunctionSpectrum((),lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
+        s.unit= 'ang'
         for b in bands:
-            #TODO:constant function spectrum
-            s = Spectrum(b.x,np.ones_like(b.x),unit=b.unit)
-            s.unit = 'hz'
-            s = Spectrum(s.x,np.ones_like(s.x)*10**(48.6/-2.5),unit='hz')
-            s.unit= 'ang'
+            s.x = b.x
+            s.unit = b.unit
             b.computeZptFromSpectrum(s,aligntoband=True,interpolation='linear')
-        del s,Spectrum,b
         
     elif 'vega' in system.lower():
         from cPickle import loads
@@ -697,9 +695,6 @@ def set_zeropoint_system(system,bands='all'):
             offset = float(system.lower().replace('vega',''))
         except ValueError:
             offset = 0
-#        import pyfits
-#        from cStringIO import StringIO
-#        vegad = pyfits.open(StringIO(_get_package_data('vega_k93.fits')))[1].data
         
         vegad = loads(_get_package_data('vega_k93.pydict'))['data']
         s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX'])
