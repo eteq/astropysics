@@ -18,13 +18,17 @@ try:
     from abc import ABCMeta
     from abc import abstractmethod
     from abc import abstractproperty
-    from collections import MutableSequence
+    from collections import Sequence,MutableSequence,MutableMapping
 except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
     class MutableSequence(object):
-        __slots__=('__weakref__',) #support for weakrefs as in 2.6 MutableSequence objects
+        __slots__=('__weakref__',) #support for weakrefs as necessary
+    class MutableMapping(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
+    class Sequence(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
         
 class CycleError(Exception):
     """
@@ -33,22 +37,24 @@ class CycleError(Exception):
     def __init__(self,message):
         super(CycleError,self).__init__(message)
 
-class CatalogElement(object):
+class CatalogNode(object):
     """
-    This Object is the superclass for all elements of a catalog.  Subclasses 
-    must call super(Subclass,self).__init__(parent) in their __init__
+    This Object is the superclass for all elements/nodes of a catalog.  
+    This is an abstract class that must have its initializer overriden.
+    
+    Subclasses must call super(Subclass,self).__init__(parent) in their __init__
     """
     
     __metaclass__ = ABCMeta
-    __slots__=('_fieldnames','_parent','_children')
+    __slots__=('_parent','_children','__weakref__')
     
     @abstractmethod
     def __init__(self,parent):
-        self._fieldnames = []
         self._children = []
         self._parent = None
         
-        self.parent = parent
+        if parent is not None:
+            self.parent = parent
         
     def _cycleCheck(self,source):
         """
@@ -60,41 +66,22 @@ class CatalogElement(object):
         if self._parent is None:
             return None
         else:
-            self.parent._cycleCheck(source)
+            return self.parent._cycleCheck(source)
             
     def _getParent(self):
         return self._parent
     def _setParent(self,val):
+        
+        if val is not None:
+            val._cycleCheck(self) #TODO:test performance effect/make disablable
+            val._children.append(self)
+            
         if self._parent is not None:
             self._parent._children.remove(self)
-        if val is not None:
-            self.parent._cycleCheck(self) #TODO:test performance effect/make disablable
-            val._children.append(self)
         self._parent = val
+        
     parent=property(_getParent,_setParent)
     
-    def addField(self,field):
-        if not isinstance(field,Field):
-            raise ValueError('input value is not a Field')
-        if field.name in self._fieldnames:
-            raise ValueError('Field name "%s" already present'%field.name)
-        setattr(self,field.name,field)
-        self._fieldnames.append(field.name)
-        
-    def delField(self,fieldname):
-        try:
-            self._fieldnames.remove(fieldname)
-            if hasattr(self.__class__,fieldname):
-                setattr(self,fieldname,None)
-            else:
-                delattr(self,fieldname)
-        except ValueError:
-            raise KeyError('Field "%s" not found'%fieldname)
-        
-    @property
-    def fieldNames(self):
-        return tuple(self._fieldnames)
-        
     
     @property
     def children(self):
@@ -125,16 +112,23 @@ class CatalogElement(object):
                 newl.append(self._children[i])
                 added[i] = True
                 
-    #TODO: overwrite __setattr__ and __delattr__ to respond better to Field objects
+    @property
+    def nnodes(self):
+        """
+        this gives the number of total nodes at this point in the tree
+        (including self - e.g. a leaf in the tree returns 1)
+        """
+        return sum([c.nnodes for c in self._children],1)
+        
     
-    def visit(self,func,traversal='inorder'):
+    def visit(self,func,traversal='postorder'):
         """
         This function walks through the object and all its children, 
-        executing func(CatalogElement)
+        executing func(CatalogNode)
         
-        traversal is the traversal order of the tree - can be 
-        'level','preorder','postorder', or a number indicating at which 
-        index the root should be evaluated (pre/post are 0/-1)
+        traversal is the traversal order of the tree - can be 'preorder',
+        'postorder', a number indicating at which index the root
+        should be evaluated (pre/post are 0/-1), or 'level'/'breathfirst' 
         """
         if type(traversal)==int:
             retvals = []
@@ -157,7 +151,7 @@ class CatalogElement(object):
             retvals = self.visit(func,None)
         elif traversal == 'preorder':
             retvals = self.visit(func,0)
-        elif traversal == 'level':
+        elif traversal == 'level' or traversal == 'breadthfirst':
             from collections import deque
             
             retvals=[]
@@ -167,33 +161,96 @@ class CatalogElement(object):
                 elem = q.popleft()
                 retvals.append(func(elem))
                 q.extend(elem._children)
+#        elif traversal == 'reverselevel' or traversal == 'reversebreadthfirst':
+#            from collections import deque
+            
+#            elems=[]
+#            q = deque()
+#            q.append(self)
+#            while len(q)>0:
+#                elem = q.popleft()
+#                elems.insert(0,elem)
+#                q.extend(elem._children)
+#            retvals = [func(e) for e in elems]
         else:
             raise ValueError('unrecognized traversal type')
         
         return retvals
-                
-
-class Catalog(CatalogElement):
-    """
-    This class represents a catalog of objects or catalogs.
     
-    A Catalog is essentially a node in the object tree that does not contain 
-    fields or have a parent, only children
+class FieldNode(CatalogNode,MutableMapping,Sequence):
     """
-    def __init__(self):
-        super(Catalog,self).__init__(parent=None)
-        self._fieldnames = None
+    A node in the catalog that has Fields.  This is an abstract class that 
+    must have its initializer overriden.
     
+    Note that for these subclasses, attribute access (e.g. node.fieldname) 
+    accesses the Field object, while mapping or sequence-style access 
+    (e.g node['fieldname'] or node[1])  directly accesses the current value
+    of the field (or None if there is no value)
+    """
+    __slots__=('_fieldnames',)
+    
+    @abstractmethod
+    def __init__(self,parent):
+        super(FieldNode,self).__init__(parent)
+        self._fieldnames = []
+        
     def addField(self,field):
-        raise NotImplementedError('Catalogs cannot have Fields')
-    
+        if not isinstance(field,Field):
+            raise ValueError('input value is not a Field')
+        if field.name in self._fieldnames:
+            raise ValueError('Field name "%s" already present'%field.name)
+        setattr(self,field.name,field)
+        self._fieldnames.append(field.name)
+        
     def delField(self,fieldname):
-        raise NotImplementedError('Catalogs cannot have Fields')
+        try:
+            self._fieldnames.remove(fieldname)
+            if hasattr(self.__class__,fieldname):
+                setattr(self,fieldname,None)
+            else:
+                delattr(self,fieldname)
+        except ValueError:
+            raise KeyError('Field "%s" not found'%fieldname)
+        
+    #def __iter__(self):
+    #    return iter(self._fieldnames)
     
+    def __len__(self):
+        return len(self._fieldnames)
+    
+    def __contains__(self,key):
+        return key in self._fieldnames
+        
+    def __getitem__(self,key):
+        if key not in self._fieldnames:
+            try:
+                key = self._fieldnames[key]
+            except (IndexError,TypeError):
+                raise KeyError('Field "%s" not found'%key)
+        try:
+            return getattr(self,key).value()
+        except IndexError: #field empty
+            return None
+    
+    def __setitem__(self,key,val):
+        if key not in self._fieldnames:
+            try:
+                key = self._fieldnames[key]
+            except (IndexError,TypeError):
+                raise KeyError('Field "%s" not found'%key)
+        field = getattr(self,key)
+        field.value = val
+    
+    def __delitem__(self,key):
+        self.delField(key)
+        
     @property
-    def parent(self):
-        return None
+    def fieldnames(self):
+        return tuple(self._fieldnames)
     
+    #TODO: overwrite __setattr__ and __delattr__ to respond better to Field objects
+   
+#<----------------------------node attribute types----------------------------->    
 
 class _SourceMeta(type):
     #TODO: improve Source Singletons
@@ -212,9 +269,6 @@ class Source(object):
         
     def __str__(self):
         return 'Source ' + self._str
-    
-    
-    
     
 class Field(MutableSequence):
     """
@@ -278,6 +332,7 @@ class Field(MutableSequence):
             for v in self._vals:
                 if key==v:
                     return v
+            raise KeyError('Could not find requested FieldValue')
         elif isinstance(key,basestring):
             if 'depends' in key.lower():
                 depre = key.lower().replace('depends','').strip()
@@ -323,13 +378,23 @@ class Field(MutableSequence):
             else:
                 return self._defaultValue
     def _setValue(self,val):
+        #TODO: decide if this try/except layering is too performance intensive
         try:
             self._currenti = self.index(self[val])
-        except TypeError,KeyError:
-            self._checkValue(val)
+        except (TypeError,KeyError):
+            #TODO: consider if it's really a good idea to allow tuple-specification
+            if type(val) is tuple and self.type is not tuple:
+                val = ObservedValue(*val)
+            try:
+                self._checkValue(val)
+                
+                self._vals.append(val)
+                self._currenti = len(self._vals)-1
             
-            self._vals.append(val)
-            self._currenti = len(self._vals)-1
+            except TypeError:
+                if len(self) == 0:
+                    self.defaultValue = val
+            
     def _delValue(self):
         try:
             del self._vals[self._currenti]
@@ -343,6 +408,14 @@ class Field(MutableSequence):
     setting it as current.  The current value can also be deleted
     or retrieved using this property
     """)
+    
+    @property
+    def values(self):
+        """
+        the FieldValue objects in this Field
+        """
+        return tuple(self._vals)
+    
     def _getType(self):
         return self._type
     def _setType(self,val):
@@ -377,14 +450,36 @@ class Field(MutableSequence):
             except:
                 raise TypeError('Invalid default value of type %s, expected %s'%(type(val),self.type))
         self._defaultValue = defval
-    defaultValue=property(_getDefault,_setDefault,doc="""
+    defaultValue = property(_getDefault,_setDefault,doc="""
     Default value if the field is empty.  Must match the type if specified.
     """)
     
     @property
     def name(self):
         return self._name
+
+#<------------------------------Node types------------------------------------->
+
+class Catalog(CatalogNode):
+    """
+    This class represents a catalog of objects or catalogs.
     
+    A Catalog is essentially a node in the object tree that does nothing other 
+    than must act as a root.
+    """    
+    def __init__(self,name='default Catalog'):
+        super(Catalog,self).__init__(parent=None)
+        self.name = name
+    
+    @property
+    def parent(self):
+        return None    
+    
+    #these methods allow support for doing uniform mapping-like lookups over a catalog
+    def __contains__(self,key):
+        return hasattr(self,key)
+    def __getitem__(self,key):
+        return getattr(self,key)
     
     
 class FieldValue(object):
@@ -500,21 +595,22 @@ class DerivedValue(FieldValue):
     
     
     
-class _CatalogObjectMeta(ABCMeta): #TODO:remove metaclass?
-    def __call__(cls,*args,**kwargs):
-        obj = super(_CatalogObjectMeta,cls).__call__(*args,**kwargs)
-        return obj
+#class _CatalogObjectMeta(ABCMeta):
+#    def __call__(cls,*args,**kwargs):
+#        obj = super(_CatalogObjectMeta,cls).__call__(*args,**kwargs)
+#        return obj
 
-class CatalogObject(CatalogElement):
+class CatalogObject(FieldNode):
     """
-    This is a CatalogElement with fields (generally a child of a Catalog 
-    object, although not necessarily)
+    This class represents a FieldNode in the catalog that follows a particular
+    data structure (i.e. a consistent set of Fields).  It is meant to be
+    subclassed to define generic types of objects in the catalog.
     
     The fields and names are inferred from the class definition and 
     hence the class attribute name must match the field name.  Any 
     FieldValues present in the class objects will be ignored
     """
-    __metaclass__ = _CatalogObjectMeta
+    #__metaclass__ = _CatalogObjectMeta
     
     def __init__(self,parent):
         import inspect
@@ -589,7 +685,8 @@ class AstronomicalObject(CatalogObject):
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
         self.name.defaultValue=name
-    
+        
+    _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',AngularPosition)
     
