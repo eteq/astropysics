@@ -348,6 +348,8 @@ class Source(object):
     def __str__(self):
         return 'Source ' + self._str
     
+#TODO: more Source information
+    
 class Field(MutableSequence,MutableMapping):
     """
     This class represents an attribute/characteristic/property of the
@@ -363,7 +365,7 @@ class Field(MutableSequence,MutableMapping):
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals')
+    __slots__=('_name','_type','_vals','_notify')
     
     def __init__(self,name,type=None,defaultval=None,usedef=None):
         """
@@ -374,6 +376,7 @@ class Field(MutableSequence,MutableMapping):
         self._name = name
         self._vals = []
         self._type = None
+        self._notifywrs = None
         
         self.type = type
         if usedef or (usedef is None and defaultval is not None):
@@ -431,7 +434,48 @@ class Field(MutableSequence,MutableMapping):
             
         val.checkType(self.type)
         return val
+    
+    def notifyValueChange(self,oldval,newval):
+        """
+        notifies all registered functions that the value in this 
+        field has changed
         
+        (see registerNotifier)
+        """
+        #TODO: optimize better
+        if self._notifywrs is not None:
+            deadrefs=[]
+            for i,wr in enumerate(self._notifywrs):
+                callobj = wr()
+                if obj is None:
+                    deadrefs.append(i)
+                else:
+                    callobj(oldval,newval)
+            
+            if len(deadrefs) == len(self._notifywrs):
+                self._notifywrs = None
+            else:
+                for i in reversed(deadrefs):
+                    del self._notifywrs[i]
+    
+    def registerNotifier(self,notifier,checkargs=True):
+        """
+        this registers a function to be called when the value changes or is 
+        otherwise rendered invalid.  The notifier will be called as
+        notifier(oldvalobj,newvalobj)
+        """
+        from weakref import ref
+        
+        if not callable(notifier):
+            raise TypeError('notifier not a callable')
+        if checkargs:
+            import inspect
+            if len(inspect.getargspec(notifier)) == 2:
+                raise TypeError('notifier does not have 2 arguments')
+        if self._notifywrs is None:
+            self._notifywrs = []
+        self._notifywrs.append(ref(notifier))
+    
     def __getitem__(self,key):
         if type(key) is int:
             return self._vals[key]
@@ -476,10 +520,11 @@ class Field(MutableSequence,MutableMapping):
             self._vals.append(val)
         
     def __delitem__(self,key):
-        if type(key) == int: #faster
-            del self._vals[key]
-        else:
-            del self._vals[self._vals.index(self[key])]
+        if type(key) is not int: 
+            key = self._vals.index(self[key])
+        if i == 0 and self._notifywrs is not None:
+            self._notifyValueChange(self._vals[0],self._vals[1] if len(self._vals)>1 else None)
+        del self._vals[key]
             
     def insert(self,key,val):
         val = self._checkConvInVal(val)
@@ -488,6 +533,8 @@ class Field(MutableSequence,MutableMapping):
             i = key
         else:
             i = self._vals.index(self[key])
+        if i == 0 and self._notifywrs is not None:
+            self._notifyValueChange(val,self._vals[0] if len(self._vals)>0 else None)
         self._vals.insert(i,val)
         
 #change to Sequnce,Mapping type
@@ -529,13 +576,14 @@ class Field(MutableSequence,MutableMapping):
         except IndexError:
             raise IndexError('Field %s empty'%self._name)
     def _setCurr(self,val):
+        oldcurr = self._vals[0] if len(self._vals)>0 else None
         try:
             i = self._vals.index(self[val])
             valobj = self._vals.pop(i)
-            self._vals.insert(0,valobj)
         except (KeyError,IndexError,TypeError):
-            val = self._checkConvInVal(val)
-            self._vals.insert(0,val)
+            valobj = self._checkConvInVal(val)
+        self._vals.insert(0,valobj)
+        self._notifyValueChange(oldcurr,valobj)
     currentobj = property(_getCurr,_setCurr)
     
     @property
@@ -545,45 +593,6 @@ class Field(MutableSequence,MutableMapping):
     @property
     def sources(self):
         return [str(v.source) for v in self._vals]
-    
-    
-class FuncField(Field):
-    """
-    This class is a field that has a DerivedValue
-    
-    """
-    
-    def __init__(self,f=None,name='default derived',type=None,defaultval=None,usedef=None):
-        raise NotImplementedError
-        self.f = f
-        super(FuncField,self).__init__(name=name,type=type,defaultval=defaultval,usedef=usedef)
-    
-    def __call__(self,*args,**kwargs):
-        return self.f(*args,**kwargs)
-
-#<------------------------------Node types------------------------------------->
-
-class Catalog(CatalogNode):
-    """
-    This class represents a catalog of objects or catalogs.
-    
-    A Catalog is essentially a node in the object tree that does nothing other 
-    than must act as a root.
-    """    
-    def __init__(self,name='default Catalog'):
-        super(Catalog,self).__init__(parent=None)
-        self.name = name
-    
-    @property
-    def parent(self):
-        return None    
-    
-    #these methods allow support for doing uniform mapping-like lookups over a catalog
-    def __contains__(self,key):
-        return hasattr(self,key)
-    def __getitem__(self,key):
-        return getattr(self,key)
-    
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
@@ -656,54 +665,105 @@ class ObservedValue(FieldValue):
         return self._value
         
 class DerivedValue(FieldValue):
-    """
-    This value is derived from a set of other fields (possibly on other 
-    objects).  Currently it does not support cycles (where e.g. 
-    DerivedValue A depends on DerivedValue B which depends on A)
-    """
-    __slots__=('_f','_val','dependson')
-    def __init__(self,func,dependson=None,source=None):
-        """
-        The supplied function will be used with the sequence of Field's
-        that the values for the derived value are to work with. 
+    __slots__=('_f','_value','_valid')
+    def __init__(self,f):
+        import inspect
         
-        alternatively, if depndson is None, the  depndencies will be 
-        inferred from the default values of the 
-        """
-        super(DerivedValue,self).__init__()
+        if callable(f):
+            self._f = f
+        else:
+            raise ValueError('attempted to make a DerivedValue with a non-callable')
         
-        from weakref import ref
+        self._valid = False
+        self._value = None
         
-        if dependson is None:
-            from inspect import getargspec
-            args,varargs,varkw,defaults = getargspec(func)
-            if len(args) != len(defs) or varargs or varkw:
-                raise ValueError('input function does not have all defaults \
-                                  matched to dependencies or has varargs')
-            dependson = defaults 
-        #TODO:infer dependencies from argument names and parents/self fields
-        
-        
-        self.dependson = []
-        for dep in dependson:
-            if not isinstance(dep,Field):
-                raise ValueError('provided dependencies are not Fields')
-            self.dependson.append(ref(dep))
-        
-        self._f = func
-        self._val = None
-        self.source = source
-        #TODO:more intelligently work out argument bindings
+        raise NotImplementedError
     
-    def __str__(self):
-        return '%s:Derived'%self.value
-        
     @property
     def value(self):
-        if self._val is None:
-            self._val = self._f(*(fieldwr()() for fieldwr in self.dependson))
-            #TODO:check for bad wrs?
-        return self._val
+        raise NotImplementedError
+
+class DependsSource(Source):
+    __slots__=('dependson')
+    
+    def __init__(self):
+        self._str = 'depend'
+        self.dependson = []
+        raise NotImplementedError
+        
+#class DerivedValue(FieldValue):
+#    """
+#    This value is derived from a set of other fields (possibly on other 
+#    objects).  Currently it does not support cycles (where e.g. 
+#    DerivedValue A depends on DerivedValue B which depends on A)
+#    """
+#    __slots__=('_f','_val','dependson')
+#    def __init__(self,func,dependson=None,source=None):
+#        """
+#        The supplied function will be used with the sequence of Field's
+#        that the values for the derived value are to work with. 
+        
+#        alternatively, if depndson is None, the  depndencies will be 
+#        inferred from the default values of the 
+#        """
+#        super(DerivedValue,self).__init__()
+        
+#        from weakref import ref
+        
+#        if dependson is None:
+#            from inspect import getargspec
+#            args,varargs,varkw,defaults = getargspec(func)
+#            if len(args) != len(defs) or varargs or varkw:
+#                raise ValueError('input function does not have all defaults \
+#                                  matched to dependencies or has varargs')
+#            dependson = defaults 
+#        #TODO:infer dependencies from argument names and parents/self fields
+        
+        
+#        self.dependson = []
+#        for dep in dependson:
+#            if not isinstance(dep,Field):
+#                raise ValueError('provided dependencies are not Fields')
+#            self.dependson.append(ref(dep))
+        
+#        self._f = func
+#        self._val = None
+#        self.source = source
+#        #TODO:more intelligently work out argument bindings
+    
+#    def __str__(self):
+#        return '%s:Derived'%self.value
+        
+#    @property
+#    def value(self):
+#        if self._val is None:
+#            self._val = self._f(*(fieldwr()() for fieldwr in self.dependson))
+#            #TODO:check for bad wrs?
+#        return self._val
+    
+#<------------------------------Node types------------------------------------->
+
+class Catalog(CatalogNode):
+    """
+    This class represents a catalog of objects or catalogs.
+    
+    A Catalog is essentially a node in the object tree that 
+    must act as a root.
+    """    
+    def __init__(self,name='default Catalog'):
+        super(Catalog,self).__init__(parent=None)
+        self.name = name
+    
+    @property
+    def parent(self):
+        return None    
+    
+    #these methods allow support for doing uniform mapping-like lookups over a catalog
+    def __contains__(self,key):
+        return hasattr(self,key)
+    def __getitem__(self,key):
+        return getattr(self,key)
+    
     
 
 class CatalogObject(FieldNode):
@@ -803,7 +863,7 @@ class AstronomicalObject(CatalogObject):
     loc = Field('loc',AngularPosition)
 
 class Test1(AstronomicalObject):
-    @FuncField
+    
     def f(name,loc):
         return '%s+%s'%(name,loc)
     
