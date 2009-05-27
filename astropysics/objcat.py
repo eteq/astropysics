@@ -121,32 +121,58 @@ class CatalogNode(object):
         return sum([c.nnodes for c in self._children],1)
         
     
-    def visit(self,func,traversal='postorder'):
+    def visit(self,func,traversal='postorder',filter=False):
         """
         This function walks through the object and all its children, 
         executing func(CatalogNode)
         
-        traversal is the traversal order of the tree - can be 'preorder',
-        'postorder', a number indicating at which index the root
-        should be evaluated (pre/post are 0/-1), or 'level'/'breathfirst' 
+        traversal is the traversal order of the tree - can be:
+        *'preorder',
+        *'postorder'
+        *an integer indicating at which index the root should 
+        be evaluated (pre/post are 0/-1)
+        * a float between -1 and 1 indicating where the root should 
+        be evaluated as a fraction
+        *'level'/'breathfirst' 
+        
+        filter can be:
+        *False: process and return all values
+        *a callable: is called as g(node) and if it returns False, the
+        node will not be processed nor put in the (also ignores anything 
+        that returns None)
+        *any other: if the node returns this value on processing, it will
+                    not be returned
         """
-        if type(traversal)==int:
+        if callable(filter):
+            func = lambda *args,**kwargs:func(*args,**kwargs) if filter(args[0]) else None
+            filter = None
+        
+        if type(traversal) is int:
             retvals = []
             doroot = True
             for i,c in enumerate(self._children):
                 if i == traversal:
                     retvals.append(func(self))
-                    doneroot = False
+                    doroot = False
                 retvals.extend(c.visit(func,traversal))
             if doroot:
                 retvals.append(func(self))
-                
+        elif type(traversal) is float:
+            retvals = []
+            doroot = True
+            travi = int(traversal*self._children)
+            for i,c in enumerate(self._children):
+                if i == travi:
+                    retvals.append(func(self))
+                    doroot = False
+                retvals.extend(c.visit(func,traversal))
+            if doroot:
+                retvals.append(func(self))
         elif traversal is None: #None means postorder
             retvals = []
             for c in self._children:
                 retvals.extend(c.visit(func,traversal))
             retvals.append(func(self))    
-            
         elif traversal == 'postorder':
             retvals = self.visit(func,None)
         elif traversal == 'preorder':
@@ -161,20 +187,11 @@ class CatalogNode(object):
                 elem = q.popleft()
                 retvals.append(func(elem))
                 q.extend(elem._children)
-#        elif traversal == 'reverselevel' or traversal == 'reversebreadthfirst':
-#            from collections import deque
-            
-#            elems=[]
-#            q = deque()
-#            q.append(self)
-#            while len(q)>0:
-#                elem = q.popleft()
-#                elems.insert(0,elem)
-#                q.extend(elem._children)
-#            retvals = [func(e) for e in elems]
         else:
             raise ValueError('unrecognized traversal type')
         
+        if filter is not False:
+            retvals = [v for v in retvals if v is not filter]
         return retvals
     
 class FieldNode(CatalogNode,MutableMapping,Sequence):
@@ -228,7 +245,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             except (IndexError,TypeError):
                 raise KeyError('Field "%s" not found'%key)
         try:
-            return getattr(self,key).value()
+            return getattr(self,key)()
         except IndexError: #field empty
             return None
     
@@ -239,7 +256,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             except (IndexError,TypeError):
                 raise KeyError('Field "%s" not found'%key)
         field = getattr(self,key)
-        field.value = val
+        field.currentobj = val
     
     def __delitem__(self,key):
         self.delField(key)
@@ -247,6 +264,67 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
     @property
     def fieldnames(self):
         return tuple(self._fieldnames)
+    
+    def extractField(self,*args,**kwargs):
+        """
+        walk through the tree starting from this object
+        
+        see FieldNode.extractFieldFromNode for arguments
+        """
+        return FieldNode.extractFieldAtNode (self,*args,**kwargs)
+    
+    @staticmethod
+    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,dtype=None):
+        """
+        this will walk through the tree starting from the Node in the first
+        argument and generate an array of the values for the 
+        specified fieldname
+        
+        missing determines the behavior in the event that a field is not 
+        present (or a non FieldNode is encounterd) it can be:
+        *'exception': raise a KeyError if the field is missing or a 
+        TypeError if  
+        *'skip': do not include this object in the final array
+        *'0'/False: 
+        
+        traversal is of an argument like that for CatalogNode.visit
+        """
+        #TODO: optimize with array size knowledge ?
+        if missing == 'exception':
+            filter = False
+            def vfunc(node):
+                return node[fieldname]
+        elif missing == 'skip':
+            filter = None
+            def vfunc(node):
+                try:
+                    return node[fieldname]
+                except (KeyError,TypeError):
+                    return None
+        elif not missing:
+            filter = False
+            def vfunc(node):
+                try:
+                    return node[fieldname]
+                except (KeyError,TypeError):
+                    return None
+        else:
+            raise ValueError('Unrecognized value for what to do with missing fields')
+            
+        lst = node.visit(vfunc,traversal=traversal,filter=filter)
+        
+        if dtype is None:
+            try:
+                #TODO: test this or be smarter
+                return np.array(lst,dtype=node.type)
+            except:
+                pass
+        
+        return np.array(lst,dtype=dtype)
+        
+        
+        
+        
     
     #TODO: overwrite __setattr__ and __delattr__ to respond better to Field objects
    
@@ -270,19 +348,24 @@ class Source(object):
     def __str__(self):
         return 'Source ' + self._str
     
-class Field(MutableSequence):
+class Field(MutableSequence,MutableMapping):
     """
     This class represents an attribute/characteristic/property of the
     CatalogObject it is associated with.  It stores the current value
     as well as all the other possible values.
+
+    The values, sources, and default properties will return the actual values 
+    contained in the FieldValues, while currentobj and iterating 
+    over the Field will return FieldValue objects.  Calling the 
+    Field (no arguments) will return the current value
     
-    note that while the value property will return a FieldValue 
-    object (or None), calling the Field directly returns the 
-    value attribute of the current FieldValue 
+    usedef specified if the default should be set -- if True, defaultval will 
+    be used, if None, a None defaultval will be ignored but any other
+    will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals','_currenti')
+    __slots__=('_name','_type','_vals')
     
-    def __init__(self,name,type=None,defaultValue=None):
+    def __init__(self,name,type=None,defaultval=None,usedef=None):
         """
         The field must have a name, and can optionally be given a type
                 
@@ -290,173 +373,193 @@ class Field(MutableSequence):
         """        
         self._name = name
         self._vals = []
-        self._currenti = 0
         self._type = None
         
         self.type = type
-        self.defaultValue = defaultValue
+        if usedef or (usedef is None and defaultval is not None):
+            self.default = defaultval
         
     def __call__(self):
-        return self.value.value
+        return self.currentobj.value
     def __len__(self):
         return len(self._vals)
+    def __contains__(self,val):
+        #TODO: decide if this performance hit is worth optimizing somehow
+        if val is None:
+            try:
+                self[None]
+                return True
+            except KeyError:
+                return False
+        else:
+            return super(Field,self).__contains__(val)
     
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
     
-    def _checkValue(self,val,checkdup=True):
+    def _checkConvInVal(self,val,dosrccheck=True):
+        """
+        auto-converts tuples to ObservedValues
+        #TODO: auto-convert callables with necessary information to derivedvalues
+        
+        dosrccheck = True -> check if source is present
+        dosrccheck = string/Source -> ensure that value matches specified 
+        string/Source
+        dosrcchecj = False -> do nothing but convert
+        """
+        
+        if isinstance(val,tuple) and self.type is not tuple:
+            val = ObservedValue(*val)   
+        
         if not (isinstance(val,FieldValue) or (hasattr(val,'source') and hasattr(val,'value'))):
-            raise TypeError('Input not FieldValue-compatible')
-        if self.type is not None:
-            if isinstance(self.type,np.dtype):
-                if not isinstance(val.value,np.ndarray):
-                    raise TypeError('Value %s not a numpy array'%val)
-                if val.value.dtype != self.type:
-                    raise TypeError('Array %s does not match dtype %s'%(val,self.type))
-            elif not isinstance(val.value,self.type):
-                raise TypeError('Value %s is not of type %s'%(val,self.type))
+            raise TypeError('Input %s not FieldValue-compatible'%str(val))
+        
+        if dosrccheck:
+            if isinstance(dosrccheck,Source):
+                s = dosrccheck
+                if val.source != s:
+                    raise ValueError('Input %s does not match expected %s' %(val.source,s))
+            elif isinstance(dosrccheck,basestring):
+                s = Source(dosrccheck)
+                if val.source != s:
+                    raise ValueError('Input %s does not match expected %s' %(val.source,s))
+            else:
+                s = None
+                for v in self._vals:
+                    if v.source is val.source:
+                        raise ValueError('value with %s already present in Field'%v.source)
             
-        if checkdup:
-            for v in self._vals:
-                if v.source is val.source:
-                    raise ValueError('value with source %s already present in Field'%v.source)
+        val.checkType(self.type)
+        return val
         
     def __getitem__(self,key):
-        if isinstance(key,Source):
-            for v in self._vals:
-                #TODO: == compared to "is" performance tests
-                if key==v.source:
-                    return v
-            raise KeyError('Could not find requested Source')
-        elif isinstance(key,FieldValue):
-            for v in self._vals:
-                if key==v:
-                    return v
-            raise KeyError('Could not find requested FieldValue')
-        elif isinstance(key,basestring):
-            if 'depends' in key.lower():
-                depre = key.lower().replace('depends','').strip()
-                if depre=='':
-                    depnum=0
-                else:
-                    depnum=int(depre)
-                try:
-                    return [v for v in self._vals if v.depends is not None][depnum]
-                except IndexError:
-                    raise IndexError('dependent value key %i does not exist'%depnum)
-            else:
-                #TODO:test performance loss
-                return self.__getitem__(Source(key))
+        if type(key) is int:
+            return self._vals[key]
         else:
-            try:
-                return self._vals[key]
-            except TypeError:
-                raise TypeError('Field keys must be strings or list indecies')
+            if key is None:
+                key = Source(None)
+            elif isinstance(key,basestring):
+                if 'derived' in key:
+                    key = key.replace('derived','')
+                    if key == '':
+                        der = 0
+                    else:
+                        der = int(key)
+                    ders = [v for v in self._vals if isinstance(v,DerivedValue)]
+                    if len(ders) <= der:
+                        raise IndexError('field has only %i DerivedValues' % len(ders))
+                    return ders[der]
+                key = Source(key)
+            if isinstance(key,Source):
+                for v in self._vals:
+                    if v.source is key:
+                        return v
+                raise KeyError('Field does not have %s'%key)
+            else:
+                raise TypeError('key not a Source key or index')
+            
     def __setitem__(self,key,val):
-        self._checkValue(val)
-        i = self._vals.index(self[key])
-        self._vals[i] = val
+        if type(key) is int or key in self:
+            i = key if type(key) is int else self._vals.index(self[key])
+            val = self._checkConvInVal(val,self._vals[i].source)
+            self._vals[i] = val
+        else:
+            if isinstance(key,Source):
+                s = key
+            elif isinstance(key,basestring):
+                s = Source(key)
+            elif key is None:
+                s = None
+            else:
+                raise TypeError('specified key not a recognized Source')
+            val = self._checkConvInVal(val if s is None else ObservedValue(val,s))
+            self._vals.append(val)
         
     def __delitem__(self,key):
-        del self.vals[self._vals.index(self[key])]
+        if type(key) == int: #faster
+            del self._vals[key]
+        else:
+            del self._vals[self._vals.index(self[key])]
+            
     def insert(self,key,val):
-        self._checkValue(val)
-        if key == len(self._vals):
-            i = len(self._vals)
+        val = self._checkConvInVal(val)
+        
+        if type(key) is int:
+            i = key
         else:
             i = self._vals.index(self[key])
         self._vals.insert(i,val)
-        if self._currenti >= i and len(self._vals) != 1:
-            self._currenti += 1
         
-    def _getValue(self):
-        try:
-            return self._vals[self._currenti]
-        except IndexError:
-            if self._defaultValue is None:
-                raise IndexError('Field empty')
-            else:
-                return self._defaultValue
-    def _setValue(self,val):
-        #TODO: decide if this try/except layering is too performance intensive
-        try:
-            self._currenti = self.index(self[val])
-        except (TypeError,KeyError):
-            #TODO: consider if it's really a good idea to allow tuple-specification
-            if type(val) is tuple and self.type is not tuple:
-                val = ObservedValue(*val)
-            try:
-                self._checkValue(val)
-                
-                self._vals.append(val)
-                self._currenti = len(self._vals)-1
-            
-            except TypeError:
-                if len(self) == 0:
-                    self.defaultValue = val
-            
-    def _delValue(self):
-        try:
-            del self._vals[self._currenti]
-            self._currenti = 0
-        except IndexError:
-            raise IndexError('deleting from empty Field')
-    value = property(_getValue,_setValue,_delValue,
-    """
-    The current value can be set by setting to a Source object,
-    a string matching a Source, or a new FieldValue (adding the value and
-    setting it as current.  The current value can also be deleted
-    or retrieved using this property
-    """)
-    
+#change to Sequnce,Mapping type
+
+#check tuple-base setting
     @property
-    def values(self):
-        """
-        the FieldValue objects in this Field
-        """
-        return tuple(self._vals)
+    def name(self):
+        return self._name
     
     def _getType(self):
         return self._type
-    def _setType(self,val):
-        if val is None:
+    def _setType(self,newtype):
+        if newtype is None:
             self._type = None
         else:
-            oldt = self._type
-            self._type = val
-            try:
-                for v in self._vals:
-                    self._checkValue(v,checkdup=False)
-            except:
-                self._type = oldt
-                raise
+            for v in self._vals:
+                v.checkType(newtype)
+            self._type = newtype
     type = property(_getType,_setType,doc="""
     Selects the type to enforce for this field.  
     if None, no type-checking will be performed
     if a numpy dtype, the value must be an array matching the dtype
     """)
-    
+#    #TODO:default should be Catalog-level?    
     def _getDefault(self):
-        if self._defaultValue is None:
-            return None
-        return self._defaultValue.value
+        return self[None].value
     def _setDefault(self,val):
-        if val is None:
-            defval = None
-        else:
-            defval=ObservedValue(val,source=None)
-            try:
-                self._checkValue(defval,False)
-            except:
-                raise TypeError('Invalid default value of type %s, expected %s'%(type(val),self.type))
-        self._defaultValue = defval
-    defaultValue = property(_getDefault,_setDefault,doc="""
-    Default value if the field is empty.  Must match the type if specified.
+        self[None] = ObservedValue(val,None)
+    def _delDefault(self):
+        del self[None]
+    default = property(_getDefault,_setDefault,_delDefault,"""
+    The default value is the FieldValue that has a
+    the None Source
     """)
     
+    def _getCurr(self):
+        try:
+            return self._vals[0]
+        except IndexError:
+            raise IndexError('Field %s empty'%self._name)
+    def _setCurr(self,val):
+        try:
+            i = self._vals.index(self[val])
+            valobj = self._vals.pop(i)
+            self._vals.insert(0,valobj)
+        except (KeyError,IndexError,TypeError):
+            val = self._checkConvInVal(val)
+            self._vals.insert(0,val)
+    currentobj = property(_getCurr,_setCurr)
+    
     @property
-    def name(self):
-        return self._name
+    def values(self):
+        return [v() for v in self._vals]
+    
+    @property
+    def sources(self):
+        return [str(v.source) for v in self._vals]
+    
+    
+class FuncField(Field):
+    """
+    This class is a field that has a DerivedValue
+    
+    """
+    
+    def __init__(self,f=None,name='default derived',type=None,defaultval=None,usedef=None):
+        raise NotImplementedError
+        self.f = f
+        super(FuncField,self).__init__(name=name,type=type,defaultval=defaultval,usedef=usedef)
+    
+    def __call__(self,*args,**kwargs):
+        return self.f(*args,**kwargs)
 
 #<------------------------------Node types------------------------------------->
 
@@ -502,6 +605,29 @@ class FieldValue(object):
                 raise TypeError('Input source is not convertable to a Source object')
         self._source = val 
     source=property(_getSource,_setSource)
+    
+    def checkType(self,type):
+        """
+        ensure that the value of this FieldValue is of the requested Type
+        (or None to accept anything).  Any mismatches will throw
+        a TypeError
+        """
+        self._doTypeCheck(type,self.value)
+        
+    def _doTypeCheck(self,type,val):
+        """
+        handles interpretation of types - subclasses
+        should call this with the val that should be checked
+        if it is not the regular value
+        """
+        if type is not None:
+            if isinstance(type,np.dtype):
+                if not isinstance(val,np.ndarray):
+                    raise TypeError('Value %s not a numpy array'%val)
+                if self.value.dtype != type:
+                    raise TypeError('Array %s does not match dtype %s'%(val,type))
+            elif not isinstance(val,type):
+                raise TypeError('Value %s is not of type %s'%(val,type))
     
     def __call__(self):
         return self.value
@@ -579,26 +705,6 @@ class DerivedValue(FieldValue):
             #TODO:check for bad wrs?
         return self._val
     
-    @staticmethod
-    def derivedFunc(func):
-        """
-        Use this as a decorator to convert a function with defaults into
-        a DerivedValue instance with the defaults as the dependencies
-        """
-        from inspect import getargspec
-        args,varargs,kwds,defs=getargspec(func)
-        if len(args) != len(defs) or varargs or kwds:
-            raise ValueError('input function does not have all defaults \
-                              matched to dependencies or has varargs')
-        return DerivedValue(func,dependson=defs)
-        
-    
-    
-    
-#class _CatalogObjectMeta(ABCMeta):
-#    def __call__(cls,*args,**kwargs):
-#        obj = super(_CatalogObjectMeta,cls).__call__(*args,**kwargs)
-#        return obj
 
 class CatalogObject(FieldNode):
     """
@@ -619,10 +725,13 @@ class CatalogObject(FieldNode):
         self._altered = False
         
         #apply Fields from class into new object as new Fields
-        for k,v in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)): #TODO:faster way than lambda?
-            if v.name != k: #TODO: figure out if this can be done at "compile-time"
-                raise KeyError('Name of Field (%s) does not match name in class attribute (%s)'%(v.name,k))
-            fobj = Field(v.name,v.type,None if v.defaultValue is None else v.defaultValue.value)
+        for k,fi in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)): #TODO:faster way than lambda?
+            if fi.name != k: #TODO: figure out if this can be done at "compile-time"
+                raise KeyError('Name of Field (%s) does not match name in class attribute (%s)'%(fi.name,k))
+            if None in fi:
+                fobj = Field(fi.name,fi.type,fi.default, True)
+            else:
+                fobj = Field(fi.name,fi.type)
             setattr(self,k,fobj)
             self._fieldnames.append(k)
             
@@ -651,10 +760,13 @@ class CatalogObject(FieldNode):
         
         #replace any deleted Fields with defaults and keep track of which should be kept
         fields=[]
-        for k,v in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)):
+        for k,fi in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)):
             fields.append(k)
             if not hasattr(self,k) or not isinstance(getattr(self,k),Field):
-                fobj = Field(name=v.name,type=v.type,defaultValue=v.defaultValue)
+                if None in fi:
+                    fobj = Field(fi.name,fi.type,fi.default, True)
+                else:
+                    fobj = Field(fi.name,fi.type)
                 setattr(self,k,fobj)
                 
         for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
@@ -684,12 +796,16 @@ class AstronomicalObject(CatalogObject):
     
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
-        self.name.defaultValue=name
+        self.name.default=name
         
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',AngularPosition)
-    
+
+class Test1(AstronomicalObject):
+    @FuncField
+    def f(name,loc):
+        return '%s+%s'%(name,loc)
     
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
