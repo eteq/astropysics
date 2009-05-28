@@ -271,7 +271,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
         
         see FieldNode.extractFieldFromNode for arguments
         """
-        return FieldNode.extractFieldAtNode (self,*args,**kwargs)
+        return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     
     @staticmethod
     def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,dtype=None):
@@ -465,6 +465,7 @@ class Field(MutableSequence,MutableMapping):
                 key = Source(None)
             elif isinstance(key,basestring):
                 if 'derived' in key:
+                    #TODO: replace with only 1 if too slow?
                     key = key.replace('derived','')
                     if key == '':
                         der = 0
@@ -665,86 +666,127 @@ class ObservedValue(FieldValue):
         
 class DerivedValue(FieldValue):
     __slots__=('_f','_value','_valid')
+    #TODO: auto-reassign nodepath from source if Field moves
+    raiseonfailedvalue = True #raise an exception when a value cannot be re-validated but an existing value is present
     
-    def __init__(self,f):
+    def __init__(self,f,sourcenode=None):
         import inspect
         
         if callable(f):
             self._f = f
+            args, varargs, varkw, defaults = inspec.getargspec(f)
+            if varargs or varkw:
+                raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
+            if len(args) != len(defaults):
+                raise TypeError('DerivedValue function does not have defaults to provide initial linkage')
         else:
-            raise ValueError('attempted to make a DerivedValue with a non-callable')
+            raise TypeError('attempted to initialize a DerivedValue with a non-callable')
         
         self._valid = False
         self._value = None
         
-        raise NotImplementedError
+        self._source = DependentSource(defaults,sourcenode)
+    
+    @property
+    def source(self):
+        return self._source
+    
+    def _invalidateNotifier(self,oldval,newval):
+        return self.invalidate()
+    
+    def invalidate(self):
+        """
+        This marks this 
+        """
+        self._valid = False
     
     @property
     def value(self):
-        raise NotImplementedError
+        if self._valid:
+            return self._value
+        else:
+            try:
+                self._value = self._f(*self._source.getDeps())
+                self._valid = True
+            except ValueError:
+                if raiseonfailedvalue:
+                    raise
+            
+            return self._value
 
-class DependsSource(Source):
-    __slots__ = ('dependson')
+class DependentSource(Source):
+    """
+    This class holds weak references to the Field's that are
+    necessary to generate values such as in DerivedValue. 
+    
+    This source must know the Node that it is expected to inhabit to properly
+    interpret string codes for fields.  Otherwise, the input fields must be
+    Field objects
+    """
+    
+    __slots__ = ('depfieldrefs','depstrs','pathnode')
     _instcount = 0
     
     def __new__(cls,*args,**kwargs):
-        super(DependsSource,cls).__new__(cls,*args,**kwargs)
-        DependsSource._instcount += 1
+        super(DependentSource,cls).__new__(cls,*args,**kwargs)
+        DependentSource._instcount += 1
     
-    def __init__(self):
-        self._str = 'derived%i'%DependsSource._instcount
-        self.dependson = []
-        raise NotImplementedError
+    def __init__(self,fields,pathnode):
+        from weakref import ref
         
-#class DerivedValue(FieldValue):
-#    """
-#    This value is derived from a set of other fields (possibly on other 
-#    objects).  Currently it does not support cycles (where e.g. 
-#    DerivedValue A depends on DerivedValue B which depends on A)
-#    """
-#    __slots__=('_f','_val','dependson')
-#    def __init__(self,func,dependson=None,source=None):
-#        """
-#        The supplied function will be used with the sequence of Field's
-#        that the values for the derived value are to work with. 
+        self._str = 'dependent%i'%DependentSource._instcount
+        self.depfieldrefs = depfieldrefs = []
+        self.depstrs = depstrs = []
+        self.pathnode = pathnode
         
-#        alternatively, if depndson is None, the  depndencies will be 
-#        inferred from the default values of the 
-#        """
-#        super(DerivedValue,self).__init__()
+        for f in fields:
+            if isinstance(f,basestring):
+                depstrs.append(f)
+                depfieldrefs.append(lambda:None)
+            elif isinstance(f,Field):
+                depstrs.append(None)
+                depfieldrefs.append(ref(f))
+            else:
+                raise ValueError('Unrecognized field code %s'%str(f))
+        self.populateFieldRefs()
         
-#        from weakref import ref
-        
-#        if dependson is None:
-#            from inspect import getargspec
-#            args,varargs,varkw,defaults = getargspec(func)
-#            if len(args) != len(defs) or varargs or varkw:
-#                raise ValueError('input function does not have all defaults \
-#                                  matched to dependencies or has varargs')
-#            dependson = defaults 
-#        #TODO:infer dependencies from argument names and parents/self fields
-        
-        
-#        self.dependson = []
-#        for dep in dependson:
-#            if not isinstance(dep,Field):
-#                raise ValueError('provided dependencies are not Fields')
-#            self.dependson.append(ref(dep))
-        
-#        self._f = func
-#        self._val = None
-#        self.source = source
-#        #TODO:more intelligently work out argument bindings
+    def __len__(self):
+        return len(self.depfieldrefs)
     
-#    def __str__(self):
-#        return '%s:Derived'%self.value
+    def populateFieldRefs(self):
+        """
+        this relinks all dead weakrefs using the dependancy strings and returns 
+        all of the references or raises a ValueError if any of the strings
+        cannot be dereferenced
+        """
+        from weakref import ref
         
-#    @property
-#    def value(self):
-#        if self._val is None:
-#            self._val = self._f(*(fieldwr()() for fieldwr in self.dependson))
-#            #TODO:check for bad wrs?
-#        return self._val
+        pathnode = self.pathnode() if self.pathnode is not None else None
+        if not hasattr(pathnode,'fieldnames'):
+            raise ValueError('Linked pathnode has no fields or does not exist')
+        
+        refs = []
+        
+        for i,wrf in enumerate(self.depfieldrefs):
+            if wrf() is None:
+                if self.depstrs[i] in pathnode.fieldnames:
+                    refs.append(getattr(pathnode,self.depstrs[i]))
+                    self.depfieldrefs[i] = ref(refs[-1])
+                else:
+                    raise ValueError('Linked node does not have requested field %s'%self.depstrs[i])
+            else:
+                refs.append(wrf())
+        
+        return refs
+        
+    def getDeps(self):
+        """
+        get the values of the dependent fields
+        """
+        fieldvals = [wr() for wr in self.depfields]    
+        if None in fieldval:
+            fieldvals = self.populateFieldRefs()
+        return [fi() for fi in fieldvals]
     
 #<------------------------------Node types------------------------------------->
 
@@ -800,6 +842,10 @@ class CatalogObject(FieldNode):
             setattr(self,k,fobj)
             self._fieldnames.append(k)
             
+        if hasattr(self,'_derivedFuncFields'):
+            for fi,func in self._derivedFuncFields.iteritems():
+                dv = DerivedValue(func,self)
+                fi.currentObj = dv
          
     
     @property
@@ -852,6 +898,22 @@ class CatalogObject(FieldNode):
         self._altered = True
         self.delField = super(CatalogObject,self).delField
         self.delField(fieldname)
+    
+    
+    @classmethod
+    def derivedFuncField(cls,f=None,type=None,defaultval=None,usedefault=None):
+        """
+        this method is to be used as a function decorator to generate a 
+        field with a name matching that of the 
+        """
+        if f is not None: #do actual operation
+            fi = Field(name=f.__name__,type,defaultval,usedefault)
+            if not hasattr(cls,'_derivedFuncFields'):
+                cls._derivedFuncs = {}
+            cls._derivedFuncs[fi.name] = f
+            return fi
+        else: #allow for decorator arguments
+            return lambda f:derivedFuncField(f,type,defaultval,usedefault)
         
         
 #<--------------------builtin catalog types------------------------------------>
