@@ -34,7 +34,7 @@ def _get_package_data(dataname):
 
 #<-----------------------General IO utilities---------------------------------->
 
-def loadtxt_text_fields(fn,fieldline=0,typedelim=':',**kwargs):
+def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
     """
     this uses numpy.loadtxt to load a text file into a numpy record 
     array where the field names are inferred from a commented text line.
@@ -49,6 +49,9 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',**kwargs):
     
     fieldline tells which line of the file to use to find the line with
     field information
+    
+    asrecarray converts the array to a record array before returning, allowing
+    attribute-style access
     
     kwargs are passed into numpy.loadtxt
     """
@@ -66,7 +69,11 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',**kwargs):
                 break
             
     dtype = np.dtype([tuple(fi.split(typedelim)) for fi in fields])
-    return np.loadtxt(fn,dtype=dtype,**kwargs)
+    arr = np.loadtxt(fn,dtype=dtype,**kwargs)
+    
+    if asrecarray:
+        return arr.view(np.recarray)
+    return arr
 
 
 #<------------------------VOTable classes-------------------------------------->
