@@ -328,28 +328,9 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
     
     #TODO: overwrite __setattr__ and __delattr__ to respond better to Field objects
    
+
 #<----------------------------node attribute types----------------------------->    
-
-class _SourceMeta(type):
-    #TODO: improve Source Singletons
-    def __call__(cls,*args,**kwargs):
-        obj = type.__call__(cls,*args,**kwargs)
-        if not obj._str in Source._singdict:
-            Source._singdict[obj._str] = obj
-        return Source._singdict[obj._str]
-
-class Source(object):
-    __metaclass__ = _SourceMeta
-    _singdict = {}
-    
-    def __init__(self,src):
-        self._str = str(src)
-        
-    def __str__(self):
-        return 'Source ' + self._str
-    
-#TODO: more Source information
-    
+ 
 class Field(MutableSequence,MutableMapping):
     """
     This class represents an attribute/characteristic/property of the
@@ -429,7 +410,7 @@ class Field(MutableSequence,MutableMapping):
             else:
                 s = None
                 for v in self._vals:
-                    if v.source is val.source:
+                    if v.source == val.source:
                         raise ValueError('value with %s already present in Field'%v.source)
             
         val.checkType(self.type)
@@ -496,7 +477,7 @@ class Field(MutableSequence,MutableMapping):
                 key = Source(key)
             if isinstance(key,Source):
                 for v in self._vals:
-                    if v.source is key:
+                    if v.source == key:
                         return v
                 raise KeyError('Field does not have %s'%key)
             else:
@@ -537,9 +518,6 @@ class Field(MutableSequence,MutableMapping):
             self._notifyValueChange(val,self._vals[0] if len(self._vals)>0 else None)
         self._vals.insert(i,val)
         
-#change to Sequnce,Mapping type
-
-#check tuple-base setting
     @property
     def name(self):
         return self._name
@@ -558,7 +536,7 @@ class Field(MutableSequence,MutableMapping):
     if None, no type-checking will be performed
     if a numpy dtype, the value must be an array matching the dtype
     """)
-#    #TODO:default should be Catalog-level?    
+    #TODO:default should be Catalog-level?    
     def _getDefault(self):
         return self[None].value
     def _setDefault(self,val):
@@ -593,6 +571,27 @@ class Field(MutableSequence,MutableMapping):
     @property
     def sources(self):
         return [str(v.source) for v in self._vals]
+    
+class _SourceMeta(type):
+    #TODO: improve Source Singleton concepts, replace with __eq__ support?
+    def __call__(cls,*args,**kwargs):
+        obj = type.__call__(cls,*args,**kwargs)
+        if not obj._str in Source._singdict:
+            Source._singdict[obj._str] = obj
+        return Source._singdict[obj._str]
+
+class Source(object):
+    __metaclass__ = _SourceMeta
+    _singdict = {}
+    
+    def __init__(self,src):
+        self._str = str(src)
+        
+    def __str__(self):
+        return 'Source ' + self._str
+    
+#TODO: more Source information in subclasses
+
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
@@ -666,6 +665,7 @@ class ObservedValue(FieldValue):
         
 class DerivedValue(FieldValue):
     __slots__=('_f','_value','_valid')
+    
     def __init__(self,f):
         import inspect
         
@@ -684,10 +684,15 @@ class DerivedValue(FieldValue):
         raise NotImplementedError
 
 class DependsSource(Source):
-    __slots__=('dependson')
+    __slots__ = ('dependson')
+    _instcount = 0
+    
+    def __new__(cls,*args,**kwargs):
+        super(DependsSource,cls).__new__(cls,*args,**kwargs)
+        DependsSource._instcount += 1
     
     def __init__(self):
-        self._str = 'depend'
+        self._str = 'derived%i'%DependsSource._instcount
         self.dependson = []
         raise NotImplementedError
         
