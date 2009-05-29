@@ -814,7 +814,14 @@ class Catalog(CatalogNode):
     def __getitem__(self,key):
         return getattr(self,key)
     
-    
+class _StructuredFieldNodeMeta(ABCMeta):
+    #Metaclass is used to check at class creation-time that fields all match names
+    def __new__(mcs,name,bases,dct):
+        cls = super(_StructuredFieldNodeMeta,mcs).__new__(mcs,name,bases,dct)
+        for k,v in dct.iteritems():
+            if isinstance(v,Field) and k != v.name:
+                raise ValueError('StructuredFieldNode class %s has conficting field names - Node attribute:%s, Field.name:%s'%(name,k,v.name))
+        return cls
 
 class StructuredFieldNode(FieldNode):
     """
@@ -826,7 +833,11 @@ class StructuredFieldNode(FieldNode):
     hence the class attribute name must match the field name.  Any 
     FieldValues present in the class objects will be ignored
     """
-    #__metaclass__ = _StructuredFieldNodeMeta
+    __metaclass__ = _StructuredFieldNodeMeta
+    
+    @staticmethod
+    def __fieldInstanceCheck(x):
+        return isinstance(x,Field) or (isinstance(x,tuple) and len(x) == 2 and isinstance(x[0],DerivedValue))
     
     def __init__(self,parent):
         import inspect
@@ -835,20 +846,24 @@ class StructuredFieldNode(FieldNode):
         self._altered = False
         
         #apply Fields from class into new object as new Fields
-        for k,fi in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)): #TODO:faster way than lambda?
-            if fi.name != k: #TODO: figure out if this can be done at "compile-time"
-                raise KeyError('Name of Field (%s) does not match name in class attribute (%s)'%(fi.name,k))
+        for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
+            if isinstance(fi,tuple):
+                dv,fi = v
+            else:
+                fi = v
+                dv = None
+            
             if None in fi:
                 fobj = Field(fi.name,fi.type,fi.default, True)
             else:
                 fobj = Field(fi.name,fi.type)
             setattr(self,k,fobj)
-            self._fieldnames.append(k)
             
-        if hasattr(self,'_derivedFuncFields'):
-            for fi,func in self._derivedFuncs.iteritems():
-                dv = DerivedValue(func,self)
-                fi.currentObj = dv
+            #now add in DerivedValue as current value if present (e.g. wrapped with derivedFieldFunc)
+            if dv is not None:
+                fobj.currobj = DerivedValue(dv._f,self)
+            
+            self._fieldnames.append(k)
          
     
     @property
@@ -869,12 +884,17 @@ class StructuredFieldNode(FieldNode):
         
         TODO:test
         """
-        import inspect
-        import new
+        import inspect,types
         
         #replace any deleted Fields with defaults and keep track of which should be kept
         fields=[]
-        for k,fi in inspect.getmembers(self.__class__,lambda x:isinstance(x,Field)):
+        for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
+            if isinstance(fi,tuple):
+                dv,fi = v
+            else:
+                fi = v
+                dv = None
+                
             fields.append(k)
             if not hasattr(self,k) or not isinstance(getattr(self,k),Field):
                 if None in fi:
@@ -883,14 +903,17 @@ class StructuredFieldNode(FieldNode):
                     fobj = Field(fi.name,fi.type)
                 setattr(self,k,fobj)
                 
+                #now add in DerivedValue as current value if present (e.g. wrapped with derivedFieldFunc)
+                if dv is not None:
+                    fobj.currobj = DerivedValue(dv._f,self)
         for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
             if k not in fields:
                 delattr(self,k)
                 
         self._fieldnames = fields
         self._altered = False
-        self.addField = new.instancemethod(StructuredFieldNode.addField,self,StructuredFieldNode)
-        self.delField = new.instancemethod(StructuredFieldNode.delField,self,StructuredFieldNode)
+        self.addField = types.MethodType(StructuredFieldNode.addField,self,StructuredFieldNode)
+        self.delField = types.MethodType(StructuredFieldNode.delField,self,StructuredFieldNode)
     
     def addField(self,field):
         self._altered = True
@@ -902,21 +925,16 @@ class StructuredFieldNode(FieldNode):
         self.delField = super(StructuredFieldNode,self).delField
         self.delField(fieldname)
     
-    
-    #TODO:MUST FIX - each subclass needs its own 
-    @classmethod
-    def derivedFuncField(cls,f=None,type=None,defaultval=None,usedef=None):
+    @staticmethod
+    def derivedFieldFunc(f=None,type=None,defaultval=None,usedef=None):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the 
         """
         if f is not None: #do actual operation
             fi = Field(name=f.__name__,type=type,defaultval=defaultval,usedef=usedef)
-            if not hasattr(cls,'_derivedFuncs'):
-                print 'hit'
-                cls._derivedFuncs = {}
-            cls._derivedFuncs[fi.name] = f
-            return fi
+            dv = DerivedValue(f,None)
+            return dv,fi
         else: #allow for decorator arguments
             return lambda f:self.derivedFuncField(f,type,defaultval,usedefault)
         
@@ -935,12 +953,12 @@ class AstronomicalObject(StructuredFieldNode):
     loc = Field('loc',AngularPosition)
 
 class Test1(AstronomicalObject):
-    @StructuredFieldNode.derivedFuncField
+    @StructuredFieldNode.derivedFieldFunc
     def f(self,name,loc):
         return '%s+%s'%(name,loc)
 
 class Test2(AstronomicalObject):
-    @StructuredFieldNode.derivedFuncField
+    @StructuredFieldNode.derivedFieldFunc
     def g(self,name,loc):
         return '%s+%s-2'%(name,loc)
     
