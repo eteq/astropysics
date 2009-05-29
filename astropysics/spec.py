@@ -911,9 +911,51 @@ class FunctionSpectrum(Spectrum):
         super(FunctionSpectrum,self)._applyUnits(xtrans,xitrans,xftrans,xfinplace)
         self._xftranses.append(xftrans)
         
-#Spectrum set to match system for AB Magnitudes        
+#Make a special Spectrum to use for AB Magnitude calibrations        
 ABSpec = FunctionSpectrum([1e14,3e15],lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
         
+
+
+
+
+class SpectralFeature(HasSpecUnits):
+    """
+    This class represents a Spectral Feature.
+    
+    All SpecralFeatures have a rest value,observed value (possibly with
+    error), flux value (possibly with error), and equivalent width (possibly
+    with error)
+    
+    Note that equivalent width is always expected to be in angstroms
+    """
+    def __init__(self,unit='wavelength'):
+        HasSpecUnits.__init__(self,unit)
+        
+        self.rest = 1
+        self.observed = None
+        self.observederr = None
+        self.flux = 0
+        self.fluxerr = 0
+        self.ew = None
+        self.ewerr = None
+    
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        self.rest = xtrans(self.rest)
+            
+        if observed is not None:
+            oldobs = self.observed
+            self.observed = newobs = xtrans(self.observed)
+            if self.observederr is not None:
+                op = oldobs+self.observederr
+                om = oldobs-self.observederr
+                op,om = xtrans(op),xtrans(om)
+                self.observederr = (op+om)/2
+    
+    @property
+    def name(self):
+        raise NotImplementedError
+    
+#<------------------------Spectrum-related functions--------------------------->
 
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """
@@ -973,43 +1015,6 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     
     return specs
 
-class SpectralFeature(HasSpecUnits):
-    """
-    This class represents a Spectral Feature.
-    
-    All SpecralFeatures have a rest value,observed value (possibly with
-    error), flux value (possibly with error), and equivalent width (possibly
-    with error)
-    
-    Note that equivalent width is always expected to be in angstroms
-    """
-    def __init__(self,unit='wavelength'):
-        HasSpecUnits.__init__(self,unit)
-        
-        self.rest = 1
-        self.observed = None
-        self.observederr = None
-        self.flux = 0
-        self.fluxerr = 0
-        self.ew = None
-        self.ewerr = None
-    
-    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
-        self.rest = xtrans(self.rest)
-            
-        if observed is not None:
-            oldobs = self.observed
-            self.observed = newobs = xtrans(self.observed)
-            if self.observederr is not None:
-                op = oldobs+self.observederr
-                om = oldobs-self.observederr
-                op,om = xtrans(op),xtrans(om)
-                self.observederr = (op+om)/2
-    
-    @property
-    def name(self):
-        raise NotImplementedError
-
 def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verbose=True,interpolation = None):
     """
     computes the best fit by linear least-squares fitting of templates to the 
@@ -1020,11 +1025,12 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     upper possible lags
     
     specobj must be a Spectrum object or a sequence of (flux,[x],[ivar]) or 
-    flux 
+    flux.  If it is not logarithmically spaced, it will be interpolated
     
     templates can be either a sequence of Spectrum objects or an array with at
-    least one dimension matching the pixel dimension.  Long templates are not
-    yet supported.
+    least one dimension matching the pixel dimension.  
+    (Note that templates longer than the spectrum will not use information off
+    the edges)
     
     interpolation is the technique for interpolating for sub-pixel lags.  If 
     None, no interpolation is used, so lags must be integers (but this method is
@@ -1086,23 +1092,18 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     llags = lags[lags<0]
     ulags = lags[lags>0]
     
+    #generate slice objects to match offsets to lags
+    #TODO:index directly - will this be much slower than rolling?
     ls,slices=[],[]
     for l in llags:
         ls.append(l)
-        #tml = tm[-l:,:]
-        #yl = y[:l]
-        slices.append((np.s_[-l:,:],np.s_[:l]))
-        #slices.append(((slice(-l,None),slice(None)),slice(None,l)))
+        slices.append((np.s_[-l:,:],np.s_[:l,:]))
     if 0 in lags:
         ls.append(0)
-        slices.append((np.s_[:,:],np.s_[:]))
-        #slices.append(((slice(None),slice(None)),slice(None)))
+        slices.append((np.s_[:,:],np.s_[:,:]))
     for l in ulags:
         ls.append(l)
-        #tml = tm[:-l,:]
-        #yl=y[l:]
-        slices.append((np.s_[:-l,:],np.s_[l:]))
-        #slices.append(((slice(None,-l),slice(None)),slice(l,None)))
+        slices.append((np.s_[:-l,:],np.s_[l:,:]))
         
         
     cs,dsq,fitfluxes=[],[],[]
@@ -1114,7 +1115,7 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
             print 'doing lag',l
         A = tm[s[0]]
         v = y[s[1]]
-        w = ivar[s[1]]
+        w = ivar[s[1][0]]
         
         if useweights:
             try:
@@ -1126,6 +1127,7 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
                 cs.append(np.linalg.pinv(A)*v)
         else:
             cs.append(np.linalg.pinv(A)*v)
+            #v->4096,a->3096
             #TODO: faster inversion schemes?
         
         fitspec = A*cs[-1]
@@ -1144,10 +1146,54 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     else:
         besti = mins
         
-    xs = [x[s[1]] for s in slices]
+    xs = [x[s[1][0]] for s in slices]
     fitfluxes = [f.A[:,0] for f in fitfluxes]
+    zs = np.mean(lag_to_z(x,ls),1)
     
-    return besti,ls,cs,xs,fitfluxes,rchi2s
+    try:
+        from collections import namedtuple
+        tinit = namedtuple('zfind_out','besti lags zs coeffs xs fitfluxes rchi2s')
+    except ImportError: #support for pre-2.6 - use ordinary tuples
+        tinit = lambda *args:args
+    return tinit(besti,ls,zs,cs,xs,fitfluxes,rchi2s)
+
+def lag_to_z(x,lag,xunit='ang',avgbad=True):
+    """
+    this converts an integer pixel lag for a given x-axis into a 
+    redshift
+    
+    currently the only supported unit for the x-axis is angstroms
+    
+    avgbad replaces undeterminable velocities with the average of 
+    the others, else they are set to 0
+    """
+    x = np.array(x,copy=False)
+    
+    if np.isscalar(lag):
+        scalarout = True
+        lag = [lag]
+    else:
+        scalarout = False
+        
+    zs = np.ndarray((len(lag),x.size))
+    for i,l in enumerate(lag):
+        z = np.roll(x,-l)/x-1
+        
+        if l>=0:
+            if avgbad:
+                z[-l:] = np.mean(z[:-l])
+            else:
+                z[-l:] = 0
+        else:
+            if avgbad:
+                z[:-l] = np.mean(z[-l:])
+            else:
+                z[:-l] = 0
+            
+        zs[i] = z
+    
+    return zs[0] if scalarout else zs
+    
 
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
