@@ -334,7 +334,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
 class Field(MutableSequence,MutableMapping):
     """
     This class represents an attribute/characteristic/property of the
-    CatalogObject it is associated with.  It stores the current value
+    FieldNode it is associated with.  It stores the current value
     as well as all the other possible values.
 
     The values, sources, and default properties will return the actual values 
@@ -428,7 +428,7 @@ class Field(MutableSequence,MutableMapping):
             deadrefs=[]
             for i,wr in enumerate(self._notifywrs):
                 callobj = wr()
-                if obj is None:
+                if callobj is None:
                     deadrefs.append(i)
                 else:
                     callobj(oldval,newval)
@@ -502,10 +502,13 @@ class Field(MutableSequence,MutableMapping):
             self._vals.append(val)
         
     def __delitem__(self,key):
-        if type(key) is not int: 
-            key = self._vals.index(self[key])
+        if type(key) is int: 
+            i = key
+        else:
+            i = self._vals.index(self[key])
+            
         if i == 0 and self._notifywrs is not None:
-            self._notifyValueChange(self._vals[0],self._vals[1] if len(self._vals)>1 else None)
+            self.notifyValueChange(self._vals[0],self._vals[1] if len(self._vals)>1 else None)
         del self._vals[key]
             
     def insert(self,key,val):
@@ -516,7 +519,7 @@ class Field(MutableSequence,MutableMapping):
         else:
             i = self._vals.index(self[key])
         if i == 0 and self._notifywrs is not None:
-            self._notifyValueChange(val,self._vals[0] if len(self._vals)>0 else None)
+            self.notifyValueChange(val,self._vals[0] if len(self._vals)>0 else None)
         self._vals.insert(i,val)
         
     @property
@@ -562,7 +565,7 @@ class Field(MutableSequence,MutableMapping):
         except (KeyError,IndexError,TypeError):
             valobj = self._checkConvInVal(val)
         self._vals.insert(0,valobj)
-        self._notifyValueChange(oldcurr,valobj)
+        self.notifyValueChange(oldcurr,valobj)
     currentobj = property(_getCurr,_setCurr)
     
     @property
@@ -674,7 +677,7 @@ class DerivedValue(FieldValue):
         
         if callable(f):
             self._f = f
-            args, varargs, varkw, defaults = inspec.getargspec(f)
+            args, varargs, varkw, defaults = inspect.getargspec(f)
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
             if len(args) != len(defaults):
@@ -709,7 +712,7 @@ class DerivedValue(FieldValue):
                 self._value = self._f(*self._source.getDeps())
                 self._valid = True
             except ValueError:
-                if raiseonfailedvalue:
+                if self.raiseonfailedvalue:
                     raise
             
             return self._value
@@ -783,8 +786,8 @@ class DependentSource(Source):
         """
         get the values of the dependent fields
         """
-        fieldvals = [wr() for wr in self.depfields]    
-        if None in fieldval:
+        fieldvals = [wr() for wr in self.depfieldrefs]    
+        if None in fieldvals:
             fieldvals = self.populateFieldRefs()
         return [fi() for fi in fieldvals]
     
@@ -813,7 +816,7 @@ class Catalog(CatalogNode):
     
     
 
-class CatalogObject(FieldNode):
+class StructuredFieldNode(FieldNode):
     """
     This class represents a FieldNode in the catalog that follows a particular
     data structure (i.e. a consistent set of Fields).  It is meant to be
@@ -823,12 +826,12 @@ class CatalogObject(FieldNode):
     hence the class attribute name must match the field name.  Any 
     FieldValues present in the class objects will be ignored
     """
-    #__metaclass__ = _CatalogObjectMeta
+    #__metaclass__ = _StructuredFieldNodeMeta
     
     def __init__(self,parent):
         import inspect
         
-        super(CatalogObject,self).__init__(parent)
+        super(StructuredFieldNode,self).__init__(parent)
         self._altered = False
         
         #apply Fields from class into new object as new Fields
@@ -843,7 +846,7 @@ class CatalogObject(FieldNode):
             self._fieldnames.append(k)
             
         if hasattr(self,'_derivedFuncFields'):
-            for fi,func in self._derivedFuncFields.iteritems():
+            for fi,func in self._derivedFuncs.iteritems():
                 dv = DerivedValue(func,self)
                 fi.currentObj = dv
          
@@ -886,39 +889,41 @@ class CatalogObject(FieldNode):
                 
         self._fieldnames = fields
         self._altered = False
-        self.addField = new.instancemethod(CatalogObject.addField,self,CatalogObject)
-        self.delField = new.instancemethod(CatalogObject.delField,self,CatalogObject)
+        self.addField = new.instancemethod(StructuredFieldNode.addField,self,StructuredFieldNode)
+        self.delField = new.instancemethod(StructuredFieldNode.delField,self,StructuredFieldNode)
     
     def addField(self,field):
         self._altered = True
-        self.addField = super(CatalogObject,self).addField
+        self.addField = super(StructuredFieldNode,self).addField
         self.addField(field)
         
     def delField(self,fieldname):
         self._altered = True
-        self.delField = super(CatalogObject,self).delField
+        self.delField = super(StructuredFieldNode,self).delField
         self.delField(fieldname)
     
     
+    #TODO:MUST FIX - each subclass needs its own 
     @classmethod
-    def derivedFuncField(cls,f=None,type=None,defaultval=None,usedefault=None):
+    def derivedFuncField(cls,f=None,type=None,defaultval=None,usedef=None):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the 
         """
         if f is not None: #do actual operation
-            fi = Field(name=f.__name__,type,defaultval,usedefault)
-            if not hasattr(cls,'_derivedFuncFields'):
+            fi = Field(name=f.__name__,type=type,defaultval=defaultval,usedef=usedef)
+            if not hasattr(cls,'_derivedFuncs'):
+                print 'hit'
                 cls._derivedFuncs = {}
             cls._derivedFuncs[fi.name] = f
             return fi
         else: #allow for decorator arguments
-            return lambda f:derivedFuncField(f,type,defaultval,usedefault)
+            return lambda f:self.derivedFuncField(f,type,defaultval,usedefault)
         
         
 #<--------------------builtin catalog types------------------------------------>
 
-class AstronomicalObject(CatalogObject):
+class AstronomicalObject(StructuredFieldNode):
     from .coords import AngularPosition
     
     def __init__(self,parent=None,name='default Name'):
@@ -930,9 +935,14 @@ class AstronomicalObject(CatalogObject):
     loc = Field('loc',AngularPosition)
 
 class Test1(AstronomicalObject):
-    
-    def f(name,loc):
+    @StructuredFieldNode.derivedFuncField
+    def f(self,name,loc):
         return '%s+%s'%(name,loc)
+
+class Test2(AstronomicalObject):
+    @StructuredFieldNode.derivedFuncField
+    def g(self,name,loc):
+        return '%s+%s-2'%(name,loc)
     
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
