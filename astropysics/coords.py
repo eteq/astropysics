@@ -205,8 +205,8 @@ class AngularCoordinate(object):
     def __float__(self):
         return self.degrees
         
-        
-    def getDmsStr(self,secform = None,sep = None, sign=True, canonical=False):
+    #unichr(176) for deg symbol
+    def getDmsStr(self,secform=None,sep=('d',"'",'"'), sign=True, canonical=False):
         """
         gets the string representation of this AngularCoordinate as degrees,
         minutes, and seconds
@@ -233,6 +233,9 @@ class AngularCoordinate(object):
         else:
             s = secform%s
         
+        if isinstance(sep,basestring):
+            sep = (sep,sep,sep)
+        
         tojoin = []
         
         if sign:
@@ -240,23 +243,18 @@ class AngularCoordinate(object):
         
         if d is not '0':
             tojoin.append(d)
-            if sep is None:
-                tojoin.append(unichr(176).encode("latin-1"))
+            tojoin.append(sep[0])
                 
         if m is not '0':
             tojoin.append(m)
-            if sep is None:
-                tojoin.append("'")
+            tojoin.append(sep[1])
                 
         tojoin.append(s)
-        if sep is None:
-            tojoin.append('"')
+        tojoin.append(sep[2])
             
-        if sep is None:
-            sep = ''
-        return sep.join(tojoin)
+        return ''.join(tojoin)
         
-    def getHmsStr(self,secform = None,sep = None, canonical = False):
+    def getHmsStr(self,secform = None,sep = ('h','m','s'), canonical = False):
         """
         gets the string representation of this AngularCoordinate as hours,
         minutes, and seconds
@@ -279,32 +277,21 @@ class AngularCoordinate(object):
         else:
             s = secform%s
         
+        if isinstance(sep,basestring):
+            sep = (sep,sep,sep)
+        
         tojoin = []
         
         tojoin.append(h)
-        if sep is None:
-            tojoin.append('h')
+        tojoin.append(sep[0])
             
         tojoin.append(m)
-        if sep is None:
-            tojoin.append('m')
-#        if h is not '0':
-#            tojoin.append(h)
-#            if sep is None:
-#                tojoin.append('h')
-                
-#        if m is not '0':
-#            tojoin.append(m)
-#            if sep is None:
-#                tojoin.append('m')
+        tojoin.append(sep[1])
                 
         tojoin.append(s)
-        if sep is None:
-            tojoin.append('s')
+        tojoin.append(sep[2])
             
-        if sep is None:
-            sep = ''
-        return sep.join(tojoin)
+        return ''.join(tojoin)
     
     def getSizeAtDistance(self,distance):
         """
