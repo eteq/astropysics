@@ -37,6 +37,9 @@ class CycleError(Exception):
     def __init__(self,message):
         super(CycleError,self).__init__(message)
 
+
+
+#<-------------------------Node/Graph objects and functions-------------------->
 class CatalogNode(object):
     """
     This Object is the superclass for all elements/nodes of a catalog.  
@@ -194,7 +197,8 @@ class CatalogNode(object):
             retvals = [v for v in retvals if v is not filter]
         return retvals
     
-class FieldNode(CatalogNode,MutableMapping,Sequence):
+#class FieldNode(CatalogNode,MutableMapping,Sequence):
+class FieldNode(CatalogNode,Sequence):
     """
     A node in the catalog that has Fields.  This is an abstract class that 
     must have its initializer overriden.
@@ -202,7 +206,9 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
     Note that for these subclasses, attribute access (e.g. node.fieldname) 
     accesses the Field object, while mapping or sequence-style access 
     (e.g node['fieldname'] or node[1])  directly accesses the current value
-    of the field (or None if there is no value)
+    of the field (or None if there is no value).  This means that 
+    iterating over the object will also give values.  To iterate over
+    the Field objects, use the fields() method.
     """
     __slots__=('_fieldnames',)
     
@@ -217,6 +223,9 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
         if field.name in self._fieldnames:
             raise ValueError('Field name "%s" already present'%field.name)
         setattr(self,field.name,field)
+        if field.node is not None:
+            raise ValueError('a Field can only reside in one Node')
+        field.node = self
         self._fieldnames.append(field.name)
         
     def delField(self,fieldname):
@@ -229,9 +238,23 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
         except ValueError:
             raise KeyError('Field "%s" not found'%fieldname)
         
-    #def __iter__(self):
-    #    return iter(self._fieldnames)
-    
+    def fields(self):
+        """
+        this yields an iterator over all of the Field objects (rather than 
+        their values)
+        """
+        for n in self._fieldnames:
+            yield getattr(self,n)
+            
+    def __str__(self):
+        return 'FieldNode with fields %s'%self._fieldnames
+        
+    def __cmp__(self,other):
+        try:
+            return cmp(list(self),list(other))
+        except TypeError:
+            return 1
+        
     def __len__(self):
         return len(self._fieldnames)
     
@@ -243,7 +266,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             try:
                 key = self._fieldnames[key]
             except (IndexError,TypeError):
-                raise KeyError('Field "%s" not found'%key)
+                raise IndexError('Field "%s" not found'%key)
         try:
             return getattr(self,key)()
         except IndexError: #field empty
@@ -254,7 +277,7 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             try:
                 key = self._fieldnames[key]
             except (IndexError,TypeError):
-                raise KeyError('Field "%s" not found'%key)
+                raise IndexError('Field "%s" not found'%key)
         field = getattr(self,key)
         field.currentobj = val
     
@@ -299,14 +322,14 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             def vfunc(node):
                 try:
                     return node[fieldname]
-                except (KeyError,TypeError):
+                except (KeyError,IndexError,TypeError):
                     return None
         elif not missing:
             filter = False
             def vfunc(node):
                 try:
                     return node[fieldname]
-                except (KeyError,TypeError):
+                except (KeyError,IndexError,TypeError):
                     return None
         else:
             raise ValueError('Unrecognized value for what to do with missing fields')
@@ -320,18 +343,48 @@ class FieldNode(CatalogNode,MutableMapping,Sequence):
             except:
                 pass
         
-        return np.array(lst,dtype=dtype)
-        
-        
-        
-        
+        return np.array(lst,dtype=dtype) 
+
+def generate_pydot_graph(node,graphfields=True):
+    """
+    this function will generate a pydot.Dot object representing the supplied 
+    node and its children.  Note that the pydot package must be installed
+    installed for this to work
     
-    #TODO: overwrite __setattr__ and __delattr__ to respond better to Field objects
-   
+    graphfields includes the fields as a record style graphviz graph
+    """
+    import pydot
+    
+    nodeidtopdnode={}
+    def visitfunc(node):
+        pdnode = pydot.Node(id(node),label=str(node))
+        if isinstance(node,FieldNode):
+            if graphfields:
+                pdnode.set_shape('record')
+                fieldstr = '|'.join([f.strCurr().replace(':',':') for f in node.fields()])
+                pdnode.set_label('"{%s| | %s}"'%(node,fieldstr))
+            else:
+                pdnode.set_shape('box')
+        nodeidtopdnode[id(node)] = pdnode
+        try:
+            edge = pydot.Edge(nodeidtopdnode[id(node.parent)],pdnode)
+        except KeyError:
+            edge = None
+        return pdnode,edge
+    nelist = node.visit(visitfunc,traversal='preorder')
+    
+    g = pydot.Dot()
+    g.add_node(nelist[0][0])
+    for node,edge in nelist[1:]:
+        g.add_node(node)
+        g.add_edge(edge)
+        
+    return g
 
 #<----------------------------node attribute types----------------------------->    
  
-class Field(MutableSequence,MutableMapping):
+#class Field(MutableSequence,MutableMapping):
+class Field(MutableSequence):
     """
     This class represents an attribute/characteristic/property of the
     FieldNode it is associated with.  It stores the current value
@@ -346,7 +399,7 @@ class Field(MutableSequence,MutableMapping):
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals','_notify')
+    __slots__=('_name','_type','_vals','_nodewr','_notify')
     
     def __init__(self,name,type=None,defaultval=None,usedef=None):
         """
@@ -358,6 +411,7 @@ class Field(MutableSequence,MutableMapping):
         self._vals = []
         self._type = None
         self._notifywrs = None
+        self._nodewr = None
         
         self.type = type
         if usedef or (usedef is None and defaultval is not None):
@@ -380,6 +434,16 @@ class Field(MutableSequence,MutableMapping):
     
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
+    
+    def strCurr(self):
+        """
+        returns a string with the current value instead of the list of 
+        values (the behavior of str(Field_obj)
+        """
+        try:
+            return 'Field %s: %s'%(self.name,self())
+        except IndexError:
+            return 'Field %s empty'%self.name
     
     def _checkConvInVal(self,val,dosrccheck=True):
         """
@@ -412,11 +476,16 @@ class Field(MutableSequence,MutableMapping):
                 for v in self._vals:
                     if v.source == val.source:
                         raise ValueError('value with %s already present in Field'%v.source)
-            
+        
         val.checkType(self.type)
+        
+        if isinstance(val,DerivedValue):
+            if val.field is not None:
+                raise ValueError('DerivedValues can only reside in a single field for dependencies')
+            val.field = self
         return val
     
-    def notifyValueChange(self,oldval,newval):
+    def notifyValueChange(self,oldval=None,newval=None):
         """
         notifies all registered functions that the value in this 
         field has changed
@@ -443,7 +512,7 @@ class Field(MutableSequence,MutableMapping):
         """
         this registers a function to be called when the value changes or is 
         otherwise rendered invalid.  The notifier will be called as
-        notifier(oldvalobj,newvalobj)
+        notifier(oldvalobj,newvalobj) BEFORE the value change is finalized.
         """
         from weakref import ref
         
@@ -488,6 +557,8 @@ class Field(MutableSequence,MutableMapping):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
             val = self._checkConvInVal(val,self._vals[i].source)
+            if i == 0:
+                self.notifyValueChange(self._vals[0],val)
             self._vals[i] = val
         else:
             if isinstance(key,Source):
@@ -525,6 +596,18 @@ class Field(MutableSequence,MutableMapping):
     @property
     def name(self):
         return self._name
+    
+    def _getNode(self):
+        return None if self._nodewr is None else self._nodewr()
+    def _setNode(self,val):
+        if val is None:
+            self._nodewr = None
+        else:
+            from weakref import ref
+            self._nodewr = ref(val)
+        for d in self.derived:
+            d.sourcenode = val
+    node = property(_getNode,_setNode,doc='the node to which this Field belongs')
     
     def _getType(self):
         return self._type
@@ -564,8 +647,8 @@ class Field(MutableSequence,MutableMapping):
             valobj = self._vals.pop(i)
         except (KeyError,IndexError,TypeError):
             valobj = self._checkConvInVal(val)
-        self._vals.insert(0,valobj)
         self.notifyValueChange(oldcurr,valobj)
+        self._vals.insert(0,valobj)
     currentobj = property(_getCurr,_setCurr)
     
     @property
@@ -574,7 +657,25 @@ class Field(MutableSequence,MutableMapping):
     
     @property
     def sources(self):
+        return [v.source for v in self._vals]
+    
+    @property
+    def sourcenames(self):
         return [str(v.source) for v in self._vals]
+    
+    @property
+    def observed(self):
+        """
+        returns a list of all the ObservedValue objects except the default
+        """
+        return [o for o in self if (isinstance(o,ObservedValue) and o.source._str != 'None')]
+        
+    @property
+    def derived(self):
+        """
+        returns a list of all the DerivedValue objects
+        """
+        return [o for o in self if isinstance(o,DerivedValue)]
     
 class _SourceMeta(type):
     #TODO: improve Source Singleton concepts, replace with __eq__ support?
@@ -645,7 +746,7 @@ class FieldValue(object):
         return self.value
     
     def __str__(self):
-        return str(self.value)
+        return 'Value %s'%self.value
     
 class ObservedValue(FieldValue):
     """
@@ -661,7 +762,7 @@ class ObservedValue(FieldValue):
         self._value = value
         
     def __str__(self):
-        return '%s:%s'%(self.value,self.source)
+        return 'Value %s:%s'%(self.value,self.source)
     
     @property    
     def value(self):
@@ -677,6 +778,9 @@ class DerivedValue(FieldValue):
     argument as the current source (see DependentSource for 
     details of how dependent values are derefernced)
     
+    fieldnotifier is a notifier function, like that of Field.notifyValueChange
+    to be called when the value is invalidated
+    
     failedvalueaction determines the action to take if an 
     problem is encountered in deriving the value and can be:
     *'raise':raise an exception (or pass one along)
@@ -686,7 +790,7 @@ class DerivedValue(FieldValue):
     will be left invalid
     *'ignore':the value will be returned as None and will be marked valid
     """
-    __slots__=('_f','_value','_valid')
+    __slots__=('_f','_value','_valid','_fieldwr')
     #TODO: auto-reassign nodepath from source if Field moves
     failedvalueaction = 'raise' 
     
@@ -699,7 +803,7 @@ class DerivedValue(FieldValue):
             
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
-            if len(args)-1 != len(defaults) or defaults is None:
+            if len(args) != len(defaults) or defaults is None:
                 raise TypeError('DerivedValue function does not have defaults to provide initial linkage')
         else:
             raise TypeError('attempted to initialize a DerivedValue with a non-callable')
@@ -707,7 +811,14 @@ class DerivedValue(FieldValue):
         self._valid = False
         self._value = None
         
-        self._source = DependentSource(defaults,sourcenode)
+        self._fieldwr = None
+        self._source = DependentSource(defaults,sourcenode,self._invalidateNotifier)
+        
+    def __str__(self):
+        try:
+            return 'Derived value: %s'%self.value
+        except:
+            return 'Derived value: Underivable'
     
     @property
     def source(self):
@@ -718,6 +829,17 @@ class DerivedValue(FieldValue):
     def _setNode(self,val):
         self._source.pathnode = val
     sourcenode=property(_getNode,_setNode,doc='The current location in the Catalog tree')
+    
+    def _getField(self):
+        return None if self._fieldwr is None else self._fieldwr()
+    def _setField(self,val):
+        if val is None:
+            self._notifierwr = None
+        else:
+            from weakref import ref
+            self._fieldwr = ref(val)
+    field=property(_getField,_setField,doc='A function like Field.notifyValueChange')
+
     
     
     def checkType(self,type):
@@ -732,11 +854,22 @@ class DerivedValue(FieldValue):
     def _invalidateNotifier(self,oldval,newval):
         return self.invalidate()
     
+    
+    __invcycleinitiator = None
     def invalidate(self):
         """
-        This marks this 
+        This marks this derivedValue as incorrect
         """
-        self._valid = False
+        try:
+            if DerivedValue.__invcycleinitiator is None:
+                DerivedValue.__invcycleinitiator = self
+            elif DerivedValue.__invcycleinitiator is self:
+                raise CycleError('attempting to set a DerivedValue that results in a cycle')
+            self._valid = False
+            if self.field is not None:
+                self.field.notifyValueChange(self,self)
+        finally:
+            DerivedValue.__invcycleinitiator = None
     
     @property
     def value(self):
@@ -773,6 +906,7 @@ class DerivedValue(FieldValue):
             
             return self._value
 
+#TODO: cycle-detection
 class DependentSource(Source):
     """
     This class holds weak references to the Field's that are
@@ -783,7 +917,7 @@ class DependentSource(Source):
     Field objects
     """
     
-    __slots__ = ('depfieldrefs','depstrs','_pathnoderef')
+    __slots__ = ('depfieldrefs','depstrs','_pathnoderef','notifierfunc')
     _instcount = 0
     
     
@@ -799,11 +933,14 @@ class DependentSource(Source):
     def __noneer(self):
         return None
     
-    def __init__(self,fields,pathnode):
+    def __init__(self,fields,pathnode,notifierfunc=None):
+        from weakref import ref
+        
         self._str = 'dependent%i'%DependentSource._instcount
         self.depfieldrefs = depfieldrefs = []
         self.depstrs = depstrs = []
         self.pathnode = pathnode
+        self.notifierfunc = notifierfunc
         
         for f in fields:
             if isinstance(f,basestring):
@@ -812,6 +949,8 @@ class DependentSource(Source):
             elif isinstance(f,Field):
                 depstrs.append(None)
                 depfieldrefs.append(ref(f))
+                if notifierfunc is not None:
+                    f.registerNotifier(notifierfunc)
             else:
                 raise ValueError('Unrecognized field code %s'%str(f))
         
@@ -858,7 +997,10 @@ class DependentSource(Source):
                 if wrf() is None:
                     if self.depstrs[i] in pathnode.fieldnames:
                         refs.append(getattr(pathnode,self.depstrs[i]))
-                        self.depfieldrefs[i] = ref(refs[-1])
+                        f = refs[-1]
+                        self.depfieldrefs[i] = ref(f)
+                        if self.notifierfunc is not None:
+                            f.registerNotifier(self.notifierfunc)
                     else:
                         raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
                 else:
@@ -876,7 +1018,6 @@ class DependentSource(Source):
         return [fi() for fi in fieldvals]
     
 #<------------------------------Node types------------------------------------->
-
 class Catalog(CatalogNode):
     """
     This class represents a catalog of objects or catalogs.
@@ -887,6 +1028,9 @@ class Catalog(CatalogNode):
     def __init__(self,name='default Catalog'):
         super(Catalog,self).__init__(parent=None)
         self.name = name
+        
+    def __str__(self):
+        return 'Catalog %s'%self.name 
     
     @property
     def parent(self):
@@ -944,6 +1088,7 @@ class StructuredFieldNode(FieldNode):
             else:
                 fobj = Field(fi.name,fi.type)
             setattr(self,k,fobj)
+            fobj.node = self
             
             if dv is not None:
                 dvs.append((dv,fobj))
@@ -991,6 +1136,7 @@ class StructuredFieldNode(FieldNode):
                 else:
                     fobj = Field(fi.name,fi.type)
                 setattr(self,k,fobj)
+                fobj.node = self
                 
                 if dv is not None:
                     dvs.append((dv,fobj))
@@ -1021,7 +1167,8 @@ class StructuredFieldNode(FieldNode):
     def derivedFieldFunc(f=None,type=None,defaultval=None,usedef=None):
         """
         this method is to be used as a function decorator to generate a 
-        field with a name matching that of the 
+        field with a name matching that of the function.  Note that the
+        function should NOT have self as the leading argument
         """
         if f is not None: #do actual operation
             fi = Field(name=f.__name__,type=type,defaultval=defaultval,usedef=usedef)
@@ -1040,19 +1187,28 @@ class AstronomicalObject(StructuredFieldNode):
         super(AstronomicalObject,self).__init__(parent)
         self.name.default=name
         
+    def __str__(self):
+        return 'Object %s'%self.name()
+        
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',AngularPosition)
 
 class Test1(AstronomicalObject):
+    num = Field('num',float,4.2)
+    
     @StructuredFieldNode.derivedFieldFunc(defaultval='f')
-    def f(self,name='name',loc='loc'):
-        return '%s+%s'%(name,loc)
+    def f(num='num'):
+        return num+1
+    
+def test_cat():
+    c=Catalog()
+    ao=AstronomicalObject(c)
+    t1=Test1(ao)
+    t2=Test1(ao)
+    
+    return c,locals()
 
-class Test2(AstronomicalObject):
-    @StructuredFieldNode.derivedFieldFunc
-    def g(self,name='name',loc='loc'):
-        return '%s+%s-2'%(name,loc)
     
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
