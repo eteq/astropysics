@@ -796,6 +796,26 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
             raise ValueError('unrecognized multi mode')
     else:
         return np.any(matches,axis=1),np.any(matches,axis=0)
+    
+def seperation_matrix(v,tri=None):
+    """
+    This function takes a length-n vector and produces a matrix given by
+    Aij = vi-vj
+    
+    If the input has more than 1 dimension, the last is assumed to be the 
+    
+    If tri is True, the lower triangular part of the matrix is set to 0
+    """
+    shape1 = list(v.shape)
+    shape1.append(1)
+    shape2 = list(v.shape)
+    shape2.insert(-1,1)
+    
+    A = v.reshape(shape1)-v.reshape(shape2)
+    if tri:
+        return np.triu(A)
+    else:
+        return A
 
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
