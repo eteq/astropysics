@@ -995,6 +995,25 @@ def mlab_camera(fp=None,pos=None,angle=None):
         c.view_angle=angle
     return c
 
+def mlab_walk(distance):
+    f = get_engine().current_scene
+    if f is None:
+        return
+    scene = f.scene
+    if scene is None:
+        return
+    
+    ren = scene.renderer
+    cam = scene.camera
+    
+    v = cam.focal_point - cam.position
+    v = distance*v/np.linalg.norm(v)
+    cam.position = cam.position + v
+    cam.focal_point = cam.focal_point + v    
+    
+    ren.reset_camera_clipping_range()
+    scene.render()
+
 def mvi_texture_src(fn):
     from enthought.mayavi.sources.api import ImageReader
     from enthought.persistence.file_path import FilePath
