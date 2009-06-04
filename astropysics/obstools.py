@@ -140,7 +140,7 @@ class Extinction(PipelineElement):
             'Hge':(2.95,4340.46,3970.07),
             'Hde':(1.62,4101.74,3970.07)
             }
-    def computeA0FromFluxRatio(self,measured,expected,lambda1=None,lambda2=None,contractionf=None):
+    def computeA0FromFluxRatio(self,measured,expected,lambda1=None,lambda2=None,filterfunc=None):
         """
         This derives the normalization of the Extinction function from provided
         ratios for theoretically expected fluxes.  If multiple measurements are
@@ -155,8 +155,10 @@ class Extinction(PipelineElement):
         lambda1 and lambda2 are the wavelengths for the ratios F1/F2, or None if
         a string is provided 
     
-        contraction is the function to be used to combine an array of A0s down
-        to one.  If None, no contraction will be applied
+        filterfunc is a function to be applied as the last step - it can 
+        either be used to contract an array to (e.g. np.mean), or filter out
+        invalid values (e.g. lambda x:x[np.isfinite(x)]).  Default
+        does nothing
         
         returns A0,standard deviation of measurements
         """
@@ -182,12 +184,12 @@ class Extinction(PipelineElement):
             else:
                 raise ValueError('need to provide wavelengths if not specifying transitions')
         
-        A0 = 2.5*np.log10(R/R0)/(self.f(lambda1)-self.f(lambda2))
+        A0 = -2.5*np.log10(R/R0)/(self.f(lambda1)-self.f(lambda2))
         
-        if contractionf is None:
-            contractionf = lambda x:x
-        self.A0 = contractionf(A0)
-        return contractionf(A0),np.std(A0)
+        if filterfunc is None:
+            filterfunc = lambda x:x
+        self.A0 = A0 = filterfunc(A0)
+        return A0,np.std(A0)
     
     #PipelineElement methods
     def _plFeed(self,data,src):
