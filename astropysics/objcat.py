@@ -58,6 +58,11 @@ class CatalogNode(object):
         
         if parent is not None:
             self.parent = parent
+            
+    def __getstate__(self):
+        raise NotImplementedError
+    def __setstate__(self,d):
+        raise NotImplementedError
         
     def _cycleCheck(self,source):
         """
@@ -216,6 +221,13 @@ class FieldNode(CatalogNode,Sequence):
     def __init__(self,parent):
         super(FieldNode,self).__init__(parent)
         self._fieldnames = []
+        
+    def __getstate__(self):
+        super(FieldNode,self).__getstate__()
+        raise NotImplementedError
+    def __setstate__(self,d):
+        super(FieldNode,self).__setstate__(d)
+        raise NotImplementedError
         
     def addField(self,field):
         if not isinstance(field,Field):
@@ -416,6 +428,11 @@ class Field(MutableSequence):
         self.type = type
         if usedef or (usedef is None and defaultval is not None):
             self.default = defaultval
+            
+    def __getstate__(self):
+        raise NotImplementedError
+    def __setstate__(self,d):
+        raise NotImplementedError
         
     def __call__(self):
         return self.currentobj.value
@@ -688,9 +705,15 @@ class _SourceMeta(type):
 class Source(object):
     __metaclass__ = _SourceMeta
     _singdict = {}
+    __slots__=['_str']
     
     def __init__(self,src):
         self._str = str(src)
+        
+    def __getstate__(self):
+        raise NotImplementedError
+    def __setstate__(self,d):
+        raise NotImplementedError
         
     def __str__(self):
         return 'Source ' + self._str
@@ -705,6 +728,11 @@ class FieldValue(object):
     @abstractmethod
     def __init__(self):
         self._source = None
+    
+    def __getstate__(self):
+        raise NotImplementedError
+    def __setstate__(self,d):
+        raise NotImplementedError
     
     value = abstractproperty()
     
@@ -761,6 +789,13 @@ class ObservedValue(FieldValue):
         self.source = source
         self._value = value
         
+    def __getstate__(self):
+        super(ObservedValue,self).__getstate__()
+        raise NotImplementedError
+    def __setstate__(self,d):
+        super(ObservedValue,self).__setstate__(d)
+        raise NotImplementedError
+        
     def __str__(self):
         return 'Value %s:%s'%(self.value,self.source)
     
@@ -813,6 +848,13 @@ class DerivedValue(FieldValue):
         
         self._fieldwr = None
         self._source = DependentSource(defaults,sourcenode,self._invalidateNotifier)
+        
+    def __getstate__(self):
+        super(DerivedValue,self).__getstate__()
+        raise NotImplementedError
+    def __setstate__(self,d):
+        super(DerivedValue,self).__setstate__(d)
+        raise NotImplementedError
         
     def __str__(self):
         try:
@@ -953,6 +995,13 @@ class DependentSource(Source):
                     f.registerNotifier(notifierfunc)
             else:
                 raise ValueError('Unrecognized field code %s'%str(f))
+    
+    def __getstate__(self):
+        super(DependentSource,self).__getstate__()
+        raise NotImplementedError
+    def __setstate__(self,d):
+        super(DependentSource,self).__setstate__(d)
+        raise NotImplementedError
         
     def __len__(self):
         return len(self.depfieldrefs)
@@ -1097,7 +1146,13 @@ class StructuredFieldNode(FieldNode):
             
         for dv,fobj in dvs:
             fobj.insert(0,DerivedValue(dv._f,self))
-         
+            
+    def __getstate__(self):
+        super(StructuredFieldNode,self).__getstate__()
+        raise NotImplementedError
+    def __setstate__(self,d):
+        super(StructuredFieldNode,self).__setstate__(d)
+        raise NotImplementedError     
     
     @property
     def alteredstruct(self):
