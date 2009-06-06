@@ -234,7 +234,7 @@ class AngularCoordinate(object):
             s = secform%s
         
         if isinstance(sep,basestring):
-            sep = (sep,sep,sep)
+            sep = (sep,sep)
         
         tojoin = []
         
@@ -250,7 +250,8 @@ class AngularCoordinate(object):
             tojoin.append(sep[1])
                 
         tojoin.append(s)
-        tojoin.append(sep[2])
+        if len(sep)>2:
+            tojoin.append(sep[2])
             
         return ''.join(tojoin)
         
@@ -278,7 +279,7 @@ class AngularCoordinate(object):
             s = secform%s
         
         if isinstance(sep,basestring):
-            sep = (sep,sep,sep)
+            sep = (sep,sep)
         
         tojoin = []
         
@@ -289,7 +290,8 @@ class AngularCoordinate(object):
         tojoin.append(sep[1])
                 
         tojoin.append(s)
-        tojoin.append(sep[2])
+        if len(sep)>2:
+            tojoin.append(sep[2])
             
         return ''.join(tojoin)
     
