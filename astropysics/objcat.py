@@ -1050,12 +1050,64 @@ class DependentSource(Source):
         """
         this method translates from a string and a location to the actual
         targretted Field
+        
+        ^^^ means up that elements in the catalog, while ... means down 
+        ^(name) means go up until name is found 
         """
-        if s in node.fieldnames:
+#        if s in node.fieldnames:
+#            return getattr(node,s)
+#        else:
+#            raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
+        
+        #TODO:optimize
+        upd = {}
+        for i,c in enumerate(s):
+            if c is '^':
+                d[i] = True
+            if c is '.':
+                d[i] = False
+        if len(upd) == 0:
             return getattr(node,s)
-        else:
-            raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
-        return ref
+        if len(s)-1 in upd:
+            raise ValueError('Improperly formatted field string - no field name')
+        
+        pairs = []
+        sortk = sorted(upd.keys())
+        lasti = sortk[0]
+        for i in sortk[1:]:
+            pairs.append((lasti,i))
+            lasti = i
+        if len(pairs) == 0:
+            pairs.append((sortk[0]-1,sortk[0]))
+            
+        for i1,i2 in pairs:
+            if i2-i1 == 1:
+                if upd[i1]:
+                    node = node.parent
+                else:
+                    node = node.children[0]
+            else:
+                subs = s[i1:i2]
+                if upd[i1]:
+                    try:
+                        node = node.parent
+                        while node.__class__!=substr and node['name']!=substr:
+                            node = node.parent
+                    except AttributeError:
+                        raise ValueError('No parrent matching "%s" found'%substr)
+                else:
+                    try:
+                        nchild = int(subs)
+                        node = node.children[nchild]
+                    except ValueError:
+                        startnode = node
+                        for n in node.children:
+                            if node.__class__==substr or node['name']==substr:
+                                node = n
+                                break
+                        if node is startnode:
+                            raise ValueError('No child matching "%s" found'%substr)
+        
     
     def populateFieldRefs(self):
         """
