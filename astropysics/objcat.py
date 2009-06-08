@@ -60,9 +60,10 @@ class CatalogNode(object):
             self.parent = parent
             
     def __getstate__(self):
-        raise NotImplementedError
+        return {'_parent':self._parent,'_children':self._children}
     def __setstate__(self,d):
-        raise NotImplementedError
+        self._parent = d['_parent']
+        self._children = d['_children']
         
     def _cycleCheck(self,source):
         """
@@ -223,12 +224,24 @@ class FieldNode(CatalogNode,Sequence):
         self._fieldnames = []
         
     def __getstate__(self):
-        super(FieldNode,self).__getstate__()
-        raise NotImplementedError
+        d = super(FieldNode,self).__getstate__()
+        d['_fieldnames'] = self._fieldnames
+        for n in self._fieldnames:
+            val = getattr(self,n)
+            if isinstance(val,DerivedValue):
+                from warnings import warn
+                warn("cannot pickle derived values that aren't part of a structure - skipping %s"%val._str)
+            else:
+                d[n] = val
+        return d
     def __setstate__(self,d):
         super(FieldNode,self).__setstate__(d)
-        raise NotImplementedError
-        
+        self._fieldnames = d['_fieldnames']
+        for n in self._fieldnames:
+            fi = d[n]
+            setattr(self,n,fi)
+            fi.node = self
+            
     def addField(self,field):
         if not isinstance(field,Field):
             raise ValueError('input value is not a Field')
@@ -253,7 +266,7 @@ class FieldNode(CatalogNode,Sequence):
     def fields(self):
         """
         this yields an iterator over all of the Field objects (rather than 
-        their values)
+        their values, as regular sequence access does)
         """
         for n in self._fieldnames:
             yield getattr(self,n)
@@ -396,6 +409,7 @@ def generate_pydot_graph(node,graphfields=True):
 #<----------------------------node attribute types----------------------------->    
  
 #class Field(MutableSequence,MutableMapping):
+#TODO: re-implemented MutableSequence methods so that no __dict__ is made
 class Field(MutableSequence):
     """
     This class represents an attribute/characteristic/property of the
@@ -411,7 +425,7 @@ class Field(MutableSequence):
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals','_nodewr','_notify')
+    __slots__=('_name','_type','_vals','_nodewr','_notifywrs')
     
     def __init__(self,name,type=None,defaultval=None,usedef=None):
         """
@@ -430,24 +444,27 @@ class Field(MutableSequence):
             self.default = defaultval
             
     def __getstate__(self):
-        raise NotImplementedError
+        return {'_name':self._name,'_type':self._type,'_vals':self._vals}
     def __setstate__(self,d):
-        raise NotImplementedError
+        self._name = d['_name']
+        self._type = d['_type']
+        self._vals = d['_vals']
+        self._notifywrs = None
+        self._nodewr = None
+        #notifiers should late-attach when values are first accessed, and  
+        #the Node does it's own attaching
         
     def __call__(self):
         return self.currentobj.value
     def __len__(self):
         return len(self._vals)
     def __contains__(self,val):
-        #TODO: decide if this performance hit is worth optimizing somehow
-        if val is None:
-            try:
-                self[None]
-                return True
-            except KeyError:
-                return False
-        else:
-            return super(Field,self).__contains__(val)
+        #TODO: optimize!
+        try:
+            self[val]
+            return True
+        except (KeyError,IndexError):
+            return False
     
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
@@ -597,7 +614,7 @@ class Field(MutableSequence):
             
         if i == 0 and self._notifywrs is not None:
             self.notifyValueChange(self._vals[0],self._vals[1] if len(self._vals)>1 else None)
-        del self._vals[key]
+        del self._vals[i]
             
     def insert(self,key,val):
         val = self._checkConvInVal(val)
@@ -710,10 +727,8 @@ class Source(object):
     def __init__(self,src):
         self._str = str(src)
         
-    def __getstate__(self):
-        raise NotImplementedError
-    def __setstate__(self,d):
-        raise NotImplementedError
+    def __reduce__(self):
+        return (Source,(self._str,))
         
     def __str__(self):
         return 'Source ' + self._str
@@ -730,9 +745,9 @@ class FieldValue(object):
         self._source = None
     
     def __getstate__(self):
-        raise NotImplementedError
+        return {'_source':self._source}
     def __setstate__(self,d):
-        raise NotImplementedError
+        self._source = d['_source']
     
     value = abstractproperty()
     
@@ -790,11 +805,12 @@ class ObservedValue(FieldValue):
         self._value = value
         
     def __getstate__(self):
-        super(ObservedValue,self).__getstate__()
-        raise NotImplementedError
+        d = super(ObservedValue,self).__getstate__()
+        d['_value'] = self._value
+        return d
     def __setstate__(self,d):
         super(ObservedValue,self).__setstate__(d)
-        raise NotImplementedError
+        self._value = d['_value']
         
     def __str__(self):
         return 'Value %s:%s'%(self.value,self.source)
@@ -850,11 +866,18 @@ class DerivedValue(FieldValue):
         self._source = DependentSource(defaults,sourcenode,self._invalidateNotifier)
         
     def __getstate__(self):
-        super(DerivedValue,self).__getstate__()
-        raise NotImplementedError
+        d = super(DerivedValue,self).__getstate__()
+        d['_value'] = self._value
+        from pickle import PicklingError
+        raise PicklingError("DerivedValue can't be pickled because it depends on a function")
+        d['_f'] = self._f #TODO: find some way to work around the function pickling issue?
+        return d
     def __setstate__(self,d):
         super(DerivedValue,self).__setstate__(d)
-        raise NotImplementedError
+        self._value = d['_value']
+        self._valid = False
+        self._fieldwr = None
+        self._f = d['_f'] #TODO: find some way to work around this?
         
     def __str__(self):
         try:
@@ -948,7 +971,6 @@ class DerivedValue(FieldValue):
             
             return self._value
 
-#TODO: cycle-detection
 class DependentSource(Source):
     """
     This class holds weak references to the Field's that are
@@ -993,15 +1015,15 @@ class DependentSource(Source):
                 depfieldrefs.append(ref(f))
                 if notifierfunc is not None:
                     f.registerNotifier(notifierfunc)
+            elif f is None:
+                depstrs.append(None)
+                depfieldsrefs.append(self.__noneer)
             else:
                 raise ValueError('Unrecognized field code %s'%str(f))
     
-    def __getstate__(self):
-        super(DependentSource,self).__getstate__()
-        raise NotImplementedError
-    def __setstate__(self,d):
-        super(DependentSource,self).__setstate__(d)
-        raise NotImplementedError
+    def __reduce__(self):
+        #Only thing guaranteed are the strings
+        return (DependentSource,(self.depstrs,None))
         
     def __len__(self):
         return len(self.depfieldrefs)
@@ -1023,6 +1045,18 @@ class DependentSource(Source):
                 self.depfieldrefs[i] = self.__noneer
     pathnode = property(_getPathnode,_setPathnode,doc='The CatalogNode for dereferencing source names')
     
+    @staticmethod
+    def _locatestr(s,node):
+        """
+        this method translates from a string and a location to the actual
+        targretted Field
+        """
+        if s in node.fieldnames:
+            return getattr(node,s)
+        else:
+            raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
+        return ref
+    
     def populateFieldRefs(self):
         """
         this relinks all dead weakrefs using the dependancy strings and returns 
@@ -1036,22 +1070,18 @@ class DependentSource(Source):
             if None in refs:
                 raise ValueError('Missing/dead field(s) cannot be dereferenced without a catalog location',[i for i,r in enumerate(refs) if r is None])
         else:
-            pathnode = self.pathnode
-            if not hasattr(pathnode,'fieldnames'):
+            if not hasattr(self.pathnode,'fieldnames'):
                 raise ValueError('Linked pathnode has no fields or does not exist')
             
             refs = []
             
             for i,wrf in enumerate(self.depfieldrefs):
                 if wrf() is None:
-                    if self.depstrs[i] in pathnode.fieldnames:
-                        refs.append(getattr(pathnode,self.depstrs[i]))
-                        f = refs[-1]
-                        self.depfieldrefs[i] = ref(f)
-                        if self.notifierfunc is not None:
+                    f = self._locatestr(self.depstrs[i],self.pathnode)
+                    refs.append(f)
+                    self.depfieldrefs[i] = ref(f)
+                    if self.notifierfunc is not None:
                             f.registerNotifier(self.notifierfunc)
-                    else:
-                        raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
                 else:
                     refs.append(wrf())
         
@@ -1121,10 +1151,9 @@ class StructuredFieldNode(FieldNode):
         
         super(StructuredFieldNode,self).__init__(parent)
         self._altered = False
-        
        
         dvs=[]  #derived values to apply to fields as (derivedvalue,field)
-         #apply Fields from class into new object as new Fields
+        #apply Fields from class into new object as new Fields
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
             if isinstance(v,tuple):
                 dv,fi = v
@@ -1148,11 +1177,39 @@ class StructuredFieldNode(FieldNode):
             fobj.insert(0,DerivedValue(dv._f,self))
             
     def __getstate__(self):
-        super(StructuredFieldNode,self).__getstate__()
-        raise NotImplementedError
+        import inspect
+        
+        currderind = {}
+        for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
+            if isinstance(v,tuple):
+                n = v[1].name
+                if n in self._fieldnames:
+                    fi = getattr(self,n)
+                    while 'derived' in fi:
+                        dv = fi['derived']
+                        if dv._f is v[0]._f:
+                            currderind[n] = fi.index(dv)
+                        del fi[dv._source._str]
+                    
+        d = super(StructuredFieldNode,self).__getstate__()
+        d['_altered'] = self._altered
+        d['currderind'] = currderind
+        return d
     def __setstate__(self,d):
+        import inspect
+        
+        self._altered = d['_altered']
         super(StructuredFieldNode,self).__setstate__(d)
-        raise NotImplementedError     
+        for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
+            if isinstance(v,tuple):
+                n = v[1].name
+                if n in self._fieldnames:
+                    fi = getattr(self,n)
+                    assert n in d['currderind'],'missing current index for structured derived value' 
+                    ind = d['currderind'][n]
+                    if ind > len(fi):
+                        ind = len(fi)
+                    fi.insert(ind,DerivedValue(v[0]._f,self))
     
     @property
     def alteredstruct(self):
