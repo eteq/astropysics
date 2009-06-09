@@ -10,7 +10,7 @@ from __future__ import division
 from math import pi
 import numpy as np
 
-from .spec import HasSpecUnits as _HasSpecUnits
+from .spec import HasSpecUnits
 try:
     #requires Python 2.6
     from abc import ABCMeta
@@ -24,7 +24,7 @@ except ImportError: #support for earlier versions
 
 #<---------------------Classes------------------------------------------------->
 
-class Band(_HasSpecUnits):
+class Band(HasSpecUnits):
     """
     This class is the base of all photometric band objects.  Bands are expected
     to be immutable once created except for changes of units.
@@ -35,7 +35,7 @@ class Band(_HasSpecUnits):
     *_getFWHM : return the FWHM of the band
     *_getx: return an array with the x-axis
     *_getS: return the photon sensitivity (shape should match x)
-    *_applyUnits: units support (see ``astrpoysics.spec._HasSpecUnits``)
+    *_applyUnits: units support (see ``astrpoysics.spec.HasSpecUnits``)
     
     #the following can be optionally overriden:
     *alignBand(x): return the sensitivity of the Band interpolated to the 
@@ -378,7 +378,7 @@ class GaussianBand(Band):
         self._sigs = sigs
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
-        _HasSpecUnits.__init__(self,unit)
+        HasSpecUnits.__init__(self,unit)
         self._unittrans = (lambda t:t,lambda t:t)
         
         self.name = name
@@ -458,7 +458,7 @@ class ArrayBand(Band):
         
         self._computeMoments()
         
-        _HasSpecUnits.__init__(self,unit)
+        HasSpecUnits.__init__(self,unit)
         
         self.name = name
         
@@ -703,6 +703,42 @@ def set_zeropoint_system(system,bands='all'):
             b.computeZptFromSpectrum(s)
     else:
         raise ValueError('unrecognized magnitude system')
+    
+    
+class PhotObservation(HasSpecUnits):
+    """
+    A photometric measurement (or array of measurements) in a fixed set of bands
+    
+    the first index of the values must have length equal to nbands
+    """
+    def __init__(self,bands,values,unit='angstroms'):
+        super(HasSpecUnits,self).__init__(unit)
+        try:
+            bands = str_to_bands(bands)
+        except ValueError #assume each character is a band
+            bands = [str_to_bands(bands)[0] for b in bands.strip()]
+        self._bands = tuple(bands)
+            
+        self.values = values
+        
+    
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        raise NotImplementedError
+    
+    @property
+    def bands(self):
+        return self._bands
+    
+    def _getVals(self):
+        pass
+    def _setVals(self,val):
+        if values is None:
+            self._values = np.zeros(len(self._bands))
+        else:
+            if len(val) != len(self._bands):
+                raise ValueError('value length does not match number of bands')
+            self._values = np.array(val)    
+    values = property(_getVals,_setVals,doc='photmetric measurements')
     
 
 #<---------------------Analysis Classes/Tools---------------------------------->
@@ -1965,6 +2001,8 @@ def str_to_bands(bnds):
     if isinstance(bnds,basestring):
         if bnds.lower() == 'all':
             bnds = bands.values()
+        elif ',' in bnds:
+            bnds = [bands[bnds.split()] for b in bnds.split(',')]
         else:
             bnds = bands[bnds]
             if isMappingType(bnds):
@@ -1976,7 +2014,7 @@ def str_to_bands(bnds):
     elif isinstance(bnds,Band):
         bnds = (Band,)
     else:
-        raise ValueError('unrecognized band types')
+        raise ValueError('unrecognized band(s)')
     
     return bnds
 #TODO: check UBVRI/ugriz S function - energy or quantal?
@@ -2101,4 +2139,4 @@ bandwl = _BwlAdapter()
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
 bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
-del ABCMeta,abstractmethod,abstractproperty,_HasSpecUnits,pi,division #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,HasSpecUnits,pi,division #clean up namespace
