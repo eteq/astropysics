@@ -18,14 +18,12 @@ try:
     from abc import ABCMeta
     from abc import abstractmethod
     from abc import abstractproperty
-    from collections import Sequence,MutableSequence,MutableMapping
+    from collections import Sequence,MutableSequence
 except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
     class MutableSequence(object):
-        __slots__=('__weakref__',) #support for weakrefs as necessary
-    class MutableMapping(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
@@ -203,7 +201,49 @@ class CatalogNode(object):
             retvals = [v for v in retvals if v is not filter]
         return retvals
     
-#class FieldNode(CatalogNode,MutableMapping,Sequence):
+    def save(self,file,savechildren=True):
+        """
+        save the file name or file-like object
+        
+        savechildren means the children of this node will be saved
+        
+        Note that the parent and everything above this point will NOT be
+        saved (when reloaded the parent will be None)
+        """
+        import cPickle
+        
+        oldpar = self._parent
+        self._parent = None
+        
+        oldchildren = self._children
+        if not savechildren:
+            self._children = []
+            
+        try:
+            if isinstance(file,basestring):
+                #filename
+                with open(file,'w') as f:
+                    return cPickle.dump(self,f)
+            else:
+                return cPickle.load(file)
+        finally:
+            self._parent = oldpar
+            self._children = oldchildren
+        
+    
+    @staticmethod
+    def load(file):
+        """
+        load the file name or file-like object
+        """
+        import cPickle
+        if isinstance(file,basestring):
+            #filename
+            with open(file,'r') as f:
+                return cPickle.load(f)
+        else:
+            return cPickle.load(file)
+    
 class FieldNode(CatalogNode,Sequence):
     """
     A node in the catalog that has Fields.  This is an abstract class that 
@@ -408,8 +448,6 @@ def generate_pydot_graph(node,graphfields=True):
 
 #<----------------------------node attribute types----------------------------->    
  
-#class Field(MutableSequence,MutableMapping):
-#TODO: re-implemented MutableSequence methods so that no __dict__ is made
 class Field(MutableSequence):
     """
     This class represents an attribute/characteristic/property of the
@@ -430,8 +468,6 @@ class Field(MutableSequence):
     def __init__(self,name,type=None,defaultval=None,usedef=None):
         """
         The field must have a name, and can optionally be given a type
-                
-        #TODO:auto-determine name from class
         """        
         self._name = name
         self._vals = []
@@ -656,6 +692,9 @@ class Field(MutableSequence):
     Selects the type to enforce for this field.  
     if None, no type-checking will be performed
     if a numpy dtype, the value must be an array matching the dtype
+    can also be a sequence of types (accepts all) or a function
+    that will be called directly on the function that returns True if
+    the type is valid
     """)
     #TODO:default should be Catalog-level?    
     def _getDefault(self):
@@ -711,6 +750,115 @@ class Field(MutableSequence):
         """
         return [o for o in self if isinstance(o,DerivedValue)]
     
+class SEDField(Field):
+    """
+    This field represents the Spectral Energy Distribution of this object - 
+    e.g. a collection of Spectra or Photometric measurements
+    """
+    from .spec import Spectrum
+    from .phot import PhotObservation
+    
+    __slots__ = ['_maskedsedvals','_unit']
+    
+    def __init__(self,name='SED',unit='angstroms'):
+        super(SEDField,self).__init__(name)
+        
+        self._type = tuple((Spectrum,PhotObservation))
+        self._unit = unit
+        self._maskedsedvals = set()
+        
+    def __getstate__(self):
+        d = super(SEDField,self).__getstate__()
+        d['_maskedsedvals'] = self._maskedsedvals
+        d['_unit'] = self._unit
+        return d
+    
+    def __setstate__(self,d):
+        super(SEDField,self).__setstate__(d)
+        self._maskedsedvals = d['_maskedsedvals']
+        self._unit = d['_unit']
+        
+    def __call__(self):
+        return self.getFullSED()
+    
+    def __setitem__(self,key,val):
+        """
+        allow self['source'] = (bands,values) syntax
+        """
+        if isinstance(val,tuple) and len(val) == 2:
+            return super(SEDField,self).__setitem__(key,PhotObservation(*val))
+        else:
+            return super(SEDField,self).__setitem__(key,val)
+        
+    @property
+    def type(self):
+        return self._type
+    
+    @property
+    def default(self):
+        return self()
+    
+    def _getUnit(self):
+        return self._unit
+    def _setUnit(self,val):
+        oldu = self._unit
+        try:
+            for obj in self:
+                obj.unit = val
+            self._unit = val
+        except:
+            for obj in self:
+                obj.unit = oldu
+            raise
+    unit = property(_getUnit,_setUnit,doc="""
+    The units to use in the objects of this SED - see 
+    astropysics.spec.HasSpecUnits for valid units
+    """)
+    
+    def getMasked(self):
+        """
+        return a copy of the values masked from the full SED
+        """
+        return tuple(sorted(self._maskedsedvals))
+    def mask(self,val):
+        """
+        mask the value (either index or source name) to not appear in the
+        full SED
+        """
+        if isinstance(val,int):
+            self._maskedsedvals.add(val)
+        else:
+            self._maskedsedvals.add(self.index(val))
+    def unmask(self,val):
+        """
+        unmask the value (either index or source name) to appear in the
+        full SED
+        """
+        if isinstance(val,int):
+            self._maskedsedvals.remove(val)
+        else:
+            self._maskedsedvals.remove(self.index(val))
+    def unmaskAll(self):
+        """
+        unmask all values (all appear in full SED)
+        """
+        self._maskedsedvals.clear()
+    
+    def getFullSED(self):
+        """
+        the generates a astropysics.spec.Spectrum object that represents all 
+        the information contained in this SEDField
+        """
+        for i,v in self.values:
+            if i not in self._maskedsedvals:
+                raise NotImplementedError
+        
+    def plotSED(self):
+        """
+        generates a plot of the SED of this object
+        """
+        raise NotImplementedError
+    
 class _SourceMeta(type):
     #TODO: improve Source Singleton concepts, replace with __eq__ support?
     def __call__(cls,*args,**kwargs):
@@ -762,21 +910,31 @@ class FieldValue(object):
         self._source = val 
     source=property(_getSource,_setSource)
     
-    def checkType(self,type):
+    def checkType(self,typetocheck):
         """
         ensure that the value of this FieldValue is of the requested Type
         (or None to accept anything).  Any mismatches will throw
         a TypeError
         """
-        self._doTypeCheck(type,self.value)
+        if typetocheck is not None:
+            from operator import isSequenceType
+            if isinstance(typetocheck,type):
+                self._doTypeCheck((typetocheck,),self.value)
+            elif callable(typetocheck):
+                if not typetocheck(self.value):
+                    raise TypeError('custom function type-checking failed')
+            elif isSequenceType(typetocheck):
+                self._doTypeCheck(typetocheck,self.value)
+            else:
+                raise ValueError('invalid type to check')
         
-    def _doTypeCheck(self,type,val):
+    def _doTypeCheck(self,types,val):
         """
         handles interpretation of types - subclasses
         should call this with the val that should be checked
         if it is not the regular value
         """
-        if type is not None:
+        for type in types:
             if isinstance(type,np.dtype):
                 if not isinstance(val,np.ndarray):
                     raise TypeError('Value %s not a numpy array'%val)
@@ -906,12 +1064,11 @@ class DerivedValue(FieldValue):
     field=property(_getField,_setField,doc='A function like Field.notifyValueChange')
 
     
-    
-    def checkType(self,type):
+    def checkType(self,typetocheck):
         oldaction = DerivedValue.failedvalueaction
         try:
             DerivedValue.failedvalueaction = 'skip'
-            super(DerivedValue,self).checkType(type)
+            super(DerivedValue,self).checkType(typetocheck)
         finally:
             DerivedValue.failedvalueaction = oldaction
     checkType.__doc__ = FieldValue.checkType.__doc__
@@ -1257,8 +1414,12 @@ class StructuredFieldNode(FieldNode):
                 n = v[1].name
                 if n in self._fieldnames:
                     fi = getattr(self,n)
-                    assert n in d['currderind'],'missing current index for structured derived value' 
-                    ind = d['currderind'][n]
+                    try:
+                        ind = d['currderind'][n]
+                    except KeyError:
+                        from warnings import warn
+                        warn('missing current index for structured derived value "%s" - assuming as default'%n)
+                        ind = 0
                     if ind > len(fi):
                         ind = len(fi)
                     fi.insert(ind,DerivedValue(v[0]._f,self))
@@ -1365,14 +1526,19 @@ class Test1(AstronomicalObject):
     def f(num='num'):
         return num+1
     
+class Test2(AstronomicalObject):
+    SED = SEDField()
+    
 def test_cat():
     c=Catalog()
-    ao=AstronomicalObject(c)
+    ao=AstronomicalObject(c,'group')
     t1=Test1(ao)
-    t2=Test1(ao)
+    t12=Test1(ao)
+    t2=Test2(ao)
+    t2.SED['src'] = ('BVRI',[12,11.5,11.3,11.2])
     
     return c,locals()
 
     
-del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,Sequence,MutableSequence,pi,division #clean up namespace
   
