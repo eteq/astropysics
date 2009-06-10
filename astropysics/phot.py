@@ -20,7 +20,16 @@ except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
-
+    
+__mferrfactor = -2.5/np.log(10.0)
+def _mag_to_flux(mag):
+    return 10**(mag/-2.5)
+def _magerr_to_fluxerr(err,mag):
+    return err*_mag_to_flux(mag)/__mferrfactor
+def _flux_to_mag(flux):
+    return -2.5*np.log10(flux)
+def _fluxerr_to_magerr(err,flux):
+    return __mferrfactor*err/flux
 
 #<---------------------Classes------------------------------------------------->
 
@@ -146,7 +155,7 @@ class Band(HasSpecUnits):
     name = property(_getName,_setName)
     _name = None #default is nameless
     
-    zeropoint = 0 #magnitude zeropoint
+    zptflux = 0 #flux at mag=0
     
     def alignBand(self,x,interpolation='linear'):
         """
@@ -215,64 +224,25 @@ class Band(HasSpecUnits):
         return self.__interp(self.x,x[sorti],y[sorti],kwargs['interpolation'])
         
     
-    def computeFlux(self,*args,**kwargs):
-        """
-        compute the flux in this band for the supplied Spectrum
-        
-        the flux is inferred from the ``Band.zeropoint`` value - an
-        object with magnitude=zeropoint is the one with flux=1
-        
-        args and kwargs go into Band.computeMag
-        """
-        return (10**((self.computeMag(*args,**kwargs))/-2.5))
-        
-#    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
-#        """
-#        compute the flux in this band for the supplied Spectrum
-        
-#        the Spectrum is aligned to the band if aligntoband is True, or vice 
-#        versa, otherwise, using the specified interpolation (see Band.alignBand
-#        for interpolation options).  If aligntoband is None, the higher of the
-#        two resolutions will be left unchanged 
-#        """
-#        from scipy.integrate import simps as integralfunc
-        
-#        if aligntoband is None:
-#            aligntoband = self.x.size > spec.x.size
-        
-#        if aligntoband:
-#            x = self.x
-#            S = self.S
-#            flux = self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
-#            units = self.unit
-#        else:
-#            x = spec.x
-#            S = self.alignBand(spec)
-#            flux = spec.flux
-#            units = spec.unit
-            
-#        y = S*flux
-#        if 'wavelength' in units:
-#            y *= x
-#            Snorm = S*x
-#        else:
-#            y /= x
-#            Snorm = S/x
-            
-#        sorti=np.argsort(x)        
-#        return integralfunc(y[sorti],x[sorti])/integralfunc(Snorm[sorti],x[sorti])
-    
-    def computeMag(self,spec,interpolation='linear',aligntoband=None):
+    def computeMag(self,*args,**kwargs):
         """
         Compute the magnitude of the supplied Spectrum in this band using the 
-        band's ``zeropoint`` attribute
+        band's ``zptflux`` attribute
+        
+        args and kwargs go into Band.computeFlux
+        """
+        return _flux_to_mag(self.computeFlux(*args,**kwargs)/self.zptflux)
+    
+    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
+        """
+        compute the flux in this band for the supplied Spectrum
         
         the Spectrum is aligned to the band if aligntoband is True, or vice 
         versa, otherwise, using the specified interpolation (see Band.alignBand
         for interpolation options).  If aligntoband is None, the higher of the
         two resolutions will be left unchanged 
         
-        the spectrum units will be converted to match those of th band
+        the spectrum units will be converted to match those of the Band
         
         the spectrum can be an array, but then aligntoband and 
         interpolation are ignored and must match the band's x-axis
@@ -308,10 +278,10 @@ class Band(HasSpecUnits):
             y*=x
         else:
             y/=x
-            #TODO:check energy factor
+            #TODO:check energy factor unit-wise
             
         sorti=np.argsort(x)
-        return -2.5*np.log10(integralfunc(y[sorti],x[sorti]))-self.zeropoint
+        return integralfunc(y[sorti],x[sorti])
     
     def computeZptFromSpectrum(self,*args,**kwargs):
         """
@@ -321,12 +291,9 @@ class Band(HasSpecUnits):
         
         args and kwargs are the same as those for computeMag
         """
-        self.zeropoint = 0
-        fluxfactor = self.computeFlux(np.ones_like(self.x)) #scale by this factor to get actual flux
-        
-        mag = self.computeMag(*args,**kwargs)
-        
-        self.zeropoint = mag
+        #fluxfactor = self.computeFlux(np.ones_like(self.x)) #scale by this factor to get actual flux
+        #mag = self.computeMag(*args,**kwargs)
+        self.zptflux = self.computeFlux(*args,**kwargs)
         
     
     def plot(self,spec=None,bandscaling=1,bandoffset=0,labelband=True,clf=True,**kwargs):
@@ -661,21 +628,21 @@ def plot_band_group(bandgrp,**kwargs):
         pass
     
     
-def compute_band_zpts(specoroffset,bands):
+def compute_band_zpts(specorscale,bands):
     """
     this will use the supplied spectrum to determine the magnitude zero points
     for the specified bands 
     OR
-    offset the zero point of all the bands by a specified value
+    scale the zeropoint 
     """
     bnds = str_to_bands(bands)
     
-    if np.isscalar(specoroffset):
+    if np.isscalar(specorscale):
         for b in bnds:
-            b.zeropoint += specoroffset
+            b.zptflux *= specorscale
     else:
         for b in bnds:
-            b.computeZptFromSpectrum(specoroffset)
+            b.computeZptFromSpectrum(specorscale)
             
 def set_zeropoint_system(system,bands='all'):
     """
@@ -708,7 +675,7 @@ def set_zeropoint_system(system,bands='all'):
             offset = 0
 
         vegad = loads(_get_package_data('vega_k93.pydict'))['data']
-        s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX'])
+        s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX']*10**(offset/2.5))
         
         for b in bands:
             b.computeZptFromSpectrum(s)
@@ -726,7 +693,6 @@ class PhotObservation(object):
     if asmags is True, values and errs will be interpreted as magnitudes,
     otherwise, flux
     """
-    __errfactor = -2.5/np.log(10)
     
     def __init__(self,bands,values,errs=None,asmags=True):
         try:
@@ -741,14 +707,14 @@ class PhotObservation(object):
                 errs = np.zeros_like(values) 
             elif np.isscalar(errs):
                 errs = errs*np.ones_like(values) 
-            self.magerrs = errs
+            self.magerr = errs
         else:
             self.flux = values
             if errs is None:
                 errs = np.zeros_like(values) 
             elif np.isscalar(errs):
                 errs = errs*np.ones_like(values) 
-            self.fluxerrs = errs
+            self.fluxerr = errs
             
     def __len__(self):
         return len(self._bandnames)
@@ -762,18 +728,20 @@ class PhotObservation(object):
         return str_to_bands(self._bandnames)
     
     def _zeroPoints(self):
-        return np.array([b.zeropoint for b in self.bands])
+        return np.array([b.zptflux for b in self.bands])
     
     def _getMags(self):
         if self._mags:
             return self._values.copy()
         else:  
-            zpts = self._zeroPoints()
-            zpts = zpts.reshape((zpts.size,1))
+            zptfluxes = self._zeroPoints()
+            zptfluxes = zptfluxes.reshape((zptfluxes.size,1))
             if len(self._values.shape)==1:
-                return -2.5*np.log10(self._values.reshape(zpts.shape))-zpts
+                return _flux_to_mags(self._values.reshape(zpts.shape)/zptfluxes).ravel()
+                #return (-2.5*np.log10(self._values.reshape(zpts.shape))-zpts).ravel()
             else:
-                return -2.5*np.log10(self._values)-zpts
+                return _flux_to_mags(self._values)
+                #return -2.5*np.log10(self._values)-zpts
     def _setMags(self,val):
         if len(val) != len(self._bandnames):
                 raise ValueError('input length does not match number of bands')
@@ -784,7 +752,8 @@ class PhotObservation(object):
         if self._mags:
             return self._err
         else:
-            return PhotObservation.__errfactor*self._err/self._values#-2.5/np.log(10)*self._err/self._values
+            return _fluxerr_to_magerr(self._err,self._values)
+            #return -2.5/np.log(10)*self._err/self._values
     def _setMagsErr(self,val):
         val = np.array(val)
         if val.shape != self._values.shape:
@@ -792,17 +761,20 @@ class PhotObservation(object):
         if self._mags:
             self._err = val
         else:
-            self._err = self._values*val/PhotObservation.__errfactor#self._values*val*np.log(10)/-2.5
-    magerrs  = property(_getMagsErr,_setMagsErr,doc='photmetric errors in magnitudes')
+            self._err = _magerr_to_fluxerr(val,self.mags)
+            #self._err = self._values*val*np.log(10)/-2.5
+    magerr = property(_getMagsErr,_setMagsErr,doc='photmetric errors in magnitudes')
     
     def _getFlux(self):
         if self._mags:
-            zpts = self._zeroPoints()
-            zpts = zpts.reshape((zpts.size,1))
+            zptfluxes = self._zeroPoints()
+            zptfluxes = zptfluxes.reshape((zptfluxes.size,1))
             if len(self._values.shape)==1:
-                return (10**((self._values.reshape(zpts.shape)+zpts)/-2.5)).ravel()
+                return zptfluxes[:,0]*_mag_to_flux(self._values)
+                #return (10**((self._values.reshape(zpts.shape)+zpts)/-2.5)).ravel()
             else:
-                return 10**((self._values+zpts)/-2.5)
+                return zptfluxes*_mag_to_flux(self._values)
+                #return 10**((self._values+zpts)/-2.5)
         else:  
             return self._values.copy()
     def _setFlux(self,val):
@@ -813,18 +785,36 @@ class PhotObservation(object):
     flux = property(_getFlux,_setFlux,doc='photmetric measurements in flux units')
     def _getFluxErr(self):
         if self._mags:
-            return self.flux*self._err/PhotObservation.__errfactor#self.flux*self._errs*np.log(10)/-2.5
+            zptfluxes = self._zeroPoints()
+            zptfluxes = zptfluxes.reshape((zptfluxes.size,1))
+            if len(self._values.shape)==1:
+                return zptfluxes[:,0]*_magerr_to_fluxerr(self._err,self._values)
+            else:
+                return zptfluxes*_magerr_to_fluxerr(self._err,self._values)
+            #return _magerr_to_fluxerr(self._err,self._values)
+            #return self.flux*self._err*np.log(10)/-2.5
         else:
-            return self._err
+            return self._err.copy()
     def _setFluxErr(self,val):
         val = np.array(val)
         if val.shape != self._values.shape:
             raise ValueError("Errors don't match values' shape")
         if self._mags:
-            self._err = PhotObservation.__errfactor*val/self.flux#-2.5/np.log(10)*val/self.flux
+            self._err = _fluxerr_to_magerr(val,self.mags)
+            #self._err = -2.5/np.log(10)*val/self.flux
         else:
             self._err = val
-    fluxerrs = property(_getFluxErr,_setFluxErr,doc='photmetric errors in flux units')
+    fluxerr = property(_getFluxErr,_setFluxErr,doc='photmetric errors in flux units')
+    
+    def getFluxDensity(self,unit='angstroms'):
+        """
+        compute an approximate flux density (e.g. erg cm^-2 s^-1 angstrom^-1)
+        assuming flat over the FWHM        
+        """
+        f,e = self.flux,self.fluxerr
+        x,w = self.getBandInfo(unit)
+        w = np.tile(w,f.size/len(x)).reshape((len(x),f.size/len(x)))
+        return f/w,e/w
     
     def getBandInfo(self,unit='angstroms'):
         """
@@ -851,7 +841,7 @@ class PhotObservation(object):
         from .spec import Spectrum
         
         y = self.flux
-        err = self.fluxerrs
+        err = self.fluxerr
         
         x=[]
         w=[]
@@ -901,30 +891,27 @@ class PhotObservation(object):
         
         if asmags:
             y = self.mags
-            yerr = self.magerrs
+            yerr = self.magerr
+        elif den:
+            y,yerr = self.getFluxDensity(unit=unit)
         else:
             y = self.flux
-            yerr = self.fluxerrs
+            yerr = self.fluxerr
             
         npts = np.prod(y.shape)/nb
         y,yerr=y.reshape((nb,npts)),yerr.reshape((nb,npts))
         
         x=[]
-        w=[]
+        #w=[]
         for b in bands:
             oldunit = b.unit
             b.unit = unit
             x.append(b.cen)
-            w.append(b.FWHM)
+            #w.append(b.FWHM)
             utype = b._phystype
             b.unit = oldunit
         x = np.tile(x,npts).reshape((nb,npts))
-        w = np.tile(w,npts).reshape((nb,npts))
-        
-        if den:
-            #TODO:better
-            y = y/w
-            yerr = yerr/w
+        #w = np.tile(w,npts).reshape((nb,npts))
             
         if clf:
             plt.clf()
@@ -936,8 +923,20 @@ class PhotObservation(object):
         plt.errorbar(x.ravel(),y.ravel(),yerr.ravel() if np.any(yerr) else None,**kwargs)
        
         if includebands:
+            if includebands is True:
+                includebands = {}
+            if 'bandscaling' not in includebands:
+                includebands['bandscaling'] = 0.5*(y.max()-y.min())
+            if 'bandoffset' not in includebands:
+                includebands['bandoffset'] = y.min()
+            if 'ls' not in includebands:
+                includebands['ls'] = '--'
+            if 'leg' not in includebands:
+                includebands['leg'] = False
+            includebands['clf'] = False
+            
             xl = plt.xlim()
-            plot_band_group(bands,bandscaling=0.5*(y.max()-y.min()),bandoffset=y.min(),ls='--',clf=False,leg=False)
+            plot_band_group(bands,**includebands)
             plt.xlim(*xl)
             
         if utype == 'wavelength':
@@ -1595,8 +1594,8 @@ class AperturePhotometry(object):
         
     def _magorfluxToFlux(self,magorflux):
         if self.usemags:
-            zpt = 0 if (self._band is None) else self.band.zeropoint
-            flux = 10**((magorflux+zpt)/-2.5)
+            zptf = 0 if (self._band is None) else self.band.zptflux
+            flux = zptf*_mag_to_flux(magorflux)
         else:
             flux = magorflux
         return flux 
@@ -1606,8 +1605,8 @@ class AperturePhotometry(object):
         convert flux back into mags if necessary and set zero-points appropriately
         """
         if self.usemags:
-            zpt = 0 if (self._band is None) else self.band.zeropoint
-            out = -2.5*np.log10(flux)-zpt
+            zptf = 0 if (self._band is None) else self.band.zptflux
+            out = _flux_to_mag(flux/zptf)
         else:
             out = flux
         return out
@@ -2015,13 +2014,15 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     elif isSequenceType(Mzpt):    
         Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
         
-    L=(10**((Mzpt-M)/2.5))*Lzpt
+    #L=(10**((Mzpt-M)/2.5))*Lzpt
+    L = _mag_to_flux(M-Mzpt)*Lzpt
     
     if dictin:
         L = dict([t for t in zip(dkeys,L)])
     
     if np.any(Merr):
-        dL=Merr*L/1.0857362047581294 #-1.0857362047581294 = -2.5/ln(10)
+        #dL=Merr*L/1.0857362047581294 #-1.0857362047581294 = -2.5/ln(10)
+        dL = _magerr_to_fluxerr(Merr,M)
         return L,dL
     else:
         return L
@@ -2046,13 +2047,15 @@ def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     elif isSequenceType(Mzpt):    
         Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
         
-    M=Mzpt-2.5*np.log10(L/Lzpt)
+    #M=Mzpt-2.5*np.log10(L/Lzpt)
+    M = Mzpt+_flux_to_mag(L/Lzpt)
 
     if dictin:
         M = dict([t for t in zip(dkeys,M)])
 
     if np.any(Lerr):
-        dM=1.0857362047581294*Lerr/L #-1.0857362047581294 = -2.5/ln(10)
+        #dM=1.0857362047581294*Lerr/L #-1.0857362047581294 = -2.5/ln(10)
+        dM = _fluxerr_to_magerr(Lerr,L)
         return M,dM
     else:
         return M

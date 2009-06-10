@@ -892,7 +892,7 @@ class SEDField(Field):
             
         return Spectrum(x,f,e,unit=self.unit)
         
-    def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),clf=True):
+    def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),log='',clf=True):
         """
         Generates a plot of the SED of this object.
         
@@ -901,21 +901,41 @@ class SEDField(Field):
         from matplotlib import pyplot as plt
         from .spec import HasSpecUnits
         
+        
+        mxy = max(np.max([np.max(s.flux) for s in self.specs]),np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in self.phots]))
+        mny = min(np.min([np.min(s.flux) for s in self.specs]),np.min([np.min(p.getFluxDensity(self.unit)[0]) for p in self.phots]))
+        mxx = max(np.max([np.max(s.x) for s in self.specs]),np.max([np.max(p.getBandInfo(self.unit)[0]) for p in self.phots]))
+        mnx = min(np.min([np.min(s.x) for s in self.specs]),np.min([np.min(p.getBandInfo(self.unit)[0]) for p in self.phots]))
+        
         preint = plt.isinteractive()
         try:
             plt.interactive(False)
 
             if clf:
                 plt.clf()
+                
+            if 'x' in log and 'y' in log:
+                plt.loglog()
+            elif 'x' in log:
+                plt.semilogx()
+            elif 'y' in log:
+                plt.semilogy()
             
             c = (colors[0],colors[2],colors[4],colors[4])
             for s in self.specs:
                 s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
                 
-            for p in self.phots:
-                pass    
-                #p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
+            lss = ('--',':','-.','-')
+            for i,p in enumerate(self.phots):
+                if plotbands:
+                    if plotbands is True:
+                        plotbands = {'bandscaling':(mxy - mny)*0.5,'bandoffset':mny}
+                    plotbands['ls'] = lss[i%len(lss)]
+                p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
                 
+            plt.xlim(mnx,mxx)
+            plt.ylim(mny,mxy)
+            
             xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
             xl = xl.replace('wavelength','\\lambda')
             xl = xl.replace('frequency','\\nu')
@@ -1627,16 +1647,17 @@ def test_sed():
     from .models import BlackbodyModel
     
     f = SEDField()
+    scale = 1e-9
     
-    f['s1'] = Spectrum(linspace(3000,8000,1024),randn(1024)/4+2.2,rand(1024)/12)
+    f['s1'] = Spectrum(linspace(3000,8000,1024),scale*(randn(1024)/4+2.2),scale*rand(1024)/12)
     m = BlackbodyModel(T=3300)
     m.peak = 2.2
     x2 = linspace(7500,10000,512)
     err = randn(512)/12
-    f['s2'] = Spectrum(x2,m(x2)+err,err)
+    f['s2'] = Spectrum(x2,scale*(m(x2)+err),scale*err)
     
     f['o1'] = PhotObservation('BVRI',[13,12.1,11.8,11.5],.153)
-    f['o2'] = PhotObservation('ugriz',randn(5,12)+16,rand(5,12)/3)
+    f['o2'] = PhotObservation('ugriz',randn(5,12)+12,rand(5,12)/3)
     
     return f
 
