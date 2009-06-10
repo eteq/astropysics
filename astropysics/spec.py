@@ -37,7 +37,7 @@ class HasSpecUnits(object):
     __metaclass__ = ABCMeta
     
     def __init__(self,unit):
-        self._phystype,self._unit,self._xscaling = self._strToUnit(unit) 
+        self._phystype,self._unit,self._xscaling = self.strToUnit(unit) 
     
     @abstractmethod
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
@@ -58,7 +58,14 @@ class HasSpecUnits(object):
         """
         raise NotImplementedError
     
-    def _strToUnit(self,typestr):
+    @staticmethod
+    def strToUnit(typestr):
+        """
+        converts a unit string into a standardized for
+        
+        returns phystype,unit,scaling
+        (scaling relative to cgs)
+        """
         u = typestr.lower()
         if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
             val =  'wavelength-angstrom'
@@ -213,7 +220,7 @@ class HasSpecUnits(object):
     def _getUnit(self):
         return self._phystype+'-'+self._unit
     def _setUnit(self,typestr):
-        newtype,newunit,newscaling = self._strToUnit(typestr)
+        newtype,newunit,newscaling = self.strToUnit(typestr)
         if not (newunit == self._unit and newscaling == self._xscaling):
             
             oldsettings = self._xscaling,self._phystype,self._unit
@@ -527,6 +534,8 @@ class Spectrum(HasSpecUnits):
         k are set by kwargs.  if the 'save' kwarg is True, the spline is saved
         and will be used for subsequent resamplings.  if 'clear' is True, the 
         existing spline will be cleared and a new spline will be calculated.
+        note that default spline has smoothing=0, which interpolates through
+        every point
         
         WARNING: this does not treat the errors properly yet - currently just interpolates
         
@@ -539,7 +548,7 @@ class Spectrum(HasSpecUnits):
         elif 'spline' in interpolation:
             from scipy.interpolate import UnivariateSpline
             
-            s = kwargs.pop('s',None)
+            s = kwargs.pop('s',0)
             k = kwargs.pop('k',3)
             save = kwargs.pop('save',False)
             clear = kwargs.pop('clear',False)
@@ -777,7 +786,7 @@ class Spectrum(HasSpecUnits):
         be offset so that the steps are centered on the pixels
         
         colors should be a 3-tuple that applies to 
-        (spectrum,error,invaliderror) and kwargs go into spectrum
+        (spectrum,error,invaliderror,continuum) and kwargs go into spectrum
         and error plots
         """
         
@@ -874,15 +883,17 @@ class FunctionSpectrum(Spectrum):
             errf = lambda x:ivarf(x)**-0.5
         err = errf(xi) if errf is not None else np.zeros_like(xi)
         self._errf = errf
-        
         super(FunctionSpectrum,self).__init__(np.array(xi,copy=True),flux,err,unit=unit)
         
+        self._xitranses = []
         self._xftranses = []
         
-    #def _getX(self):
-    #    return self._x
     def _setX(self,x):
-        x = np.array(x)
+        self._x = x = np.array(x)
+        
+        for xit in self._xitranses:
+            x = xit(x)
+            
         flux = self._fluxf(x)
         err = self._errf(x) if self._errf is not None else np.zeros_like(x)
         
@@ -890,7 +901,6 @@ class FunctionSpectrum(Spectrum):
             err = xft(x,err)[1]
             x,flux = xft(x,flux)
             
-        self._x = x
         self._flux = flux
         self._err = err    
     x = property(Spectrum._getX,_setX)
@@ -909,10 +919,11 @@ class FunctionSpectrum(Spectrum):
     
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         super(FunctionSpectrum,self)._applyUnits(xtrans,xitrans,xftrans,xfinplace)
+        self._xitranses.append(xitrans)
         self._xftranses.append(xftrans)
         
 #Make a special Spectrum to use for AB Magnitude calibrations        
-ABSpec = FunctionSpectrum([1e14,3e15],lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
+ABSpec = FunctionSpectrum(np.linspace(5e13,3e15,1024),lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
         
 
 

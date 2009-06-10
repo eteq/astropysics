@@ -471,11 +471,10 @@ class Field(MutableSequence):
         """        
         self._name = name
         self._vals = []
-        self._type = None
+        self._type = type
         self._notifywrs = None
         self._nodewr = None
         
-        self.type = type
         if usedef or (usedef is None and defaultval is not None):
             self.default = defaultval
             
@@ -755,12 +754,14 @@ class SEDField(Field):
     This field represents the Spectral Energy Distribution of this object - 
     e.g. a collection of Spectra or Photometric measurements
     """
-    from .spec import Spectrum
-    from .phot import PhotObservation
+    
     
     __slots__ = ['_maskedsedvals','_unit']
     
     def __init__(self,name='SED',unit='angstroms'):
+        from .spec import Spectrum
+        from .phot import PhotObservation
+        
         super(SEDField,self).__init__(name)
         
         self._type = tuple((Spectrum,PhotObservation))
@@ -798,13 +799,32 @@ class SEDField(Field):
     def default(self):
         return self()
     
+    @property
+    def specs(self):
+        from .spec import Spectrum
+        return [o for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
+    @property
+    def specsources(self):
+        from .spec import Spectrum
+        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
+    
+    @property
+    def phots(self):
+        from .phot import PhotObservation
+        return [o for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
+    @property
+    def photsources(self):
+        from .phot import PhotObservation
+        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
+    
     def _getUnit(self):
         return self._unit
     def _setUnit(self,val):
         oldu = self._unit
         try:
             for obj in self:
-                obj.unit = val
+                if hasattr(obj,'unit'):
+                    obj.unit = val
             self._unit = val
         except:
             for obj in self:
@@ -849,15 +869,68 @@ class SEDField(Field):
         the generates a astropysics.spec.Spectrum object that represents all 
         the information contained in this SEDField
         """
-        for i,v in self.values:
-            if i not in self._maskedsedvals:
-                raise NotImplementedError
+        from .spec import Spectrum
         
-    def plotSED(self):
+        x = np.array([])
+        f = np.array([])
+        e = np.array([])
+        for s in self.specs:
+            x = np.r_[x,s.x]
+            f = np.r_[f,s.flux]
+            e = np.r_[e,s.err]
+        
+        for p in self.phots:
+            pf,pe = p.flux,p.err
+            px,pw = p.getBandInfo()
+            px = np.tile(px/pw,np.prod(px.shape)/len(p))
+            px = px.reshape((len(p),np.prod(px.shape)/len(p)))
+            pf = pf.reshape((len(p),np.prod(pf.shape)/len(p)))
+            pe = pe.reshape((len(p),np.prod(pe.shape)/len(p)))
+            x = np.r_[x,px]
+            f = np.r_[f,pf]
+            e = np.r_[e,pe]
+            
+        return Spectrum(x,f,e,unit=self.unit)
+        
+    def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),clf=True):
         """
-        generates a plot of the SED of this object
-        """
-        raise NotImplementedError
+        Generates a plot of the SED of this object.
+        
+        colors is a tuple of colors as (spec,phot,specerr,photerr,other)
+        """       
+        from matplotlib import pyplot as plt
+        from .spec import HasSpecUnits
+        
+        preint = plt.isinteractive()
+        try:
+            plt.interactive(False)
+
+            if clf:
+                plt.clf()
+            
+            c = (colors[0],colors[2],colors[4],colors[4])
+            for s in self.specs:
+                s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
+                
+            for p in self.phots:
+                pass    
+                #p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
+                
+            xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
+            xl = xl.replace('wavelength','\\lambda')
+            xl = xl.replace('frequency','\\nu')
+            xl = xl.replace('energy','E')
+            xl = xl.replace('angstrom','\\AA')
+            xl = xl.replace('micron','\\mu m')
+            xl = tuple(xl.split('-'))
+            plt.xlabel('$%s/{\\rm %s}$'%xl)
+            
+            plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
+            
+            plt.show()
+            plt.draw()
+        finally:
+            plt.interactive(preint)
     
 class _SourceMeta(type):
     #TODO: improve Source Singleton concepts, replace with __eq__ support?
@@ -934,14 +1007,21 @@ class FieldValue(object):
         should call this with the val that should be checked
         if it is not the regular value
         """
+        passed = False
+        err = 'Type checking problem'
         for type in types:
             if isinstance(type,np.dtype):
                 if not isinstance(val,np.ndarray):
-                    raise TypeError('Value %s not a numpy array'%val)
+                    err = 'Value %s not a numpy array'%val
+                    continue
                 if self.value.dtype != type:
-                    raise TypeError('Array %s does not match dtype %s'%(val,type))
+                    err = 'Array %s does not match dtype %s'%(val,type)
+                    continue
             elif not isinstance(val,type):
-                raise TypeError('Value %s is not of type %s'%(val,type))
+                err = 'Value %s is not of type %s'%(val,type)
+                continue
+            return
+        raise TypeError(err)
     
     def __call__(self):
         return self.value
@@ -1538,6 +1618,27 @@ def test_cat():
     t2.SED['src'] = ('BVRI',[12,11.5,11.3,11.2])
     
     return c,locals()
+
+def test_sed():
+    from numpy.random import randn,rand
+    from numpy import linspace
+    from .spec import Spectrum
+    from .phot import PhotObservation
+    from .models import BlackbodyModel
+    
+    f = SEDField()
+    
+    f['s1'] = Spectrum(linspace(3000,8000,1024),randn(1024)/4+2.2,rand(1024)/12)
+    m = BlackbodyModel(T=3300)
+    m.peak = 2.2
+    x2 = linspace(7500,10000,512)
+    err = randn(512)/12
+    f['s2'] = Spectrum(x2,m(x2)+err,err)
+    
+    f['o1'] = PhotObservation('BVRI',[13,12.1,11.8,11.5],.153)
+    f['o2'] = PhotObservation('ugriz',randn(5,12)+16,rand(5,12)/3)
+    
+    return f
 
     
 del ABCMeta,abstractmethod,abstractproperty,Sequence,MutableSequence,pi,division #clean up namespace

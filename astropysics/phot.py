@@ -35,7 +35,7 @@ class Band(HasSpecUnits):
     *_getFWHM : return the FWHM of the band
     *_getx: return an array with the x-axis
     *_getS: return the photon sensitivity (shape should match x)
-    *_applyUnits: units support (see ``astrpoysics.spec.HasSpecUnits``)
+    *_applyUnits: units support (see ``astropysics.spec.HasSpecUnits``)
     
     #the following can be optionally overriden:
     *alignBand(x): return the sensitivity of the Band interpolated to the 
@@ -107,10 +107,17 @@ class Band(HasSpecUnits):
         """
         if interpolation == 'linear':
             return np.interp(x,x0,y0)
-        elif interpolation == 'spline':
-            raise NotImplementedError
+        elif 'spline' in interpolation:
             if not hasattr(self,'_splineobj'):
                 self._splineobj = None
+                
+            deg = interpolation.replace('spline','').strip()
+            deg = 3 if deg == '' else int(deg)
+            if self._splineobj is None or self._splineobj._data[5] != deg:
+                from scipy.interp import InterpolatedUnivariateSpline
+                self._splineobj = InterpolatedUnivariateSpline(k=deg)
+            return self._splineobj(x)
+                
         else:
             raise ValueError('unrecognized interpolation type')
     
@@ -125,8 +132,9 @@ class Band(HasSpecUnits):
             self._src = Source(None)
         return self._src
     def _setSrc(self,val=None):
-        from .objcat import Source
-        self._src = Source(val)
+        pass
+        #from .objcat import Source
+        #self._src = Source(val)
     source = property(_getSrc,_setSrc)
     def _getName(self):
         if self._name is None:
@@ -139,7 +147,6 @@ class Band(HasSpecUnits):
     _name = None #default is nameless
     
     zeropoint = 0 #magnitude zeropoint
-    zpflux = 1 #flux from an object with mag=0
     
     def alignBand(self,x,interpolation='linear'):
         """
@@ -179,13 +186,19 @@ class Band(HasSpecUnits):
         """
         if len(args) == 1:
             from operator import isSequenceType
-            from .spec import Spectrum
-            
+            from .spec import Spectrum,FunctionSpectrum
             specin = args[0]
             
             if isSequenceType(specin):
                 y = np.array(specin,copy=False)
                 x = np.linspace(self.x[0],self.x[-1])
+            elif isinstance(specin,FunctionSpectrum):
+                oldx = specin.x
+                try:
+                    specin.x = self.x
+                    return specin.getUnitFlux(self.unit)
+                finally:
+                    specin.x = oldx
             elif hasattr(specin,'x') and hasattr(specin,'flux'):
                 x,y = specin.getUnitFlux(self.unit)
                 #x = specin.x
@@ -206,12 +219,12 @@ class Band(HasSpecUnits):
         """
         compute the flux in this band for the supplied Spectrum
         
-        the flux is inferred from the ``Band.zpflux`` value - the 
-        total flux in the band in an object with mag = 0
+        the flux is inferred from the ``Band.zeropoint`` value - an
+        object with magnitude=zeropoint is the one with flux=1
         
         args and kwargs go into Band.computeMag
         """
-        return (10**(self.computeMag(*args,**kwargs)/-2.5))/self.zpflux
+        return (10**((self.computeMag(*args,**kwargs))/-2.5))
         
 #    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
 #        """
@@ -283,7 +296,6 @@ class Band(HasSpecUnits):
                 if aligntoband:
                     x = self.x
                     y = self.S*self.alignToBand(spec.x,spec.flux,interpolation=interpolation)
-                    
                 else:
                     x = spec.x.copy()
                     y = self.alignBand(spec)*spec.flux
@@ -310,17 +322,14 @@ class Band(HasSpecUnits):
         args and kwargs are the same as those for computeMag
         """
         self.zeropoint = 0
-        self.zptflux = 1
         fluxfactor = self.computeFlux(np.ones_like(self.x)) #scale by this factor to get actual flux
         
         mag = self.computeMag(*args,**kwargs)
-        flux = 10**(mag/-2.5)
         
         self.zeropoint = mag
-        self.zptflux = flux/fluxfactor
         
     
-    def plot(self,spec=None,**kwargs):
+    def plot(self,spec=None,bandscaling=1,bandoffset=0,labelband=True,clf=True,**kwargs):
         """
         this plots the requested band and passes kwargs into matplotlib.pyplot.plot
         OR
@@ -334,17 +343,18 @@ class Band(HasSpecUnits):
         from matplotlib import pyplot as plt
         band = self
         
-        if kwargs.pop('clf',True):
-                plt.clf()
+        if clf:
+            plt.clf()
                 
         if spec:
             from .spec import Spectrum
             if not isinstance(spec,Spectrum):
                 raise ValueError('input not a Spectrum')
-            N = np.max(spec.flux)
+            bandscaling = np.max(spec.flux)*bandscaling
             convflux = band.alignToBand(spec)*band.S
             
-            plt.plot(band.x,N*band.S,c='k',label='$S_{\\rm Band}$')
+            plt.plot(band.x,bandscaling*band.S+bandoffset,c='k',label='$S_{\\rm Band}$')
+            bandmax = bandscaling*band.S.max()+bandoffset
             plt.plot(spec.x,spec.flux,c='g',ls=':',label='$f_{\\rm spec}$')
             plt.plot(band.x,convflux,c='b',ls='--',label='$f_{\\rm spec}S_{\\rm Band}$')
             
@@ -355,11 +365,13 @@ class Band(HasSpecUnits):
             rng = ma-mi
             plt.xlim(mi-rng/3,ma+rng/3)
         else:
-            plt.plot(band.x,band.S,**kwargs)
+            bandmax = bandscaling*band.S.max()+bandoffset
+            plt.plot(band.x,bandscaling*band.S+bandoffset,**kwargs)
             plt.ylabel('$S$')
-            plt.ylim(0,band.S.max())
+            plt.ylim(0,bandscaling*band.S.max())
             
-        plt.title('' if self.name is None else self.name)
+        if labelband and self.name is not None:
+            plt.text(band.cen,bandmax,self.name)
         plt.xlabel('$\\lambda$')
             
 
@@ -676,15 +688,14 @@ def set_zeropoint_system(system,bands='all'):
     * 'vega##' - use vega=## magnitudes based on Kurucz '93 Alpha Lyrae models
     """
     
-    from .spec import FunctionSpectrum
+    from .spec import Spectrum,FunctionSpectrum,ABSpec
     bands = str_to_bands(bands)
     
     if system == 'AB':
-        s = FunctionSpectrum((),lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
-        s.unit= 'ang'
+        s = ABSpec.copy()
         for b in bands:
-            s.x = b.x
             s.unit = b.unit
+            s.x = b.x
             b.computeZptFromSpectrum(s,aligntoband=True,interpolation='linear')
         
     elif 'vega' in system.lower():
@@ -695,7 +706,7 @@ def set_zeropoint_system(system,bands='all'):
             offset = float(system.lower().replace('vega',''))
         except ValueError:
             offset = 0
-        
+
         vegad = loads(_get_package_data('vega_k93.pydict'))['data']
         s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX'])
         
@@ -705,41 +716,239 @@ def set_zeropoint_system(system,bands='all'):
         raise ValueError('unrecognized magnitude system')
     
     
-class PhotObservation(HasSpecUnits):
+class PhotObservation(object):
     """
-    A photometric measurement (or array of measurements) in a fixed set of bands
+    A photometric measurement (or array of measurements) in a fixed 
+    group of bands.  These bands must be present in the band registry.
     
     the first index of the values must have length equal to nbands
+    
+    if asmags is True, values and errs will be interpreted as magnitudes,
+    otherwise, flux
     """
-    def __init__(self,bands,values,unit='angstroms'):
-        super(HasSpecUnits,self).__init__(unit)
+    __errfactor = -2.5/np.log(10)
+    
+    def __init__(self,bands,values,errs=None,asmags=True):
         try:
             bands = str_to_bands(bands)
-        except ValueError #assume each character is a band
-            bands = [str_to_bands(bands)[0] for b in bands.strip()]
-        self._bands = tuple(bands)
+        except KeyError: #assume each character is a band
+            bands = [str_to_bands(b)[0] for b in bands.strip()]
+        self._bandnames = tuple([b.name for b in bands])
             
-        self.values = values
-        
+        if asmags:
+            self.mags = values
+            if errs is None:
+                errs = np.zeros_like(values) 
+            elif np.isscalar(errs):
+                errs = errs*np.ones_like(values) 
+            self.magerrs = errs
+        else:
+            self.flux = values
+            if errs is None:
+                errs = np.zeros_like(values) 
+            elif np.isscalar(errs):
+                errs = errs*np.ones_like(values) 
+            self.fluxerrs = errs
+            
+    def __len__(self):
+        return len(self._bandnames)
     
-    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
-        raise NotImplementedError
+    @property
+    def bandnames(self):
+        return self._bandnames
     
     @property
     def bands(self):
-        return self._bands
+        return str_to_bands(self._bandnames)
     
-    def _getVals(self):
-        pass
-    def _setVals(self,val):
-        if values is None:
-            self._values = np.zeros(len(self._bands))
+    def _zeroPoints(self):
+        return np.array([b.zeropoint for b in self.bands])
+    
+    def _getMags(self):
+        if self._mags:
+            return self._values.copy()
+        else:  
+            zpts = self._zeroPoints()
+            zpts = zpts.reshape((zpts.size,1))
+            if len(self._values.shape)==1:
+                return -2.5*np.log10(self._values.reshape(zpts.shape))-zpts
+            else:
+                return -2.5*np.log10(self._values)-zpts
+    def _setMags(self,val):
+        if len(val) != len(self._bandnames):
+                raise ValueError('input length does not match number of bands')
+        self._mags = True
+        self._values = np.array(val)
+    mags = property(_getMags,_setMags,doc='photmetric measurements in magnitudes')
+    def _getMagsErr(self):
+        if self._mags:
+            return self._err
         else:
-            if len(val) != len(self._bands):
-                raise ValueError('value length does not match number of bands')
-            self._values = np.array(val)    
-    values = property(_getVals,_setVals,doc='photmetric measurements')
+            return PhotObservation.__errfactor*self._err/self._values#-2.5/np.log(10)*self._err/self._values
+    def _setMagsErr(self,val):
+        val = np.array(val)
+        if val.shape != self._values.shape:
+            raise ValueError("Errors don't match values' shape")
+        if self._mags:
+            self._err = val
+        else:
+            self._err = self._values*val/PhotObservation.__errfactor#self._values*val*np.log(10)/-2.5
+    magerrs  = property(_getMagsErr,_setMagsErr,doc='photmetric errors in magnitudes')
     
+    def _getFlux(self):
+        if self._mags:
+            zpts = self._zeroPoints()
+            zpts = zpts.reshape((zpts.size,1))
+            if len(self._values.shape)==1:
+                return (10**((self._values.reshape(zpts.shape)+zpts)/-2.5)).ravel()
+            else:
+                return 10**((self._values+zpts)/-2.5)
+        else:  
+            return self._values.copy()
+    def _setFlux(self,val):
+        if len(val) != len(self._bandnames):
+                raise ValueError('input length does not match number of bands')
+        self._mags = False
+        self._values = np.array(val)
+    flux = property(_getFlux,_setFlux,doc='photmetric measurements in flux units')
+    def _getFluxErr(self):
+        if self._mags:
+            return self.flux*self._err/PhotObservation.__errfactor#self.flux*self._errs*np.log(10)/-2.5
+        else:
+            return self._err
+    def _setFluxErr(self,val):
+        val = np.array(val)
+        if val.shape != self._values.shape:
+            raise ValueError("Errors don't match values' shape")
+        if self._mags:
+            self._err = PhotObservation.__errfactor*val/self.flux#-2.5/np.log(10)*val/self.flux
+        else:
+            self._err = val
+    fluxerrs = property(_getFluxErr,_setFluxErr,doc='photmetric errors in flux units')
+    
+    def getBandInfo(self,unit='angstroms'):
+        """
+        Extracts the center and FWHM of the bands in these observations
+        
+        returns x,w
+        """
+        x=[]
+        w=[]
+        for b in self.bands:
+            oldunit = b.unit
+            b.unit = unit
+            x.append(b.cen)
+            w.append(b.FWHM)
+            b.unit = oldunit
+        return np.array(x),np.array(w)
+    
+    def toSpectrum(self,unit='angstroms'):
+        """
+        converts this data set to a Spectrum
+        
+        TODO: fill in gaps assuming a flat spectrum
+        """
+        from .spec import Spectrum
+        
+        y = self.flux
+        err = self.fluxerrs
+        
+        x=[]
+        w=[]
+        for b in self.bands:
+            oldunit = b.unit
+            b.unit = unit
+            x.append(b.cen)
+            w.append(b.FWHM)
+            utype = b._phystype
+            b.unit = oldunit
+            
+        x = np.tile(x,np.prod(y.shape)/y.shape[0]).reshape((y.shape))
+        w = np.tile(w,np.prod(y.shape)/y.shape[0]).reshape((y.shape))
+        return Spectrum(x,y/w,err/w,unit=unit)
+    
+    def plot(self,includebands=True,fluxtype=None,unit='angstroms',clf=True,**kwargs):
+        """
+        plots these photometric points
+        
+        fluxtype can be:
+        *None: either magnitude or flux depending on the input type
+        *'mag': magnitudes
+        *'flux': flux in erg cm^-2 s^-1
+        *'fluxden': flux spectral density e.g. erg cm^-2 s^-1 angstroms^-1
+        
+        kwargs go into matplotlib.pyplot.errorbar
+        """
+        from matplotlib import pyplot as plt
+        
+        if fluxtype is None:
+            asmags = self._mags
+            den = False
+        elif fluxtype == 'mag':
+            asmags = True
+            den = False
+        elif fluxtype == 'flux':
+            asmags = False
+            den = False
+        elif fluxtype == 'fluxden':
+            asmags = False
+            den = True
+        else:
+            raise ValueError('unrecognized fluxtype')
+            
+        bands = self.bands
+        nb = len(bands) 
+        
+        if asmags:
+            y = self.mags
+            yerr = self.magerrs
+        else:
+            y = self.flux
+            yerr = self.fluxerrs
+            
+        npts = np.prod(y.shape)/nb
+        y,yerr=y.reshape((nb,npts)),yerr.reshape((nb,npts))
+        
+        x=[]
+        w=[]
+        for b in bands:
+            oldunit = b.unit
+            b.unit = unit
+            x.append(b.cen)
+            w.append(b.FWHM)
+            utype = b._phystype
+            b.unit = oldunit
+        x = np.tile(x,npts).reshape((nb,npts))
+        w = np.tile(w,npts).reshape((nb,npts))
+        
+        if den:
+            #TODO:better
+            y = y/w
+            yerr = yerr/w
+            
+        if clf:
+            plt.clf()
+            
+        if 'fmt' not in kwargs:
+            kwargs['fmt'] = 'o'
+        if 'ecolor' not in kwargs:
+            kwargs['ecolor'] = 'k'
+        plt.errorbar(x.ravel(),y.ravel(),yerr.ravel() if np.any(yerr) else None,**kwargs)
+       
+        if includebands:
+            xl = plt.xlim()
+            plot_band_group(bands,bandscaling=0.5*(y.max()-y.min()),bandoffset=y.min(),ls='--',clf=False,leg=False)
+            plt.xlim(*xl)
+            
+        if utype == 'wavelength':
+            plt.xlabel('$\\lambda$')
+        elif utype=='frequency':
+            plt.xlabel('$\\nu$')
+        else:
+            plt.xlabel(unit)
+        plt.ylabel('Mag' if asmags else 'Flux[${\\rm erg} {\\rm s}^{-1} {\\rm cm}^{-2} {%s}^{-1}$]'%unit)
+        rng = y.max() - y.min()
+        plt.ylim(y.min()*1.05-y.max()*.05,y.min()*-0.05+y.max()*1.05)
 
 #<---------------------Analysis Classes/Tools---------------------------------->
 
@@ -1990,10 +2199,12 @@ class _BandRegistry(dict):
         for k in self.groupkeys():
             yield (k,self[k])
             
-def str_to_bands(bnds):
+def str_to_bands(bnds,forceregistry=False):
     """
     this translates a string or sequence of strings into a sequence of Band
     objects using the phot.bands band registry
+    
+    if forceregistry is True, new bands will not be accepted if they are not in the registry
     """
     from operator import isMappingType,isSequenceType
     global bands
@@ -2002,7 +2213,7 @@ def str_to_bands(bnds):
         if bnds.lower() == 'all':
             bnds = bands.values()
         elif ',' in bnds:
-            bnds = [bands[bnds.split()] for b in bnds.split(',')]
+            bnds = [bands[b.strip()] for b in bnds.split(',')]
         else:
             bnds = bands[bnds]
             if isMappingType(bnds):
@@ -2012,9 +2223,11 @@ def str_to_bands(bnds):
     elif isSequenceType(bnds):
         bnds = [bands[b] if isinstance(b,basestring) else b for b in bnds] 
     elif isinstance(bnds,Band):
+        if forceregistry and bnds.name not in bands:
+            raise KeyError('requested band not in registry') 
         bnds = (Band,)
     else:
-        raise ValueError('unrecognized band(s)')
+        raise KeyError('unrecognized band(s)')
     
     return bnds
 #TODO: check UBVRI/ugriz S function - energy or quantal?
@@ -2139,4 +2352,4 @@ bandwl = _BwlAdapter()
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
 bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
-del ABCMeta,abstractmethod,abstractproperty,HasSpecUnits,pi,division #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,Spectrum,HasSpecUnits,pi,division #clean up namespace
