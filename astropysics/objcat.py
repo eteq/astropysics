@@ -863,6 +863,48 @@ class SEDField(Field):
         unmask all values (all appear in full SED)
         """
         self._maskedsedvals.clear()
+        
+    def getBand(self,bands,asflux=False,asdict=False):
+        """
+        determines the magnitude or flux in the requested band.
+        
+        The first photometric measurement in this SEDField that has
+        the band will be used - if not present, it will be computed 
+        from  the first Spectrum with appropriate overlap.  If none
+        of these are found, a ValueError will be raised
+        
+        if asflux is True, the result will be returned as a flux - 
+        otherwise, a magnitude is returned.
+        
+        asdict returns a dictionary of results - otherwise, a sequence will
+        be returned (or a scalar if only one band is requested)
+        """
+        from .phot import str_to_bands
+        print bands
+        bands = str_to_bands(bands)
+        vals = []
+        for b,bn in zip(bands,[b.name for b in bands]):
+            v = None
+            for p in self.phots:
+                if bn in p.bandnames:
+                    i = p.bandnames.index(bn)
+                    v = p.flux[i] if asflux else p.mag[i]
+                    break
+            if v is None:
+                for s in self.specs:
+                    if b.isOverlapped(s):
+                        v = b.computeFlux(s) if asflux else b.computeMag(s)
+                        break
+            if v is None:
+                raise ValueError('could not locate value for band '%bn)
+            vals.append(v)
+        
+        if asdict:
+            return dict([(b.name,v) for b,v in zip(bands,vals)])
+        elif len(vals)==1:
+            return vals[0]
+        else:
+            return vals
     
     def getFullSED(self):
         """
@@ -1618,6 +1660,7 @@ class AstronomicalObject(StructuredFieldNode):
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',AngularPosition)
+    sed = SEDField('sed')
 
 class Test1(AstronomicalObject):
     num = Field('num',float,4.2)

@@ -222,7 +222,21 @@ class Band(HasSpecUnits):
         
         sorti = np.argsort(x)    
         return self.__interp(self.x,x[sorti],y[sorti],kwargs['interpolation'])
+    
+    def isOverlapped(self,xorspec):
+        """
+        determes if this Band overlaps on a significant part of the provided 
+        spectrum (that is, if center+/-fwhm overlaps) 
+        """
         
+        if hasattr(xorspec,'x') and hasattr(xorspec,'flux'):
+            x = xorspec.x
+        else:
+            x = xorspec
+            
+        mx,mn = np.max(x),np.min(x)
+        c,w = self.cen,self.FWHM/2
+        return (mx >= c+w) and (mn <= c-w)
     
     def computeMag(self,*args,**kwargs):
         """
@@ -233,7 +247,7 @@ class Band(HasSpecUnits):
         """
         return _flux_to_mag(self.computeFlux(*args,**kwargs)/self.zptflux)
     
-    def computeFlux(self,spec,interpolation='linear',aligntoband=None):
+    def computeFlux(self,spec,interpolation='linear',aligntoband=None,overlapcheck=True):
         """
         compute the flux in this band for the supplied Spectrum
         
@@ -241,6 +255,9 @@ class Band(HasSpecUnits):
         versa, otherwise, using the specified interpolation (see Band.alignBand
         for interpolation options).  If aligntoband is None, the higher of the
         two resolutions will be left unchanged 
+        
+        if overlapcheck is True, a ValueError will be raised if most of the 
+        Spectrum does not lie within the band
         
         the spectrum units will be converted to match those of the Band
         
@@ -273,6 +290,9 @@ class Band(HasSpecUnits):
                 spec.unit=oldunits
         else:
             raise ValueError('unrecognized input spectrum')
+        
+        if overlapcheck and not self.isOverlapped(x):
+            raise ValueError('provided input does not overlap on this band')
             
         if 'wavelength' in self.unit:
             y*=x
@@ -695,14 +715,10 @@ class PhotObservation(object):
     """
     
     def __init__(self,bands,values,errs=None,asmags=True):
-        try:
-            bands = str_to_bands(bands)
-        except KeyError: #assume each character is a band
-            bands = [str_to_bands(b)[0] for b in bands.strip()]
-        self._bandnames = tuple([b.name for b in bands])
+        self._bandnames = tuple([b.name for b in str_to_bands(bands)])
             
         if asmags:
-            self.mags = values
+            self.mag = values
             if errs is None:
                 errs = np.zeros_like(values) 
             elif np.isscalar(errs):
@@ -747,7 +763,7 @@ class PhotObservation(object):
                 raise ValueError('input length does not match number of bands')
         self._mags = True
         self._values = np.array(val)
-    mags = property(_getMags,_setMags,doc='photmetric measurements in magnitudes')
+    mag = property(_getMags,_setMags,doc='photmetric measurements in magnitudes')
     def _getMagsErr(self):
         if self._mags:
             return self._err
@@ -761,7 +777,7 @@ class PhotObservation(object):
         if self._mags:
             self._err = val
         else:
-            self._err = _magerr_to_fluxerr(val,self.mags)
+            self._err = _magerr_to_fluxerr(val,self.mag)
             #self._err = self._values*val*np.log(10)/-2.5
     magerr = property(_getMagsErr,_setMagsErr,doc='photmetric errors in magnitudes')
     
@@ -800,7 +816,7 @@ class PhotObservation(object):
         if val.shape != self._values.shape:
             raise ValueError("Errors don't match values' shape")
         if self._mags:
-            self._err = _fluxerr_to_magerr(val,self.mags)
+            self._err = _fluxerr_to_magerr(val,self.mag)
             #self._err = -2.5/np.log(10)*val/self.flux
         else:
             self._err = val
@@ -890,7 +906,7 @@ class PhotObservation(object):
         nb = len(bands) 
         
         if asmags:
-            y = self.mags
+            y = self.mag
             yerr = self.magerr
         elif den:
             y,yerr = self.getFluxDensity(unit=unit)
@@ -2217,12 +2233,15 @@ def str_to_bands(bnds,forceregistry=False):
             bnds = bands.values()
         elif ',' in bnds:
             bnds = [bands[b.strip()] for b in bnds.split(',')]
-        else:
+        elif bnds in bands:
             bnds = bands[bnds]
             if isMappingType(bnds):
                 bnds = bnds.values()
             else:
                 bnds = (bnds,)
+        else: #assume each charater is a band name
+            bnds = [bands[b] for b in bnds.strip()]
+            
     elif isSequenceType(bnds):
         bnds = [bands[b] if isinstance(b,basestring) else b for b in bnds] 
     elif isinstance(bnds,Band):
