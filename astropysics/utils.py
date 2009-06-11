@@ -2,8 +2,7 @@
 
 """
 This module contains various astropysics or python-related utility
-functions that have no obvious place in some other module, including
-pipeline interfaces
+functions that have no obvious place in some other module
 """
 
 from __future__ import division
@@ -194,5 +193,48 @@ class PipelineError(Exception):
     that purpose
     """
     pass
+
+
+
+#<--------------------Analysis/simple numerical functions---------------------->
+def centroid(val,axes=None,offset='median')
+    """
+    computes the centroid of an n-dimensional array
     
+    axes can either be a list of axis values for the array (must be
+    same length as the number of dimensions) or None to report just the 
+    pixel value
+    
+    offset is an amount to subtract from the input array, can be:
+    *'median'
+    *'mean'
+    *None
+    """
+    if offset:
+        if offset == 'median':
+            val = val - np.median(val)
+        elif offset == 'mean':
+            val = val - np.mean(val)
+        else:
+            raise ValueError('unrecognized offset type')
+    
+    shp = val.shape
+    if axes is None:
+        axes=[np.arange(s) for s in shp]
+    if len(shp) != len(axes):
+        raise ValueError("input dimensions don't match axes")
+    
+    cens = []
+    for i,(s,a) in enumerate(zip(shp,axes)):
+        if s != len(a):
+            raise ValueError("axis #%i doesn't match array size"%i)
+        rng = range(len(s))
+        del rng[i]
+        vsum = val
+        for j in reversed(rng):
+            vsum = val.sum(axis = j)
+        cens.append(np.sum(x*vsum)/np.sum(vsum))
+    
+    return tuple(cens)
+
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
