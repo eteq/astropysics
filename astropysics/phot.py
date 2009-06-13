@@ -21,15 +21,62 @@ except ImportError: #support for earlier versions
     abstractproperty = property
     ABCMeta = type
     
-__mferrfactor = -2.5/np.log(10.0)
-def _mag_to_flux(mag):
-    return 10**(mag/-2.5)
-def _magerr_to_fluxerr(err,mag):
-    return err*_mag_to_flux(mag)/__mferrfactor
-def _flux_to_mag(flux):
-    return -2.5*np.log10(flux)
-def _fluxerr_to_magerr(err,flux):
-    return __mferrfactor*err/flux
+    
+#<-----------------------Magnitude systems------------------------------------->
+__maga = -2.5/np.log(10.0)
+def _m2f_pogson(mag):
+    return np.exp(mag/__maga)
+def _m2fe_pogson(err,mag):
+    return -err*_m2f_pogson(mag)/__maga
+def _f2m_pogson(flux):
+    return __maga*np.log(flux)
+def _f2me_pogson(err,flux):
+    return -__maga*err/flux
+
+
+__magb = 1e-10 #np.exp(25/__maga)
+__logb = np.log(__magb)
+def _m2f_asinh(mag):
+    b = __magb
+    return 2*b*np.sinh(mag/__maga-__logb)
+def _m2fe_asinh(err,mag):
+    b = __magb
+    #TODO:fix/test
+    return 2*b*err/-__maga*(1+_m2f_asinh(mag)**2)**0.5
+def _f2m_asinh(flux):
+    b = __magb
+    return __maga*(np.arcsinh(flux/2/b)+__logb)
+def _f2me_asinh(err,flux):
+    b = __magb
+    #TODO:fix/test
+    return -__maga*err/2/b/(1 + (flux/2/b)**2)**0.5
+
+
+_mag_to_flux = _m2f_pogson
+_magerr_to_fluxerr = _m2fe_pogson
+_flux_to_mag = _f2m_pogson
+_fluxerr_to_magerr = _f2me_pogson
+
+def magnitude_system(system):
+    """
+    This function is used to change the magnitude system used where
+    magnitudes are used in astropysics.  It can be:
+    *pogson: mag = -2.5 log10(f/f0)
+    *asinh mag = -2.5 log10(e) [asinh(x/2b)+ln(b)] (TODO: choose b from the band instead of fixed @ 25 zptmag)
+    """
+    global _mag_to_flux,_magerr_to_fluxerr,_flux_to_mag,_fluxerr_to_magerr
+    if system == 'pogson':
+        _mag_to_flux = _m2f_pogson
+        _magerr_to_fluxerr = _m2fe_pogson
+        _flux_to_mag = _f2m_pogson
+        _fluxerr_to_magerr = _f2me_pogson
+    elif system == 'asinh':
+        _mag_to_flux = _m2f_asinh
+        _magerr_to_fluxerr = _m2fe_asinh
+        _flux_to_mag = _f2m_asinh
+        _fluxerr_to_magerr = _f2me_asinh
+    else:
+        raise ValueError('unrecognized ')
 
 #<---------------------Classes------------------------------------------------->
 
@@ -732,6 +779,11 @@ class PhotObservation(object):
                 errs = errs*np.ones_like(values) 
             self.fluxerr = errs
             
+    def __str__(self):
+        ss = ['Band %s:%s'%(bn,v) for bn,v in zip(self.bandnames,self._values)]
+        ss.append('(mag)' if self._mags else '(flux)')
+        return ' '.join(ss)
+            
     def __len__(self):
         return len(self._bandnames)
     
@@ -829,7 +881,9 @@ class PhotObservation(object):
         """
         f,e = self.flux,self.fluxerr
         x,w = self.getBandInfo(unit)
-        w = np.tile(w,f.size/len(x)).reshape((len(x),f.size/len(x)))
+        if len(f.shape) > 1:
+            w = np.tile(w,f.size/len(x)).reshape((len(x),f.size/len(x)))
+        
         return f/w,e/w
     
     def getBandInfo(self,unit='angstroms'):
