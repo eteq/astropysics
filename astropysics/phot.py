@@ -10,7 +10,7 @@ from __future__ import division
 from math import pi
 import numpy as np
 
-from .spec import HasSpecUnits
+from .spec import HasSpecUnits as _HasSpecUnits
 try:
     #requires Python 2.6
     from abc import ABCMeta
@@ -23,67 +23,94 @@ except ImportError: #support for earlier versions
     
     
 #<-----------------------Magnitude systems------------------------------------->
-__maga = -2.5/np.log(10.0)
-def _m2f_pogson(mag):
-    return np.exp(mag/__maga)
-def _m2fe_pogson(err,mag):
-    return -err*_m2f_pogson(mag)/__maga
-def _f2m_pogson(flux):
-    return __maga*np.log(flux)
-def _f2me_pogson(err,flux):
-    return -__maga*err/flux
+
+class Magnitude(object):
+    __metaclass__ = ABCMeta
+    @abstractmethod
+    def mag_to_flux(self,mag):
+        raise NotImplementedError
+    @abstractmethod
+    def magerr_to_fluxerr(self,err,mag):
+        raise NotImplementedError
+    @abstractmethod
+    def flux_to_mag(self,flux):
+        raise NotImplementedError
+    @abstractmethod
+    def fluxerr_to_magerr(self,err,flux):
+        raise NotImplementedError
+    
+class PogsonMagnitude(Magnitude):
+    a = -2.5/np.log(10.0)
+    
+    def mag_to_flux(self,mag):
+        return np.exp(mag/__maga)
+    def magerr_to_fluxerr(self,err,mag):
+        return -err*_m2f_pogson(mag)/self.a
+    def flux_to_mag(self,flux):
+        return self.a*np.log(flux)
+    def fluxerr_to_magerr(self,err,flux):
+        return -self.a*err/flux
+
+class AsinhMagnitude(Magnitude):
+    a = -2.5/np.log(10.0)
+    
+    def __init__(self,b=1e-10):
+        self.b = b
+        
+    def _getb(self):
+        return self._b
+    def _setb(self,val):
+        self._b = val
+        self._logb = np.log(b)
+    b= property(_getb,_setb)
+    
+    def mag_to_flux(self,mag):
+        return 2*b*np.sinh(mag/self.a-self._logb)
+    def magerr_to_fluxerr(self,err,mag):
+        b = self.b
+        #TODO:fix/test
+        return 2*b*err/-self.a*(1+_m2f_asinh(mag)**2)**0.5
+    def flux_to_mag(self,flux):
+        b = self.b
+        return self.a*(np.arcsinh(flux/2/b)+self._logb)
+    def fluxerr_to_magerr(self,err,flux):
+        #TODO:fix/test
+        return -self.a*err/2/b/(1 + (flux/2/b)**2)**0.5
 
 
-__magb = 1e-10 #np.exp(25/__maga)
-__logb = np.log(__magb)
-def _m2f_asinh(mag):
-    b = __magb
-    return 2*b*np.sinh(mag/__maga-__logb)
-def _m2fe_asinh(err,mag):
-    b = __magb
-    #TODO:fix/test
-    return 2*b*err/-__maga*(1+_m2f_asinh(mag)**2)**0.5
-def _f2m_asinh(flux):
-    b = __magb
-    return __maga*(np.arcsinh(flux/2/b)+__logb)
-def _f2me_asinh(err,flux):
-    b = __magb
-    #TODO:fix/test
-    return -__maga*err/2/b/(1 + (flux/2/b)**2)**0.5
-
-
-_mag_to_flux = _m2f_pogson
-_magerr_to_fluxerr = _m2fe_pogson
-_flux_to_mag = _f2m_pogson
-_fluxerr_to_magerr = _f2me_pogson
-
-def magnitude_system(system):
+def choose_magnitude_system(system):
     """
     This function is used to change the magnitude system used where
     magnitudes are used in astropysics.  It can be:
     *pogson: mag = -2.5 log10(f/f0)
-    *asinh mag = -2.5 log10(e) [asinh(x/2b)+ln(b)] (TODO: choose b from the band instead of fixed @ 25 zptmag)
+    *asinh mag = -2.5 log10(e) [asinh(x/2b)+ln(b)] (TODO: choose b from the band or something instead of fixed @ 25 zptmag)
     """
-    global _mag_to_flux,_magerr_to_fluxerr,_flux_to_mag,_fluxerr_to_magerr
-    if system == 'pogson':
-        _mag_to_flux = _m2f_pogson
-        _magerr_to_fluxerr = _m2fe_pogson
-        _flux_to_mag = _f2m_pogson
-        _fluxerr_to_magerr = _f2me_pogson
+    global _magsys,_mag_to_flux,_magerr_to_fluxerr,_flux_to_mag,_fluxerr_to_magerr
+    if isinstance(system,Magnitude):
+        _magsys = system
+    elif system == 'pogson':
+        _magsys = PogsonMagnitude()
     elif system == 'asinh':
-        _mag_to_flux = _m2f_asinh
-        _magerr_to_fluxerr = _m2fe_asinh
-        _flux_to_mag = _f2m_asinh
-        _fluxerr_to_magerr = _f2me_asinh
+        _magsys = AsinhMagnitude(b=1e-10)
     else:
         raise ValueError('unrecognized ')
+    
+    _mag_to_flux = _magsys.mag_to_flux
+    _magerr_to_fluxerr = _magsys.magerr_to_fluxerr
+    _flux_to_mag = _magsys.flux_to_mag
+    _fluxerr_to_magerr = _magsys.fluxerr_to_magerr   
+    
+choose_magnitude_system('pogson')
 
-#<---------------------Classes------------------------------------------------->
+#<---------------------Photometric Classes------------------------------------->
 
-class Band(HasSpecUnits):
+class Band(_HasSpecUnits):
     """
     This class is the base of all photometric band objects.  Bands are expected
     to be immutable once created except for changes of units.
+    
+    The response functions should be photon-counting response functions (see
+    e.g. Bessell et al 2000)
     
     subclasses must implement the following functions:
     *__init__ : initialize the object
@@ -135,25 +162,49 @@ class Band(HasSpecUnits):
     def __ne__(self,other):
         return not self.__eq__(other)
     def __lt__(self,other):
+        oldu = None
         try:
+            oldu = other.unit
+            other.unit = self.unit
             return self.cen < other.cen
         except:
             return NotImplemented
+        finally:
+            if oldu is not None:
+                other.unit = oldu 
     def __le__(self,other):
+        oldu = None
         try:
+            oldu = other.unit
+            other.unit = self.unit
             return self.cen <= other.cen
         except:
             return NotImplemented
+        finally:
+            if oldu is not None:
+                other.unit = oldu 
     def __gt__(self,other):
+        oldu = None
         try:
+            oldu = other.unit
+            other.unit = self.unit
             return self.cen > other.cen
         except:
             return NotImplemented
+        finally:
+            if oldu is not None:
+                other.unit = oldu 
     def __ge__(self,other):
+        oldu = None
         try:
+            oldu = other.unit
+            other.unit = self.unit
             return self.cen >= other.cen
         except:
             return NotImplemented
+        finally:
+            if oldu is not None:
+                other.unit = oldu 
     
     def __interp(self,x,x0,y0,interpolation):
         """
@@ -424,7 +475,7 @@ class GaussianBand(Band):
         self._sigs = sigs
         self._updateXY(self._cen,self._sigma,self._A,self._n,self._sigs)
         
-        HasSpecUnits.__init__(self,unit)
+        _HasSpecUnits.__init__(self,unit)
         self._unittrans = (lambda t:t,lambda t:t)
         
         self.name = name
@@ -504,7 +555,7 @@ class ArrayBand(Band):
         
         self._computeMoments()
         
-        HasSpecUnits.__init__(self,unit)
+        _HasSpecUnits.__init__(self,unit)
         
         self.name = name
         
@@ -515,6 +566,7 @@ class ArrayBand(Band):
         self._S/=mx
         if not self._norm:
             self._S/=self._N
+        self._computeMoments() #need to recompute moments
         
     def _computeMoments(self):
         from scipy.integrate import  simps as integralfunc
@@ -623,7 +675,6 @@ def plot_band_group(bandgrp,**kwargs):
     from operator import isMappingType,isSequenceType
     
     
-    
     if isMappingType(bandgrp):
         names = bandgrp.keys()
         bs = bandgrp.values()
@@ -636,6 +687,7 @@ def plot_band_group(bandgrp,**kwargs):
             else:
                 names.append(b.name)
                 bs.append(b)
+
     d = dict([(n,b) for n,b in  zip(names,bs)])
     sortednames = sorted(d,key=d.get)
     
@@ -644,9 +696,9 @@ def plot_band_group(bandgrp,**kwargs):
     kwargs.pop('spec',None)
     cs = kwargs.pop('c',None)
     unit = kwargs.pop('unit','wl')
-        
+       
+    oldunits = [b.unit for b in bs]
     try:
-        oldunits = [b.unit for b in bs]
         for b in bs:
             b.unit = unit
     except NotImplementedError:
@@ -692,6 +744,7 @@ def plot_band_group(bandgrp,**kwargs):
         for u,b in zip(oldunits,bs):
             b.unit = u
     except (NameError,NotImplementedError),e:
+        print 'hit'
         pass
     
     
@@ -2334,6 +2387,31 @@ def __load_UBVRI():
         v.source = src
     return d
 
+def __load_JHK():
+    from .io import _get_package_data
+    bandlines = _get_package_data('JHKbands.dat').split('\n')
+    
+    src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
+    
+    d={}
+    for ln in bandlines:
+        if ln.strip() == '':
+            pass
+        elif 'Band' in ln:
+            k = ln.replace('Band','').strip()
+            xl = []
+            Rl = []
+            d[k]=(xl,Rl)
+        else:
+            t = ln.split()
+            xl.append(t[0])
+            Rl.append(t[1])
+            
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'),name=k,unit='microns')) for k,v in d.iteritems()])
+    for v in d.itervalues():
+        v.source = src
+    return d
+
 def __load_ugriz():
     from .io import _get_package_data
     bandlines = _get_package_data('ugrizbands.dat').split('\n')
@@ -2402,6 +2480,7 @@ bands.register(d,'ugriz')
 bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
+bands.register(__load_JHK(),'JHK')
 #default all to AB mags
 set_zeropoint_system('AB','all')
 
@@ -2428,4 +2507,4 @@ bandwl = _BwlAdapter()
 #photometric band centers - B&M ... deprecated, use bands[band].cen instead
 bandwl.update({'U':3650,'B':4450,'V':5510,'R':6580,'I':8060,'u':3520,'g':4800,'r':6250,'i':7690,'z':9110})
 
-del ABCMeta,abstractmethod,abstractproperty,Spectrum,HasSpecUnits,pi,division #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,Spectrum,pi,division #clean up namespace
