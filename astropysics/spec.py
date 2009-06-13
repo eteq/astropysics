@@ -66,6 +66,9 @@ class HasSpecUnits(object):
         returns phystype,unit,scaling
         (scaling relative to cgs)
         """
+        if not isinstance(typestr,basestring):
+            raise TypeError('invalid type provided as unit')
+        
         u = typestr.lower()
         if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
             val =  'wavelength-angstrom'
