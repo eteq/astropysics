@@ -758,15 +758,25 @@ class SEDField(Field):
     
     __slots__ = ['_maskedsedvals','_unit']
     
-    def __init__(self,name='SED',unit='angstroms'):
-        from .spec import Spectrum
+    def __init__(self,name='SED',unit='angstroms',type=None,defaultval=None, usedef=None):
+        from .spec import Spectrum,HasSpecUnits
         from .phot import PhotObservation
         
         super(SEDField,self).__init__(name)
         
+        
+        
         self._type = tuple((Spectrum,PhotObservation))
-        self._unit = unit
         self._maskedsedvals = set()
+        unittuple = HasSpecUnits.strToUnit(unit)
+        self._unit = unittuple[0]+'-'+unittuple[1]
+        
+        if type is not None and set(type) != set(self._type):
+            raise ValueError("SEDFields only accept Spectrum and PhotObservation objects - can't set type")
+        
+        if defaultval:
+            self[None] = defaultval
+        
         
     def __getstate__(self):
         d = super(SEDField,self).__getstate__()
@@ -786,6 +796,8 @@ class SEDField(Field):
         """
         allow self['source'] = (bands,values) syntax
         """
+        from .phot import PhotObservation
+        
         if isinstance(val,tuple) and len(val) == 2:
             return super(SEDField,self).__setitem__(key,PhotObservation(*val))
         else:
@@ -820,6 +832,11 @@ class SEDField(Field):
     def _getUnit(self):
         return self._unit
     def _setUnit(self,val):
+        from .spec import HasSpecUnits
+        #this checks to make sure the unit is valid
+        val = HasSpecUnits.strToUnit(val)
+        val = val[0]+'-'+val[1]
+        
         oldu = self._unit
         try:
             for obj in self:
@@ -943,11 +960,31 @@ class SEDField(Field):
         from matplotlib import pyplot as plt
         from .spec import HasSpecUnits
         
+        specs = self.specs
+        phots = self.phots
         
-        mxy = max(np.max([np.max(s.flux) for s in self.specs]),np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in self.phots]))
-        mny = min(np.min([np.min(s.flux) for s in self.specs]),np.min([np.min(p.getFluxDensity(self.unit)[0]) for p in self.phots]))
-        mxx = max(np.max([np.max(s.x) for s in self.specs]),np.max([np.max(p.getBandInfo(self.unit)[0]) for p in self.phots]))
-        mnx = min(np.min([np.min(s.x) for s in self.specs]),np.min([np.min(p.getBandInfo(self.unit)[0]) for p in self.phots]))
+        mxy1 = np.max([np.max(s.flux) for s in specs]) if len(specs) > 0 else None
+        mxy2 = np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in phots]) if len(phots) > 0 else None
+        mxy = max(mxy1,mxy2)
+        mny1 = np.min([np.min(s.flux) for s in self.specs]) if len(specs) > 0 else None
+        mny2 = np.min([np.min(p.getFluxDensity(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        if mny1 is None:
+            mny = mny2
+        elif mny2 is None:
+            mny = mny1
+        else:
+            mny = min(mny1,mny2)
+        mxx1 = np.max([np.max(s.x) for s in self.specs]) if len(specs) > 0 else None
+        mxx2 = np.max([np.max(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        mxx = max(mxx1,mxx2)
+        mnx1 = np.min([np.min(s.x) for s in self.specs]) if len(specs) > 0 else None
+        mnx2 = np.min([np.min(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        if mnx1 is None:
+            mnx = mnx2
+        elif mnx2 is None:
+            mnx = mnx1
+        else:
+            mny = min(mnx1,mnx2)
         
         preint = plt.isinteractive()
         try:
@@ -964,19 +1001,20 @@ class SEDField(Field):
                 plt.semilogy()
             
             c = (colors[0],colors[2],colors[4],colors[4])
-            for s in self.specs:
+            for s in specs:
                 s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
                 
             lss = ('--',':','-.','-')
-            for i,p in enumerate(self.phots):
+            for i,p in enumerate(phots):
                 if plotbands:
                     if plotbands is True:
                         plotbands = {'bandscaling':(mxy - mny)*0.5,'bandoffset':mny}
                     plotbands['ls'] = lss[i%len(lss)]
                 p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
                 
-            plt.xlim(mnx,mxx)
-            plt.ylim(mny,mxy)
+            rngx,rngy=mxx-mnx,mxy-mny
+            plt.xlim(mnx-rngx*0.1,mxx+rngx*0.1)
+            plt.ylim(mny-rngy*0.1,mxy+rngy*0.1)
             
             xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
             xl = xl.replace('wavelength','\\lambda')
@@ -1511,11 +1549,11 @@ class StructuredFieldNode(FieldNode):
             else:
                 fi = v
                 dv = None
-            
+
             if None in fi:
-                fobj = Field(fi.name,fi.type,fi.default, True)
+                fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi.default, usedef=True)
             else:
-                fobj = Field(fi.name,fi.type)
+                fobj = fi.__class__(fi.name,type=fi.type)
             setattr(self,k,fobj)
             fobj.node = self
             
@@ -1599,9 +1637,9 @@ class StructuredFieldNode(FieldNode):
             fields.append(k)
             if not hasattr(self,k) or not isinstance(getattr(self,k),Field):
                 if None in fi:
-                    fobj = Field(fi.name,fi.type,fi.default, True)
+                    fobj = fi.__class__(fi.name,fi.type,fi.default, True)
                 else:
-                    fobj = Field(fi.name,fi.type)
+                    fobj = fi.__class__(fi.name,fi.type)
                 setattr(self,k,fobj)
                 fobj.node = self
                 
@@ -1669,16 +1707,13 @@ class Test1(AstronomicalObject):
     def f(num='num'):
         return num+1
     
-class Test2(AstronomicalObject):
-    SED = SEDField()
-    
 def test_cat():
     c=Catalog()
     ao=AstronomicalObject(c,'group')
     t1=Test1(ao)
     t12=Test1(ao)
-    t2=Test2(ao)
-    t2.SED['src'] = ('BVRI',[12,11.5,11.3,11.2])
+    t13=Test1(ao)
+    t13.sed['src'] = ('BVRI',[12,11.5,11.3,11.2])
     
     return c,locals()
 
