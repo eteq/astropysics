@@ -890,6 +890,7 @@ class FunctionSpectrum(Spectrum):
         
         self._xitranses = []
         self._xftranses = []
+        self._unithist = []
         
     def _setX(self,x):
         self._x = x = np.array(x)
@@ -922,8 +923,15 @@ class FunctionSpectrum(Spectrum):
     
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         super(FunctionSpectrum,self)._applyUnits(xtrans,xitrans,xftrans,xfinplace)
-        self._xitranses.append(xitrans)
-        self._xftranses.append(xftrans)
+        if self.unit in self._unithist:
+            i = self._unithist.index(self.unit)+1
+            self._xitranses = self._xitranses[:i]
+            self._xftranses = self._xftranses[:i]
+            self._unithist = self._unithist[:i]
+        else:
+            self._xitranses.append(xitrans)
+            self._xftranses.append(xftrans)
+            self._unithist.append(self.unit)
         
 #Make a special Spectrum to use for AB Magnitude calibrations        
 ABSpec = FunctionSpectrum(np.linspace(5e13,3e15,1024),lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
