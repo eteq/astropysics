@@ -34,6 +34,14 @@ class CycleError(Exception):
     """
     def __init__(self,message):
         super(CycleError,self).__init__(message)
+        
+class SourceDataError(Exception):
+    """
+    This exception indicates a problem occured while trying to retrieve 
+    external Source-related data
+    """
+    def __init__(self,message):
+        super(CycleError,self).__init__(message)
 
 
 
@@ -1036,17 +1044,33 @@ class _SourceMeta(type):
     #TODO: improve Source Singleton concepts, replace with __eq__ support?
     def __call__(cls,*args,**kwargs):
         obj = type.__call__(cls,*args,**kwargs)
-        if not obj._str in Source._singdict:
+        if obj._str in Source._singdict:
+            singobj = Source._singdict[obj._str]
+            ol = obj.location
+            sl = singobj.location
+            if ol is not None and ol != sl:
+                from warnings import warn
+                warn('overwriting location %s with %s in %s'%(sl,ol,singobj))
+                singobj._adscode = obj._adscode
+        else:
             Source._singdict[obj._str] = obj
+            
         return Source._singdict[obj._str]
 
 class Source(object):
     __metaclass__ = _SourceMeta
     _singdict = {}
-    __slots__=['_str']
+    __slots__=['_str','_adscode']
     
-    def __init__(self,src):
-        self._str = str(src)
+    def __init__(self,src,location=None):
+        src = str(src)
+        
+        if location is None and '-' in src:
+            location = src.split('-')[-1].strip()
+            self._str = '-'.join(src.split[:-1])
+        else:
+            self._str = src
+        self.location = location
         
     def __reduce__(self):
         return (Source,(self._str,))
@@ -1054,8 +1078,162 @@ class Source(object):
     def __str__(self):
         return 'Source ' + self._str
     
-#TODO: more Source information in subclasses
+    adsurl = 'adsabs.harvard.edu'
+    
+    def _getLoc(self):
+        return self._adscode
+    def _setLoc(self,val):
+        if val is not None:
+            if val == '':
+                val = None
+            else:
+                val = self._findADScode(val)
+        self._adscode = val
+    location = property(_getLoc,_setLoc)
+    
+    @staticmethod
+    def _findADScode(loc):
+        from urllib2 import urlopen
+        from contextlib import closing
 
+
+        lloc = loc.lower()
+        if 'arxiv' in lloc:
+            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,arxivcode.replace('arxiv:','').replace('arxiv',''))
+        elif 'astro-ph' in lower:
+            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,arxivcode.replace('astro-ph:','').replace('astro-ph',''))
+        elif 'doi' in lloc: #TODO:check if doi is case-sensitive
+            url = 'http://%s/doi/%s'%(Source.adsurl,lloc.replace('doi:','').replace('doi',''))
+        elif 'http' in lloc:
+            url = loc
+        else: #assume ADS abstract code
+            url = 'http://%s/abs/%s'%(Source.adsurl,loc)
+        
+        with closing(urlopen(url+'?data_type=PLAINTEXT')) as page: #raises exceptions if url DNE
+            for l in page:
+                if 'Bibliographic Code:' in l: 
+                    return l.replace('Bibliographic Code:','').strip()
+        raise SourceDataError('Bibliographic entry for the location %s had no ADS code, or parsing problem'%loc)
+    
+    
+    _adsxmlcache = {}
+    
+    @staticmethod
+    def clearADSCache(adscode=None, disable=False):
+        """
+        this clears the cache of the specified adscode, or everything, if 
+        the adscode is None
+        """
+        if adscode is None:
+            Source._adsxmlcache.clear()
+        else:
+            del Source._adsxmlcache[abscode]
+    
+    @staticmethod
+    def useADSCache(enable=True):
+        """
+        This is used to disable or enable the cache for ADS lookups - if the 
+        enable argument is True, the cache is enable (or unaltered if it
+        is already active)) and if it is False, it will be disabled
+        
+        note that if the cache is disabled, all entries are lost
+        """
+        if enable:
+            if Source._adsxmlcache is None:
+                Source._adsxmlcache = {}
+        else:
+            Source._adsxmlcache = None
+            
+    def _getADSXMLRec(self):
+        adscode = self._adscode
+        if adscode is None:
+            raise SourceDataError('No location provided for additional source data')
+        
+        if Source._adsxmlcache is not None and adscode in Source._adsxmlcache:
+            xmlrec = Source._adsxmlcache[adscode]
+        else:
+            from urllib2 import urlopen
+            from contextlib import closing
+            from xml.dom.minidom import parseString
+            
+            with closing(urlopen('http://%s/abs/%s>data_type=XML'%(Source.adsurl,adscode))) as f:
+                xmld = parseString(f.read())
+            
+            recs = xmld.getElementsByTagName('record')
+            if len(recs) > 1:
+                raise SourceDataError('Multiple matching ADS records for code %s'%adscode)
+            
+            xmlrec = recs[0]
+            if Source._adsxmlcache is not None: 
+                Source._adsxmlcache[adscode] = xmlrec
+        
+        return xmlrec
+        
+    def getBibEntry(self):
+        """
+        returns a string with the BibTeX formatted entry for this source, retrieved from ADS
+        (requires network connection)
+        """
+        from urllib2 import urlopen
+        
+        if self._adscode is None:
+            raise SourceDataError('No location provided for additional source data')
+        
+        with closing(urllib2.urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
+            return xf.read()
+        
+    @property
+    def authors(self):
+        """
+        The author list for this Source as a list of strings
+        """
+        rec = self._getADSXMLRec()
+        return [e.firstChild.nodeValue for e in rec.getElementsByTagName('author')]
+    
+    @property
+    def abstract(self):
+        """
+        The abstract for this Source
+        """
+        rec = self._getADSXMLRec()
+        es = rec.getElementsByTagName('abstract')
+        if len(es) != 1:
+            raise SourceDataError('Abstract not found for %s'%self)
+        return es[0].firstChild.nodeValue
+    
+    @property
+    def date(self):
+        """
+        The publication date of this Source
+        """
+        rec = self._getADSXMLRec()
+        es = rec.getElementsByTagName('pubdate')
+        if len(es) != 1:
+            raise SourceDataError('Publication date not found for %s'%self)
+        return es[0].firstChild.nodeValue
+    
+    @property
+    def adsurl(self):
+        """
+        The ADS url for this source
+        """
+        rec = self._getADSXMLRec()
+        for e in rec.getElementsByTagName('link'):
+            if e.attributes['type'].value == 'ABSTRACT':
+                urlnodes = e.getElementsByTagName('url')
+                if len(urlnodes)==1:
+                    return urlnodes[0].firstChild.nodeValue
+                else:
+                    return [n.firstChild.nodeValue for n in urlnodes]
+        raise SourceDataError('Abstract URL not found for %s'%self)
+    
+    @property
+    def keywords(self):
+        """
+        The keywords for this source
+        """
+        rec = self._getADSXMLRec()
+        raise NotImplementedError
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
@@ -1364,6 +1542,10 @@ class DependentSource(Source):
         
     def __len__(self):
         return len(self.depfieldrefs)
+    
+    @property
+    def location(self):
+        return None
     
     def _getPathnode(self):
         return self._pathnoderef()
