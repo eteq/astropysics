@@ -41,7 +41,7 @@ class SourceDataError(Exception):
     external Source-related data
     """
     def __init__(self,message):
-        super(CycleError,self).__init__(message)
+        super(SourceDataError,self).__init__(message)
 
 
 
@@ -1041,7 +1041,6 @@ class SEDField(Field):
             plt.interactive(preint)
     
 class _SourceMeta(type):
-    #TODO: improve Source Singleton concepts, replace with __eq__ support?
     def __call__(cls,*args,**kwargs):
         obj = type.__call__(cls,*args,**kwargs)
         if obj._str in Source._singdict:
@@ -1058,25 +1057,48 @@ class _SourceMeta(type):
         return Source._singdict[obj._str]
 
 class Source(object):
+    """
+    A source for an observation/measurement/value.  Note that there is always 
+    only one instance if a source at a given time - any two Sources with the
+    same source string are the same object
+    
+    The source can optionally include a URL location to look up metadata 
+    like authors, publication date, etc (location property)
+    
+    the constructor string can be of the form 'str/loc' in which case
+    loc will be interpreted as the location, if it is not specified
+    in the argument.  If it is 'str//loc', the loc will not be validated
+    (e.g. it is assumed to be a correct ADS abstract code)
+    """
     __metaclass__ = _SourceMeta
-    _singdict = {}
-    __slots__=['_str','_adscode']
+    __slots__=['_str','_adscode','__weakref__']
+    
+    from weakref import WeakValueDictionary
+    _singdict = WeakValueDictionary()
+    del WeakValueDictionary
     
     def __init__(self,src,location=None):
         src = str(src)
         
-        if location is None and '-' in src:
-            location = src.split('-')[-1].strip()
-            self._str = '-'.join(src.split[:-1])
+        if location is None and '/' in src:
+            srcsp = src.split('/')
+            
+            if srcsp[-2] == '': #don't do checking for // case
+                self._str = '/'.join(srcsp[:-2]).strip()
+                self._adscode = srcsp[-1].strip()
+
+            else:
+                self._str = '/'.join(srcsp[:-1]).strip()
+                self.location = srcsp[-1].strip()
         else:
             self._str = src
-        self.location = location
+            self.location = location
         
     def __reduce__(self):
-        return (Source,(self._str,))
+        return (Source,(self._str+'//'+self._adscode,))
         
     def __str__(self):
-        return 'Source ' + self._str
+        return 'Source '+self._str + ((' @' + self.location) if self._adscode is not None else '')
     
     adsurl = 'adsabs.harvard.edu'
     
@@ -1093,26 +1115,30 @@ class Source(object):
     
     @staticmethod
     def _findADScode(loc):
-        from urllib2 import urlopen
+        from urllib2 import urlopen,HTTPError
         from contextlib import closing
 
 
         lloc = loc.lower()
         if 'arxiv' in lloc:
-            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,arxivcode.replace('arxiv:','').replace('arxiv',''))
-        elif 'astro-ph' in lower:
-            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,arxivcode.replace('astro-ph:','').replace('astro-ph',''))
+            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,lloc.replace('arxiv:','').replace('arxiv','').strip())
+        elif 'astro-ph' in lloc:
+            url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,lloc.replace('astro-ph:','').replace('astro-ph','').strip())
         elif 'doi' in lloc: #TODO:check if doi is case-sensitive
             url = 'http://%s/doi/%s'%(Source.adsurl,lloc.replace('doi:','').replace('doi',''))
         elif 'http' in lloc:
             url = loc
         else: #assume ADS abstract code
             url = 'http://%s/abs/%s'%(Source.adsurl,loc)
-        
-        with closing(urlopen(url+'?data_type=PLAINTEXT')) as page: #raises exceptions if url DNE
-            for l in page:
-                if 'Bibliographic Code:' in l: 
-                    return l.replace('Bibliographic Code:','').strip()
+            
+        url += '?data_type=PLAINTEXT'
+        try:
+            with closing(urlopen(url)) as page: #raises exceptions if url DNE
+                for l in page:
+                    if 'Bibliographic Code:' in l: 
+                        return l.replace('Bibliographic Code:','').strip()
+        except HTTPError:
+            raise SourceDataError('Requested location %s does not exist at url %s'%(loc,url))
         raise SourceDataError('Bibliographic entry for the location %s had no ADS code, or parsing problem'%loc)
     
     
@@ -1191,6 +1217,17 @@ class Source(object):
         return [e.firstChild.nodeValue for e in rec.getElementsByTagName('author')]
     
     @property
+    def title(self):
+        """
+        The publication title for this Source
+        """
+        rec = self._getADSXMLRec()
+        es = rec.getElementsByTagName('title')
+        if len(es) != 1:
+            raise SourceDataError('Title not found for %s'%self)
+        return es[0].firstChild.nodeValue
+    
+    @property
     def abstract(self):
         """
         The abstract for this Source
@@ -1213,9 +1250,9 @@ class Source(object):
         return es[0].firstChild.nodeValue
     
     @property
-    def adsurl(self):
+    def adsabs(self):
         """
-        The ADS url for this source
+        The URL for the ADS abstract of this Source
         """
         rec = self._getADSXMLRec()
         for e in rec.getElementsByTagName('link'):
@@ -1230,10 +1267,17 @@ class Source(object):
     @property
     def keywords(self):
         """
-        The keywords for this source
+        The keywords for this source, and the type of the keywords, if 
+        present
         """
         rec = self._getADSXMLRec()
-        raise NotImplementedError
+        kwn = rec.getElementsByTagName('keywords')[0]
+        kws = [n.firstChild.nodeValue for n in kwn.getElementsByTagName('keyword')]
+        try:
+            type = kwn.attributes['type'].value
+        except KeyError:
+            type = None
+        return kws,type
     
 class FieldValue(object):
     __metaclass__ = ABCMeta
