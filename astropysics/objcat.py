@@ -1383,16 +1383,18 @@ class DerivedValue(FieldValue):
     """
     A FieldValue that derives its value from a function of other FieldValues
     
-    the dependent values are initially set through the default values of 
-    the function, and can be either references to fields or strings used to
-    locate the dependencies in the catalog tree, using the sourcenode 
-    argument as the current source (see DependentSource for 
-    details of how dependent values are derefernced)
+    the values to use as arguments to the function are initially set through 
+    the default values of the function, and can be either references to 
+    fields or strings used to locate the dependencies in the catalog tree, 
+    using the sourcenode argument as the current source (see DependentSource 
+    for details of how dependent values are derefernced)
     
-    fieldnotifier is a notifier function, like that of Field.notifyValueChange
-    to be called when the value is invalidated
+    Alternatively, the initializer argument ``flinkdict`` may 
+    be a dictionary of link values that overrides the defaults 
+    from the function
     
-    failedvalueaction determines the action to take if an 
+    
+    The class attribute ``failedvalueaction`` determines the action to take if a
     problem is encountered in deriving the value and can be:
     *'raise':raise an exception (or pass one along)
     *'warn': issue a warning when it occurs, but continue execution with the 
@@ -1405,7 +1407,7 @@ class DerivedValue(FieldValue):
     #TODO: auto-reassign nodepath from source if Field moves
     failedvalueaction = 'raise' 
     
-    def __init__(self,f,sourcenode=None):
+    def __init__(self,f,sourcenode=None,flinkdict=None):
         import inspect
         
         if callable(f):
@@ -1414,8 +1416,16 @@ class DerivedValue(FieldValue):
             
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
-            if len(args) != len(defaults) or defaults is None:
-                raise TypeError('DerivedValue function does not have defaults to provide initial linkage')
+            if flinkdict is not None and len(flinkdict) > 0:
+                #populate any function defaults if not given already
+                if defaults is not None:
+                    for a,d in zip(reversed(args),defaults):
+                        if a not in flinkdict:
+                            flinkdict[a] = d
+                defaults = [flinkdict[a] for a in args if a in flinkdict]
+                
+            if defaults is None or len(args) != len(defaults) :
+                raise TypeError('DerivedValue does not have enought initial linkage items')
         else:
             raise TypeError('attempted to initialize a DerivedValue with a non-callable')
         
@@ -1448,6 +1458,13 @@ class DerivedValue(FieldValue):
     @property
     def source(self):
         return self._source
+    
+    @property
+    def flinkdict(self):
+        from inspect import getargspec
+        
+        args = getargspec(self._f)[0]
+        return dict([t for t in zip(args,self.source.depstrs)])
     
     def _getNode(self):
         return self._source.pathnode
@@ -1556,7 +1573,7 @@ class DependentSource(Source):
     def __noneer(self):
         return None
     
-    def __init__(self,fields,pathnode,notifierfunc=None):
+    def __init__(self,depfields,pathnode,notifierfunc=None):
         from weakref import ref
         
         self._str = 'dependent%i'%DependentSource._instcount
@@ -1565,7 +1582,7 @@ class DependentSource(Source):
         self.pathnode = pathnode
         self.notifierfunc = notifierfunc
         
-        for f in fields:
+        for f in depfields:
             if isinstance(f,basestring):
                 depstrs.append(f)
                 depfieldrefs.append(self.__noneer)
@@ -1789,7 +1806,7 @@ class StructuredFieldNode(FieldNode):
             self._fieldnames.append(k)
             
         for dv,fobj in dvs:
-            fobj.insert(0,DerivedValue(dv._f,self))
+            fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict))
             
     def __getstate__(self):
         import inspect
@@ -1828,7 +1845,7 @@ class StructuredFieldNode(FieldNode):
                         ind = 0
                     if ind > len(fi):
                         ind = len(fi)
-                    fi.insert(ind,DerivedValue(v[0]._f,self))
+                    fi.insert(ind,DerivedValue(v[0]._f,self,v[0].flinkdict))
     
     @property
     def alteredstruct(self):
@@ -1878,7 +1895,7 @@ class StructuredFieldNode(FieldNode):
         self._fieldnames = fields
         
         for dv,fobj in dvs:
-            fobj.insert(0,DerivedValue(dv._f,self))
+            fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict))
         
         self._altered = False
         self.addField = types.MethodType(StructuredFieldNode.addField,self,StructuredFieldNode)
@@ -1895,18 +1912,22 @@ class StructuredFieldNode(FieldNode):
         self.delField(fieldname)
     
     @staticmethod
-    def derivedFieldFunc(f=None,type=None,defaultval=None,usedef=None):
+    def derivedFieldFunc(f=None,type=None,defaultval=None,usedef=None,**kwargs):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the function.  Note that the
         function should NOT have self as the leading argument
+        
+        Arguments are the same as for the Field constructor, except that 
+        leftover kwargs are passed in as links that override the 
+        defaults of the function
         """
-        if f is not None: #do actual operation
+        if f is None: #allow for decorator arguments
+            return lambda f:StructuredFieldNode.derivedFieldFunc(f,type,defaultval,usedef,**kwargs)
+        else: #do actual operation
             fi = Field(name=f.__name__,type=type,defaultval=defaultval,usedef=usedef)
-            dv = DerivedValue(f,None)
+            dv = DerivedValue(f,None,kwargs)
             return dv,fi
-        else: #allow for decorator arguments
-            return lambda f:StructuredFieldNode.derivedFieldFunc(f,type,defaultval,usedef)
         
         
 #<--------------------builtin catalog types------------------------------------>
@@ -1933,6 +1954,13 @@ class Test1(AstronomicalObject):
     def f(num='num'):
         return num+1
     
+class Test2(AstronomicalObject):
+    num = Field('num',float,4.2)
+    
+    @StructuredFieldNode.derivedFieldFunc(num='num')
+    def f(num):
+        return num+1
+    
 def test_cat():
     c=Catalog()
     ao=AstronomicalObject(c,'group')
@@ -1940,6 +1968,7 @@ def test_cat():
     t12=Test1(ao)
     t13=Test1(ao)
     t13.sed['src'] = ('BVRI',[12,11.5,11.3,11.2])
+    
     
     return c,locals()
 
