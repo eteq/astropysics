@@ -1095,7 +1095,7 @@ class Source(object):
             self.location = location
         
     def __reduce__(self):
-        return (Source,(self._str+'//'+self._adscode,))
+        return (Source,(self._str+('' if self._adscode is None else ('//'+self._adscode)),))
         
     def __str__(self):
         return 'Source '+self._str + ((' @' + self.location) if self._adscode is not None else '')
@@ -1329,21 +1329,21 @@ class FieldValue(object):
         should call this with the val that should be checked
         if it is not the regular value
         """
-        passed = False
-        err = 'Type checking problem'
-        for type in types:
-            if isinstance(type,np.dtype):
-                if not isinstance(val,np.ndarray):
-                    err = 'Value %s not a numpy array'%val
+        if val is not None:
+            err = 'Type checking problem'
+            for type in types:
+                if isinstance(type,np.dtype):
+                    if not isinstance(val,np.ndarray):
+                        err = 'Value %s not a numpy array'%val
+                        continue
+                    if self.value.dtype != type:
+                        err = 'Array %s does not match dtype %s'%(val,type)
+                        continue
+                elif not isinstance(val,type):
+                    err = 'Value %s is not of type %s'%(val,type)
                     continue
-                if self.value.dtype != type:
-                    err = 'Array %s does not match dtype %s'%(val,type)
-                    continue
-            elif not isinstance(val,type):
-                err = 'Value %s is not of type %s'%(val,type)
-                continue
-            return
-        raise TypeError(err)
+                return
+            raise TypeError(err)
     
     def __call__(self):
         return self.value
@@ -1912,7 +1912,7 @@ class StructuredFieldNode(FieldNode):
         self.delField(fieldname)
     
     @staticmethod
-    def derivedFieldFunc(f=None,type=None,defaultval=None,usedef=None,**kwargs):
+    def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,usedef=None,**kwargs):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the function.  Note that the
@@ -1923,9 +1923,11 @@ class StructuredFieldNode(FieldNode):
         defaults of the function
         """
         if f is None: #allow for decorator arguments
-            return lambda f:StructuredFieldNode.derivedFieldFunc(f,type,defaultval,usedef,**kwargs)
+            return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,**kwargs)
         else: #do actual operation
-            fi = Field(name=f.__name__,type=type,defaultval=defaultval,usedef=usedef)
+            if name is None:
+                name = f.__name__
+            fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef)
             dv = DerivedValue(f,None,kwargs)
             return dv,fi
         
