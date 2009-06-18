@@ -83,23 +83,7 @@ class _FuncMeta1D(ABCMeta):
             cls.__statargs = list(args)
         else:
             cls._args = tuple(args)
-        
             
-        cls.params = property(lambda cls:cls._args)
-        def _set_parvals(cls,newpars):
-            if len(newpars)>len(cls._args):
-                raise ValueError('too many new parameters')
-            for a,v in zip(cls._args,newpars):
-                setattr(cls,a,v)        
-        def _set_pardict(cls,newpardict):
-            for k in newpardict.keys():
-                if k not in cls._args:
-                    raise KeyError('No parameter %s found'%k)
-            for k,v in newpardict.iteritems():
-                setattr(cls,k,v)
-        cls.parvals = property(lambda cls:[getattr(cls,a) for a in cls._args],fset=_set_parvals)
-        cls.pardict = property(lambda cls:dict([(a,getattr(cls,a)) for a in cls._args]),fset=_set_pardict)
-        
     def __call__(cls,*args,**kwargs):
         if cls._args is None: #this is the case for *args in the function
             args=list(args)
@@ -120,7 +104,7 @@ class _FuncMeta1D(ABCMeta):
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
             obj = super(_FuncMeta1D,_FuncMeta1D).__call__(cls,**objkwargs) #object __init__ is called here
             
-        obj.f(np.array([0]),*obj.parvals) #try once to check for a real function
+        obj.f(np.array([0]),*obj.parvals) #try once to check for a working function
             
         #set initial values
         if len(args)+len(kwargs) > len(obj.params):
@@ -153,11 +137,11 @@ class FunctionModel1D(object):
     xAxisName
     yAxisName
     
-    The metaclass generates the following properties:
-    Parameters for each of the inputs of the function (except self and x)
-    self.params: a tuple of the parameter names
-    self.parvals: a list of the values in the parameters
-    self.pardict: a dictionary of the parameter names and values
+    The metaclass generates Parameters for each of the 
+    inputs of the function (except self and x)
+    
+    The initializer's arguments specify initial values for the parameters,
+    and any non-parameter kwargs will be passed into the __init__ method
     """
     __metaclass__ = _FuncMeta1D
     
@@ -177,7 +161,33 @@ class FunctionModel1D(object):
             return res
         else:
             return res[0]
-            
+        
+    @property
+    def params(self):
+        """
+        a tuple of the parameter names
+        """
+        return self._args
+    
+    def _getParvals(self):
+        return [getattr(self,a) for a in self._args]
+    def _setParvals(self,newpars):
+        if len(newpars)>len(self._args):
+            raise ValueError('too many new parameters')
+        for a,v in zip(self._args,newpars):
+            setattr(self,a,v)        
+    parvals = property(_getParvals,_setParvals,doc='a list of the values in the parameters') 
+    
+    def _getPardict(self):
+        return dict([(a,getattr(self,a)) for a in self._args])
+    def _setPardict(self,newpardict):
+        for k in newpardict.keys():
+            if k not in self._args:
+                raise KeyError('No parameter %s found'%k)
+        for k,v in newpardict.iteritems():
+            setattr(self,k,v)
+    pardict = property(_getPardict,_setPardict,doc='a dictionary of the parameter names and values')
+    
     def inv(self,yval,*args,**kwargs):
         """
         Find the x value matching the requested y-value.  
@@ -318,7 +328,9 @@ class FunctionModel1D(object):
                 pdict=dict([(p,getattr(self,p)) for p in fixedpars])
                 def f(x,v):
                     pdict.update(dict(zip(ps,v)))
-                    return self.f(x,**pdict)
+                    #return self.f(x,**pdict)
+                    params = [pdict[a] for a in self._args]
+                    return self.f(x,*params)
             else:
                 f=lambda x,v:self.f(x,*v)
                 
@@ -811,82 +823,173 @@ class FunctionModel1D(object):
         """
         raise NotImplementedError
   
-class CompositeModel(FunctionModel1D):
-    #TODO:initial vals
-    def __init__(self,models=[],operation='+'):
-        raise NotImplementedError
-        self.op = operation
-        ms=[]
-        for m in models:
-            if isinstance(m,basestring):
-                m=get_model(m)
-            if not issubclass(m,FunctionModel1D):
-                raise ValueError('Non FunctionModel1D provided')
-            ms.append(m)
-        self._modelcounts=dict([(m,ms.count(m)) for m in set(ms)])
-        self._models=[m() for m in ms]
+  
+class _CompMeta1D(_FuncMeta1D):
+#    def __init__(cls,name,bases,dct):
+#        super(_CompMeta1D,cls).__init__(name,bases,dct)
+    def __call__(cls,*args,**kwargs):
+        obj = super(_FuncMeta1D,_CompMeta1D).__call__(cls,*args,**kwargs) #object __init__ is called here
+        return obj
         
-        self.f=self.__f
-        
-        #TODO: set up attributes
-        
-    def _getParams(self):
-        ps=[]
-        from collections import defaultdict
-        d=defaultdict(lambda:1)
-        for m in self._models:
-            i=d[m]
-            d[m]=i+1
-            mname=m.__name__.replace('Model','').replace('model','')
-            for p in m.params:
-                ps.append('%s_%i_%s'%(mname,i+1,p))
-        return ps
-    def _getParvals(self):
-        ps=[]
-        for m in self._models:
-            for p in m.params:
-                ps.append(getattr(m,p))
-        return ps
-    def _setParvals(self,val):
-        i=0
-        for m in self._models:
-            for p in m.params:
-                v=val[i]
-                setattr(m,p,v)
-                i+=1
-    def _getPardict(self):
-        from collections import defaultdict
-        d=defaultdict(lambda:1)
-        for m in self._models:
-            i=d[m]
-            d[m]=i+1
-            mname=m.__name__.replace('Model','').replace('model','')
-            ps=[]
-            for p in m.params:
-                ps.append(('%s_%i_%s'%(mname,i+1,p),getattr(m,p)))
-        return dict(ps)
-    def _setPardict(self,val):
-        raise NotImplementedError
+class CompositeModel1D(FunctionModel1D):
+    """
+    This model contains a group of FunctionModel1D objects and evaluates them
+    as a single model.
     
-    params = property(_getParams)
-    parvals = property(_getParvals,_setParvals)
-    pardict = property(_getPardict,_setPardict)
+    The models can either be FunctionModel1D objects, FunctionModel1D classes,
+    or a string (in the later two cases, new instances will be generated)
+    
+    parameter names are of the form 'A-0' and 'A-1' where A is the parameter
+    name and the number is the sequential number of the model with that
+    parameter
+    
+    the operations can be any valid python operator, or a sequence of operators
+    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4
+    
+    any extra kwargs will be used to specify default values of the parameters
+    """
+    __metaclass__ = _CompMeta1D
+    
+    #TODO:initial vals
+    def __init__(self,models=[],operation='+',**kwargs):
+        from inspect import isclass
         
-    def f(self,x):
-        raise RuntimeError('Placeholder function - this should never be reachable')
-    def __f(self,x,*args):
-        #TODO:optimize
-        vals=[]
-        i=0
-        vals = [m(x) for m in self._models]
-        if self.op == '+':
-            return np.sum(vals)
-        elif self.op == '*':
-            return np.prod(vals)
+        self.__dict__['_args'] = tuple() #necessary for later when getattr is invoked
+        
+        mods = []
+
+        for m in models:
+            if isinstance(m,FunctionModel1D):
+                pass
+            elif isinstance(m,basestring):
+                m = get_model(m)()
+            elif isclass(m) and issubclass(m,FunctionModel1D):
+                m = m()
+            else:
+                raise ValueError('Supplied object is not a function model')
+            mods.append(m)
+            
+        self._models = tuple(mods)
+        
+        if isinstance(operation,basestring):
+            operation = [operation for i in range(len(mods)-1)]
+        elif len(operation) != len(mods)-1:
+            raise ValueError('impossible number of operations')
+        
+        self._ops = tuple(operation)
+        oplst = ['mval[%i]%s'%t for t in enumerate(self._ops)]
+        oplst += 'mval[%i]'%len(oplst)
+        self._opstr = ''.join(oplst)
+        
+        args = []
+        argmodi = []
+        for i,m in enumerate(self._models):
+            for p in m.params:
+                args.append(p+str(i))
+                argmodi.append(i)
+        self._args = tuple(args)
+        self._argmodi = tuple(argmodi)
+        
+        self._filters = None
+        
+        for k,v in kwargs:
+            setattr(self,k,v)
+    
+    def __getattr__(self,name):
+        if name in self._args:
+            i = self._args.index(name)
+            j = self._argmodi[i]
+            return getattr(self._models[j],name[:-len(str(j))])
+        raise AttributeError("'%s' has no attribute '%s'"%(self,name))
+    
+    def __setattr__(self,name,val):
+        if name in self._args:
+            i = self._args.index(name)
+            j = self._argmodi[i]
+            setattr(self._models[j],name[:-len(str(j))],val)
         else:
-            return ValueError('unrecognized operation')
+            self.__dict__[name] = val
+    
+    def f(self,x,*args):
+        #TODO: find out if the commented part can be sometimes skipped somehow
+        for p,a in zip(self.params,args):
+            setattr(self,p,a)
+        mval = [m.f(x,*m.parvals) for m in self._models]
+        res = eval(self._opstr)
+        if self._filters is None:
+            return res
+        else:
+            for filter in self._filters:
+                res = filter(res)
+            return res
+        
+    def addFilter(self,filter):
+        """
+        This adds a function to be applied after the model is evaluated
+        """
+        if self._filters is None:
+            self._filters = []
+        
+        if not callable(filter):
+            raise ValueError('input filter is not a function')
+        
+        self._filters.append(filter)
+        
+    def clearFilters(self):
+        """
+        this clears all previously added filters
+        """
+        self._filters = None
+        
+    def addLowerBoundFilter(self,bound):
+        def bndfunc(x):
+            x[x<bound] = bound
+            return x
+        self.addFilter(bndfunc)
+        
+    def fitDataFixed(self,*args,**kwargs):
+        """
+        Calls fitData with kwargs and args, but ignores fixedpars 
+        argument and uses 'fixedmods' or 'freemods' kwarg to 
+        determine which parameters should be fixed
+        
+        freemods or fixedmods should be a sequence of indecies of 
+        models for which the parameters should be left free or held
+        fixed
+        """
+        fps = []
+        if 'fixedmods' in kwargs and 'freemods' in kwargs:
+            raise TypeError('fitDataFixed cannot have both fixedmod and freemod arguments')
+        elif 'fixedmods' in kwargs:
+            for i in kwargs.pop('fixedmods'):
+                stri = str(i)
+                for p in self._models[i].params:
+                    fps.append(p+stri)
+        elif 'freemods' in kwargs:
+            fps.extend(self.params)
+            for i in kwargs.pop('freemods'):
+                stri=str(i)
+                for p in self._models[i].params:
+                    fps.remove(p+stri)
+                
+        else:
+            raise TypeError('fitDataFixed must have fixedmods or freemods as arguments')
             
         
+        if len(args)>=4:
+            args[3] = fps
+        else:
+            kwargs['fixedpars'] = fps
+        print fps
+        return self.fitData(*args,**kwargs)
+            
+    @property
+    def models(self):
+        return self._models
+    
+    @property
+    def ops(self):
+        return self._ops  
         
 #<----------------------Module functions -------------->  
 __model_registry={}
@@ -1714,7 +1817,7 @@ class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
     
 #register all Models in this module
 for o in locals().values():
-    if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel:
+    if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel1D:
         register_model(o)
 
 #<---------------------------Other modelling techniques------------------------>
