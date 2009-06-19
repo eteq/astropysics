@@ -844,7 +844,10 @@ class CompositeModel1D(FunctionModel1D):
     parameter
     
     the operations can be any valid python operator, or a sequence of operators
-    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4
+    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4), or a string
+    giving the expression to be evaluated, with  'm' in places where
+    the evaluated models (in order) should go (e.g. 'm + m * m + m' will do
+    mod1+mod2*mod3+mod4)
     
     any extra kwargs will be used to specify default values of the parameters
     """
@@ -872,11 +875,16 @@ class CompositeModel1D(FunctionModel1D):
         self._models = tuple(mods)
         
         if isinstance(operation,basestring):
-            operation = [operation for i in range(len(mods)-1)]
+            if len(operation.strip()) == 1:
+                operation = [operation for i in range(len(mods)-1)]
+            else:
+                operation = operation.split('m')[1:-1]
         elif len(operation) != len(mods)-1:
             raise ValueError('impossible number of operations')
         
+        
         self._ops = tuple(operation)
+            
         oplst = ['mval[%i]%s'%t for t in enumerate(self._ops)]
         oplst += 'mval[%i]'%len(oplst)
         self._opstr = ''.join(oplst)
