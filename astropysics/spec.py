@@ -838,12 +838,11 @@ class Spectrum(HasSpecUnits):
             ploterrs.setdefault('ls','-')
             
             m = (e < np.max(y)*2) & np.isfinite(e)
-            if sum(m) > 0:
+            if np.sum(m) > 0:
                 kwargs['c'] = colors[1]
                 res.append(plt.plot(x[m],e[m],**kwargs))
-            if sum(~m) > 0:
-                res.append(plt.plot(x[~m],np.mean(e[m])*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
-        
+            if np.sum(~m) > 0:
+                res.append(plt.plot(x[~m],np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
         if plotcontinuum and self.continuum is not None:
             if callable(self.continuum):
                 cont = self.continuum(self.x)
@@ -936,9 +935,126 @@ class FunctionSpectrum(Spectrum):
 #Make a special Spectrum to use for AB Magnitude calibrations        
 ABSpec = FunctionSpectrum(np.linspace(5e13,3e15,1024),lambda x:np.ones_like(x)*10**(48.6/-2.5),unit='hz')
         
-
-
-
+class ModelSpectrum(FunctionSpectrum):
+    """
+    A Spectrum that follows the provided astropysics.models.FunctionModel1D .
+    
+    noisefunc should be of the form nf(x,flux)
+    
+    Attributes
+    ------------
+    `noisetype` determines the noise model - can be:
+    *None: no noise
+    *'poisson': poisson noise where the noisefunc determines the poissonian
+    scale factor
+    *'normal' or 'gauss': normally-distributed noise where the noisefunc 
+    determines sigma
+    """
+    def __init__(self,xi,model,noisetype=None,noisefunc=None,unit='wl'):     
+        super(ModelSpectrum,self).__init__(xi,model,errf=None,ivarf=None,unit=unit)
+        self.noisefunc = noisefunc
+        self.noisetype = noisetype
+        self._mod = model
+        
+    def _setX(self,x):
+        super(ModelSpectrum,self)._setX(x)
+        if self._noise is not None:
+            self._noise(x,self._flux)
+#        if self._noisetype is not None:
+#            nf = self._noisefunc(x,self._flux)
+#            if self._noisetype == 'normal':
+#                offset = np.random.normal(scale=nf,size=x.size)
+#                self._flux += offset
+#            elif self._noisetype == 'poisson':
+#                frac = np.random.poisson(nf,size=x.size)/nf
+#                self._flux *= frac
+#            else:
+#                raise ValueError('internally invalid noise type')
+    x = property(Spectrum._getX,_setX)
+        
+    @property
+    def model(self):
+        return self._mod
+    
+    def _getNoisefunc(self):
+        return self._noisefunc
+    def _setNoisefunc(self,val):
+        if val is None:
+            self._noisefunc = None
+        else:
+            if not callable(val):
+                if np.isscalar(val):
+                    scalarval = val
+                    val = lambda x,f:scalarval*np.ones(x.size)
+                else:
+                    raise ValueError('noisefunc is not a callable or a scalar')
+            
+            oldfunc = self._noisefunc
+            try:
+                self._noisefunc = val
+                if self._noisetype is not None:
+                    self._setX(self.x)
+            except:
+                self._noisefunc = oldfunc
+                raise
+                
+            
+    noisefunc = property(_getNoisefunc,_setNoisefunc)
+    
+    def _getNoisetype(self):
+        return self._noisetype
+    def _setNoisetype(self,val):
+        if val is None:
+            self._noisetype = None
+            self._errf = None
+            self._noise = None
+        else:
+            if self._noisefunc is None:
+                raise ValueError("can't apply noise model without a noise function")   
+            
+            if val == 'poisson':
+                val = 'poisson'
+                newerrf = lambda x:self._flux*self._noisefunc(x,self._flux)**-0.5
+                def newnoise(x,flux):
+                    nf = self._noisefunc(x,flux)
+                    flux *= np.random.poisson(nf,size=x.size)/nf
+            elif 'gauss' in val or 'normal' == val:
+                val = 'normal'
+                newerrf = lambda x:self._noisefunc(x,self._flux)
+                def newnoise(x,flux):
+                    nf = self._noisefunc(x,flux)
+                    flux += np.random.normal(scale=nf,size=x.size)
+            else:
+                raise ValueError('unrecognized noise %s'%val)
+            
+            oldtype = self._noisetype
+            olderrf = self._errf
+            oldnoise = self._noise
+            try:
+                self._noisetype = val
+                self._noise = newnoise
+                self._errf = newerrf
+                self._setX(self.x)
+            except:
+                self._noisetype = oldtype
+                self._errf = olderrf
+                self._noise = oldnoise
+                raise
+    noisetype = property(_getNoisetype,_setNoisetype)
+    
+    def fitToSpectrum(self,spec,**kwargs):
+        """
+        Fit the model parameters to match this Spectrum to the supplied 
+        Spectrum
+        
+        kwargs are passed into the fitData method of the model
+        """
+        return self._mod.fitData(spec._x,spec._flux,**kwargs)
+    def plotModels(self,*args,**kwargs):
+        """
+        calls the model's plot method with args and kwargs
+        """
+        return self._mod.plot(*args,**kwargs)
 
 class SpectralFeature(HasSpecUnits):
     """
