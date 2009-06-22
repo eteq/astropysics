@@ -139,7 +139,8 @@ class CatalogNode(object):
     def visit(self,func,traversal='postorder',filter=False):
         """
         This function walks through the object and all its children, 
-        executing func(CatalogNode)
+        executing func(CatalogNode) and returning a list of the 
+        return values
         
         traversal is the traversal order of the tree - can be:
         *'preorder',
@@ -153,14 +154,21 @@ class CatalogNode(object):
         filter can be:
         *False: process and return all values
         *a callable: is called as g(node) and if it returns False, the
-        node will not be processed nor put in the (also ignores anything 
+        node will not be processed nor put in the list (also ignores anything 
         that returns None)
         *any other: if the node returns this value on processing, it will
                     not be returned
         """
         if callable(filter):
-            func = lambda *args,**kwargs:func(*args,**kwargs) if filter(args[0]) else None
-            filter = None
+            oldfunc = func
+            def func(*args,**kwargs):
+                if filter(args[0]):
+                    return oldfunc(*args,**kwargs)
+                else:
+                    return None
+            filterval = None
+        else:
+            filterval = filter
         
         if type(traversal) is int:
             retvals = []
@@ -205,8 +213,8 @@ class CatalogNode(object):
         else:
             raise ValueError('unrecognized traversal type')
         
-        if filter is not False:
-            retvals = [v for v in retvals if v is not filter]
+        if filterval is not False:
+            retvals = [v for v in retvals if v is not filterval]
         return retvals
     
     def save(self,file,savechildren=True):
@@ -291,10 +299,14 @@ class FieldNode(CatalogNode,Sequence):
             fi.node = self
             
     def addField(self,field):
-        if not isinstance(field,Field):
+        if isinstance(field,basestring):
+            field=Field(field)
+        elif not isinstance(field,Field):
             raise ValueError('input value is not a Field')
+        
         if field.name in self._fieldnames:
             raise ValueError('Field name "%s" already present'%field.name)
+        
         setattr(self,field.name,field)
         if field.node is not None:
             raise ValueError('a Field can only reside in one Node')
@@ -1932,6 +1944,137 @@ class StructuredFieldNode(FieldNode):
             return dv,fi
         
         
+def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
+    """
+    Applies values from an array to CatalogNodes.
+    
+    array must be a 2-dimensional array or a 1-dimensional structured array
+    
+    source is a Source object or a string that will be converted to a Source
+    object
+    
+    nodes is either a container of nodes to visit or a CatalogNode 
+    in which all FieldNodes within will be used as the nodes to visit
+    
+    fields is either a sequence of field names (must be at least as long as
+    the array's second index dimension) or a mapping from indecies to field
+    names or structured array field names to FieldNode field names
+    
+    matcher is a callable called as matcher(arrayrow,node) - if it returns 
+    False, the array will be matched to the next node - if True, the array
+    values will be applied to the node
+    
+    converters  are either a sequence of callables or a mapping from indecies 
+    to callables or structured array field names to callables that will be
+    called on each array element before being added to the FieldNode, or None
+    to do no converting 
+    """
+    from operator import isSequenceType,isMappingType
+    
+    if not isinstance(source,Source):
+        source = Source(source)
+     
+    if isinstance(nodes,CatalogNode):
+        if isinstance(matcher,basestring):
+            traversal = matcher
+            matcher = None
+        else:
+            traversal = 'preorder'
+        nodes = nodes.visit(lambda n:n,traversal,lambda n:isinstance(n,FieldNode))
+    else:
+        nodes = list(nodes)
+        
+    if not isMappingType(fields):
+        fields = dict([t for t in enumerate(fields)])
+    else:
+        fields = dict(fields) #copy
+    
+    array = np.array(array,copy=False)
+    
+    if converters is None:
+        converters = {}
+    
+    if array.dtype.names is not None and len(array.shape) == 1:
+        #structured/record array
+        if len(array.shape) != 1:
+            raise ValueError('structured array must be 1d')
+        
+        nms = array.dtype.names
+        for k in fields.keys():
+            if k in nms:
+                fields[nms.index(k)] = fields[k]
+        for k in converters.keys():
+            if k in nms:
+                converters[nms.index(k)] = converters[k]
+    elif array.dtype.names is None and len(array.shape) == 2:
+        pass #2d array
+    else:
+        raise ValueError('invalid input array')
+    
+    fieldseq = []
+    for i in range(len(array[0])):
+        if i not in fields:
+            fieldseq.append(None)
+        else:
+            fieldseq.append(fields[i])
+    fieldseq = tuple(fieldseq)
+            
+    convseq = []
+    for i in range(len(array[0])):
+        if i not in converters:
+            convseq.append(lambda x:x)
+        else:
+            convseq.append(converters[i])
+    convseq = tuple(convseq)
+    
+    if matcher is None and len(array) != len(nodes):
+        raise ValueError('with no matcher, the number of nodes must match the size of the array')
+    
+    for a in array:
+        if matcher is None:
+            n = nodes[0]
+            del nodes[0]
+        else:
+            #find the node that a matcher matches, and remove it it is matched to get log(N) run time
+            for i,n in enumerate(nodes):
+                if matcher(a,n):
+                    i = None
+                    break
+            else:
+                i = None
+            if i is not None:
+                del nodes[i]
+        
+        for fi in fieldseq:
+            if fi is not None and fi not in n.fieldnames:
+                n.addField(fi)
+        
+        for i,v in enumerate(a):
+            if fieldseq[i] is not None:
+                getattr(n,fieldseq[i])[source] = convseq[i](v)
+        
+def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,converters=None,filter=None):
+    if isinstance(parent,basestring):
+        parent = Catalog(parent)
+    
+    nodes = []
+    for i in range(len(array)):
+        nodes.append(nodetype(parent=parent))
+    
+    if filter:
+        def matcher(arrayrow,node):
+            return filter(arrayrow)
+    else:
+        matcher = None
+        
+    arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher)
+    
+    if parent is None:
+        return nodes
+    else:
+        return parent
+    
+    
 #<--------------------builtin catalog types------------------------------------>
 
 class AstronomicalObject(StructuredFieldNode):
