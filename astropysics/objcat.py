@@ -333,7 +333,20 @@ class FieldNode(CatalogNode,Sequence):
             
     def __str__(self):
         return 'FieldNode with fields %s'%self._fieldnames
-        
+    
+    def getFieldString(self,sep='\n'):
+        """
+        Generate a string with field:value pairs for all fields using
+        sep as the seperator between the strings
+        """
+        strs = []
+        for f in self.fields():
+            try:
+                strs.append(f.name+':'+str(f()))
+            except IndexError:
+                strs.append(f.name+' empty')
+        return sep.join(strs)
+
     def __cmp__(self,other):
         try:
             return cmp(list(self),list(other))
@@ -393,7 +406,7 @@ class FieldNode(CatalogNode,Sequence):
         *'exception': raise a KeyError if the field is missing or a 
         TypeError if  
         *'skip': do not include this object in the final array
-        *'0'/False: 
+        *0/False: put 0 in the array location
         
         traversal is of an argument like that for CatalogNode.visit
         """
@@ -407,15 +420,15 @@ class FieldNode(CatalogNode,Sequence):
             def vfunc(node):
                 try:
                     return node[fieldname]
-                except (KeyError,IndexError,TypeError):
+                except (KeyError,IndexError,TypeError,AttributeError):
                     return None
         elif not missing:
             filter = False
             def vfunc(node):
                 try:
                     return node[fieldname]
-                except (KeyError,IndexError,TypeError):
-                    return None
+                except (KeyError,IndexError,TypeError,AttributeError):
+                    return 0
         else:
             raise ValueError('Unrecognized value for what to do with missing fields')
             
@@ -645,6 +658,9 @@ class Field(MutableSequence):
     def __setitem__(self,key,val):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
+            if not isinstance(val,FieldValue) and key in self:
+                print 'at',key,val
+                val = ObservedValue(val,key)
             val = self._checkConvInVal(val,self._vals[i].source)
             if i == 0:
                 self.notifyValueChange(self._vals[0],val)
@@ -1966,10 +1982,11 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
     
     converters  are either a sequence of callables or a mapping from indecies 
     to callables or structured array field names to callables that will be
-    called on each array element before being added to the FieldNode, or None
-    to do no converting 
+    called on each array element before being added to the FieldNode as 
+    converter(value,row).  If converters is None, no converting is performed.
     """
     from operator import isSequenceType,isMappingType
+    from inspect import getargspec
     
     if not isinstance(source,Source):
         source = Source(source)
@@ -1988,6 +2005,13 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
         fields = dict([t for t in enumerate(fields)])
     else:
         fields = dict(fields) #copy
+        
+    if converters is None:
+        pass
+    elif not isMappingType(converters):
+        converters = dict([t for t in enumerate(converters)])
+    else:
+        converters = dict(converters) #copy
     
     array = np.array(array,copy=False)
     
@@ -2016,57 +2040,73 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
         if i not in fields:
             fieldseq.append(None)
         else:
-            fieldseq.append(fields[i])
+            fi = fields[i]
+            fieldseq.append(fi)
     fieldseq = tuple(fieldseq)
             
     convseq = []
     for i in range(len(array[0])):
         if i not in converters:
-            convseq.append(lambda x:x)
+            convseq.append(lambda val,row:val)
         else:
             convseq.append(converters[i])
+#            cver = converters[i]
+#            print 'cv',i,cver
+#            nargs = len(getargspec(cver)[0])
+#            if nargs == 1:
+#                convseq.append(lambda val,row:cver(val))
+#            elif nargs == 2:
+#                convseq.append(cver)
+#            else:
+#                raise TypeError('provided converter %i has incorrect number of arguments'%i)
     convseq = tuple(convseq)
     
     if matcher is None and len(array) != len(nodes):
         raise ValueError('with no matcher, the number of nodes must match the size of the array')
     
-    for a in array:
+    for i,a in enumerate(array):
+        print 2,a,i
         if matcher is None:
             n = nodes[0]
             del nodes[0]
         else:
             #find the node that a matcher matches, and remove it it is matched to get log(N) run time
-            for i,n in enumerate(nodes):
+            for j,n in enumerate(nodes):
                 if matcher(a,n):
-                    i = None
                     break
             else:
-                i = None
-            if i is not None:
-                del nodes[i]
+                j = None
+            if j is not None:
+                del nodes[j]
         
         for fi in fieldseq:
             if fi is not None and fi not in n.fieldnames:
                 n.addField(fi)
         
-        for i,v in enumerate(a):
-            if fieldseq[i] is not None:
-                getattr(n,fieldseq[i])[source] = convseq[i](v)
+        for k,v in enumerate(a):
+            if fieldseq[k] is not None:
+                getattr(n,fieldseq[k])[source] = convseq[k](v,a)
         
 def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,converters=None,filter=None):
     if isinstance(parent,basestring):
         parent = Catalog(parent)
     
-    nodes = []
-    for i in range(len(array)):
-        nodes.append(nodetype(parent=parent))
-    
     if filter:
+        nnodes = 0
+        for a in array:
+            if filter(a):
+                nnodes += 1
+                
         def matcher(arrayrow,node):
             return filter(arrayrow)
     else:
+        nnodes = len(array)
         matcher = None
-        
+    
+    nodes = []
+    for i in range(nnodes):
+        nodes.append(nodetype(parent=parent))
+    
     arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher)
     
     if parent is None:
