@@ -462,20 +462,23 @@ class FieldNode(CatalogNode,Sequence):
         """
         sib = kwargs.pop('siblings',False)
         if sib and self.parent is not None:
-            if len(args)<5:
+            if len(args)<6:
                 kwargs['includeself'] = False
             else:
-                args[4] = False
+                args[5] = False
             return FieldNode.extractFieldAtNode(self.parent,*args,**kwargs)
         else:
             return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     
     @staticmethod
-    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,dtype=None,includeself=True):
+    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,
+                           converter=None,dtype=None,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
         specified fieldname
+        
+        traversal is of an argument like that for CatalogNode.visit
         
         missing determines the behavior in the event that a field is not 
         present (or a non FieldNode is encounterd) it can be:
@@ -484,7 +487,10 @@ class FieldNode(CatalogNode,Sequence):
         *'skip': do not include this object in the final array
         *0/False: put 0 in the array location
         
-        traversal is of an argument like that for CatalogNode.visit
+        converter is a function that is applied to the data before being 
+        added to the array (or None to perform no conversion)
+        
+        dtype is the numpy dtype/string to use for this array
         
         includeself determines if the node itself should be included
         """
@@ -509,8 +515,11 @@ class FieldNode(CatalogNode,Sequence):
                     return 0
         else:
             raise ValueError('Unrecognized value for what to do with missing fields')
-            
-        lst = node.visit(vfunc,traversal=traversal,filter=filter,includeself=includeself)
+        
+        if converter is None:
+            lst = node.visit(vfunc,traversal=traversal,filter=filter,includeself=includeself)
+        else:
+            lst = node.visit(lambda node:converter(vfunc(node)),traversal=traversal,filter=filter,includeself=includeself)
         
         if dtype is None:
             try:
