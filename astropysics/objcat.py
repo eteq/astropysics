@@ -161,10 +161,7 @@ class CatalogNode(object):
                     
         if includeself is not True, the function will not visit the node 
         itself (only the sub-trees)
-        """
-        if not includeself:
-            print self,includeself,'is'
-        
+        """       
         if callable(filter):
             oldfunc = func
             def func(*args,**kwargs):
@@ -227,9 +224,10 @@ class CatalogNode(object):
     
     def save(self,file,savechildren=True):
         """
-        save the file name or file-like object
+        save this node as a file with the given name or file-like object
         
-        savechildren means the children of this node will be saved
+        if savechildren is True, the entire subtree will be saved, if False,
+        just this node
         
         Note that the parent and everything above this point will NOT be
         saved (when reloaded the parent will be None)
@@ -247,14 +245,15 @@ class CatalogNode(object):
             if isinstance(file,basestring):
                 #filename
                 with open(file,'w') as f:
-                    return cPickle.dump(self,f)
+                    return cPickle.dump(self,f,protocol=2)
             else:
                 return cPickle.load(file)
         finally:
             self._parent = oldpar
             self._children = oldchildren
         
-    
+    #this is a staticmethod to keep both save and load methods in the same 
+    #place - they are also available at the package level
     @staticmethod
     def load(file):
         """
@@ -267,6 +266,21 @@ class CatalogNode(object):
                 return cPickle.load(f)
         else:
             return cPickle.load(file)
+
+#place save/load at module-level, as well
+def save(node,file,savechildren=True):
+    """
+    save the specified node as a file with the given name or file-like object
+    
+    if savechildren is True, the entire subtree will be saved, if False,
+    just this node
+    
+    Note that the parent and everything above this point will NOT be
+    saved (when reloaded the parent will be None)
+    """      
+    return node.save(file,savechildren)
+load = CatalogNode.load
+
     
 class FieldNode(CatalogNode,Sequence):
     """
