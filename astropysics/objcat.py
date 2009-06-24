@@ -1874,7 +1874,16 @@ class StructuredFieldNode(FieldNode):
     
     The fields and names are inferred from the class definition and 
     hence the class attribute name must match the field name.  Any 
-    FieldValues present in the class objects will be ignored
+    FieldValues present in the class objects will be ignored.
+    
+    the checkonload class attribute determines the action to take if an
+    unaltered StructuredFieldNode is loaded and found to be inconsistent 
+    with  the current class definition
+    *False/None/0: Do no checking
+    *'warn': show a warning when
+    *'raise': raise a ValueError
+    *'revert': silently revert to the current definition
+    *'revertwarn': issue a warning, then revert
     """
     __metaclass__ = _StructuredFieldNodeMeta
     
@@ -1931,11 +1940,18 @@ class StructuredFieldNode(FieldNode):
         d['_altered'] = self._altered
         d['currderind'] = currderind
         return d
+    
+    
+    checkonload = 'warn'
     def __setstate__(self,d):
         import inspect
         
         self._altered = d['_altered']
         super(StructuredFieldNode,self).__setstate__(d)
+        
+        if StructuredFieldNode.checkonload:
+            consistent = True
+            fields = []
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
             if isinstance(v,tuple):
                 n = v[1].name
@@ -1950,6 +1966,32 @@ class StructuredFieldNode(FieldNode):
                     if ind > len(fi):
                         ind = len(fi)
                     fi.insert(ind,DerivedValue(v[0]._f,self,v[0].flinkdict))
+            
+                    
+            #consistency check to ensure that the object has the necessary fields
+            if StructuredFieldNode.checkonload:
+                fields.append(k)
+                if consistent and getattr(self,k) is getattr(self.__class__,k) or not isinstance(getattr(self,k),Field):
+                    consistent = False
+                
+        #do consistency check to ensure that there are no extra fields that shouldn't be present
+        if StructuredFieldNode.checkonload:
+            for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
+                if k not in fields:
+                    consistent = False
+                    break
+                
+            if not consistent:
+                if 'raise' in StructuredFieldNode.checkonload:
+                    raise ValueError("object %s is not consistent with it's class definition"%self)
+                
+                if 'warn' in StructuredFieldNode.checkonload or StructuredFieldNode.checkonload is True:
+                    from warnings import warn
+                    warn("object %s is not consistent with it's class definition"%self)
+                    
+                if 'revert' in StructuredFieldNode.checkonload:
+                    self.revert()
+                
     
     @property
     def alteredstruct(self):
@@ -1982,7 +2024,8 @@ class StructuredFieldNode(FieldNode):
                 dv = None
                 
             fields.append(k)
-            if not hasattr(self,k) or not isinstance(getattr(self,k),Field):
+            #check to make sure the field is present, and if not, add it back in
+            if hasattr(self,k) is hasattr(self.__class__,k) or not hasattr(self,k) or not isinstance(getattr(self,k),Field):
                 if None in fi:
                     fobj = fi.__class__(fi.name,fi.type,fi.default, True)
                 else:
@@ -1992,6 +2035,8 @@ class StructuredFieldNode(FieldNode):
                 
                 if dv is not None:
                     dvs.append((dv,fobj))
+                    
+        #check to make sure there are no extra fields
         for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
             if k not in fields:
                 delattr(self,k)
