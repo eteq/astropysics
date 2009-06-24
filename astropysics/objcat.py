@@ -136,7 +136,7 @@ class CatalogNode(object):
         return sum([c.nnodes for c in self._children],1)
         
     
-    def visit(self,func,traversal='postorder',filter=False):
+    def visit(self,func,traversal='postorder',filter=False,includeself=True):
         """
         This function walks through the object and all its children, 
         executing func(CatalogNode) and returning a list of the 
@@ -158,7 +158,13 @@ class CatalogNode(object):
         that returns None)
         *any other: if the node returns this value on processing, it will
                     not be returned
+                    
+        if includeself is not True, the function will not visit the node 
+        itself (only the sub-trees)
         """
+        if not includeself:
+            print self,includeself,'is'
+        
         if callable(filter):
             oldfunc = func
             def func(*args,**kwargs):
@@ -174,38 +180,40 @@ class CatalogNode(object):
             retvals = []
             doroot = True
             for i,c in enumerate(self._children):
-                if i == traversal:
+                if i == traversal and includeself:
                     retvals.append(func(self))
                     doroot = False
                 retvals.extend(c.visit(func,traversal))
-            if doroot:
+            if doroot and includeself:
                 retvals.append(func(self))
         elif type(traversal) is float:
             retvals = []
             doroot = True
             travi = int(traversal*self._children)
             for i,c in enumerate(self._children):
-                if i == travi:
+                if i == travi and includeself:
                     retvals.append(func(self))
                     doroot = False
                 retvals.extend(c.visit(func,traversal))
-            if doroot:
+            if doroot and includeself:
                 retvals.append(func(self))
         elif traversal is None: #None means postorder
             retvals = []
             for c in self._children:
                 retvals.extend(c.visit(func,traversal))
-            retvals.append(func(self))    
+            if  includeself:
+                retvals.append(func(self))    
         elif traversal == 'postorder':
-            retvals = self.visit(func,None)
+            retvals = self.visit(func,None,filter,includeself)
         elif traversal == 'preorder':
-            retvals = self.visit(func,0)
+            retvals = self.visit(func,0,filter,includeself)
         elif traversal == 'level' or traversal == 'breadthfirst':
             from collections import deque
             
             retvals=[]
             q = deque()
-            q.append(self)
+            if includeself:
+                q.append(self)
             while len(q)>0:
                 elem = q.popleft()
                 retvals.append(func(elem))
@@ -386,16 +394,70 @@ class FieldNode(CatalogNode,Sequence):
     def fieldnames(self):
         return tuple(self._fieldnames)
     
+    def setToSource(self,src,missing='skip',traversal=None):
+        """
+        Sets the given src string or Source object as the current source for
+        all fields in this node.
+        
+        missing can be:
+        *'raise':raise a ValueError if there is no value with that source
+        *'warn':give a warning if the value is missing
+        *'skip':do nothing 
+        
+        if traversal is None, no tree traversal will be performed.  Otherwise,
+        the function will be called on all sub-trees
+        """
+        if not isinstance(src,Source):
+                src = Source(src)
+                
+        if traversal is None:
+            if missing == 'skip':
+                action = 0
+            elif missing == 'raise':
+                action = 1
+            elif missing == 'warn':
+                from warnings import warn
+                action = 2
+            else:
+                raise ValueError('invalid missing action')
+            
+            for f in self.fields():
+                if src in f:
+                    f.current = src
+                else:
+                    if action is 1:
+                        raise ValueError('could not find src %s in field %s'%(src,f))
+                    elif action is 2:
+                        warn('could not find src %s in field %s'%(src,f))
+        else:
+            def f(node):
+                if hasattr(node,'setToSource'):
+                    node.setToSource(src,missing,None)
+            self.visit(f,traversal=traversal)
+                
+    
     def extractField(self,*args,**kwargs):
         """
         walk through the tree starting from this object
         
+        if the kwarg 'siblings' is set to True,this will 
+        also extract the siblings (e.g. the parent subtree,
+        except for the parent itself) , and overwrites includeself
+        
         see FieldNode.extractFieldFromNode for arguments
         """
-        return FieldNode.extractFieldAtNode(self,*args,**kwargs)
+        sib = kwargs.pop('siblings',False)
+        if sib and self.parent is not None:
+            if len(args)<5:
+                kwargs['includeself'] = False
+            else:
+                args[4] = False
+            return FieldNode.extractFieldAtNode(self.parent,*args,**kwargs)
+        else:
+            return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     
     @staticmethod
-    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,dtype=None):
+    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,dtype=None,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
@@ -409,6 +471,8 @@ class FieldNode(CatalogNode,Sequence):
         *0/False: put 0 in the array location
         
         traversal is of an argument like that for CatalogNode.visit
+        
+        includeself determines if the node itself should be included
         """
         #TODO: optimize with array size knowledge ?
         if missing == 'exception':
@@ -432,7 +496,7 @@ class FieldNode(CatalogNode,Sequence):
         else:
             raise ValueError('Unrecognized value for what to do with missing fields')
             
-        lst = node.visit(vfunc,traversal=traversal,filter=filter)
+        lst = node.visit(vfunc,traversal=traversal,filter=filter,includeself=includeself)
         
         if dtype is None:
             try:
@@ -659,7 +723,6 @@ class Field(MutableSequence):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
             if not isinstance(val,FieldValue) and key in self:
-                print 'at',key,val
                 val = ObservedValue(val,key)
             val = self._checkConvInVal(val,self._vals[i].source)
             if i == 0:
@@ -933,7 +996,6 @@ class SEDField(Field):
         be returned (or a scalar if only one band is requested)
         """
         from .phot import str_to_bands
-        print bands
         bands = str_to_bands(bands)
         vals = []
         for b,bn in zip(bands,[b.name for b in bands]):
@@ -2065,7 +2127,6 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
         raise ValueError('with no matcher, the number of nodes must match the size of the array')
     
     for i,a in enumerate(array):
-        print 2,a,i
         if matcher is None:
             n = nodes[0]
             del nodes[0]
