@@ -746,7 +746,7 @@ class Field(MutableSequence):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
             if not isinstance(val,FieldValue) and key in self:
-                val = ObservedValue(val,key)
+                val = ObservedValue(key,val)
             val = self._checkConvInVal(val,self._vals[i].source)
             if i == 0:
                 self.notifyValueChange(self._vals[0],val)
@@ -754,13 +754,17 @@ class Field(MutableSequence):
         else:
             if isinstance(key,Source):
                 s = key
-            elif isinstance(key,basestring):
+            elif isinstance(key,basestring) or key is None:
                 s = Source(key)
-            elif key is None:
-                s = None
+#            elif key is None:
+#                print 'an'
+#                s = Source(None)
             else:
                 raise TypeError('specified key not a recognized Source')
-            val = self._checkConvInVal(val if s is None else ObservedValue(val,s))
+            #val = self._checkConvInVal(val if s is None else ObservedValue(s,val))
+            if not isinstance(val,FieldValue):
+                val = ObservedValue(s,val)
+            val = self._checkConvInVal(val)
             self._vals.append(val)
         
     def __delitem__(self,key):
@@ -821,7 +825,7 @@ class Field(MutableSequence):
     def _getDefault(self):
         return self[None].value
     def _setDefault(self,val):
-        self[None] = ObservedValue(val,None)
+        self[None] = val#ObservedValue(None,val)
     def _delDefault(self):
         del self[None]
     default = property(_getDefault,_setDefault,_delDefault,"""
@@ -1470,7 +1474,7 @@ class ObservedValue(FieldValue):
     with the associated Source.
     """
     __slots__=('_value')
-    def __init__(self,value,source):
+    def __init__(self,source,value):
         super(ObservedValue,self).__init__()
         if not isinstance(source,Source):
             source = Source(source)
