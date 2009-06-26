@@ -47,15 +47,37 @@ class _Parameter(object):
     
     def __delete__(self,obj):
         raise AttributeError("can't delete a parameter")
+    
+class Model(object):
+    __metaclass__ = ABCMeta
+    
+    @abstractmethod
+    def __call__(self,x):
+        raise NotImplementedError
+    
+    ndims = abstractproperty(doc='The number of dimensions for this model')         
+    params = abstractproperty(doc='a sequence of the parameter names')     
+    parvals = abstractproperty(doc='a sequence of the values in the parameters')             
+    pardict = abstractproperty(doc='a dictionary of the parameter names and values')
+    
+    
 
-class _FuncMeta1D(ABCMeta):
+class _FuncMeta(ABCMeta):
     def __init__(cls,name,bases,dct):
         #called on import of astro.models
         from inspect import getargspec
         
-        super(_FuncMeta1D,cls).__init__(name,bases,dct)
-        
-        args,varargs,varkw,defaults=getargspec(dct['f'])
+        super(_FuncMeta,cls).__init__(name,bases,dct)
+        if 'f' in dct:
+            ffunc = dct['f']
+        else:
+            for b in bases:
+                if 'f' in b.__dict__:
+                    ffunc = b.__dict__['f']
+                    break
+            else:
+                raise KeyError('missing f function')
+        args,varargs,varkw,defaults=getargspec(ffunc)
         if varkw is not None:
             raise SyntaxError("can't have kwargs in model function")
         
@@ -92,7 +114,7 @@ class _FuncMeta1D(ABCMeta):
             except IndexError:
                 IndexError('No # of parameters found for variable-size function')
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
-            obj = super(_FuncMeta1D,_FuncMeta1D).__call__(cls,**objkwargs) #object __init__ is called here
+            obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             pars = cls.__statargs
             del cls.__statargs
             for i in range(nparams):
@@ -102,7 +124,7 @@ class _FuncMeta1D(ABCMeta):
             cls._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
-            obj = super(_FuncMeta1D,_FuncMeta1D).__call__(cls,**objkwargs) #object __init__ is called here
+            obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             
         obj.f(np.array([0]),*obj.parvals) #try once to check for a working function
             
@@ -117,38 +139,23 @@ class _FuncMeta1D(ABCMeta):
         for p,v in zip(pars,args):
             setattr(obj,p,v)
         return obj
-
-class FunctionModel1D(object):
-    """
-    This class is the base for 1-dimensional models with parameters that are 
-    implemented as python functions.
     
-    Subclassing:
-    The following method MUST be overridden in a subclass:
-    *f(self,x,...)
     
-    The following methods may be overridden for speed of some operations - pars
-    should be accessed with self.pardict, self.parvals, or by properties/name :
-    *integrate(self,lower,upper)
-    *derivative(self,x,dx)
-    *inv(yval,*args,**kwargs)
-    *_customFit(x,y,fixedpars=(),weights=None,**kwargs)
-    The following attributes may be set for additional information:
-    xAxisName
-    yAxisName
+class FunctionModel(Model):
+    __metaclass__ = _FuncMeta
     
-    The metaclass generates Parameters for each of the 
-    inputs of the function (except self and x)
-    
-    The initializer's arguments specify initial values for the parameters,
-    and any non-parameter kwargs will be passed into the __init__ method
-    """
-    __metaclass__ = _FuncMeta1D
-    
-    defaultIntMethod = 'quad'
-    defaultInvMethod = 'brentq'
-    xAxisName = None
-    yAxisName = None
+    @abstractmethod
+    def f(self,x):
+        """
+        this function MUST be overriden in subclasses - default arguments will
+        be taken as initial parameter values, and unspecified defaults will
+        default to 1
+        
+        the first parameter (other than 'self' or 'cls', if provided) must be 
+        the data vector/matrix (and have no default value), and the rest are 
+        parameters
+        """
+        raise NotImplementedError
     
     def __call__(self,x):
         """
@@ -161,6 +168,13 @@ class FunctionModel1D(object):
             return res
         else:
             return res[0]
+        
+    @property
+    def ndims(self):
+        """
+        The number of dimensions for this model
+        """
+        return self._ndims
         
     @property
     def params(self):
@@ -187,6 +201,118 @@ class FunctionModel1D(object):
         for k,v in newpardict.iteritems():
             setattr(self,k,v)
     pardict = property(_getPardict,_setPardict,doc='a dictionary of the parameter names and values')
+    
+    def getMCMC(self,x,y,priors={},datamodel=None):
+        """
+        Note that this function requires PyMC (http://code.google.com/p/pymc/)
+        
+        To specify the priors, either supply pymc.Stochastric objects, a 2-tuple 
+        (uniform lower and upper), a scalar > 0 (gaussian w/ the center given by 
+        the current value and sigma provided by the scalar), or 0 (poisson with 
+        k set by the current value)
+        
+        Any missing priors will raise a ValueError
+        
+        datamodel can be:
+        *None: a normal distribution with sigma given by the data's standard 
+        deviation is used as the data model
+        *a tuple: (dist,dataname,kwargs)the first element is the 
+        pymc.distribution to be used as the distribution representing the data
+        and the second is the name of the argument to be associated with the 
+        FunctionModel1D's output, and the third is kwargs for the distribution 
+        ("observed" and "data" will be ignored, as will the data argument)
+        *a scalar or sequence of length == data: a normal distribution is used 
+        with sigma specified by the scalar/sequence
+        
+        returns a pymc.MCMC object for Markov Chain Monte Carlo sampling
+        """
+        import pymc
+        from operator import isSequenceType
+        from inspect import getargspec
+        from types import MethodType
+        
+        if set(priors.keys()) != set(self.params):
+            raise ValueError("input priors don't match function params")
+        
+        d={}
+        for k,v in priors.iteritems():
+            if isinstance(v,pymc.StochasticBase):
+                d[k]=v
+            elif isSequenceType(v):
+                if len(v) == 2:
+                    d[k]=pymc.distributions.Uniform(k,v[0],v[1])
+                else:
+                    raise ValueError("couldn't understand sequence "+str(v) )
+            elif v > 0:
+                d[k] = pymc.distributions.Normal(k,self.pardict[k],1.0/v/v)
+            elif v == 0:
+                d[k] = pymc.distributions.Poisson(k,self.pardict[k])
+            else:
+                raise ValueError("couldn't interpret prior "+str(v))
+        
+        funcdict=dict(d)
+        if type(self.f) is MethodType:
+            xstr = getargspec(self.f)[0][1]
+        else:
+            assert callable(self.f),'object function is not a callable'
+            xstr = getargspec(self.f)[0][0] 
+        funcdict[xstr]=x
+        funcdet=pymc.Deterministic(name='f',eval=self.f,parents=funcdict,doc="FunctionModel1D function")
+        d['f'] = funcdet
+        
+        if type(datamodel) is tuple:
+            distobj,dataarg,kwargs=datamodel
+            if 'name' not in kwargs:
+                kwargs['name'] = 'data'
+                
+            kwargs[dataarg] = funcdet
+            kwargs['observed'] = True
+            kwargs['value'] = y
+            
+            datamodel = distobj(**kwargs)
+        else:
+            if datamodel is None:
+                sig = np.std(y)
+            else:
+                sig = datamodel
+            datamodel = pymc.distributions.Normal('data',mu=funcdet,tau=1/sig/sig,observed=True,value=y)
+        d[datamodel.__name__ ]=datamodel
+        
+        return pymc.MCMC(d)
+
+class FunctionModel1D(FunctionModel):
+    """
+    This class is the base for 1-dimensional models with parameters that are 
+    implemented as python functions.
+    
+    Subclassing:
+    The following method MUST be overridden in a subclass:
+    *f(self,x,...)
+    
+    The following methods may be overridden for speed of some operations - pars
+    should be accessed with self.pardict, self.parvals, or by properties/name :
+    *integrate(self,lower,upper)
+    *derivative(self,x,dx)
+    *inv(yval,*args,**kwargs)
+    *_customFit(x,y,fixedpars=(),weights=None,**kwargs)
+    The following attributes may be set for additional information:
+    xAxisName
+    yAxisName
+    
+    The metaclass generates Parameters for each of the 
+    inputs of the function (except self and x)
+    
+    The initializer's arguments specify initial values for the parameters,
+    and any non-parameter kwargs will be passed into the __init__ method
+    """
+    _ndims = 1
+    
+    defaultIntMethod = 'quad'
+    defaultInvMethod = 'brentq'
+    xAxisName = None
+    yAxisName = None
+    
+    
     
     def inv(self,yval,*args,**kwargs):
         """
@@ -520,77 +646,6 @@ class FunctionModel1D(object):
         
         return d
         
-    def getMCMC(self,x,y,priors={},datamodel=None):
-        """
-        Note that this function requires PyMC (http://code.google.com/p/pymc/)
-        
-        To specify the priors, either supply pymc.Stochastric objects, a 2-tuple 
-        (uniform lower and upper), a scalar > 0 (gaussian w/ the center given by 
-        the current value and sigma provided by the scalar), or 0 (poisson with 
-        k set by the current value)
-        
-        Any missing priors will raise a ValueError
-        
-        datamodel can be:
-        *None: a normal distribution with sigma given by the data's standard 
-        deviation is used as the data model
-        *a tuple: (dist,dataname,kwargs)the first element is the 
-        pymc.distribution to be used as the distribution representing the data
-        and the second is the name of the argument to be associated with the 
-        FunctionModel1D's output, and the third is kwargs for the distribution 
-        ("observed" and "data" will be ignored, as will the data argument)
-        *a scalar or sequence of length == data: a normal distribution is used 
-        with sigma specified by the scalar/sequence
-        
-        returns a pymc.MCMMC object for Markov Chain Monte Carlo sampling
-        """
-        import pymc
-        from operator import isSequenceType
-        
-        if set(priors.keys()) != set(self.params):
-            raise ValueError("input priors don't match function params")
-        
-        d={}
-        for k,v in priors.iteritems():
-            if isinstance(v,pymc.StochasticBase):
-                d[k]=v
-            elif isSequenceType(v):
-                if len(v) == 2:
-                    d[k]=pymc.distributions.Uniform(k,v[0].v[1])
-                else:
-                    raise ValueError("couldn't understand sequence "+str(v) )
-            elif v > 0:
-                d[k] = pymc.distributions.Normal(k,self.pardict[k],1.0/v/v)
-            elif v == 0:
-                d[k] = pymc.distributions.Poisson(k,self.pardict[k])
-            else:
-                raise ValueError("couldn't interpret prior "+str(v))
-        
-        funcdict=dict(d)    
-        funcdict['x']=x
-        funcdet=pymc.Deterministic(name='f',eval=self.f,parents=funcdict,doc="FunctionModel1D function")
-        d['f'] = funcdet
-        
-        if type(datamodel) is tuple:
-            distobj,dataarg,kwargs=datamodel
-            if 'name' not in kwargs:
-                kwargs['name'] = 'data'
-                
-            kwargs[dataarg] = funcdet
-            kwargs['observed'] = True
-            kwargs['data'] = y
-            
-            datamodel = distobj(**kwargs)
-        else:
-            if datamodel is None:
-                sig = np.std(y)
-            else:
-                sig = datamodel
-            datamodel = pymc.distributions.Normal('data',mu=funcdet,tau=1/sig/sig,oberved=True,data=y)
-        d[datamodel.__name__ ]=datamodel
-        
-        return pymc.MCMC(d)
-        
     def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
               powerx=False,powery=False,deriv=None,data='auto',fit = False,*args,**kwargs):
         """
@@ -809,22 +864,9 @@ class FunctionModel1D(object):
         derivative(self,x,dx=1) , but dx may be ignored
         """
         return (self(x+dx)-self(x))/dx
-    
-    @abstractmethod
-    def f(self,x):
-        """
-        this function MUST be overriden in subclasses - default arguments will
-        be taken as initial parameter values, and unspecified defaults will
-        default to 1
-        
-        the first parameter (other than 'self' or 'cls', if provided) must be 
-        the data vector/matrix (and have no default value), and the rest are 
-        parameters
-        """
-        raise NotImplementedError
   
   
-class _CompMeta1D(_FuncMeta1D):
+class _CompMeta1D(_FuncMeta):
 #    def __init__(cls,name,bases,dct):
 #        super(_CompMeta1D,cls).__init__(name,bases,dct)
     def __call__(cls,*args,**kwargs):
@@ -1002,8 +1044,21 @@ class CompositeModel1D(FunctionModel1D):
 #<----------------------Module functions -------------->  
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
-    if not issubclass(model,FunctionModel1D):
-        raise TypeError('Supplied model is not a FunctionModel1D')
+    """
+    register a model at the module package level for get_model and list_model
+    
+    model is the class object
+    
+    name is the name to assign (class name will be used if this is None)
+    
+    if overwrite is True, if a model already exists with the provided name, it
+    will be silently overwritten, otherwise a KeyError will be raised
+    
+    if stripmodel is true, the characters 'model' will be stripped from
+    the name before the model is assigned
+    """
+    if not issubclass(model,Model):
+        raise TypeError('Supplied model is not a Model')
     if name is None:
         name = model.__name__.lower()
     else:
@@ -1016,10 +1071,22 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     __model_registry[name]=model
     
 def get_model(modelname):
+    """
+    returns the class object for the requested model name in the model registry
+    """
     return __model_registry[modelname]
 
-def list_models():
-    return __model_registry.keys()
+def list_models(ndims=None):
+    """
+    lists the registered Model objects in the package
+    
+    to get only models that accept a certain dimensionality, set ndims 
+    to the model dimension wanted
+    """
+    if ndims is None:
+        return __model_registry.keys()
+    else:
+        return [k for k,m in __model_registry.iteritems() if m.ndims == ndims]
 
 
 
@@ -1702,24 +1769,24 @@ class PlummerModel(FunctionModel1D):
     def f(self,r,rp=1.,M=1.):
         return 3*M/(4.*pi*rp**3)*(1+(r/rp)**2)**-2.5
 
-class King2DModel(FunctionModel1D):    
+class King2DrModel(FunctionModel1D):    
     def f(self,r,rc=1,rt=2,A=1):
         rcsq=rc*rc
         return A*rcsq*((r*r+rcsq)**-0.5 - (rt*rt+rcsq)**-0.5)**2
     
-class King3DModel(FunctionModel1D):
+class King3DrModel(FunctionModel1D):
     def f(self,r,rc=1,rt=2,A=1):
         rcsq=rc*rc
         z=((r*r+rcsq)**0.5) * ((rt*rt+rcsq)**-0.5)
         return (A/z/z/pi/rc)*((1+rt*rt/rcsq)**-1.5)*(np.arccos(z)/z-(1-z*z)**0.5)
 
-class SchecterModel(FunctionModel1D):
+class SchecterMagModel(FunctionModel1D):
     def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
         from numpy import log,exp
         x=10**(0.4*(Mstar-M))
         return 0.4*log(10)*phistar*(x**(1+alpha))*exp(-x)
     
-class SchecterModelLum(SchecterModel):
+class SchecterLumModel(FunctionModel1D):
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
         #from .phot import lum_to_mag as l2m
         #M,Mstar=l2m(L),l2m(Lstar)
@@ -1755,6 +1822,7 @@ class SersicModel(FunctionModel1D):
         if usecache is True, the cache will be searched, if False it will
         be saved but not used, if None, ignored
         """
+        n = float(n) #sometimes 0d array gets passed in
         if n  in SersicModel._bncache and usecache:
             val = SersicModel._bncache[n]
         else:
