@@ -49,16 +49,75 @@ class _Parameter(object):
         raise AttributeError("can't delete a parameter")
     
 class Model(object):
+    """
+    The superclass of all models
+    
+    subclasses should implement all abstract properties and methods:
+    *__call__: determine the value at the location - note that
+    dimension size-checking should not be performed here - the checkDims 
+    method is for that purpose
+    *ndims: a property that is a tuple of the form (indims,outdims)
+    *params: a sequence of names for the parameters of the model
+    *parvals: a sequence of values for the parameters of the model
+    
+    optional overrides:
+    *pardict: a dictionary with keys as parameter names and values as 
+    the value for that parameter
+    *inv: compute the inverse of the function 
+    """
     __metaclass__ = ABCMeta
     
     @abstractmethod
     def __call__(self,x):
         raise NotImplementedError
+        
+    def checkDims(self,x,strict=False):
+        """
+        calls the function and checks the dimension - raises a DimensionError
+        if the shapes are not appropriate
+        """
+        indim = len(np.array(x,copy=False).shape)
+        if indim > self.indims:
+            raise DimensionError('input dimension is too large')
+        elif strict and indim < self.indims:
+            raise DimensionError('input dimension is too small')
+        
+        y = self(x)
+        
+        outdim = len(np.array(y,copy=False).shape)
+        if outdim > self.outdims:
+            raise DimensionError('output dimension is too large')
+        elif strict and outdim < self.outdims:
+            raise DimensionError('output dimension is too small')
+        
+        return y
     
-    ndims = abstractproperty(doc='The number of dimensions for this model')         
+    
+    ndims = abstractproperty(doc='The number of dimensions for this model as a 2-tuple of (indim,outdim)')    
+    @property
+    def indims(self):
+        return self.ndims[0]     
+    @property
+    def outdims(self):
+        return self.ndims[1]
+    
     params = abstractproperty(doc='a sequence of the parameter names')     
-    parvals = abstractproperty(doc='a sequence of the values in the parameters')             
-    pardict = abstractproperty(doc='a dictionary of the parameter names and values')
+    parvals = abstractproperty(doc='a sequence of the values in the parameters')       
+    @property
+    def pardict(self):
+        """
+        a dictionary of the parameter names and values
+        """
+        return dict([t for t in zip(self.params,self.parvals)])      
+    
+    def inv(output,*args,**kwargs):
+        """
+        compute the inverse of this object
+        
+        There is no generic form for this to allow for non 1-to-1 models, so
+        None will be returned if there is no inverse
+        """
+        return None
     
     
 
@@ -172,7 +231,7 @@ class FunctionModel(Model):
     @property
     def ndims(self):
         """
-        The number of dimensions for this model
+        The number of dimensions for this model as a 2-tuple (indims,outdims)
         """
         return self._ndims
         
@@ -305,7 +364,7 @@ class FunctionModel1D(FunctionModel):
     The initializer's arguments specify initial values for the parameters,
     and any non-parameter kwargs will be passed into the __init__ method
     """
-    _ndims = 1
+    _ndims = (1,1)
     
     defaultIntMethod = 'quad'
     defaultInvMethod = 'brentq'
