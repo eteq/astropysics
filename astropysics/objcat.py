@@ -150,6 +150,7 @@ class CatalogNode(object):
         * a float between -1 and 1 indicating where the root should 
         be evaluated as a fraction
         *'level'/'breathfirst' 
+        *None:only visit this Node
         
         filter can be:
         *False: process and return all values
@@ -194,14 +195,12 @@ class CatalogNode(object):
                 retvals.extend(c.visit(func,traversal))
             if doroot and includeself:
                 retvals.append(func(self))
-        elif traversal is None: #None means postorder
+        elif traversal == 'postorder': #None means postorder
             retvals = []
             for c in self._children:
                 retvals.extend(c.visit(func,traversal))
             if  includeself:
                 retvals.append(func(self))    
-        elif traversal == 'postorder':
-            retvals = self.visit(func,None,filter,includeself)
         elif traversal == 'preorder':
             retvals = self.visit(func,0,filter,includeself)
         elif traversal == 'level' or traversal == 'breadthfirst':
@@ -215,6 +214,8 @@ class CatalogNode(object):
                 elem = q.popleft()
                 retvals.append(func(elem))
                 q.extend(elem._children)
+        elif traversal is None:
+            retvals = [func(self)]
         else:
             raise ValueError('unrecognized traversal type')
         
@@ -408,47 +409,82 @@ class FieldNode(CatalogNode,Sequence):
     def fieldnames(self):
         return tuple(self._fieldnames)
     
-    def setToSource(self,src,missing='skip',traversal=None):
+    def setToSource(self,src,missing='skip'):
         """
         Sets the given src string or Source object as the current source for
-        all fields in this node.
+        all fields in the node.
         
         missing can be:
-        *'raise':raise a ValueError if there is no value with that source
+        *'raise'/'exception':raise a ValueError if there is no value with that source
+        *'warn':give a warning if the value is missing
+        *'skip':do nothing 
+        """
+        if not isinstance(src,Source) and src != 'derived':
+            src = Source(src)      #TODO:see if this is speedier          
+            
+        if callable(missing):
+            action = missing
+        elif missing == 'skip':
+            def action(src,f,node):
+                return None
+        elif missing == 'raise' or missing == 'exception':
+            def action(src,f,node):
+                raise ValueError('could not find src %s in field %s and node %s'%(src,f,node))
+        elif missing == 'warn':
+            from warnings import warn
+            def action(src,f,node):
+                warn('could not find src %s in field %s and node %s'%(src,f,node))
+        else:
+            raise ValueError('invalid missing action')
+        
+        for f in self.fields():
+            if src in f:
+                f.currentobj = src
+            else:
+                action(src,f,self)
+                    
+    @staticmethod
+    def setToSourceAtNode(node,src,missing='skip',traversal='postorder',siblings=False):
+        """
+        Sets the given src string or Source object as the current source for 
+        the requested FieldNode and it's subtree
+        
+        missing can be:
+        *'raise'/'exception':raise a ValueError if there is no value with that source
         *'warn':give a warning if the value is missing
         *'skip':do nothing 
         
-        if traversal is None, no tree traversal will be performed.  Otherwise,
-        the function will be called on all sub-trees
+        traversal is the type of traversal to perform on the subtree
+        
+        siblings applies the function to all the children of the parent of 
+        the node
         """
-        if not isinstance(src,Source):
-                src = Source(src)
-                
-        if traversal is None:
-            if missing == 'skip':
-                action = 0
-            elif missing == 'raise':
-                action = 1
-            elif missing == 'warn':
-                from warnings import warn
-                action = 2
+        if isinstance(node,FieldNode):
+            if siblings and node.parent is not None:
+                node = node.parent
+                includeself = False
             else:
-                raise ValueError('invalid missing action')
-            
-            for f in self.fields():
-                if src in f:
-                    f.current = src
-                else:
-                    if action is 1:
-                        raise ValueError('could not find src %s in field %s'%(src,f))
-                    elif action is 2:
-                        warn('could not find src %s in field %s'%(src,f))
-        else:
+                includeself = True
+                
             def f(node):
                 if hasattr(node,'setToSource'):
-                    node.setToSource(src,missing,None)
-            self.visit(f,traversal=traversal)
-                
+                    node.setToSource(src,missing)
+                    return node
+            return node.visit(f,traversal=traversal,includeself=includeself,filter=None)
+        else: #assume iterable
+            vals = []
+            for n in node:
+                vals.extend(setToSourceAtNode(n,src,missing,traversal,siblings))
+            return vals
+    def setToSourceAtSelf(self,*args,**kwargs):
+        """
+        Sets the given src string or Source object as the current source for 
+        this FieldNode and it's subtree
+        
+        see `FieldNode.setToSourceAtNode` for details
+        """
+        return setToSourceAtNode(self,*args,**kwarg)
+
     
     def extractField(self,*args,**kwargs):
         """
@@ -471,64 +507,97 @@ class FieldNode(CatalogNode,Sequence):
             return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     
     @staticmethod
-    def extractFieldAtNode(node,fieldname,traversal='postorder',missing=False,
-                           converter=None,dtype=None,includeself=True):
+    def extractFieldAtNode(node,fieldnames,traversal='postorder',missing='0',
+                           converter=None,asrec=False,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
         specified fieldname
         
+        fieldnames can be a single field name, a sequence of fieldnames,
+        or a comma-seperated string of field names
+        
         traversal is of an argument like that for CatalogNode.visit
         
         missing determines the behavior in the event that a field is not 
         present (or a non FieldNode is encounterd) it can be:
-        *'exception': raise a KeyError if the field is missing or a 
-        TypeError if  
+        *'exception': raise an exception if the field is missing
         *'skip': do not include this object in the final array
-        *0/False: put 0 in the array location
+        *'0': put 0 in the array location
+        *'mask': put 0 in the array location and return a mask of missing 
+                 values as the second return value
         
         converter is a function that is applied to the data before being 
         added to the array (or None to perform no conversion)
         
-        dtype is the numpy dtype/string to use for this array
+        asrec generates a record array instead of a regular array - for
+        multiple fields, if this is False, the output will be f x N
         
         includeself determines if the node itself should be included
         """
-        #TODO: optimize with array size knowledge ?
-        if missing == 'exception':
-            filter = False
-            def vfunc(node):
-                return node[fieldname]
-        elif missing == 'skip':
-            filter = None
-            def vfunc(node):
-                try:
-                    return node[fieldname]
-                except (KeyError,IndexError,TypeError,AttributeError):
-                    return None
-        elif not missing:
-            filter = False
-            def vfunc(node):
-                try:
-                    return node[fieldname]
-                except (KeyError,IndexError,TypeError,AttributeError):
-                    return 0
-        else:
-            raise ValueError('Unrecognized value for what to do with missing fields')
+        from functools import partial
+        
+        if missing not in ('exception','raise','skip','mask','0'):
+            raise ValueError('invalid missing action %s'%missing)
+        
+        if isinstance(fieldnames,basestring):
+            if ',' in fieldnames:
+                fieldnames = fieldnames.split(',')
+            else:
+                fieldnames = [fieldnames]
         
         if converter is None:
-            lst = node.visit(vfunc,traversal=traversal,filter=filter,includeself=includeself)
+            if missing == 'exception' or missing == 'raise':
+                def visitfunc(node,fieldname):
+                    return node[fieldname]
+            else:
+                def visitfunc(node,fieldname):
+                    try:
+                        return node[fieldname]
+                    except (KeyError,IndexError,TypeError,AttributeError):
+                        return 0
         else:
-            lst = node.visit(lambda node:converter(vfunc(node)),traversal=traversal,filter=filter,includeself=includeself)
-        
-        if dtype is None:
+            if missing == 'exception' or missing == 'raise':
+                def visitfunc(node,fieldname):
+                    return converter(node[fieldname])
+            else:
+                def visitfunc(node,fieldname):
+                    try:
+                        return converter(node[fieldname])
+                    except (KeyError,IndexError,TypeError,AttributeError):
+                        return 0
+                    
+        def maskfunc(node,fieldname):
             try:
-                #TODO: test this or be smarter
-                return np.array(lst,dtype=node.type)
-            except:
-                pass
+                return True
+            except (KeyError,IndexError,TypeError,AttributeError):
+                return False 
         
-        return np.array(lst,dtype=dtype) 
+        lsts = []
+        masks = []
+        for fn in fieldnames:
+            lsts.append(node.visit(partial(visitfunc,fieldname=fn),traversal=traversal,includeself=includeself))
+            masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,includeself=includeself))
+            
+        if missing=='skip':
+            lsts=[l[m] for l,m in zip(lsts,maks)]
+            
+         
+        if asrec:
+            arr = np.rec.fromarrays(lsts,names=fieldnames)
+            masks = np.rec.fromarrays(masks,names=fieldnames)
+        else:
+            arr = np.array(lsts)
+            masks = np.array(masks)
+            
+        if arr.shape[0]==1:
+            arr = arr[0]
+            masks = masks[0]
+            
+        if missing == 'mask':
+            return arr,masks
+        else:
+            return arr
 
 def generate_pydot_graph(node,graphfields=True):
     """
@@ -1490,7 +1559,7 @@ class ObservedValue(FieldValue):
         self._value = d['_value']
         
     def __str__(self):
-        return 'Value %s:%s'%(self.value,self.source)
+        return '%s:Value %s'%(self.source,self.value)
     
     @property    
     def value(self):
