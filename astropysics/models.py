@@ -26,6 +26,13 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 from .spec import HasSpecUnits as _HasSpecUnits
 
+class DimensionError(Exception):
+    """
+    This exception indicates a problem with the dimensionality of 
+    an input or model
+    """
+    def __init__(self,message):
+        super(DimensionError,self).__init__(message)
 
 class _Parameter(object):
     
@@ -112,11 +119,13 @@ class Model(object):
     
     def inv(output,*args,**kwargs):
         """
-        compute the inverse of this object
+        Compute the inverse of this model for the requested output
         
-        There is no generic form for this to allow for non 1-to-1 models, so
-        None will be returned if there is no inverse
+        It should return None if the model is not invertible, or raise a
+        DimensionError if indims != outdims
         """
+        if self.indims != self.outdims:
+            raise DimensionError('inverse only meaningful if input and output dimensions are the same')
         return None
     
     
@@ -185,7 +194,8 @@ class _FuncMeta(ABCMeta):
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             
-        obj.f(np.array([0]),*obj.parvals) #try once to check for a working function
+        #TODO: smarter function check?
+        #obj.f(np.zeros([1 for i in range(cls._ndims[0])]),*obj.parvals) #try once to check for a working function
             
         #set initial values
         if len(args)+len(kwargs) > len(obj.params):
@@ -469,7 +479,7 @@ class FunctionModel1D(FunctionModel):
         returns the vector of the best fit parameters, and sets the parameters 
         if updatepars is True
         
-        the full output is available is self.lastFit
+        the full output is available is self.lastfit
         
         if savedata is true, the input fit data will be available in 
         self.fitteddata as an (x,y) tuple
@@ -585,7 +595,7 @@ class FunctionModel1D(FunctionModel):
                 else:
                     raise ValueError('Unrecognzied method %s'%method)
             
-        self.lastFit = res
+        self.lastfit = res
         v=res[0] #assumes output is at least a tuple - needs "full_output=1 !"
         
         try:
@@ -1100,7 +1110,7 @@ class CompositeModel1D(FunctionModel1D):
     def ops(self):
         return self._ops  
         
-#<----------------------Module functions -------------->  
+#<-------------------------------Module functions ----------------------------->  
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
     """
@@ -1145,11 +1155,13 @@ def list_models(ndims=None):
     if ndims is None:
         return __model_registry.keys()
     else:
+        if np.isscalar(ndims):
+            ndims = (ndims,ndims)
         return [k for k,m in __model_registry.iteritems() if m.ndims == ndims]
 
 
 
-#<----------------------Builtin models----------------->
+#<---------------------------------Builtin models------------------------------>
 class ConstantModel(FunctionModel1D):
     """
     the simplest model imaginable - just a constant value
@@ -1181,7 +1193,7 @@ class LinearModel(FunctionModel1D):
         fixint and fixslope can be used to specify the intercept or slope of the 
         fit or leave them free by having fixint or fixslope be False or None
         
-        lastFit stores ((m,b),dm,db,dy)
+        lastfit stores ((m,b),dm,db,dy)
         """  
         if weights is not None:
             if fixedpars or len(kwargs)>0:
@@ -1949,6 +1961,216 @@ class MaxwellBoltzmanSpeedModel(MaxwellBoltzmannModel):
     def f(self,v,T=273,m=me):
         from .constants import kb,pi
         return 4*pi*v*v*(m/(2*pi*kb*T))**1.5*np.exp(-m*v*v/2/kb/T)
+    
+    
+class Plane(FunctionModel):
+    """
+    Generates a plane that follows the form
+    d = a*x+b*y+c*z (e.g. (a,b,c) is the normal vector and 
+    d/a, b ,or c are the intercepts
+    """
+    _ndims = (2,1)
+    
+    def __init__(self,varorder='xyz',vn=(1,0,0),wn=(0,1,0),origin=(0,0,0)):
+        self.varorder = varorder
+        self.vn=vn
+        self.wn=wn
+        self.origin = origin
+    
+    def _getvaro(self):
+        return self._varo
+    def _setvaro(self,val):
+        if val == 'xyz':
+            self._f = self._fxyz
+        elif val == 'yxz':
+            self._f = self._fyxz
+        elif val == 'xzy':
+            self._f = self._fxzy
+        elif val == 'zxy':
+            self._f = self._fzxy
+        elif val == 'yzx':
+            self._f = self._fyzx
+        elif val == 'zyx':
+            self._f = self._fzyx
+        else:
+            raise ValueError('unrecognized variable order')
+        self._varo = val
+    varorder = property(_getvaro,_setvaro)
+    
+    def _getvn(self):
+        return self._vn
+    def _setvn(self,val):
+        vn = np.array(val)
+        if vn.shape != (3,):
+            raise ValueError('vn must be a length-3 vector')
+        self._vn = vn
+    vn = property(_getvn,_setvn,doc='3D vector to project on to plane to get 2D basis vector 1')
+    
+    def _getwn(self):
+        return self._wn
+    def _setwn(self,val):
+        wn = np.array(val)
+        if wn.shape != (3,):
+            raise ValueError('wn must be a length-3 vector')
+        self._wn = wn
+    wn = property(_getwn,_setwn,doc='3D vector to project on to plane to get 2D basis vector 2')
+
+    def _getorigin(self):
+        n = self.n
+        scale = (self.d - np.dot(self._origin,n))/np.dot(n,n)
+        return self._origin + scale*n
+    def _setorigin(self,val):
+        val = np.array(val,copy=False)
+        if val.shape == (2,):
+            self._origin = self.unproj(*val)[:,0]
+        elif val.shape == (3,):
+            self._origin = val
+        else:
+            raise ValueError('invalid shape for orign - must be 2-vector or 3-vector')
+    origin = property(_getorigin,_setorigin)
+    
+    @property
+    def n(self):
+        """
+        non-normalized unit vector
+        """
+        return np.array((self.a,self.b,self.c))
+    
+    @property
+    def nhat(self):
+        """
+        normalized unit vector
+        """
+        n = np.array((self.a,self.b,self.c))
+        return n/np.linalg.norm(n)
+    
+    def f(self,x,a=0,b=0,c=1,d=0):
+        x = np.array(x,copy=False)
+        shp = x.shape
+        if len(shp) > 2: 
+            x = x.reshape(2,np.prod(shp[1:]))
+            y = self._f(x,a,b,c,d)
+            return y.reshape(shp[1:])
+        else:
+            return self._f(x,a,b,c,d)
+    
+    def _fxyz(self,v,a,b,c,d):
+        M = np.matrix([(a/c,b/c)])
+        return d/c-(M*v).A
+    def _fyxz(self,v,a,b,c,d):
+        M = np.matrix((b/c,a/c))
+        return d/c-(M*v).A
+    def _fxzy(self,v,a,b,c,d):
+        M = np.matrix((a/b,c/b))
+        return d/b-(M*v).A
+    def _fzxy(self,v,a,b,c,d):
+        M = np.matrix((c/b,a/b))
+        return d/b-(M*v).A
+    def _fyzx(self,v,a,b,c,d):
+        M = np.matrix((b/a,c/a))
+        return d/a-(M*v).A
+    def _fzyx(self,v,a,b,c,d):
+        M = np.matrix((c/a,b/a))
+        return d/a-(M*v).A
+    
+    def fitData(self,x,y,z,w=None):
+        """
+        least squares fit using the output variable as the dependent
+        """
+        from scipy.optimize import leastsq
+        #reorder vars to get the right fitter
+        x,y,z = eval(','.join(self._varo))
+        
+        xy = np.array([x,y],copy=False)
+        if w is None:
+            f = lambda v:(self.f(xy,*v)-z).ravel()
+        else:
+            f = lambda v:(self.f(xy,*v)-z).ravel()*w**0.5
+        
+        res = leastsq(f,self.parvals,full_output=1)
+        self.lastfit = res
+        
+        self.parvals = res[0]
+        return res[0]
+    
+    def distance(self,x,y,z):
+        """
+        compute the distance of a set of points in the 3D space from 
+        the plane
+        """
+        shp = list(x.shape)
+        x = np.array(x,copy=False).ravel()
+        y = np.array(y,copy=False).ravel()
+        z = np.array(z,copy=False).ravel()
+        p = np.c_[x,y,z]
+        
+        return (np.dot(p,self.n)+self.d).reshape(shp)
+    
+    def proj(self,x,y,z):
+        """
+        project points onto the plane from the 3D space
+        
+        returns a 2 x N aray 
+        """
+        n = self.nhat
+        
+        vn = np.cross(np.cross(n,self.vn),n)
+        wn = np.cross(np.cross(n,self.vn),n)
+        
+        shp = list(x.shape)
+        x = np.array(x,copy=False).ravel()
+        y = np.array(y,copy=False).ravel()
+        z = np.array(z,copy=False).ravel()
+        p = np.c_[x,y,z] - self.origin
+        
+        shp.insert(0,2)
+        return (np.c_[np.dot(p,vn),np.dot(p,wn)].T).reshape(shp)
+    
+    def unproj(self,v,w):
+        """
+        extract points from the plane back into the 3D space
+        
+        returns a 3 x N array
+        """
+        n = self.nhat
+        
+        vn = np.cross(np.cross(n,self.vn),n)
+        wn = np.cross(np.cross(n,self.vn),n)
+        
+        shp = list(v.shape)
+        v = np.array(v,copy=False).ravel()
+        w = np.array(w,copy=False).ravel()
+        
+        shp.insert(0,3)
+        return (v*vn+w*wn + self.origin).reshape(shp)
+    
+    def plot3d(self,data=np.array([(-1,1),(-1,1),(-1,1)]),n=10,
+               showdata=False,clf=True,**kwargs):
+        """
+        data should be 3 x N
+        """
+        import enthought.mayavi.mlab as M
+        data = np.array(data,copy=False)
+        
+        xi,xx = data[0].min(),data[0].max()
+        yi,yx = data[1].min(),data[1].max()
+        x,y = np.meshgrid(np.linspace(xi,xx,n),np.linspace(yi,yx,n))
+        
+        if clf:
+            M.clf()
+        
+        if 'color' not in kwargs:
+            kwargs['color']=(1,0,0)
+        if 'opacity' not in kwargs:
+            kwargs['opacity'] = 0.5
+            
+        M.mesh(x,y,self([x,y]),**kwargs)
+        if showdata:
+            from operator import isMappingType
+            if isMappingType(showdata):
+                M.points3d(*data,**showdata)
+            else:
+                M.points3d(*data)
     
 #register all Models in this module
 for o in locals().values():
