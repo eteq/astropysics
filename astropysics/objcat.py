@@ -2163,11 +2163,14 @@ class StructuredFieldNode(FieldNode):
             return dv,fi
         
         
-def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
+def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
+                  namefield=None):
     """
     Applies values from an array to CatalogNodes.
     
-    array must be a 2-dimensional array or a 1-dimensional structured array
+    array must be a 2-dimensional array or a 1-dimensional structured array.
+    If a 2D array, the first dimension should be the number of nodes, while
+    the second dimension should match the number of fields
     
     source is a Source object or a string that will be converted to a Source
     object
@@ -2187,6 +2190,12 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
     to callables or structured array field names to callables that will be
     called on each array element before being added to the FieldNode as 
     converter(value,row).  If converters is None, no converting is performed.
+    
+    namefield is a field name that will be set to a unique code of the form
+    'src-i' where i is element index of the array row (or None to apply 
+    no name).  It can also be a 2-tuple (name,converter) where converter is
+    a callable of the form converter(i) that should return the value to 
+    apply to the field.
     """
     from operator import isSequenceType,isMappingType
     from inspect import getargspec
@@ -2234,7 +2243,9 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
             if k in nms:
                 converters[nms.index(k)] = converters[k]
     elif array.dtype.names is None and len(array.shape) == 2:
-        pass #2d array
+        #2d array
+        if array.shape[1] != len(fields):
+            raise ValueError('second dimension of array does not match number of fields')
     else:
         raise ValueError('invalid input array')
     
@@ -2266,6 +2277,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
     
     if matcher is None and len(array) != len(nodes):
         raise ValueError('with no matcher, the number of nodes must match the size of the array')
+            
     
     for i,a in enumerate(array):
         if matcher is None:
@@ -2289,25 +2301,57 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None):
             if fieldseq[k] is not None:
                 getattr(n,fieldseq[k])[source] = convseq[k](v,a)
         
-def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,converters=None,filter=None):
+def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
+                   converters=None,filter=None,namefield=None,nameconv=None):
+    """
+    Generates a catalog of nodes from the array of data.  
+    
+    See ``arrayToNodes`` for array,source,fields, and covnerter arguments.
+    
+    parent is the object to use as the parent for all of the nodes (which will
+    be returned, a string (in which case a Catalog object will be created
+    and returned), or None (return value will be a sequence of nodes)
+    
+    nodetype is the class to use to create the nodes (usually a subclass of 
+    ``StructuredFieldNode``)
+    
+    filter is a function that will be called on the array row and if it 
+    returns True, a node will be created, and if False, that row will be 
+    skipped
+    
+    namefield is the field to use to apply the name of the node from the 
+    index of the array row.  nameconv is a function called as nameconv(i)
+    that should return the value to apply to the field.  If nameconv is None,
+    this will default to 'sourcestr-i'.  If namefiled is None, no name
+    will be applied
+    """
     if isinstance(parent,basestring):
         parent = Catalog(parent)
-    
-    if filter:
-        nnodes = 0
-        for a in array:
-            if filter(a):
-                nnodes += 1
-                
+        
+    source = Source(source)
+        
+    if namefield and nameconv is None:
+        srcstr = source._str.split('/')[0]
+        nameconv = lambda i:srcstr+'-'+str(i)
+        
+    if filter:  
         def matcher(arrayrow,node):
             return filter(arrayrow)
     else:
-        nnodes = len(array)
+        filter = lambda a:True
         matcher = None
     
     nodes = []
-    for i in range(nnodes):
-        nodes.append(nodetype(parent=parent))
+    for i,a in enumerate(array):
+        if filter(a):
+            n = nodetype(parent=parent)
+            nodes.append(n)
+            if namefield:
+                if namefield not in n:
+                    n.addField(namefield)
+                getattr(n,namefield)[source] = nameconv(i)
+                    
+    
     
     arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher)
     
