@@ -241,14 +241,15 @@ class CatalogNode(object):
         oldchildren = self._children
         if not savechildren:
             self._children = []
-            
+          
         try:
+            pass
             if isinstance(file,basestring):
                 #filename
                 with open(file,'w') as f:
-                    return cPickle.dump(self,f,protocol=2)
+                    cPickle.dump(self,f,protocol = 0)
             else:
-                return cPickle.load(file)
+                cPickle.dump(self,file,protocol = 0)
         finally:
             self._parent = oldpar
             self._children = oldchildren
@@ -307,11 +308,7 @@ class FieldNode(CatalogNode,Sequence):
         d['_fieldnames'] = self._fieldnames
         for n in self._fieldnames:
             val = getattr(self,n)
-            if isinstance(val,DerivedValue):
-                from warnings import warn
-                warn("cannot pickle derived values that aren't part of a structure - skipping %s"%val._str)
-            else:
-                d[n] = val
+            d[n] = val
         return d
     def __setstate__(self,d):
         super(FieldNode,self).__setstate__(d)
@@ -523,7 +520,7 @@ class FieldNode(CatalogNode,Sequence):
         present (or a non FieldNode is encounterd) it can be:
         *'exception': raise an exception if the field is missing
         *'skip': do not include this object in the final array
-        *'0': put 0 in the array location
+        *'0': put 0 in the array location - this also replaces Nones with 0
         *'mask': put 0 in the array location and return a mask of missing 
                  values as the second return value
         
@@ -553,7 +550,8 @@ class FieldNode(CatalogNode,Sequence):
             else:
                 def visitfunc(node,fieldname):
                     try:
-                        return node[fieldname]
+                        res = node[fieldname]
+                        return res if res is not None else 0
                     except (KeyError,IndexError,TypeError,AttributeError):
                         return 0
         else:
@@ -563,7 +561,8 @@ class FieldNode(CatalogNode,Sequence):
             else:
                 def visitfunc(node,fieldname):
                     try:
-                        return converter(node[fieldname])
+                        res = converter(node[fieldname])
+                        return res if res is not None else 0
                     except (KeyError,IndexError,TypeError,AttributeError):
                         return 0
                     
@@ -652,9 +651,9 @@ class Field(MutableSequence):
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals','_nodewr','_notifywrs')
+    __slots__=('_name','_type','_vals','_nodewr','_notifywrs','_units')
     
-    def __init__(self,name,type=None,defaultval=None,usedef=None):
+    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None):
         """
         The field must have a name, and can optionally be given a type
         """        
@@ -663,12 +662,25 @@ class Field(MutableSequence):
         self._type = type
         self._notifywrs = None
         self._nodewr = None
+        self._units = units
         
         if usedef or (usedef is None and defaultval is not None):
             self.default = defaultval
-            
+    
+    _okDVs = set() #DerivedValues that are safe to ignore, used by StructuredFieldNode
     def __getstate__(self):
-        return {'_name':self._name,'_type':self._type,'_vals':self._vals}
+        prunedvals = []
+        for v in self._vals:
+            if isinstance(v,DerivedValue):
+                if v in Field._okDVs:
+                    Field._okDVs.remove(v)
+                else:
+                    from warnings import warn
+                    warn("can't pickle DerivedValue in %s"%self)
+            else:
+                prunedvals.append(v)
+        return {'_name':self._name,'_type':self._type,'_vals':prunedvals}
+        
     def __setstate__(self,d):
         self._name = d['_name']
         self._type = d['_type']
@@ -759,6 +771,7 @@ class Field(MutableSequence):
                     deadrefs.append(i)
                 else:
                     callobj(oldval,newval)
+                    
             
             if len(deadrefs) == len(self._notifywrs):
                 self._notifywrs = None
@@ -860,6 +873,13 @@ class Field(MutableSequence):
     @property
     def name(self):
         return self._name
+    
+    #TODO: some sort of unit support beyond just names?
+    def _getUnits(self):
+        return self._units
+    def _setUnits(self,val):
+        self._units = val
+    units = property(_getUnits,_setUnits)
     
     def _getNode(self):
         return None if self._nodewr is None else self._nodewr()
@@ -1264,7 +1284,7 @@ class Source(object):
     del WeakValueDictionary
     
     def __init__(self,src,location=None):
-        src = str(src)
+        src = src._str if hasattr(src,'_str') else str(src)
         
         if location is None and '/' in src:
             srcsp = src.split('/')
@@ -1602,7 +1622,7 @@ class DerivedValue(FieldValue):
             
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
-            if flinkdict is not None and len(flinkdict) > 0:
+            if flinkdict:
                 #populate any function defaults if not given already
                 if defaults is not None:
                     for a,d in zip(reversed(args),defaults):
@@ -2006,17 +2026,17 @@ class StructuredFieldNode(FieldNode):
     def __getstate__(self):
         import inspect
         
+        #locate derived values and store where they should be re-inserted
         currderind = {}
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
             if isinstance(v,tuple):
                 n = v[1].name
                 if n in self._fieldnames:
                     fi = getattr(self,n)
-                    while 'derived' in fi:
-                        dv = fi['derived']
-                        if dv._f is v[0]._f:
+                    for dv in fi:
+                        if hasattr(dv,'_f') and dv._f is v[0]._f:
                             currderind[n] = fi.index(dv)
-                        del fi[dv._source._str]
+                            Field._okDVs.add(dv)
                     
         d = super(StructuredFieldNode,self).__getstate__()
         d['_altered'] = self._altered
@@ -2143,7 +2163,8 @@ class StructuredFieldNode(FieldNode):
         self.delField(fieldname)
     
     @staticmethod
-    def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,usedef=None,**kwargs):
+    def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
+                         usedef=None,units=None,**kwargs):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the function.  Note that the
@@ -2158,13 +2179,14 @@ class StructuredFieldNode(FieldNode):
         else: #do actual operation
             if name is None:
                 name = f.__name__
-            fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef)
+            fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,units=units)
+            
             dv = DerivedValue(f,None,kwargs)
             return dv,fi
         
         
 def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
-                  namefield=None):
+                  namefield=None,setcurr=True):
     """
     Applies values from an array to CatalogNodes.
     
@@ -2189,7 +2211,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
     converters  are either a sequence of callables or a mapping from indecies 
     to callables or structured array field names to callables that will be
     called on each array element before being added to the FieldNode as 
-    converter(value,row).  If converters is None, no converting is performed.
+    converter(value).  If converters is None, no converting is performed.
     
     namefield is a field name that will be set to a unique code of the form
     'src-i' where i is element index of the array row (or None to apply 
@@ -2261,7 +2283,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
     convseq = []
     for i in range(len(array[0])):
         if i not in converters:
-            convseq.append(lambda val,row:val)
+            convseq.append(lambda val:val)
         else:
             convseq.append(converters[i])
 #            cver = converters[i]
@@ -2292,17 +2314,21 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
                 j = None
             if j is not None:
                 del nodes[j]
-        
+
         for fi in fieldseq:
             if fi is not None and fi not in n.fieldnames:
                 n.addField(fi)
         
         for k,v in enumerate(a):
             if fieldseq[k] is not None:
-                getattr(n,fieldseq[k])[source] = convseq[k](v,a)
+                fi = getattr(n,fieldseq[k])
+                fi[source] = convseq[k](v)
+                if setcurr:
+                    fi.currentobj = source
         
 def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
-                   converters=None,filter=None,namefield=None,nameconv=None):
+                   converters=None,filter=None,namefield=None,nameconv=None,
+                   setcurr=True):
     """
     Generates a catalog of nodes from the array of data.  
     
@@ -2327,9 +2353,8 @@ def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
     """
     if isinstance(parent,basestring):
         parent = Catalog(parent)
-        
-    source = Source(source)
-        
+    
+    source = Source(source) 
     if namefield and nameconv is None:
         srcstr = source._str.split('/')[0]
         nameconv = lambda i:srcstr+'-'+str(i)
@@ -2349,11 +2374,12 @@ def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
             if namefield:
                 if namefield not in n:
                     n.addField(namefield)
-                getattr(n,namefield)[source] = nameconv(i)
-                    
+                nfi = getattr(n,namefield)
+                if len(nfi) == 1 and None in nfi:
+                    del nfi[None]
+                nfi[source] = nameconv(i)
     
-    
-    arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher)
+    arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher,setcurr=setcurr)
     
     if parent is None:
         return nodes
