@@ -380,6 +380,7 @@ class FunctionModel1D(FunctionModel):
     defaultInvMethod = 'brentq'
     xAxisName = None
     yAxisName = None
+    fitteddata = None
     
     
     
@@ -750,7 +751,7 @@ class FunctionModel1D(FunctionModel):
             self.fitData(*data,**fit)
             
         if data is 'auto':
-            if hasattr(self,'fitteddata') and self.fitteddata:
+            if self.fitteddata:
                 data = self.fitteddata
             else:
                 data = None
@@ -1640,7 +1641,8 @@ class SmoothSplineModel(FunctionModel1D):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+        self.fitteddata=(np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
+        self.fitData(*self.fitteddata)
             
     def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
@@ -1698,7 +1700,8 @@ class KnotSplineModel(FunctionModel1D):
         
         self._oldd=self._oldk=self._ws=None
         self.locmethod = locmethod
-        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+        self.fitteddata=(np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
+        self.fitData(*self.fitteddata)
             
     def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
@@ -1716,7 +1719,7 @@ class KnotSplineModel(FunctionModel1D):
             self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
         else:
             raise ValueError('unrecognized locmethod %s'%self.locmethod)
-        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=self.degree,w=kwargs['weights'] if 'weights' in kwargs else None)
+        self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=kwargs['weights'] if 'weights' in kwargs else None)
         
         self._oldk = self.nknots
         self._oldd = self.degree
