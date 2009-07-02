@@ -1641,7 +1641,7 @@ class SmoothSplineModel(FunctionModel1D):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata=(np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
+        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
         self.fitData(*self.fitteddata)
             
     def _customFit(self,x,y,fixedpars=(),**kwargs):
@@ -1675,6 +1675,58 @@ class SmoothSplineModel(FunctionModel1D):
     
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
+            xd,yd = self.fitteddata
+            self._customFit(xd,yd,weights=self._ws)
+        
+        return self.spline(x)
+    
+    
+class InterpolatedSplineModel(FunctionModel1D):
+    """
+    this uses a B-spline as a model for the function.  Note that by
+    default the degree is left alone when fitting, as this model
+    always fits the points perfectly.
+    
+    the scipy.interpolate.InterpolatedUnivariateSpline class is used to
+    do the calculation (in the "spline" attribute) 
+    """
+    def __init__(self):
+        super(InterpolatedSplineModel,self).__init__()
+        
+        self._oldd=self._olds=self._ws=None
+        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+        self.fitData(*self.fitteddata)
+            
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
+        """
+        just fits the spline with the current s-value - if s is not changed,
+        it will execute very quickly after
+        """
+        from scipy.interpolate import InterpolatedUnivariateSpline
+        
+        self.spline = InterpolatedUnivariateSpline(x,y,w=kwargs['weights'] if 'weights' in kwargs else None,k=self.degree)
+        
+        self._oldd = self.degree
+        
+        return np.array([self.degree])
+        
+    def fitData(self,x,y,**kwargs):
+        self._oldd=None
+        if 'savedata' in kwargs and not kwargs['savedata']:
+            raise ValueError('data must be saved for spline models')
+        else:
+            kwargs['savedata']=True
+            
+        if 'weights' in kwargs:
+            self._ws = kwargs['weights']
+        else:
+            self._ws = None
+            
+        sorti = np.argsort(x)    
+        return super(InterpolatedSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
+    
+    def f(self,x,degree=3):        
+        if self._oldd != degree:
             xd,yd = self.fitteddata
             self._customFit(xd,yd,weights=self._ws)
         

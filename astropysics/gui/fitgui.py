@@ -10,7 +10,7 @@ from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button,Event,
 from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
                                     InstanceEditor,EnumEditor
 from enthought.traits.ui.menu import ModalButtons
-from enthought.chaco.api import Plot,ArrayPlotData
+from enthought.chaco.api import Plot,ArrayPlotData,jet
 from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool
 from enthought.enable.component_editor import ComponentEditor
 
@@ -43,18 +43,21 @@ class _TraitedModel(HasTraits):
             g = Group()
             g.content.append(Label('No Model Selected'))
         else:
-            g = Group(columns=5,label=self.modelname,show_border=True)
+            g = Group(columns=8,label=self.modelname,show_border=True)
             for p in model.params:
                 self.add_trait(p,Float)
                 setattr(self,p,getattr(model,p))
                 self.on_trait_change(self._param_change_handler,p)
-                
                 g.content.append(Item(p))
+                
+                ffp = 'fixfit_'+p
+                self.add_trait(ffp,Bool)
+                setattr(self,ffp,False)
+                self.on_trait_change(self._param_change_handler,ffp)
+                g.content.append(Item(ffp,label='Fix?'))
         
         view = View(g,buttons=['Apply','Revert','OK','Cancel'])
         self.trait_view('traits_view',view)
-        
-        
     
     def _param_change_handler(self,name,new):
         setattr(self.model,name,new)
@@ -69,30 +72,37 @@ class _TraitedModel(HasTraits):
     def _fitdata_fired(self,new):
         from operator import isSequenceType,isMappingType
         
-        if isSequenceType(new) and len(new) == 2:
-            kw={'x':new[0],'y':new[1]}
-        elif isMappingType(new):
-            kw = dict(new)
-            for xy in ('x','y'):
-                if xy not in new:
-                    if self.model.fiteddata:
-                        new[xy] = self.model.fiteddata[0]
-                    else:
-                        raise ValueError('not pre-fitted data available')
-        elif new is True:
-            if self.model.fiteddata:
-                fd = self.model.fiteddata
-                kw= {'x':fd[0],'y':fd[1]}
+        if self.model is not None:
+            if isSequenceType(new) and len(new) == 2:
+                kw={'x':new[0],'y':new[1]}
+            elif isMappingType(new):
+                kw = dict(new)
+                for xy in ('x','y'):
+                    if xy not in new:
+                        if self.model.fiteddata:
+                            new[xy] = self.model.fiteddata[0]
+                        else:
+                            raise ValueError('not pre-fitted data available')
+            elif new is True:
+                if self.model.fiteddata:
+                    fd = self.model.fiteddata
+                    kw= {'x':fd[0],'y':fd[1]}
+                else:
+                    raise ValueError('No data to fit')
             else:
-                raise ValueError('No data to fit')
-        else:
-            raise ValueError('unusable fitdata event input')
-
-        self.model.fitData(**kw)
-        self.updatetraitparams = True
+                raise ValueError('unusable fitdata event input')
+            
+            if 'fixedpars' not in kw:
+                kw['fixedpars'] = [tn.replace('fixfit_','') for tn in self.traits() if tn.startswith('fixfit_') if getattr(self,tn)]
+            
+            self.model.fitData(**kw)
+            self.updatetraitparams = True
     
     def _get_modelname(self):
-        return self.model.__class__.__name__
+        if self.model is None:
+            return 'None'
+        else:
+            return self.model.__class__.__name__
         
 class _NewModelSelector(HasTraits):
     modelnames = List
@@ -123,8 +133,8 @@ class FitGui(HasTraits):
     fitmodel = Button('Fit Model')
     updatemodelplot = Button('Update Model Plot')
     autoupdate = Bool(True)
-    xdata = Array
-    ydata = Array
+    data = Array(dtype=float,shape=(2,None))
+    weights = Array
     
     nmod = Int(100)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -152,22 +162,24 @@ class FitGui(HasTraits):
                     title='Data Fitting'
                     )
     
-    def __init__(self,xdata,ydata,mod=None,**kwargs):
+    def __init__(self,xdata,ydata,mod=None,weights=None,**kwargs):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
 
         self.tmodel = _TraitedModel(mod)
 
         self.on_trait_change(self._paramchanged,'tmodel.paramchange')
         
-        self.xdata = xdata
-        self.ydata = ydata
+        self.data = [xdata,ydata]
+        self.weights = np.ones_like(xdata) if weights is None else weights
         
-        pd = ArrayPlotData(xdata=self.xdata,ydata=self.ydata)
+        pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
         self.plot = plot = Plot(pd,resizable='hv')
         
-        plot.plot(('xdata','ydata'),name='data',type='scatter',color='blue',marker='circle')
-        self.updatemodelplot = False #force plot update
-        plot.plot(('xmod','ymod'),name='model',type='line',line_style='solid',color='red',line_width=2)
+        plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=jet,marker='circle')
+        if not isinstance(mod,Model):
+            self.fitmodel = True
+        self.updatemodelplot = False #force plot update - generates xmod and ymod
+        plot.plot(('xmod','ymod'),name='model',type='line',line_style='dash',color='black',line_width=2)
         
         plot.tools.append(PanTool(plot))
         plot.tools.append(ZoomTool(plot))
@@ -184,10 +196,10 @@ class FitGui(HasTraits):
         #if False (e.g. button click), update regardless, otherwise check for autoupdate
         if new and not self.autoupdate:
             return
-        
+
         mod = self.tmodel.model
         if mod:
-            xd = self.xdata
+            xd = self.data[0]
             xmod = np.linspace(np.min(xd),np.max(xd))
             ymod = self.tmodel.model(xmod)
             
@@ -202,7 +214,11 @@ class FitGui(HasTraits):
         preaup = self.autoupdate
         try:
             self.autoupdate = False
-            self.tmodel.fitdata = (self.xdata,self.ydata)
+            xd,yd = self.data
+            kwd = {'x':xd,'y':yd}
+            if xd.shape == self.weights.shape:
+                kwd['weights'] = self.weights
+            self.tmodel.fitdata = kwd
         finally:
             self.autoupdate = preaup
             
@@ -216,19 +232,25 @@ class FitGui(HasTraits):
                 self.tmodel = _TraitedModel(None)
             else:
                 self.tmodel = _TraitedModel(cls())
+            self.fitmodel = True
                 
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
     
-    @on_trait_change('xdata,ydata',post_init=True)
-    def dataChanged(self):
+    @on_trait_change('data',post_init=True)
+    def dataChanged(self):        
         pd = self.plot.data
         #TODO:make set_data apply to both simultaneously?
-        pd.set_data('x',self.xdata)
-        pd.set_data('y',self.ydata)
+        pd.set_data('xdata',self.data[0])
+        pd.set_data('ydata',self.data[1])
         
         self.updatemodelplot = True
+        
+    @on_trait_change('weights',post_init=True)    
+    def weightsChanged(self):
+        self.plot.data.set_data('weights',self.weights)
+        self.plot.plots['data'][0].color_mapper.range.refresh()
         
         
         
@@ -247,7 +269,7 @@ class FitGui(HasTraits):
             return '%s(%s)'%(mod.__class__.__name__,','.join(parstrs))
     
     def getModelObject(self):
-        return self.tmodel.model21
+        return self.tmodel.model
             
 def fit1d(xdata,ydata,model=None,**kwargs):
     """
