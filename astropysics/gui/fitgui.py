@@ -5,14 +5,21 @@ This package contains the internals for the FitGui gui.
 from __future__ import division,with_statement
 import numpy as np
 
-from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button,Event, \
-                                 Property,on_trait_change,Array,List,Str
+from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
+                                 Event,Property,on_trait_change,Array,List, \
+                                 Tuple,Str,Dict,cached_property,Color
 from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
-                                    InstanceEditor,EnumEditor
+                                    InstanceEditor,EnumEditor,ListEditor, \
+                                    TupleEditor
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet
 from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool
 from enthought.enable.component_editor import ComponentEditor
+
+#TODO:move to remove deps?
+from enthought.tvtk.pyface.scene_editor import SceneEditor 
+from enthought.mayavi.tools.mlab_scene_model import MlabSceneModel
+from enthought.mayavi.core.ui.mayavi_scene import MayaviScene
 
 
 from ..models import list_models,get_model,Model
@@ -93,7 +100,7 @@ class _TraitedModel(HasTraits):
                 raise ValueError('unusable fitdata event input')
             
             if 'fixedpars' not in kw:
-                kw['fixedpars'] = [tn.replace('fixfit_','') for tn in self.traits() if tn.startswith('fixfit_') if getattr(self,tn)]
+                 kw['fixedpars'] = [tn.replace('fixfit_','') for tn in self.traits() if tn.startswith('fixfit_') if getattr(self,tn)]
             
             self.model.fitData(**kw)
             self.updatetraitparams = True
@@ -115,8 +122,10 @@ class _NewModelSelector(HasTraits):
     def __init__(self,**traits):
         super(_NewModelSelector,self).__init__(**traits)
         
-        self.modelnames = list_models()
+        self.modelnames = list_models(1)
         self.modelnames.insert(0,'No Model')
+        print self.modelnames
+        self.modelnames.remove('polynomial')
         
     def _get_selectedmodelclass(self):
         n = self.selectedname
@@ -135,6 +144,7 @@ class FitGui(HasTraits):
     autoupdate = Bool(True)
     data = Array(dtype=float,shape=(2,None))
     weights = Array
+    plotname = Property
     
     nmod = Int(100)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -200,7 +210,7 @@ class FitGui(HasTraits):
         mod = self.tmodel.model
         if mod:
             xd = self.data[0]
-            xmod = np.linspace(np.min(xd),np.max(xd))
+            xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
             ymod = self.tmodel.model(xmod)
             
             self.plot.data.set_data('xmod',xmod)
@@ -238,6 +248,22 @@ class FitGui(HasTraits):
     def _get_nomodel(self):
         return self.tmodel.model is None
     
+    def _get_plotname(self):
+        xlabel = self.plot.x_axis.title
+        ylabel = self.plot.y_axis.title
+        if xlabel == '' and ylabel == '':
+            return ''
+        else:
+            return xlabel+' vs '+ylabel
+    def _set_plotname(self,val):
+        if isinstance(val,basestring):
+            val = val.split('vs')
+            if len(val) ==1:
+                val = val.split('-')
+            val = [v.strip() for v in val]
+        self.x_axis.title = val[0]
+        self.y_axis.title = val[1]
+    
     @on_trait_change('data',post_init=True)
     def dataChanged(self):        
         pd = self.plot.data
@@ -271,9 +297,10 @@ class FitGui(HasTraits):
     def getModelObject(self):
         return self.tmodel.model
             
-def fit1d(xdata,ydata,model=None,**kwargs):
+            
+def fit_curve(xdata,ydata,model=None,**kwargs):
     """
-    fit a 1d data set using the FitGui interface.  Returns the model or None
+    fit a 2d data set using the FitGui interface.  Returns the model or None
     if fitting is cancelled.
     """
     
@@ -284,5 +311,206 @@ def fit1d(xdata,ydata,model=None,**kwargs):
     
     if res:
         return fg.getModelObject()
+    else:
+        return None
+    
+class MultiFitGui(HasTraits):
+    """
+    data should be c x N where c is the number of data columns/axes and N is 
+    the number of points
+    """
+    doplot3d = Bool(False)
+    replot3d = Button('Replot 3D')
+    scalefactor3d = Float(0)
+    nmodel3d = Int(100)
+    usecolor3d = Bool(False)
+    color3d = Color((0,0,0))
+    scene3d = Instance(MlabSceneModel,())
+    plot3daxes = Tuple(('x','y','z'))
+    data = Array(shape=(None,None))
+    weights = Array(shape=(None,))
+    curveaxes = List(Tuple(Int,Int))
+    axisnames = Dict(Int,Str)
+    invaxisnames = Property(Dict,depends_on='axisnames')
+    
+    fgs = List(Instance(FitGui))
+    
+    
+    traits_view = View(HGroup(VGroup(Item('doplot3d',label='3D Plot?'),
+                              Item('scene3d',editor=SceneEditor(scene_class=MayaviScene),show_label=False,resizable=True,visible_when='doplot3d'),
+                              Item('plot3daxes',editor=TupleEditor(cols=3,labels=['x','y','z']),label='Axes',visible_when='doplot3d'),
+                              HGroup(Item('scalefactor3d',label='scaling',visible_when='doplot3d'),
+                              Item('nmodel3d',label='Nmodel',visible_when='doplot3d')),
+                              HGroup(Item('usecolor3d',label='Use color?',visible_when='doplot3d'),Item('color3d',label='Relation Color',visible_when='doplot3d',enabled_when='usecolor3d')),
+                              Item('replot3d',show_label=False,visible_when='doplot3d'),
+                              ),
+                              Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
+                              resizable=True,width=1240,height=650,buttons=['OK','Cancel'])
+    
+    def __init__(self,data,names=None,models=None,weights=None,**traits):
+        super(MultiFitGui,self).__init__(**traits)
+        self._lastcurveaxes = None
+        self.plot3d = None
+        
+        data = np.array(data,copy=False)
+        if weights is None:
+            self.weights = np.ones(data.shape[1])
+        else:
+            self.weights = np.array(weights)
+        
+        self.data = data
+        if data.shape[0] < 2:
+            raise ValueError('Must have at least 2 columns')
+        
+        
+        
+        if names is None:
+            if len(data) == 2:
+                self.axisnames = {0:'x',1:'y'}
+            elif len(data) == 3:
+                self.axisnames = {0:'x',1:'y',2:'z'}
+            else:
+                self.axisnames = dict((i,str(i)) for i in data)
+        elif len(names) == len(data):
+            self.axisnames = dict([t for t in enumerate(names)])
+        else:
+            raise ValueError("names don't match data")
+        
+        #default to using 0th axis as parametric
+        self.curveaxes = [(0,i) for i in range(len(data))[1:]]
+        
+        if models is not None:
+            if len(models) != len(data)-1:
+                raise ValueError("models don't match data")
+            for i,m in enumerate(models):
+                fg = self.fgs[i]
+                fg.tmodel = _TraitedModel(m)
+                fg.fitmodel = True
+        
+        
+        
+    def _data_changed(self):
+        self.curveaxes = [(0,i) for i in range(len(self.data))[1:]]
+
+    def _axisnames_changed(self):
+        for ax,fg in zip(self.curveaxes,self.fgs):
+            fg.plot.x_axis.title = self.axisnames[ax[0]] if ax[0] in self.axisnames else ''
+            fg.plot.y_axis.title = self.axisnames[ax[1]] if ax[1] in self.axisnames else ''
+        
+    @on_trait_change('curveaxes[]')
+    def _curveaxes_update(self,names,old,new):
+        ax=[]
+        for t in self.curveaxes:
+            ax.append(t[0])
+            ax.append(t[1])
+        if set(ax) != set(range(len(self.data))):
+            self.curveaxes = self._lastcurveaxes
+            return #TOOD:check for recursion
+            
+        if self._lastcurveaxes is None:
+            self.fgs = [FitGui(self.data[t[0]],self.data[t[1]],weights=self.weights) for t in self.curveaxes]
+            for ax,fg in zip(self.curveaxes,self.fgs):
+                fg.plot.x_axis.title = self.axisnames[ax[0]] if ax[0] in self.axisnames else ''
+                fg.plot.y_axis.title = self.axisnames[ax[1]] if ax[1] in self.axisnames else ''
+        else:
+            for i,t in enumerate(self.curveaxes):
+                if  self._lastcurveaxes[i] != t:
+                    self.fgs[i] = fg = FitGui(self.data[t[0]],self.data[t[1]],weights=self.weights)
+                    ax = self.curveaxes[i]
+                    fg.plot.x_axis.title = self.axisnames[ax[0]] if ax[0] in self.axisnames else ''
+                    fg.plot.y_axis.title = self.axisnames[ax[1]] if ax[1] in self.axisnames else ''
+        
+        self._lastcurveaxes = self.curveaxes
+        
+    def _doplot3d_changed(self,new):
+        if new:
+            self.replot3d = True
+    def _plot3daxes_changed(self):
+        self.replot3d = True
+        
+    @on_trait_change('data','fgs','replot3d','weights')
+    def _do_3d(self):
+        if self.doplot3d:
+            M = self.scene3d.mlab
+            try:
+                xi = self.invaxisnames[self.plot3daxes[0]]
+                yi = self.invaxisnames[self.plot3daxes[1]]
+                zi = self.invaxisnames[self.plot3daxes[2]]
+                x,y,z = self.data[xi],self.data[yi],self.data[zi]
+                w = self.weights
+
+                M.clf()
+                if self.scalefactor3d == 0:
+                    sf = x.max()-x.min()
+                    sf *= y.max()-y.min()
+                    sf *= z.max()-z.min()
+                    sf = sf/len(x)/5
+                    self.scalefactor3d = sf
+                else:
+                    sf = self.scalefactor3d
+                M.points3d(x,y,z,w,scale_factor=sf)
+                M.axes()
+                
+                try:
+                    xs = np.linspace(np.min(x),np.max(x),self.nmodel3d)
+                    
+                    #find sequence of models to go from x to y and z
+                    ymods,zmods = [],[]
+                    for curri,mods in zip((yi,zi),(ymods,zmods)):
+                        while curri != xi:
+                            for i,(i1,i2) in enumerate(self.curveaxes):
+                                if curri==i2:
+                                    curri = i1
+                                    mods.insert(0,self.fgs[i].tmodel.model)
+                                    break
+                            else:
+                                raise KeyError
+                    
+                    ys = xs
+                    for m in ymods:
+                        ys = m(ys)
+                    zs = xs
+                    for m in zmods:
+                        zs = m(zs)
+                    
+                    if self.usecolor3d:
+                        c = (self.color3d[0]/255,self.color3d[1]/255,self.color3d[2]/255)
+                        M.plot3d(xs,ys,zs,color=c)
+                    else:
+                        M.plot3d(xs,ys,zs,np.arange(len(xs)))
+                except (KeyError,TypeError):
+                    M.text(0.5,0.75,'Underivable relation')
+            except KeyError:
+                M.clf()
+                M.text(0.25,0.25,'Data problem')
+                
+            
+            
+    @cached_property        
+    def _get_invaxisnames(self):
+        d={}
+        for k,v in self.axisnames.iteritems():
+            d[v] = k
+        return d
+    
+def fit_curve_multi(data,names=None,weights=None,models=None):
+    """
+    fit a data set consisting of a variety of curves simultaneously
+    
+    returns a tuple of models e.g. [xvsy,xvsz]
+    """
+    
+    if len(data.shape) !=2 or data.shape[0]<2:
+        raise ValueError('data must be 2D with first dimension >=2')
+    
+    if models is not None and len(models) != data.shape[0]:
+        raise ValueError('Number of models does not match number of data sets')
+    
+    mfg = MultiFitGui(data,names,models,weights=weights)
+
+    res = mfg.configure_traits(kind='livemodal')
+
+    if res:
+        return tuple([fg.tmodel.model for fg in mfg.fgs])
     else:
         return None
