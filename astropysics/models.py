@@ -63,9 +63,11 @@ class Model(object):
     *__call__: determine the value at the location - note that
     dimension size-checking should not be performed here - the checkDims 
     method is for that purpose
-    *ndims: a property that is a tuple of the form (indims,outdims)
     *params: a sequence of names for the parameters of the model
     *parvals: a sequence of values for the parameters of the model
+    
+    subclasses should also have the following attribute
+    *ndims: a tuple of the form (indims,outdims)
     
     optional overrides:
     *pardict: a dictionary with keys as parameter names and values as 
@@ -100,7 +102,6 @@ class Model(object):
         return y
     
     
-    ndims = abstractproperty(doc='The number of dimensions for this model as a 2-tuple of (indim,outdim)')    
     @property
     def indims(self):
         return self.ndims[0]     
@@ -239,13 +240,6 @@ class FunctionModel(Model):
             return res[0]
         
     @property
-    def ndims(self):
-        """
-        The number of dimensions for this model as a 2-tuple (indims,outdims)
-        """
-        return self._ndims
-        
-    @property
     def params(self):
         """
         a tuple of the parameter names
@@ -374,7 +368,7 @@ class FunctionModel1D(FunctionModel):
     The initializer's arguments specify initial values for the parameters,
     and any non-parameter kwargs will be passed into the __init__ method
     """
-    _ndims = (1,1)
+    ndims = (1,1)
     
     defaultIntMethod = 'quad'
     defaultInvMethod = 'brentq'
@@ -2024,7 +2018,7 @@ class Plane(FunctionModel):
     d = a*x+b*y+c*z (e.g. (a,b,c) is the normal vector and 
     d/a, b ,or c are the intercepts
     """
-    _ndims = (2,1)
+    ndims = (2,1)
     
     def __init__(self,varorder='xyz',vn=(1,0,0),wn=(0,1,0),origin=(0,0,0)):
         self.varorder = varorder
