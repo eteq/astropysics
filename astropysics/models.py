@@ -12,7 +12,7 @@ Currently, the main fitting algorithms are those from scipy.optimize and the
 PyMC package (http://code.google.com/p/pymc/)
 """
 
-from __future__ import division
+from __future__ import division,,with_statement
 from math import pi
 import numpy as np
 try:

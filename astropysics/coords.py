@@ -13,7 +13,7 @@ project for conversions and calculations - some functions will work poorly or
 not at all without this package installed
 """
 
-from __future__ import division
+from __future__ import division,,with_statement
 from math import pi
 import numpy as np
 

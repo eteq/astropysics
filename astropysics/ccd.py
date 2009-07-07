@@ -8,7 +8,7 @@ This package deals mostly with the raw CCD images themselves - for science tools
 see the phot and spec packages.
 """
 
-from __future__ import division
+from __future__ import division,,with_statement
 import numpy as np
 try:
     #requires Python 2.6

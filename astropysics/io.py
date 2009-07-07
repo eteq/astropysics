@@ -5,7 +5,7 @@ This module contains functions and classes for various forms of data/file
 input and output As well as library retrieval for built-in data.
 """
 
-from __future__ import division
+from __future__ import division,with_statement
 import numpy as np
 
 try:

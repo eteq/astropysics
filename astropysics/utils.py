@@ -5,7 +5,7 @@ This module contains various astropysics or python-related utility
 functions that have no obvious place in some other module
 """
 
-from __future__ import division
+from __future__ import division,,with_statement
 import numpy as np
 
 try:
@@ -197,7 +197,7 @@ class PipelineError(Exception):
 
 
 #<--------------------Analysis/simple numerical functions---------------------->
-def centroid(val,axes=None,offset='median')
+def centroid(val,axes=None,offset='median'):
     """
     computes the centroid of an n-dimensional array
     

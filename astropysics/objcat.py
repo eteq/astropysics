@@ -9,7 +9,7 @@ The basic idea is a tree/DAG with the root typically a Catalog object
 TODO: modules to also dynamically update via a web server.
 """
 
-from __future__ import division
+from __future__ import division,,with_statement
 from math import pi
 import numpy as np
 

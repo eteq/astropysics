@@ -124,8 +124,8 @@ class _NewModelSelector(HasTraits):
         
         self.modelnames = list_models(1)
         self.modelnames.insert(0,'No Model')
-        print self.modelnames
         self.modelnames.remove('polynomial')
+        self.modelnames.sort()
         
     def _get_selectedmodelclass(self):
         n = self.selectedname
@@ -322,6 +322,7 @@ class MultiFitGui(HasTraits):
     doplot3d = Bool(False)
     replot3d = Button('Replot 3D')
     scalefactor3d = Float(0)
+    do3dscale = Bool(False)
     nmodel3d = Int(100)
     usecolor3d = Bool(False)
     color3d = Color((0,0,0))
@@ -339,7 +340,8 @@ class MultiFitGui(HasTraits):
     traits_view = View(HGroup(VGroup(Item('doplot3d',label='3D Plot?'),
                               Item('scene3d',editor=SceneEditor(scene_class=MayaviScene),show_label=False,resizable=True,visible_when='doplot3d'),
                               Item('plot3daxes',editor=TupleEditor(cols=3,labels=['x','y','z']),label='Axes',visible_when='doplot3d'),
-                              HGroup(Item('scalefactor3d',label='scaling',visible_when='doplot3d'),
+                              HGroup(Item('do3dscale',label='Scale by weight?',visible_when='doplot3d'),
+                              Item('scalefactor3d',label='Point scale',visible_when='doplot3d'),
                               Item('nmodel3d',label='Nmodel',visible_when='doplot3d')),
                               HGroup(Item('usecolor3d',label='Use color?',visible_when='doplot3d'),Item('color3d',label='Relation Color',visible_when='doplot3d',enabled_when='usecolor3d')),
                               Item('replot3d',show_label=False,visible_when='doplot3d'),
@@ -350,7 +352,7 @@ class MultiFitGui(HasTraits):
     def __init__(self,data,names=None,models=None,weights=None,**traits):
         super(MultiFitGui,self).__init__(**traits)
         self._lastcurveaxes = None
-        self.plot3d = None
+        #self.scene3d = None
         
         data = np.array(data,copy=False)
         if weights is None:
@@ -363,7 +365,8 @@ class MultiFitGui(HasTraits):
             raise ValueError('Must have at least 2 columns')
         
         
-        
+        if isinstance(names,basestring):
+            names = names.split(',')
         if names is None:
             if len(data) == 2:
                 self.axisnames = {0:'x',1:'y'}
@@ -396,6 +399,7 @@ class MultiFitGui(HasTraits):
         for ax,fg in zip(self.curveaxes,self.fgs):
             fg.plot.x_axis.title = self.axisnames[ax[0]] if ax[0] in self.axisnames else ''
             fg.plot.y_axis.title = self.axisnames[ax[1]] if ax[1] in self.axisnames else ''
+        self.plot3daxes = (self.axisnames[0],self.axisnames[1],self.axisnames[2] if len(self.axisnames) > 2 else self.axisnames[1])
         
     @on_trait_change('curveaxes[]')
     def _curveaxes_update(self,names,old,new):
@@ -436,6 +440,7 @@ class MultiFitGui(HasTraits):
                 xi = self.invaxisnames[self.plot3daxes[0]]
                 yi = self.invaxisnames[self.plot3daxes[1]]
                 zi = self.invaxisnames[self.plot3daxes[2]]
+                
                 x,y,z = self.data[xi],self.data[yi],self.data[zi]
                 w = self.weights
 
@@ -448,8 +453,9 @@ class MultiFitGui(HasTraits):
                     self.scalefactor3d = sf
                 else:
                     sf = self.scalefactor3d
-                M.points3d(x,y,z,w,scale_factor=sf)
-                M.axes()
+                glyph = M.points3d(x,y,z,w,scale_factor=sf)
+                glyph.glyph.scale_mode = 0 if self.do3dscale else 1
+                M.axes(xlabel=self.plot3daxes[0],ylabel=self.plot3daxes[1],zlabel=self.plot3daxes[2])
                 
                 try:
                     xs = np.linspace(np.min(x),np.max(x),self.nmodel3d)
