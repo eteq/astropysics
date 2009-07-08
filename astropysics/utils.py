@@ -5,7 +5,7 @@ This module contains various astropysics or python-related utility
 functions that have no obvious place in some other module
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 import numpy as np
 
 try:

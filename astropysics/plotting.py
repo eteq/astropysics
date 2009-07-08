@@ -6,7 +6,7 @@ This module contains functions and classes for specialized plotting functions
 2D plots depend on matplotlib, 3D plots depend on MayaVI
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 import numpy as np
 
 try:

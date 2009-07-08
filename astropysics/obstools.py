@@ -9,7 +9,7 @@ The focus is currently on optical astronomy, as that is what the primary author
 does.
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 from math import pi
 import numpy as np
 

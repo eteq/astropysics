@@ -6,7 +6,7 @@ related operations.
 Tends to be oriented towards optical techniques.
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 from math import pi
 import numpy as np
 

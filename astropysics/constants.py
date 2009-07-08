@@ -7,7 +7,7 @@ Some of the package-level variables are generated from the currently selected
 Cosmology (see Cosmology object and choose_cosmology function for details)
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 from math import pi
 import numpy as np
 

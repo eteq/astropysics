@@ -7,7 +7,7 @@ Methods/functions tend to be oriented towards optical, but will work in other
 bands.
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 from math import pi
 import numpy as np
 try:
