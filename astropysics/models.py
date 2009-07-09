@@ -181,16 +181,16 @@ class _FuncMeta(ABCMeta):
             try:
                 nparams=args.pop(0) if 'nparams' not in kwargs else kwargs.pop('nparams')
             except IndexError:
-                IndexError('No # of parameters found for variable-size function')
+                raise IndexError('No # of parameters found for variable-size function')
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             pars = cls.__statargs
-            del cls.__statargs
             for i in range(nparams):
                 p='p%i'%i
                 pars.append(p)
+                print 'doing',p
                 setattr(obj,p,1) #default varargs to 1
-            cls._args = tuple(pars)
+            obj._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
@@ -862,8 +862,8 @@ class FunctionModel1D(FunctionModel):
             res=itg.quad(f,lower,upper,args=ps,full_output=1,**kwargs)
             if len(res) == 4:
                 v,e,d,m = res
-                #from warnings import warn
-                #warn('Integration message: %s'%m)
+                from warnings import warn
+                warn('Integration message: %s'%m)
                 print 'Integration message:',m
         #use these for 2d and 3d
         #elif method=='dblquad':
@@ -1155,6 +1155,57 @@ def list_models(ndims=None):
         return [k for k,m in __model_registry.iteritems() if m.ndims == ndims]
 
 
+def model_intersect(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
+    """
+    determine the points where two models intersect
+    
+    if bounds is None, the bounds will be determined from the model data if
+    any is saved.  Otherwise, it should be (min,max) for the region to look
+    for points
+    
+    returns a sorted array of points where the two models intersect on the 
+    interval (up to a resolution in nsample), or if full_output is True,
+    returns array,scipy.optimize.zeros.RootResults
+    
+    kwargs are passed into scipy.optimize.brentq
+    """
+    from scipy.optimize import brentq
+    
+    if bounds is None:
+        data1 = m1.fitteddata if hasattr(m1,'fitteddata') else None
+        data2 = m2.fitteddata if hasattr(m2,'fitteddata') else None
+        
+        if data1 is None and data2 is None:
+            raise ValueError('must supply bounds if neither model has data')
+        elif data1 is None:
+            bounds = (np.min(data2),np.max(data2))
+        elif data2 is None:
+            bounds = (np.min(data1),np.max(data1))
+        else: #both are valid
+            bounds = (min(np.min(data1),np.min(data2)),max(np.max(data1),np.max(data2)))
+    
+    xsample = np.linspace(bounds[0],bounds[1],nsample)
+    
+    diff = m1(xsample) - m2(xsample)
+    transis = np.convolve(diff>0,[1,-1]) #1-> crossing up between index and the one before
+    transis[0] = 0
+    transis[-1] = 0
+    
+    inters = []
+    reses = []
+    kwargs['full_output'] = 1
+    for i in np.where(transis)[0]:
+        t = brentq(lambda x:m1(x)-m2(x),xsample[i-1],xsample[i],**kwargs)
+        inters.append(t[0])
+        reses.append(t[1])
+        
+    arr = np.array(inters)
+    arr.sort()
+    
+    if full_output:
+        return arr,reses
+    else:
+        return arr
 
 #<---------------------------------Builtin models------------------------------>
 class ConstantModel(FunctionModel1D):
@@ -1426,6 +1477,21 @@ class PowerLawModel(FunctionModel1D):
     """
     def f(self,x,A=1,p=1,B=0):
         return A*x**p+B
+    
+class SinModel(FunctionModel1D):
+    """
+    A trigonometric model A*sin(k*x+p)
+    """
+    def f(self,x,A=1,k=2*pi,p=0):
+        return A*np.sin(k*x+p)
+    
+    def derivative(self,x,dx=1):
+        A,k,p=self.A,self.k,self.p
+        return A*k*np.cos(k*x+p)
+    
+    def integrate(self,lower,upper):
+        A,k,p=self.A,self.k,self.p
+        return A*(np.cos(k*lower+p)-np.cos(k*upper+p))/k
     
 class TwoPowerModel(FunctionModel1D):
     """
