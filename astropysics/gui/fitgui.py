@@ -192,7 +192,7 @@ class FitGui(HasTraits):
         plot.plot(('xmod','ymod'),name='model',type='line',line_style='dash',color='black',line_width=2)
         
         plot.tools.append(PanTool(plot))
-        plot.tools.append(ZoomTool(plot))
+        plot.overlays.append(ZoomTool(plot))
         
         super(FitGui,self).__init__(**kwargs)
         
@@ -234,15 +234,18 @@ class FitGui(HasTraits):
             
         self.updatemodelplot = True
         
-    def _newmodel_fired(self):
-        msel = _NewModelSelector()
-        if msel.edit_traits(kind='modal').result:
-            cls = msel.selectedmodelclass
-            if cls is None:
-                self.tmodel = _TraitedModel(None)
-            else:
-                self.tmodel = _TraitedModel(cls())
-            self.fitmodel = True
+    def _newmodel_fired(self,newval):
+        if isinstance(newval,basestring):
+            self.tmodel = _TraitedModel(newval)
+        else:
+            msel = _NewModelSelector()
+            if msel.edit_traits(kind='modal').result:
+                cls = msel.selectedmodelclass
+                if cls is None:
+                    self.tmodel = _TraitedModel(None)
+                else:
+                    self.tmodel = _TraitedModel(cls())
+        self.fitmodel = True
                 
                 
     def _get_nomodel(self):
