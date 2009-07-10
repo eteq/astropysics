@@ -208,6 +208,10 @@ class _FuncMeta(ABCMeta):
             setattr(obj,k,v)
         for p,v in zip(pars,args):
             setattr(obj,p,v)
+            
+        #bind _callf to the standard call if it isn't messed with by the function constructor
+        if not hasattr(obj,'_callf'):
+            obj._callf = obj.f 
         return obj
     
     
@@ -233,7 +237,7 @@ class FunctionModel(Model):
         the result
         """
         arr = np.array(x,copy=False,dtype=float)
-        res = self.f(np.atleast_1d(arr),*self.parvals)
+        res = self._callf(np.atleast_1d(arr),*self.parvals)
         if len(arr.shape) > 0:
             return res
         else:
@@ -948,21 +952,11 @@ class FunctionModel1D(FunctionModel):
         method that is used in the new call, it probably won't work
         """
         from types import MethodType
-        from functools import partial
+        import inspec
         
         if type is None:
-            if hasattr(self,'_origcall'):
-                self.__call__ = self._origcall
-                del self._origcall
-            #otherwise do nothing - presumably we're already in the correct form
+            self._callf = self.f
         else:
-                
-            if 'integrate' in type:
-                if 'upper' in kwargs and 'lower' in kwargs:
-                    raise ValueError("can't do integral with lower and upper both specified")
-                elif 'upper' not in kwargs and 'lower' not in kwargs:
-                    raise ValueError("can't do integral without lower or upper specified")
-                
             try:
                 newf = getattr(self,type)
                 if not callable(newf):
@@ -970,22 +964,40 @@ class FunctionModel1D(FunctionModel):
             except AttributeError:
                 raise AttributeError('function %s not found in %s'%(type,self))
             
-            newf = partial(newf,**kwargs)
-            def newcall(self,x):
-                """
-                call the function on the input x with the current parameters and return
-                the result
-                """
-                arr = np.array(x,copy=False,dtype=float)
-                res = newf(np.atleast_1d(arr))
-                if len(arr.shape) > 0:
-                    return res
-                else:
-                    return res[0]
+               
+            if 'integrate' in type:
+                if 'upper' in kwargs and 'lower' in kwargs:
+                    raise ValueError("can't do integral with lower and upper both specified")
+                elif 'upper' not in kwargs and 'lower' not in kwargs: 
+                    raise ValueError("can't do integral without lower or upper specified")
+
+            fargs, fvarargs, fvarkws, fdefaults = inspect.getargspec(newf)
+            for arg in fargs:
+                if arg not in kwargs:
+                    xkw = arg
+                    break
+            else:
+                raise ValueError('function with no arguments attempted in setCall')
+                    
+            def callfunc(self,x,*pars):
+                #TODO:test cost of par-setting
+                self.parvals = pars
                 
-            self._origcall = self.__call__
-            self.__call__ = MethodType(newcall,self,self.__class__)
-  
+                kwargs[xkw] = x
+                return newf(**kwargs)
+                
+            self._callf = MethodType(callfunc,self,self.__class__)
+        self._callftype = type
+    def getCall(self):
+        """
+        returns the type of evaluation to perform when this model is called - 
+        a string like that of the type passed into `setCall`, or None if
+        the model function itself is to be called.
+        """
+        if hasattr(self,'_callftype'):
+            return self._callftype
+        else:
+            return None
   
 class _CompMeta1D(_FuncMeta):
 #    def __init__(cls,name,bases,dct):
