@@ -928,6 +928,63 @@ class FunctionModel1D(FunctionModel):
         derivative(self,x,dx=1) , but dx may be ignored
         """
         return (self(x+dx)-self(x))/dx
+    
+    def setCall(self,type=None,**kwargs):
+        """
+        sets the type of function evaluation to occur when the model is called
+        
+        type can be:
+        *None: basic function evaluation
+        *derivative: derivative at the location
+        *integrate: integral - must specify 'upper' or 'lower' kwarg
+                    and the evaluation location will be treated as 
+                    the other bound
+        *integrateCircular: same as integrate, but using polar jacobian
+        *integrateSpherical: same as integrate, but using spherical jacobian
+        
+        kwargs are passed into the type requested, and the call will occur on 
+        
+        note that if the model object is called directly in an overridden 
+        method that is used in the new call, it probably won't work
+        """
+        from types import MethodType
+        from functools import partial
+        
+        if type is None:
+            if hasattr(self,'_origcall'):
+                self.__call__ = self._origcall
+                del self._origcall
+            #otherwise do nothing - presumably we're already in the correct form
+        else:
+                
+            if 'integrate' in type:
+                if 'upper' in kwargs and 'lower' in kwargs:
+                    raise ValueError("can't do integral with lower and upper both specified")
+                elif 'upper' not in kwargs and 'lower' not in kwargs:
+                    raise ValueError("can't do integral without lower or upper specified")
+                
+            try:
+                newf = getattr(self,type)
+                if not callable(newf):
+                    raise AttributeError
+            except AttributeError:
+                raise AttributeError('function %s not found in %s'%(type,self))
+            
+            newf = partial(newf,**kwargs)
+            def newcall(self,x):
+                """
+                call the function on the input x with the current parameters and return
+                the result
+                """
+                arr = np.array(x,copy=False,dtype=float)
+                res = newf(np.atleast_1d(arr))
+                if len(arr.shape) > 0:
+                    return res
+                else:
+                    return res[0]
+                
+            self._origcall = self.__call__
+            self.__call__ = MethodType(newcall,self,self.__class__)
   
   
 class _CompMeta1D(_FuncMeta):
@@ -1295,6 +1352,7 @@ class LinearModel(FunctionModel1D):
         return np.ones_like(x)*m
     
     def integrate(self,lower,upper):
+        m,b = self.m,self.b
         return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
     
     def weightedFit(self,x,y,sigmay=None,doplot=False):
