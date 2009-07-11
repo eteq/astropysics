@@ -188,7 +188,6 @@ class _FuncMeta(ABCMeta):
             for i in range(nparams):
                 p='p%i'%i
                 pars.append(p)
-                print 'doing',p
                 setattr(obj,p,1) #default varargs to 1
             obj._args = tuple(pars)
         else: #this is the case for fixed functions
@@ -705,7 +704,6 @@ class FunctionModel1D(FunctionModel):
                 nc+=1
                 
             for i,p in enumerate(self.params):
-                print nr,nc
                 plt.subplot(nr,nc,i+1)
                 plt.hist(d[p],bins=n//20)
                 plt.xlabel(p)
@@ -849,6 +847,9 @@ class FunctionModel1D(FunctionModel):
         if subclassing, this should be overwritten with a function of the form
         integrate(lower,upper,[args])
         """
+        
+        #TODO:vectorize when needed
+        
         import scipy.integrate as itg
         if method is None:
             method=self.defaultIntMethod
@@ -902,7 +903,7 @@ class FunctionModel1D(FunctionModel):
         
         self.lastIntegrate = res
         return res if np.isscalar(res) else res[0]
-    def integrateCircular(self,*args,**kwargs):
+    def integrateCircular(self,lower,upper,*args,**kwargs):
         """
         This is an alias for self.integrate with jacobian set for a azimuthally
         symmetric 2D radial profile
@@ -911,9 +912,9 @@ class FunctionModel1D(FunctionModel):
             kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*2.0*pi
         else:
             kwargs['jac'] = lambda x,*params:x*2.0*pi
-        return self.integrate(*args,**kwargs)
+        return self.integrate(lower,upper,*args,**kwargs)
     
-    def integrateSpherical(self,*args,**kwargs):
+    def integrateSpherical(self,lower,upper,*args,**kwargs):
         """
         This is an alias for self.integrate with jacobian set for a spherically
         symmetric 3D radial profile
@@ -922,7 +923,7 @@ class FunctionModel1D(FunctionModel):
             kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*x*4.0*pi
         else:
             kwargs['jac'] = lambda x,*params:x*x*4.0*pi
-        return self.integrate(*args,**kwargs)
+        return self.integrate(lower,upper,*args,**kwargs)
         
     def derivative(self,x,dx=1):
         """
@@ -933,7 +934,7 @@ class FunctionModel1D(FunctionModel):
         """
         return (self(x+dx)-self(x))/dx
     
-    def setCall(self,type=None,**kwargs):
+    def setCall(self,type=None,xtrans=None,ytrans=None,**kwargs):
         """
         sets the type of function evaluation to occur when the model is called
         
@@ -946,48 +947,119 @@ class FunctionModel1D(FunctionModel):
         *integrateCircular: same as integrate, but using polar jacobian
         *integrateSpherical: same as integrate, but using spherical jacobian
         
+        xtrans and ytrans are functions applied to either the input call (for x)
+        or the output (for y) - they can also be strings:
+        *'log':base-10 logarithm
+        *'ln':base-e logarithm
+        *'pow':10**
+        *'exp':e**
+        
         kwargs are passed into the type requested, and the call will occur on 
         
         note that if the model object is called directly in an overridden 
         method that is used in the new call, it probably won't work
         """
         from types import MethodType
-        import inspec
+        import inspect
         
+        transmap={'log':np.log10,'ln':np.log,'pow':lambda x:np.power(x,10),'exp':np.exp}
+        xts,yts = xtrans,ytrans
+        if isinstance(xtrans,basestring):
+            xtrans = transmap[xtrans]
+        if isinstance(ytrans,basestring):
+            ytrans = transmap[ytrans]
+            
         if type is None:
-            self._callf = self.f
+            if xtrans and ytrans: 
+                self._callf = MethodType(lambda self,x,*pars:ytrans(self.f(xtrans(x),*pars)),self,self.__class__)
+            elif xtrans:
+                self._callf = MethodType(lambda self,x,*pars:self.f(xtrans(x),*pars),self,self.__class__)
+            elif ytrans:
+                self._callf = MethodType(lambda self,x,*pars:ytrans(self.f(x,*pars)),self,self.__class__)
+            else:
+                self._callf = self.f
         else:
             try:
                 newf = getattr(self,type)
+                
                 if not callable(newf):
                     raise AttributeError
             except AttributeError:
                 raise AttributeError('function %s not found in %s'%(type,self))
-            
-               
+                
             if 'integrate' in type:
                 if 'upper' in kwargs and 'lower' in kwargs:
                     raise ValueError("can't do integral with lower and upper both specified")
-                elif 'upper' not in kwargs and 'lower' not in kwargs: 
+                elif 'upper' in kwargs:
+                    xkw = 'lower'
+                elif  'lower' in kwargs:
+                    xkw = 'upper'
+                else: 
                     raise ValueError("can't do integral without lower or upper specified")
-
-            fargs, fvarargs, fvarkws, fdefaults = inspect.getargspec(newf)
-            for arg in fargs:
-                if arg not in kwargs:
-                    xkw = arg
-                    break
-            else:
-                raise ValueError('function with no arguments attempted in setCall')
-                    
-            def callfunc(self,x,*pars):
-                #TODO:test cost of par-setting
-                self.parvals = pars
                 
-                kwargs[xkw] = x
-                return newf(**kwargs)
+                #TODO:undo this once integrateSpherical is vectorized
+                def vecf(x):
+                    kwargs[xkw] = x
+                    return newf(**kwargs)
+                vecf = np.vectorize(vecf)
+                
+                
+                if xtrans and ytrans: 
+                    def callfunc(self,x,*pars):
+                        self.parvals = pars
+                        return ytrans(vecf(xtrans(x)))
+                elif xtrans:
+                    def callfunc(self,x,*pars):
+                        self.parvals = pars
+                        return vecf(xtrans(x))
+                elif ytrans:
+                    def callfunc(self,x,*pars):
+                        self.parvals = pars
+                        return ytrans(vecf(x))
+                else:
+                    def callfunc(self,x,*pars):
+                        #TODO:test cost of par-setting
+                        self.parvals = pars
+                        return vecf(x)
+                
+            else:    
+                
+                fargs, fvarargs, fvarkws, fdefaults = inspect.getargspec(newf)
+                    
+                for arg in fargs:
+                    if arg not in kwargs and arg !='self':
+                        xkw = arg
+                        break
+                else:
+                    raise ValueError('function with no arguments attempted in setCall')
+                if xtrans and ytrans: 
+                    def callfunc(self,x,*pars):
+                        #TODO:test cost of par-setting
+                        self.parvals = pars
+                        kwargs[xkw] = xtrans(x)
+                        return ytrans(newf(**kwargs))
+                elif xtrans:
+                    def callfunc(self,x,*pars):
+                        #TODO:test cost of par-setting
+                        self.parvals = pars
+                        kwargs[xkw] = xtrans(x)
+                        return newf(**kwargs)
+                elif ytrans:
+                    def callfunc(self,x,*pars):
+                        #TODO:test cost of par-setting
+                        self.parvals = pars
+                        kwargs[xkw] = x
+                        return ytrans(newf(**kwargs))
+                else:
+                    def callfunc(self,x,*pars):
+                        #TODO:test cost of par-setting
+                        self.parvals = pars
+                        kwargs[xkw] = x
+                        return newf(**kwargs)
                 
             self._callf = MethodType(callfunc,self,self.__class__)
-        self._callftype = type
+            
+        self._callftype = (type,xts,yts)
     def getCall(self):
         """
         returns the type of evaluation to perform when this model is called - 
@@ -1163,7 +1235,6 @@ class CompositeModel1D(FunctionModel1D):
             args[3] = fps
         else:
             kwargs['fixedpars'] = fps
-        print fps
         return self.fitData(*args,**kwargs)
             
     @property
@@ -1932,43 +2003,48 @@ class KnotSplineModel(FunctionModel1D):
     
     
     
-class NFWModel(TwoPowerModel):
+class NFWModel(FunctionModel1D):
     """
     A Navarro, Frenk, and White 1996 profile
     """
-    def __init__(self):
-        TwoPowerModel.__init__(self)
-        self.a = -1
-        self.b = -3
         
-    def f(self,x,rho0=1,rc=1): #TODO: see if its better to handcode the A->rho0
-        return TwoPowerModel.f(self,x,rho0*rc*rc*rc,rc,self.a,self.b)
+    def f(self,x,rho0=1,rc=1):
+        #return TwoPowerModel.f(self,x,rho0*rc*rc*rc,rc,-1,-3)
+        -31--1
+        return rho0*rc*rc*rc*((x+rc)**(-2))*(x**-1)
     
-    def integrateSpherical(self,*args,**kwargs):
+    def integrateSpherical(self,lower,upper,*args,**kwargs):
         """
-        NFW Has an analytic form for the spherical integral - if the inner 
-        is not 0 or the form is anything other than integrateSpherical(0,r) 
-        fall back to FunctionModel1D.integrateSpherical (or if the keyword
-        'numerical' is true)
-        """
-        
-        if kwargs.pop('numerical',False) or len(kwargs)>0 or len(args)!=2 or args[0]!=0.0:
+        NFW Has an analytic form for the spherical integral - if the lower 
+        is not 0 or or if the keyword 'numerical' is True, this function will
+        fall back to FunctionModel1D.integrateSpherical 
+        """        
+        if kwargs.pop('numerical',False):
             return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
         else:
-            x=args[1]/self.rc
+            x=upper/self.rc
             return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
-    def setRc(self,Rs,c,M):
+        
+    def setC(self,c,Rvir=None,Mvir=None):
         """
-        sets the model parameters according to the given Rs/rc, concentration
-        and mass enclosed
+        sets the model parameters to match a given concentration 
+        
+        if Rvir or Mvir are None, the Rvir/Mvir relation in this model 
+        (Maller&Bullock 2004) will be used to infer the relation
         """
-        self.rc = Rs
-        Router = c*Rs
+        if Rvir is None and Mvir is None:
+            raise ValueError('Must specify Rvir,Mvir, or both')
+        elif Rvir is None:
+            Rvir = self.Mvir_to_Rvir(Mvir)
+        elif Mvir is None:
+            Mvir = self.Rvir_to_Mvir(Rvir)
+        
+        self.rc = Rvir/c
         
         self.rho0 = 1
-        a0 = self.integrateSpherical(0,Router)
-        self.rho0 = M/a0
-    
+        a0 = self.integrateSpherical(0,Rvir)
+        self.rho0 = Mvir/a0
+            
     def getRv(self,z=0):
         """
         get the virial radius at a given redshift (uses NFWModel.Delta(z))
@@ -1998,7 +2074,7 @@ class NFWModel(TwoPowerModel):
         """
         M_sun,kpc
         """
-        return 1e12/h (Omega0*NFWModel.Delta(z)/97.2)*(Rvir*(1+z)/203.4/h)**3
+        return 1e12/h*(Omega0*NFWModel.Delta(z)/97.2)*(Rvir*(1+z)/203.4/h)**3
     
     @staticmethod
     def Mvir_to_Rvir(Mvir,z=0,h=.72,Omega0=1):
@@ -2115,7 +2191,7 @@ class SersicModel(FunctionModel1D):
         if clf:
             plt.clf()
         
-        print lower,upper
+        print '?',lower,upper
         x = np.linspace(lower,upper,n)
         plt.plot(x,zpt-2.5*np.log10(self(x)))
         if data:
