@@ -961,8 +961,9 @@ class FunctionModel1D(FunctionModel):
         """
         from types import MethodType
         import inspect
+        from functools import partial
         
-        transmap={'log':np.log10,'ln':np.log,'pow':lambda x:np.power(x,10),'exp':np.exp}
+        transmap={'log':np.log10,'ln':np.log,'pow':partial(np.power,10),'exp':np.exp}
         xts,yts = xtrans,ytrans
         if isinstance(xtrans,basestring):
             xtrans = transmap[xtrans]
@@ -1295,7 +1296,7 @@ def list_models(ndims=None):
         return [k for k,m in __model_registry.iteritems() if m.ndims == ndims]
 
 
-def model_intersect(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
+def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     """
     determine the points where two models intersect
     
@@ -1346,6 +1347,35 @@ def model_intersect(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
         return arr,reses
     else:
         return arr
+    
+def binned_weights(values,n,log=False):
+    """
+    Produces an array of values of the same size as values that is generated
+    by subdividing the values into n bins such that each bin has an equal share
+    of the total number of values.
+    
+    Returns an array of values on [0,1]
+    
+    if log is True, the values are evenly-spaced on logarithmic intervals
+    """
+    
+    if log:
+        values = np.log(values).ravel()
+    else:
+        values = np.array(values,copy=False).ravel()
+        
+    mx,mi = np.max(values),np.min(values)
+    
+    n,edges = np.histogram(values)
+    ws = np.zeros_like(values)
+    
+    wsr = ws.ravel()
+    for i,w in enumerate(1.0/n):
+        m = (edges[i]<=values) & (values<edges[i+1])
+        wsr[m] = w 
+    wsr[edges[-1]==values] = w
+    
+    return ws
 
 #<---------------------------------Builtin models------------------------------>
 class ConstantModel(FunctionModel1D):
@@ -1661,9 +1691,9 @@ class TwoSlopeModel(FunctionModel1D):
     
     specifically, a*x+(b-a)*log(1+exp(x))+c
     """
-    def f(self,x,a=1,b=2,c=0,xs=0):
+    def f(self,x,a=1,b=2,C=0,xs=0):
         z = x-xs
-        return a*z+(b-a)*np.log(1+np.exp(z))+c
+        return a*z+(b-a)*np.log(1+np.exp(z))+C
     
 class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
     """
