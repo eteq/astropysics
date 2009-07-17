@@ -941,9 +941,9 @@ class FunctionModel1D(FunctionModel):
         type can be:
         *None: basic function evaluation
         *derivative: derivative at the location
-        *integrate: integral - must specify 'upper' or 'lower' kwarg
-                    and the evaluation location will be treated as 
-                    the other bound
+        *integrate: integral - specify 'upper' or 'lower' kwarg and
+                    the evaluation location will be treated as the
+                    other bound.  If neither is given, lower=0 is assumed
         *integrateCircular: same as integrate, but using polar jacobian
         *integrateSpherical: same as integrate, but using spherical jacobian
         
@@ -996,7 +996,9 @@ class FunctionModel1D(FunctionModel):
                 elif  'lower' in kwargs:
                     xkw = 'upper'
                 else: 
-                    raise ValueError("can't do integral without lower or upper specified")
+                    kwargs['lower']=0
+                    xkw = 'upper'
+                    #raise ValueError("can't do integral without lower or upper specified")
                 
                 #TODO:undo this once integrateSpherical is vectorized
                 def vecf(x):
@@ -1634,6 +1636,15 @@ class VoigtModel(GaussianModel,LorentzianModel):
         else:
             w=wofz(((x-mu)+1j*gamma)*2**-0.5/sig)
             return A*w.real*(2*pi)**-0.5/sig
+        
+class MoffatModel(FunctionModel1D):
+    """
+    Moffat function given by:
+    (beta-1)/(pi alpha^2) [1+(r/alpha)^2]^-beta
+    """
+    def f(self,r,alpha=1,beta=4.765):
+        roa=r/alpha
+        return (beta-1)/(pi*alpha**2)*(1+roa*roa)**-beta
     
 class ExponentialModel(FunctionModel1D):
     """
