@@ -7,12 +7,14 @@ import numpy as np
 
 from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
                                  Event,Property,on_trait_change,Array,List, \
-                                 Tuple,Str,Dict,cached_property,Color
+                                 Tuple,Str,Dict,cached_property,Color,Enum, \
+                                 TraitError
 from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
                                     InstanceEditor,EnumEditor,ListEditor, \
                                     TupleEditor
 from enthought.traits.ui.menu import ModalButtons
-from enthought.chaco.api import Plot,ArrayPlotData,jet
+from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
+                                ColorMapper,LinearMapper
 from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool
 from enthought.enable.component_editor import ComponentEditor
 
@@ -22,7 +24,29 @@ from enthought.mayavi.tools.mlab_scene_model import MlabSceneModel
 from enthought.mayavi.core.ui.mayavi_scene import MayaviScene
 
 
-from ..models import list_models,get_model,Model
+from ..models import list_models,get_model,Model,binned_weights
+
+#_cmap = jet
+def _cmap(range, **traits):
+    _data =   {'red':   ((0, 0, 0),(1e-10,0,1), (0.3, .8, .8), (0.5, 0, 0), (0.75,0.75, 0.75),(.875,.2,.2),
+                         (1, 0, 0)),
+               'blue': ((0., 0, 0), (0.3,0, 0), (0.5,0, 0), (0.75,.75, .75),
+                         (0.875,0.75,0.75), (1, 1, 1)),
+               'green':  ((0.,0, 0),(0.3,.8,.8), (0.4, 0.4, 0.4),(0.5,1,1), (0.65,.75, .75), (0.75,0.1, 0.1),
+                         (1, 0, 0))}
+
+#    """ inverted version of 'jet' colormap"""
+
+#    _data =   {'red':   ((0., 0, 0), (0.35, 0, 0), (0.66, 1, 1), (0.89,1, 1),
+#                         (1, 0.5, 0.5)),
+#               'green': ((0., 0, 0), (0.125,0, 0), (0.375,1, 1), (0.64,1, 1),
+#                         (0.91,0,0), (1, 0, 0)),
+#               'blue':  ((0., 0.5, 0.5), (0.11, 1, 1), (0.34, 1, 1), (0.65,0, 0),
+#                         (1, 0, 0))}
+#    for k,v in _data.items():
+#        _data[k] = tuple(reversed([(v[-1-i][0],t[1],t[2]) for i,t in enumerate(v)]))
+
+    return ColorMapper.from_segment_map(_data, range=range, **traits)
 
 class _TraitedModel(HasTraits):
     from inspect import isclass
@@ -45,26 +69,29 @@ class _TraitedModel(HasTraits):
             
         self.model = model
         
-        
-        if model is None:
+    def default_traits_view(self):
+        if self.model is None:
             g = Group()
             g.content.append(Label('No Model Selected'))
         else:
-            g = Group(columns=8,label=self.modelname,show_border=True)
-            for p in model.params:
+            #g = Group(label=self.modelname,show_border=False,orientation='horizontal',layout='flow')
+            g = Group(label=self.modelname,show_border=True,orientation='horizontal',scrollable=True)
+            for p in self.model.params:
+                gi = Group(orientation='horizontal',label=p)
                 self.add_trait(p,Float)
-                setattr(self,p,getattr(model,p))
+                setattr(self,p,getattr(self.model,p))
                 self.on_trait_change(self._param_change_handler,p)
-                g.content.append(Item(p))
+                gi.content.append(Item(p,show_label=False))
                 
                 ffp = 'fixfit_'+p
                 self.add_trait(ffp,Bool)
                 setattr(self,ffp,False)
                 self.on_trait_change(self._param_change_handler,ffp)
-                g.content.append(Item(ffp,label='Fix?'))
-        
-        view = View(g,buttons=['Apply','Revert','OK','Cancel'])
-        self.trait_view('traits_view',view)
+                gi.content.append(Item(ffp,label='Fix?'))
+                
+                g.content.append(gi)
+            
+        return View(g,buttons=['Apply','Revert','OK','Cancel'])
     
     def _param_change_handler(self,name,new):
         setattr(self.model,name,new)
@@ -136,6 +163,8 @@ class _NewModelSelector(HasTraits):
     
 class FitGui(HasTraits):
     plot = Plot
+    colorbar = ColorBar
+    plotcontainer = HPlotContainer
     tmodel = Instance(_TraitedModel,allow_none = False)
     nomodel = Property
     newmodel = Button('New Model...')
@@ -144,6 +173,10 @@ class FitGui(HasTraits):
     autoupdate = Bool(True)
     data = Array(dtype=float,shape=(2,None))
     weights = Array
+    weighttype = Enum(('custom','equal','lin bins','log bins'))
+    weightsvary = Property(Bool)
+    weights0rem = Bool(False)
+    
     plotname = Property
     
     nmod = Int(100)
@@ -151,15 +184,17 @@ class FitGui(HasTraits):
     modelpanel = View
     
     traits_view = View(VGroup(
-                       Item('plot', editor=ComponentEditor(),show_label=False),
-                       HGroup(Item('newmodel',show_label=False),
-                              Item('fitmodel',show_label=False),
-                              Item('nmod',label='Nmodel'),
-                              Item('updatemodelplot',show_label=False,enabled_when='not autoupdate'),
-                              Item('autoupdate',label='Auto?')),
+                       Item('plotcontainer', editor=ComponentEditor(),show_label=False),
+                       HGroup(VGroup(HGroup(Item('newmodel',show_label=False),
+                              Item('fitmodel',show_label=False),Item('weighttype',label='Weights:')),
+                              Item('weights0rem',label='Remove 0-weight points for fit?')
+                              ),
+                              VGroup(HGroup(Item('autoupdate',label='Auto?'),
+                              Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
+                              Item('nmod',label='Nmodel'))),
                        Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
                       ),
-                    resizable=True, title='Data Fitting',buttons=['OK','Cancel']
+                    resizable=True, title='Data Fitting',buttons=['OK','Cancel'],width=650,height=650
                     )
                     
     panel_view = View(VGroup(
@@ -180,12 +215,17 @@ class FitGui(HasTraits):
         self.on_trait_change(self._paramchanged,'tmodel.paramchange')
         
         self.data = [xdata,ydata]
-        self.weights = np.ones_like(xdata) if weights is None else weights
+        
+        if weights is None:
+            self.weights = np.ones_like(xdata)
+            self.weighttype = 'equal'
+        else:
+            self.weights = weights
         
         pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
         self.plot = plot = Plot(pd,resizable='hv')
         
-        plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=jet,marker='circle')
+        plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=_cmap,marker='circle')
         if not isinstance(mod,Model):
             self.fitmodel = True
         self.updatemodelplot = False #force plot update - generates xmod and ymod
@@ -193,6 +233,21 @@ class FitGui(HasTraits):
         
         plot.tools.append(PanTool(plot))
         plot.overlays.append(ZoomTool(plot))
+        
+        self.colorbar = colorbar = ColorBar(index_mapper=LinearMapper(range=plot.color_mapper.range),
+                                            color_mapper=plot.color_mapper.range,
+                                            plot=plot,
+                                            orientation='v',
+                                            resizable='v',
+                                            width = 30,
+                                            padding = 5)
+        colorbar.padding_top = plot.padding_top
+        colorbar.padding_bottom = plot.padding_bottom
+        colorbar._axis.title = 'Weights'
+        
+        self.plotcontainer = container = HPlotContainer(use_backbuffer=True)
+        container.add(plot)
+        container.add(colorbar)
         
         super(FitGui,self).__init__(**kwargs)
         
@@ -227,7 +282,13 @@ class FitGui(HasTraits):
             xd,yd = self.data
             kwd = {'x':xd,'y':yd}
             if xd.shape == self.weights.shape:
-                kwd['weights'] = self.weights
+                w = self.weights
+                if self.weights0rem:
+                    m = w!=0
+                    w = w[m]
+                    kwd['x'] = kwd['x'][m]
+                    kwd['y'] = kwd['y'][m]
+                kwd['weights'] = w
             self.tmodel.fitdata = kwd
         finally:
             self.autoupdate = preaup
@@ -250,6 +311,10 @@ class FitGui(HasTraits):
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
+    
+    def _get_weightsvary(self):
+        w = self.weights
+        return np.any(w!=w[0])if len(w)>0 else False
     
     def _get_plotname(self):
         xlabel = self.plot.x_axis.title
@@ -281,7 +346,29 @@ class FitGui(HasTraits):
         self.plot.data.set_data('weights',self.weights)
         self.plot.plots['data'][0].color_mapper.range.refresh()
         
+        if self.weightsvary:
+            if self.colorbar not in self.plotcontainer.components:
+                self.plotcontainer.add(self.colorbar)
+                self.plotcontainer.request_redraw()
+        elif self.colorbar in self.plotcontainer.components:
+                self.plotcontainer.remove(self.colorbar)
+                self.plotcontainer.request_redraw()
+            
+    
+    def _weighttype_changed(self, name, old, new):
+        if old == 'custom':
+            self._customweights = self.weights
         
+        if new == 'custom':
+            self.weights = self._customweights #if hasattr(self,'_customweights') else np.ones_like(self.data[0])
+        elif new == 'equal':
+            self.weights = np.ones_like(self.data[0])
+        elif new == 'lin bins':
+            self.weights = binned_weights(self.data[0],10,False)
+        elif new == 'log bins':
+            self.weights = binned_weights(self.data[0],10,True)
+        else:
+            raise TraitError('Invalid Enum value on weighttype')
         
     def getModelInitStr(self):
         """
@@ -350,7 +437,7 @@ class MultiFitGui(HasTraits):
                               Item('replot3d',show_label=False,visible_when='doplot3d'),
                               ),
                               Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
-                              resizable=True,width=1240,height=650,buttons=['OK','Cancel'])
+                              resizable=True,width=1240,height=700,buttons=['OK','Cancel'])
     
     def __init__(self,data,names=None,models=None,weights=None,**traits):
         super(MultiFitGui,self).__init__(**traits)
