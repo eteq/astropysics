@@ -510,6 +510,12 @@ class FunctionModel1D(FunctionModel):
             from operator import isSequenceType
             if not isSequenceType(res[0]):
                 res = (res,)
+                
+            if fixedpars:
+                for p in fixedpars:
+                    i=ps.index(p)
+                    del ps[i]
+                    del v[i]
         else:
             if fixedpars:
                 for p in fixedpars:
@@ -1343,10 +1349,14 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
         if data1 is None and data2 is None:
             raise ValueError('must supply bounds if neither model has data')
         elif data1 is None:
+            data2 = data2[0]
             bounds = (np.min(data2),np.max(data2))
         elif data2 is None:
+            data1 = data1[0]
             bounds = (np.min(data1),np.max(data1))
         else: #both are valid
+            data1 = data1[0]
+            data2 = data2[0]
             bounds = (min(np.min(data1),np.min(data2)),max(np.max(data1),np.max(data2)))
     
     xsample = np.linspace(bounds[0],bounds[1],nsample)
@@ -1461,7 +1471,15 @@ class LinearModel(FunctionModel1D):
         """  
         if weights is not None:
             if fixedpars or len(kwargs)>0:
-                raise NotImplementedError("can't fix pars with weighted linear fit yes")
+                from warnings import warn
+                warn("customized exact linear fit not yet available for fixed pars")
+                kwargs=kwargs.copy()
+                kwargs['x']=x
+                kwargs['y']=y
+                kwargs['method']='leastsq'
+                kwargs['fixedpars']=fixedpars
+                kwargs['weights']=weights
+                return FunctionModel1D.fitData(self,**kwargs)
             m,b,dm,db = self.weightedFit(x,y,1/weights,False)
             dy = (y-m*x-b).std(ddof=1)
             return (np.array((m,b)),dm,db,dy)
