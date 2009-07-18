@@ -1078,7 +1078,11 @@ class _CompMeta1D(_FuncMeta):
 #    def __init__(cls,name,bases,dct):
 #        super(_CompMeta1D,cls).__init__(name,bases,dct)
     def __call__(cls,*args,**kwargs):
-        obj = super(_FuncMeta1D,_CompMeta1D).__call__(cls,*args,**kwargs) #object __init__ is called here
+        obj = super(_FuncMeta,_CompMeta1D).__call__(cls,*args,**kwargs) #object __init__ is called here
+        
+        #bind _callf to the standard call if it isn't messed with by the function constructor
+        if not hasattr(obj,'_callf'):
+            obj._callf = obj.f 
         return obj
         
 class CompositeModel1D(FunctionModel1D):
@@ -1141,12 +1145,28 @@ class CompositeModel1D(FunctionModel1D):
         
         args = []
         argmodi = []
+        argsuffsz = []
+        #add all parameters with suffixes for their model number
         for i,m in enumerate(self._models):
             for p in m.params:
                 args.append(p+str(i))
                 argmodi.append(i)
+                argsuffsz.append(len(str(i)))
+                
+        #remove suffixes if they are unique
+        cargs = list(args)
+        for i,a in enumerate(cargs):
+            argname = a[:len(a)-argsuffsz[i]]
+            for j,a in enumerate(cargs):
+                if a.startswith(argname) and i != j:
+                    break
+            else:
+                args[i] = argname
+                argsuffsz[i] = 0
+            
         self._args = tuple(args)
         self._argmodi = tuple(argmodi)
+        self._argsuffsz = tuple(argsuffsz)
         
         self._filters = None
         
@@ -1157,14 +1177,16 @@ class CompositeModel1D(FunctionModel1D):
         if name in self._args:
             i = self._args.index(name)
             j = self._argmodi[i]
-            return getattr(self._models[j],name[:-len(str(j))])
+            suffixsize = self._argsuffsz[i]
+            return getattr(self._models[j],name[:len(name)-suffixsize])
         raise AttributeError("'%s' has no attribute '%s'"%(self,name))
     
     def __setattr__(self,name,val):
         if name in self._args:
             i = self._args.index(name)
             j = self._argmodi[i]
-            setattr(self._models[j],name[:-len(str(j))],val)
+            suffixsize = self._argsuffsz[i]
+            setattr(self._models[j],name[:len(name)-suffixsize],val)
         else:
             self.__dict__[name] = val
     
@@ -1349,6 +1371,30 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
         return arr,reses
     else:
         return arr
+    
+def offset_model(model,**kwargs):
+    """
+    generator function that takes a Model type (class or name) and uses it
+    to construct a CompositeModel that adds a 'C' parameter that offsets is
+    added to the model output (or 'C1' if C is already a parameter)
+    
+    kwargs are used to set the parameters
+    """
+    return CompositeModel1D((model,ConstantModel),('+'),**kwargs)
+    
+def scale_model(model,**kwargs):
+    """
+    generator function that takes a Model type (class or name) and uses it
+    to construct a CompositeModel that adds a 'C' parameter that scales is
+    added to the model output (or 'C1' if C is already a parameter)
+    
+    kwargs are used to set the parameters
+    """
+    mod = CompositeModel1D((model,ConstantModel),('*'),**kwargs)
+    cpar = 'C' if 'C' in mod.params else 'C1'
+    if cpar not in kwargs:
+        setattr(mod,cpar,1.0)
+    return mod
     
 def binned_weights(values,n,log=False):
     """
