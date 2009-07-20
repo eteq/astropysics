@@ -184,9 +184,12 @@ class _FuncMeta(ABCMeta):
                 raise IndexError('No # of parameters found for variable-size function')
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
-            pars = cls.__statargs
+            pars = list(cls.__statargs)
+            
+            parsname = getattr(cls,'parsname') if hasattr(cls,'parsname') else 'p'
+            
             for i in range(nparams):
-                p='p%i'%i
+                p = parsname+str(i)
                 pars.append(p)
                 setattr(obj,p,1) #default varargs to 1
             obj._args = tuple(pars)
@@ -367,9 +370,14 @@ class FunctionModel1D(FunctionModel):
     
     The metaclass generates Parameters for each of the 
     inputs of the function (except self and x)
-    
+        
     The initializer's arguments specify initial values for the parameters,
     and any non-parameter kwargs will be passed into the __init__ method
+    
+    if f has a variable number of arguments, the first argument of the 
+    constructor is taken to be the number of arguments that particular 
+    instance should have, and the 'parsname' class attribute can be used
+    to specify the prefix for the name of the parameters
     """
     ndims = (1,1)
     
@@ -1648,6 +1656,9 @@ class PolynomialModel(FunctionModel1D):
     """
     arbitrary-degree polynomial
     """
+    
+    parsname = 'c'
+    
     #TODO: use polynomial objects that are only updated when necessary
     def f(self,x,*args): 
         return np.polyval(np.array(args)[::-1],x)
