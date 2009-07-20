@@ -146,7 +146,7 @@ class NewModelSelector(HasTraits):
     isvarargmodel = Property
     
     traits_view = View(Item('selectedname',editor=EnumEditor(name='modelnames')),
-                       Item('modelargnum',visible_when='isvarargmodel'),
+                       Item('modelargnum',label='Var Parameter Count:',enabled_when='isvarargmodel'),
                        buttons=['OK','Cancel'])
     
     def __init__(self,include_models=None,exclude_models=None,**traits):
