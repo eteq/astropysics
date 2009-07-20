@@ -182,8 +182,10 @@ class _FuncMeta(ABCMeta):
                 nparams=args.pop(0) if 'nparams' not in kwargs else kwargs.pop('nparams')
             except IndexError:
                 raise IndexError('No # of parameters found for variable-size function')
-            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])    
+            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
+            cls._currnparams = nparams #this is set in case the constructor needs to know for some reason
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
+            del cls._currnparams
             pars = list(cls.__statargs)
             
             parsname = getattr(cls,'parsname') if hasattr(cls,'parsname') else 'p'
@@ -191,7 +193,10 @@ class _FuncMeta(ABCMeta):
             for i in range(nparams):
                 p = parsname+str(i)
                 pars.append(p)
-                setattr(obj,p,1) #default varargs to 1
+                if not hasattr(cls,p):
+                    setattr(obj,p,1) #default varargs to 1
+                else: #let class variables specify defaults for varargs
+                    setattr(obj,p,getattr(cls,p))
             obj._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
@@ -2093,8 +2098,7 @@ class InterpolatedSplineModel(FunctionModel1D):
         
         return self.spline(x)
     
-    
-class KnotSplineModel(FunctionModel1D):
+class _KnotSplineModel(FunctionModel1D):
     """
     this uses a B-spline as a model for the function.  The knots
     parameter specifies the number of INTERIOR knots to use for the
@@ -2108,36 +2112,22 @@ class KnotSplineModel(FunctionModel1D):
     the scipy.interpolate.UnivariateSpline class is used to
     do the calculation (in the "spline" attribute) 
     """
-    def __init__(self,locmethod='even'):
-        super(KnotSplineModel,self).__init__()
+    def __init__(self):
+        super(_KnotSplineModel,self).__init__()
         
-        self._oldd=self._oldk=self._ws=None
-        self.locmethod = locmethod
+        self._ws = None
+        
         self.fitteddata=(np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
-        self.fitData(*self.fitteddata)
-            
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
-        """
-        just fits the spline with the current s-value - if s is not changed,
-        it will execute very quickly after
-        """
+    
+    @abstractmethod        
+    def f(self,x):
+        raise NotImplemetedError
+    
+    @abstractmethod    
+    def _customFit(self,x,y,fixedpars=(),**kwargs):        
         from scipy.interpolate import LSQUnivariateSpline
-        if self.locmethod == 'evencdf':
-            cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
-            mask = cdf!=0
-            cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
-            cdf = np.hstack((0,np.cumsum(cdf)/np.sum(cdf)))
-            self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
-        elif self.locmethod == 'even':
-            self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
-        else:
-            raise ValueError('unrecognized locmethod %s'%self.locmethod)
+        
         self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=kwargs['weights'] if 'weights' in kwargs else None)
-        
-        self._oldk = self.nknots
-        self._oldd = self.degree
-        
-        return np.array([self.nknots,self.degree])
         
     def fitData(self,x,y,**kwargs):
         self._oldd=self._olds=None
@@ -2152,10 +2142,88 @@ class KnotSplineModel(FunctionModel1D):
             self._ws = None
             
         sorti = np.argsort(x)    
-        return super(KnotSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
+        return super(_KnotSplineModel,self).fitData(x[sorti],y[sorti],**kwargs)
+
+class UniformKnotSplineModel(_KnotSplineModel):
+    def __init__(self):
+        self._oldk = self._oldd = None
+        super(UniformKnotSplineModel,self).__init__()
+        self.fitData(*self.fitteddata)
     
-    def f(self,x,nknots=3,degree=3):        
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
+        self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
+        
+        super(UniformKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        
+        self._oldk = self.nknots
+        self._oldd = self.degree
+        
+        return np.array([self.nknots,self.degree])
+    
+    def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
+            xd,yd = self.fitteddata
+            self._customFit(xd,yd,weights=self._ws)
+        
+        return self.spline(x)
+    
+    
+
+class UniformCDFKnotSplineModel(_KnotSplineModel):
+    def __init__(self):
+        self._oldk = self._oldd = None
+        super(UniformCDFKnotSplineModel,self).__init__()
+        self.fitData(*self.fitteddata)
+    
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
+        cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
+        mask = cdf!=0
+        cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
+        cdf = np.hstack((0,np.cumsum(cdf)/np.sum(cdf)))
+        self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
+        
+        super(UniformCDFKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        
+        self._oldk = self.nknots
+        self._oldd = self.degree
+        
+        return np.array([self.nknots,self.degree])
+    
+    def f(self,x,nknots=3,degree=3):
+        if self._oldk != nknots or self._oldd != degree:
+            xd,yd = self.fitteddata
+            self._customFit(xd,yd,weights=self._ws)
+        
+        return self.spline(x)
+
+class SpecifiedKnotSplineModel(_KnotSplineModel):
+    def __init__(self):
+        self.nknots = self.__class__._currnparams
+        self._oldd = None #this will force a fit at first call
+        super(SpecifiedKnotSplineModel,self).__init__()
+    
+    def _customFit(self,x,y,fixedpars=(),**kwargs):
+        """
+        just fits the spline with the current s-value - if s is not changed,
+        it will execute very quickly after
+        """
+        self.iknots = np.array([v for k,v in self.pardict.iteritems() if k.startswith('k')])
+        self.iknots.sort()
+        
+        super(SpecifiedKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        
+        self._oldd = self.degree
+        
+        retlist = list(self.iknots)
+        retlist.insert(0,self.degree)
+        return np.array(retlist)
+    
+    parsname = 'k'
+    
+    degree=3 #default cubic
+    def f(self,x,degree,*args):
+        #TODO:faster way to do the arg check?
+        if self._oldd != degree or np.any(self.iknots != np.array(args)):
             xd,yd = self.fitteddata
             self._customFit(xd,yd,weights=self._ws)
         
@@ -2595,7 +2663,7 @@ class Plane(FunctionModel):
     
 #register all Models in this module
 for o in locals().values():
-    if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel1D:
+    if type(o) == type(FunctionModel1D) and issubclass(o,FunctionModel1D) and o != FunctionModel1D and o!= CompositeModel1D and not o.__name__.startswith('_'):
         register_model(o)
 
 #<---------------------------Other modelling techniques------------------------>
