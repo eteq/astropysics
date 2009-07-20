@@ -1099,9 +1099,14 @@ class CompositeModel1D(FunctionModel1D):
     The models can either be FunctionModel1D objects, FunctionModel1D classes,
     or a string (in the later two cases, new instances will be generated)
     
-    parameter names are of the form 'A-0' and 'A-1' where A is the parameter
+    parameter names are of the form 'A0' and 'A1' where A is the parameter
     name and the number is the sequential number of the model with that
-    parameter
+    parameter.  If autoshorten is True, the suffix will be removed if there
+    is only one of that parameter
+    
+    parnames is a dictionary that maps from names of the form 'A0' to a 
+    different name for the parameter.  If a parameter with the name already
+    exists, a ValueError will be raised.
     
     the operations can be any valid python operator, or a sequence of operators
     to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4), or a string
@@ -1109,12 +1114,15 @@ class CompositeModel1D(FunctionModel1D):
     the evaluated models (in order) should go (e.g. 'm + m * m + m' will do
     mod1+mod2*mod3+mod4)
     
+    
+    
     any extra kwargs will be used to specify default values of the parameters
     """
     __metaclass__ = _CompMeta1D
     
     #TODO:initial vals
-    def __init__(self,models=[],operation='+',**kwargs):
+    def __init__(self,models=[],operation='+',parnames={},autoshorten=True,
+                  **parvals):
         from inspect import isclass
         
         self.__dict__['_args'] = tuple() #necessary for later when getattr is invoked
@@ -1150,49 +1158,60 @@ class CompositeModel1D(FunctionModel1D):
         self._opstr = ''.join(oplst)
         
         args = []
-        argmodi = []
-        argsuffsz = []
+        argmap = {}
         #add all parameters with suffixes for their model number
         for i,m in enumerate(self._models):
             for p in m.params:
-                args.append(p+str(i))
-                argmodi.append(i)
-                argsuffsz.append(len(str(i)))
+                argn = p+str(i)
+                args.append(argn)
+                argmap[argn] = (i,p) 
                 
+        if parnames:
+            for k,v in parnames.iteritems():
+                try:
+                    i = args.index(k)
+                except ValueError:
+                    raise KeyError('parameter %s not present'%k)
+                if v in args:
+                    raise ValueError('attempted to specify a replacement parameter name that already exists')
+                args[i] = v
+                argmap[v] = argmap[k]
+                del argmap[k]
+        else:
+            parnames = {}
+                        
         #remove suffixes if they are unique
-        cargs = list(args)
-        for i,a in enumerate(cargs):
-            argname = a[:len(a)-argsuffsz[i]]
-            for j,a in enumerate(cargs):
-                if a.startswith(argname) and i != j:
-                    break
-            else:
-                args[i] = argname
-                argsuffsz[i] = 0
+        if autoshorten:
+            cargs = list(args)
+            for i,a in enumerate(cargs):
+                if a not in parnames.values():
+                    argname = argmap[a][1]
+                    for j,a2 in enumerate(cargs):
+                        if a2.startswith(argname) and i != j:
+                            break
+                    else:
+                        argmap[argname] = argmap[a]
+                        del argmap[a]
+                        args[i] = argname
             
         self._args = tuple(args)
-        self._argmodi = tuple(argmodi)
-        self._argsuffsz = tuple(argsuffsz)
+        self._argmap = argmap
         
         self._filters = None
         
-        for k,v in kwargs:
+        for k,v in parvals.iteritems():
             setattr(self,k,v)
     
     def __getattr__(self,name):
         if name in self._args:
-            i = self._args.index(name)
-            j = self._argmodi[i]
-            suffixsize = self._argsuffsz[i]
-            return getattr(self._models[j],name[:len(name)-suffixsize])
+            i,n = self._argmap[name]
+            return getattr(self._models[i],n)
         raise AttributeError("'%s' has no attribute '%s'"%(self,name))
     
     def __setattr__(self,name,val):
         if name in self._args:
-            i = self._args.index(name)
-            j = self._argmodi[i]
-            suffixsize = self._argsuffsz[i]
-            setattr(self._models[j],name[:len(name)-suffixsize],val)
+            i,n = self._argmap[name]
+            setattr(self._models[i],n,val)
         else:
             self.__dict__[name] = val
     
@@ -1311,19 +1330,47 @@ def get_model(modelname):
     """
     return __model_registry[modelname]
 
-def list_models(ndims=None):
+def list_models(ndims=None,include=None,exclude=None):
     """
     lists the registered Model objects in the package
     
     to get only models that accept a certain dimensionality, set ndims 
     to the model dimension wanted
+    
+    include is a sequence of model names to include in the list (e.g. the 
+    function will just validate that they are valid models and return the
+    strings) - if not in the registry, a ValueError will be raised
+    
+    exclude is a sequence of model names that should be excluded (if any 
+    are not in the registry, a ValueError will be raised)
     """
-    if ndims is None:
-        return __model_registry.keys()
-    else:
+    from operator import isSequenceType
+    
+    res = __model_registry.keys()
+    
+    if include is not None:
+        if exclude is not None:
+            raise TypeError("can't specify both included models and excluded models")
+        if isinstance(include,basestring) or not isSequenceType(include):
+            include = [include]
+        for m in include:
+            if m not in res:
+                raise ValueError('modelname to include %s not a valid model name'%m)
+            res = include
+    elif exclude is not None:
+        if isinstance(exclude,basestring) or not isSequenceType(exclude):
+            exclude = [exclude]
+        for m in exclude:
+            if m not in res:
+                raise ValueError('modelname to exclude %s not a valid model name'%m)
+            res.remove(m)
+    
+    if ndims is not None:
         if np.isscalar(ndims):
             ndims = (ndims,ndims)
-        return [k for k,m in __model_registry.iteritems() if m.ndims == ndims]
+        res = [m for m in res if __model_registry[m].ndims == ndims]
+    
+    return res
 
 
 def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
@@ -1382,29 +1429,43 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     else:
         return arr
     
-def offset_model(model,**kwargs):
+def offset_model(model,pname='C',**kwargs):
     """
     generator function that takes a Model type (class or name) and uses it
-    to construct a CompositeModel that adds a 'C' parameter that offsets is
-    added to the model output (or 'C1' if C is already a parameter)
+    to construct a CompositeModel with an extra parameter that is a constant
+    offset (with a name given by the pname argument)
     
-    kwargs are used to set the parameters
+    kwargs are used to set the parameter values
     """
-    return CompositeModel1D((model,ConstantModel),('+'),**kwargs)
+    return CompositeModel1D((model,ConstantModel),('+'),{'C1':pname},**kwargs)
     
-def scale_model(model,**kwargs):
+def scale_model(model,pname='A',**kwargs):
     """
     generator function that takes a Model type (class or name) and uses it
-    to construct a CompositeModel that adds a 'C' parameter that scales is
-    added to the model output (or 'C1' if C is already a parameter)
+    to construct a CompositeModel with an extra parameter that is a constant
+    offset (with a name given by the pname argument)
     
-    kwargs are used to set the parameters
+    kwargs are used to set the parameter values
     """
-    mod = CompositeModel1D((model,ConstantModel),('*'),**kwargs)
-    cpar = 'C' if 'C' in mod.params else 'C1'
-    if cpar not in kwargs:
-        setattr(mod,cpar,1.0)
+    mod = CompositeModel1D((model,ConstantModel),('*'),{'C1':pname},**kwargs)
+
+    if pname not in kwargs:
+        setattr(mod,pname,1.0)
     return mod
+
+def scale_and_offset_model(model,scalepname='A',offsetpname='C',**kwargs):
+    """
+    generator function that takes a Model type (class or name) and uses it
+    to construct a CompositeModel that adds a 'C1' parameter that scales the
+    model, and a 'C2' parameter than is the offset
+    
+    kwargs are used to set the parameters
+    """
+    mod = CompositeModel1D((model,ConstantModel,ConstantModel),('*','+'),{'C1':scalepname,'C2':offsetpname},**kwargs)
+    if scalepname not in kwargs:
+        setattr(mod,scalepname,1.0)
+    return mod
+    
     
 def binned_weights(values,n,log=False):
     """
@@ -1915,23 +1976,6 @@ class BlackbodyModel(FunctionModel1D,_HasSpecUnits):
         h,c,kb=BlackbodyModel.h,BlackbodyModel.c,BlackbodyModel.kb
         sigma = 2*pi**5*kb**4*h**-3*c**-2/15
         return area*sigma*T**4
-    
-class BlackbodyOffsetModel(BlackbodyModel):
-    """
-    This is a Planck spectrum with y and x offsets
-    """
-    
-    def f(self,x,A=1,T=5800,xoff=0,yoff=0):
-        raise NotImplementedError
-    
-    def _flambda(self,x,A=1,T=5800,xoff=0,yoff=0):
-        return BlackbodyModel._flambda(self,x+xoff,A,T)+yoff
-    
-    def _fnu(self,x,A=1,T=5800,xoff=0,yoff=0):
-        return BlackbodyModel._fnu(self,x+xoff,A,T)+yoff
-    
-    def _fen(self,x,A=1,T=5800,xoff=0,yoff=0):
-        return BlackbodyModel._fen(self,x+xoff,A,T)+yoff
     
    
 class SmoothSplineModel(FunctionModel1D):
