@@ -28,7 +28,7 @@ from ..models import list_models,get_model,Model,binned_weights
 
 #_cmap = jet
 def _cmap(range, **traits):
-    _data =   {'red':   ((0, 0, 0),(1e-10,0,1), (0.3, .8, .8), (0.5, 0, 0), (0.75,0.75, 0.75),(.875,.2,.2),
+    _data =   {'red':   ((0,1,1), (0.3, .8, .8), (0.5, 0, 0), (0.75,0.75, 0.75),(.875,.2,.2),
                          (1, 0, 0)),
                'blue': ((0., 0, 0), (0.3,0, 0), (0.5,0, 0), (0.75,.75, .75),
                          (0.875,0.75,0.75), (1, 1, 1)),
@@ -138,20 +138,22 @@ class _TraitedModel(HasTraits):
         else:
             return self.model.__class__.__name__
         
-class _NewModelSelector(HasTraits):
+class NewModelSelector(HasTraits):
     modelnames = List
     selectedname = Str('No Model')
+    modelargnum = Int(2)
     selectedmodelclass = Property
+    isvarargmodel = Property
     
     traits_view = View(Item('selectedname',editor=EnumEditor(name='modelnames')),
+                       Item('modelargnum',visible_when='isvarargmodel'),
                        buttons=['OK','Cancel'])
     
-    def __init__(self,**traits):
-        super(_NewModelSelector,self).__init__(**traits)
+    def __init__(self,include_models=None,exclude_models=None,**traits):
+        super(NewModelSelector,self).__init__(**traits)
         
-        self.modelnames = list_models(1)
+        self.modelnames = list_models(1,include_models,exclude_models)
         self.modelnames.insert(0,'No Model')
-        self.modelnames.remove('polynomial')
         self.modelnames.sort()
         
     def _get_selectedmodelclass(self):
@@ -160,11 +162,19 @@ class _NewModelSelector(HasTraits):
             return None
         else:
             return get_model(n)
+        
+    def _get_isvarargmodel(self):
+        cls = self.selectedmodelclass
+        
+        if cls is None:
+            return False
+        else:
+            return cls._args is None
     
 class FitGui(HasTraits):
-    plot = Plot
-    colorbar = ColorBar
-    plotcontainer = HPlotContainer
+    plot = Instance(Plot)
+    colorbar = Instance(ColorBar)
+    plotcontainer = Instance(HPlotContainer)
     tmodel = Instance(_TraitedModel,allow_none = False)
     nomodel = Property
     newmodel = Button('New Model...')
@@ -176,10 +186,11 @@ class FitGui(HasTraits):
     weighttype = Enum(('custom','equal','lin bins','log bins'))
     weightsvary = Property(Bool)
     weights0rem = Bool(False)
+    modelselector = NewModelSelector
     
     plotname = Property
     
-    nmod = Int(100)
+    nmod = Int(1024)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
     modelpanel = View
     
@@ -207,12 +218,14 @@ class FitGui(HasTraits):
                     title='Data Fitting'
                     )
     
-    def __init__(self,xdata,ydata,mod=None,weights=None,**kwargs):
+    def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**kwargs):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
-
+        
         self.tmodel = _TraitedModel(mod)
 
-        self.on_trait_change(self._paramchanged,'tmodel.paramchange')
+        self.on_trait_change(self._paramsChanged,'tmodel.paramchange')
+        
+        self.modelselector = NewModelSelector(include_models,exclude_models)
         
         self.data = [xdata,ydata]
         
@@ -228,8 +241,11 @@ class FitGui(HasTraits):
         plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=_cmap,marker='circle')
         if not isinstance(mod,Model):
             self.fitmodel = True
+            
         self.updatemodelplot = False #force plot update - generates xmod and ymod
         plot.plot(('xmod','ymod'),name='model',type='line',line_style='dash',color='black',line_width=2)
+        
+        self.on_trait_change(self._rangeChanged,'plot.index_mapper.range.updated')
         
         plot.tools.append(PanTool(plot))
         plot.overlays.append(ZoomTool(plot))
@@ -251,12 +267,15 @@ class FitGui(HasTraits):
         
         super(FitGui,self).__init__(**kwargs)
         
-    def _paramchanged(self,new):
+    def _paramsChanged(self,new):
         self.updatemodelplot = True
             
     def _nmod_changed(self):
         self.updatemodelplot = True
-        
+    
+    def _rangeChanged(self):
+        self.updatemodelplot = True
+    
     def _updatemodelplot_fired(self,new):
         #if False (e.g. button click), update regardless, otherwise check for autoupdate
         if new and not self.autoupdate:
@@ -264,8 +283,11 @@ class FitGui(HasTraits):
 
         mod = self.tmodel.model
         if mod:
-            xd = self.data[0]
-            xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
+            #xd = self.data[0]
+            #xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
+            xl = self.plot.index_range.low
+            xh = self.plot.index_range.high
+            xmod = np.linspace(xl,xh,self.nmod)
             ymod = self.tmodel.model(xmod)
             
             self.plot.data.set_data('xmod',xmod)
@@ -299,11 +321,12 @@ class FitGui(HasTraits):
         if isinstance(newval,basestring):
             self.tmodel = _TraitedModel(newval)
         else:
-            msel = _NewModelSelector()
-            if msel.edit_traits(kind='modal').result:
-                cls = msel.selectedmodelclass
+            if self.modelselector.edit_traits(kind='modal').result:
+                cls = self.modelselector.selectedmodelclass
                 if cls is None:
                     self.tmodel = _TraitedModel(None)
+                elif cls._args is None:
+                    self.tmodel = _TraitedModel(cls(self.modelselector.modelargnum))
                 else:
                     self.tmodel = _TraitedModel(cls())
         self.fitmodel = True
@@ -372,8 +395,8 @@ class FitGui(HasTraits):
         
     def getModelInitStr(self):
         """
-        returns a string that can be used to generate a model like the one in 
-        this FitGui
+        returns a python code string that can be used to generate a 
+        model with parameters matching that of this FitGui
         """
         mod = self.tmodel.model
         if mod is None:
@@ -413,7 +436,7 @@ class MultiFitGui(HasTraits):
     replot3d = Button('Replot 3D')
     scalefactor3d = Float(0)
     do3dscale = Bool(False)
-    nmodel3d = Int(100)
+    nmodel3d = Int(1024)
     usecolor3d = Bool(False)
     color3d = Color((0,0,0))
     scene3d = Instance(MlabSceneModel,())
