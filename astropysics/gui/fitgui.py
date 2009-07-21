@@ -190,10 +190,14 @@ class FitGui(HasTraits):
     weights0rem = Bool(False)
     modelselector = NewModelSelector
     
-    plotname = Property
-    
-    scattertool = Enum(None,'click','lassoadd','lassoremove','lassoinvert')
+    selbutton = Button('Selection...')    
+    scattertool = Enum(None,'clicktoggle','clicksingle','lassoadd','lassoremove','lassoinvert')
     selectedi = Property #indecies of the selected objects
+    weightchangesel = Button('Set Selection To')
+    weightchangeto = Float
+    delsel = Button('Delete Selected')
+    
+    plotname = Property
     
     nmod = Int(1024)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -204,6 +208,7 @@ class FitGui(HasTraits):
                        HGroup(VGroup(HGroup(Item('newmodel',show_label=False),
                               Item('fitmodel',show_label=False),Item('weighttype',label='Weights:')),
                               Item('weights0rem',label='Remove 0-weight points for fit?')
+                              Item('selbutton',show_label=False)
                               ),
                               VGroup(HGroup(Item('autoupdate',label='Auto?'),
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
@@ -222,6 +227,18 @@ class FitGui(HasTraits):
                       ),
                     title='Data Fitting'
                     )
+    selection_view = View(Group(
+                           Item('scattertool',label='Selection Mode',
+                                 editor=EnumEditor(values={'No Selection':None,
+                                                           'Toggle on Click':'clicktoggle',
+                                                           'Select on Click':'clicksingle',
+                                                           'Add with Lasso':'lassoadd',
+                                                           'Remove with Lasso':'lassoremove',
+                                                           'Invert with Lasso':'lassoinvert'})),
+                           Item('weightchangesel',show_label=False),
+                           Item('weightchangeto',label='Weight'),
+                           Item('delsel',show_label=False)
+                         ))
     
     def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**kwargs):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -350,7 +367,9 @@ class FitGui(HasTraits):
                 else:
                     self.tmodel = _TraitedModel(cls())
         self.fitmodel = True
-                
+        
+    def _selbutton_fired(self,event):
+        self.edit_traits(view='selection_view')            
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
@@ -390,9 +409,11 @@ class FitGui(HasTraits):
                 
                 
         self.scatter.tools = []    
-        if new == 'click':
-            self.scatter.tools.append(ScatterInspector(self.scatter))
-        elif new is not None and 'lasso' in new:
+        if new is None:
+            pass
+        elif 'click' in new:
+            self.scatter.tools.append(ScatterInspector(self.scatter,selection_mode=new.replace('click','')))
+        elif 'lasso' in new:
             lasso_selection = LassoSelection(component=self.scatter,
                                     selection_datasource=self.scatter.index)
             self.scatter.tools.append(lasso_selection)
@@ -401,7 +422,15 @@ class FitGui(HasTraits):
             self.scatter.overlays.append(lasso_overlay)
             self.lassomode = new.replace('lasso','')
             lasso_selection.on_trait_change(self._lasso_callback,'selection_changed')
+        else:
+            raise TraitsError('invalid scattertool value')
+        
+    def _weightchangesel_fired(self,event):
+        self.weights[self.selectedi] = self.weightchangeto
     
+    def _delsel_fired(self,event):
+        self.weights[self.selectedi] = 0
+        
     def _lasso_callback(self,event):
         lassomask = self.scatter.index.metadata['selection'].astype(int)
         clickmask = np.zeros_like(lassomask)
