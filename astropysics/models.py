@@ -171,24 +171,24 @@ class _FuncMeta(ABCMeta):
             
         if varargs is not None:
             cls._args = None
-            cls.__statargs = list(args)
+            cls._statargs = list(args)
         else:
             cls._args = tuple(args)
             
     def __call__(cls,*args,**kwargs):
         if cls._args is None: #this is the case for *args in the function
             args=list(args)
+            parsname = getattr(cls,'parsname') if hasattr(cls,'parsname') else 'p'
+            
             try:
                 nparams=args.pop(0) if 'nparams' not in kwargs else kwargs.pop('nparams')
             except IndexError:
                 raise IndexError('No # of parameters found for variable-size function')
-            objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
+            objkwargs = dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._statargs if not k.startswith(parsname)])
             cls._currnparams = nparams #this is set in case the constructor needs to know for some reason
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             del cls._currnparams
-            pars = list(cls.__statargs)
-            
-            parsname = getattr(cls,'parsname') if hasattr(cls,'parsname') else 'p'
+            pars = list(cls._statargs)
             
             for i in range(nparams):
                 p = parsname+str(i)
@@ -450,9 +450,9 @@ class FunctionModel1D(FunctionModel):
             raise ValueError('Unrecognized type')
         
         if method == 'fmin':
-            res=fmin(g,x0,tuple(self.parvals),**kwargs)
+            res = fmin(g,x0,tuple(self.parvals),**kwargs)
         elif method == 'fmin_powell':
-            res=fmin_powell(g,x0,tuple(self.parvals),**kwargs)
+            res = fmin_powell(g,x0,tuple(self.parvals),**kwargs)
         else:
             raise ValueError('Unrecognized method')
         
@@ -2201,6 +2201,8 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         self.nknots = self.__class__._currnparams
         self._oldd = None #this will force a fit at first call
         super(SpecifiedKnotSplineModel,self).__init__()
+        
+        self.setKnots(np.linspace(-1,1,self.nknots))
     
     def _customFit(self,x,y,fixedpars=(),**kwargs):
         """
@@ -2217,6 +2219,19 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         retlist = list(self.iknots)
         retlist.insert(0,self.degree)
         return np.array(retlist)
+    
+    def setKnots(self,knots):
+        if len(knots) != self.nknots:
+            raise ValueError('provided knot sequence does not match the number of parameters')
+        for i,k in enumerate(knots):
+            setattr(self,'k'+str(i),k)
+            
+    def getKnots(self):
+        ks = []
+        for i in range(self.nknots):
+            pn = 'k' + str(i)
+            ks.append(getattr(self,pn))
+        return np.array(ks)
     
     parsname = 'k'
     
@@ -2238,7 +2253,6 @@ class NFWModel(FunctionModel1D):
         
     def f(self,x,rho0=1,rc=1):
         #return TwoPowerModel.f(self,x,rho0*rc*rc*rc,rc,-1,-3)
-        -31--1
         return rho0*rc*rc*rc*((x+rc)**(-2))*(x**-1)
     
     def integrateSpherical(self,lower,upper,*args,**kwargs):

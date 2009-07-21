@@ -14,8 +14,10 @@ from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
                                     TupleEditor
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
-                                ColorMapper,LinearMapper
-from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool
+                                ColorMapper,LinearMapper,ScatterInspectorOverlay,\
+                                LassoOverlay
+from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool,LassoSelection,\
+                                      ScatterInspector
 from enthought.enable.component_editor import ComponentEditor
 
 #TODO:move to remove deps?
@@ -143,10 +145,10 @@ class NewModelSelector(HasTraits):
     selectedname = Str('No Model')
     modelargnum = Int(2)
     selectedmodelclass = Property
-    isvarargmodel = Property
+    isvarargmodel = Property(depends_on='modelnames')
     
-    traits_view = View(Item('selectedname',editor=EnumEditor(name='modelnames')),
-                       Item('modelargnum',label='Var Parameter Count:',enabled_when='isvarargmodel'),
+    traits_view = View(Item('selectedname',label='Model Name:',editor=EnumEditor(name='modelnames')),
+                       Item('modelargnum',label='Extra Parameters:',enabled_when='isvarargmodel'),
                        buttons=['OK','Cancel'])
     
     def __init__(self,include_models=None,exclude_models=None,**traits):
@@ -189,6 +191,9 @@ class FitGui(HasTraits):
     modelselector = NewModelSelector
     
     plotname = Property
+    
+    scattertool = Enum(None,'click','lassoadd','lassoremove','lassoinvert')
+    selectedi = Property #indecies of the selected objects
     
     nmod = Int(1024)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -238,7 +243,7 @@ class FitGui(HasTraits):
         pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
         self.plot = plot = Plot(pd,resizable='hv')
         
-        plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=_cmap,marker='circle')
+        self.scatter = plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=_cmap,marker='circle')[0]
         if not isinstance(mod,Model):
             self.fitmodel = True
             
@@ -247,8 +252,23 @@ class FitGui(HasTraits):
         
         self.on_trait_change(self._rangeChanged,'plot.index_mapper.range.updated')
         
-        plot.tools.append(PanTool(plot))
+        plot.tools.append(PanTool(plot,drag_button='right'))
         plot.overlays.append(ZoomTool(plot))
+        
+        self.scattertool = None
+        
+        #scatter.tools.append(ScatterInspector(scatter))
+        self.scatter.overlays.append(ScatterInspectorOverlay(self.scatter, 
+                        hover_color = "black",
+                        selection_color="black",
+                        selection_outline_color="red",
+                        selection_line_width=2))
+                        
+#        self.ls = lasso_selection = LassoSelection(component=scatter,selection_datasource=scatter.index)
+#        scatter.active_tool = lasso_selection
+#        lasso_overlay = LassoOverlay(lasso_selection=lasso_selection,
+#                                     component=scatter)
+#        scatter.overlays.append(lasso_overlay)
         
         self.colorbar = colorbar = ColorBar(index_mapper=LinearMapper(range=plot.color_mapper.range),
                                             color_mapper=plot.color_mapper.range,
@@ -267,7 +287,7 @@ class FitGui(HasTraits):
         
         super(FitGui,self).__init__(**kwargs)
         
-    def _paramsChanged(self,new):
+    def _paramsChanged(self):
         self.updatemodelplot = True
             
     def _nmod_changed(self):
@@ -354,6 +374,52 @@ class FitGui(HasTraits):
             val = [v.strip() for v in val]
         self.x_axis.title = val[0]
         self.y_axis.title = val[1]
+        
+    def _scattertool_changed(self,old,new):
+        if old is not None and 'lasso' in old:
+            if 'lasso' in new:
+                #connect correct callbacks
+                self.lassomode = new.replace('lasso','')
+                return
+            else:
+                #TODO:test
+                self.scatter.tools[-1].on_trait_change(self._lasso_callback,
+                                            'selection_changed',remove=True) 
+                del self.scatter.overlays[-1]
+                del self.lassomode
+                
+                
+        self.scatter.tools = []    
+        if new == 'click':
+            self.scatter.tools.append(ScatterInspector(self.scatter))
+        elif new is not None and 'lasso' in new:
+            lasso_selection = LassoSelection(component=self.scatter,
+                                    selection_datasource=self.scatter.index)
+            self.scatter.tools.append(lasso_selection)
+            lasso_overlay = LassoOverlay(lasso_selection=lasso_selection,
+                                         component=self.scatter)
+            self.scatter.overlays.append(lasso_overlay)
+            self.lassomode = new.replace('lasso','')
+            lasso_selection.on_trait_change(self._lasso_callback,'selection_changed')
+    
+    def _lasso_callback(self,event):
+        lassomask = self.scatter.index.metadata['selection'].astype(int)
+        clickmask = np.zeros_like(lassomask)
+        clickmask[self.scatter.index.metadata['selections']] = 1
+        
+        if self.lassomode == 'add':
+            mask = clickmask | lassomask
+        elif self.lassomode == 'remove':
+            mask = clickmask & ~lassomask
+        elif self.lassomode == 'invert':
+            mask = np.logical_xor(clickmask,lassomask)
+        else:
+            raise TraitsError('lassomode is in invalid state')
+        
+        self.scatter.index.metadata['selections'] = list(np.where(mask)[0])
+            
+    def _get_selectedi(self):
+        return self.scatter.index.metadata['selections']
     
     @on_trait_change('data',post_init=True)
     def dataChanged(self):        
@@ -403,8 +469,11 @@ class FitGui(HasTraits):
             return 'None'
         else:
             parstrs = []
-            for p,v in mod.pardict:
+            for p,v in mod.pardict.iteritems():
                 parstrs.append(p+'='+str(v))
+            if mod.__class__._args is None: #varargs need to have the first argument give the right number
+                varcount = len(mod.params)-len(mod.__class__._statargs)
+                parstrs.insert(0,str(varcount))
             return '%s(%s)'%(mod.__class__.__name__,','.join(parstrs))
     
     def getModelObject(self):
