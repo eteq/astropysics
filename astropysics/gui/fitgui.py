@@ -15,10 +15,10 @@ from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
                                 ColorMapper,LinearMapper,ScatterInspectorOverlay,\
-                                LassoOverlay
+                                LassoOverlay,AbstractOverlay
 from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool,LassoSelection,\
                                       ScatterInspector
-from enthought.enable.component_editor import ComponentEditor
+from enthought.enable.api import ColorTrait,ComponentEditor
 
 #TODO:move to remove deps?
 from enthought.tvtk.pyface.scene_editor import SceneEditor 
@@ -28,7 +28,26 @@ from enthought.mayavi.core.ui.mayavi_scene import MayaviScene
 
 from ..models import list_models,get_model,Model,binned_weights
 
+class ColorMapperFixSingleVal(ColorMapper):
+    coloratval = ColorTrait('black')
+    val = 0
+    
+    def map_screen(self, data_array):
+        res = super(ColorMapperFixSingleVal,self).map_screen(data_array)
+        res[data_array==self.val] = self.coloratval_
+        return res
+
 #_cmap = jet
+def _cmapblack(range, **traits):
+    _data =   {'red':   ((0,1,1), (0.3, .8, .8), (0.5, 0, 0), (0.75,0.75, 0.75),(.875,.2,.2),
+                         (1, 0, 0)),
+               'blue': ((0., 0, 0), (0.3,0, 0), (0.5,0, 0), (0.75,.75, .75),
+                         (0.875,0.75,0.75), (1, 1, 1)),
+               'green':  ((0.,0, 0),(0.3,.8,.8), (0.4, 0.4, 0.4),(0.5,1,1), (0.65,.75, .75), (0.75,0.1, 0.1),
+                         (1, 0, 0))}
+
+    return ColorMapperFixSingleVal.from_segment_map(_data, range=range, **traits)
+
 def _cmap(range, **traits):
     _data =   {'red':   ((0,1,1), (0.3, .8, .8), (0.5, 0, 0), (0.75,0.75, 0.75),(.875,.2,.2),
                          (1, 0, 0)),
@@ -47,7 +66,7 @@ def _cmap(range, **traits):
 #                         (1, 0, 0))}
 #    for k,v in _data.items():
 #        _data[k] = tuple(reversed([(v[-1-i][0],t[1],t[2]) for i,t in enumerate(v)]))
-
+#    
     return ColorMapper.from_segment_map(_data, range=range, **traits)
 
 class _TraitedModel(HasTraits):
@@ -172,6 +191,43 @@ class NewModelSelector(HasTraits):
             return False
         else:
             return cls._args is None
+        
+#class WeightFillOverlay(AbstractOverlay):
+#    weightval = Float(0)
+#    color = ColorTrait('black')
+#    plot = Instance(Plot)
+    
+#    def overlay(self, component, gc, view_bounds=None, mode="normal"):
+#        from enthought.chaco.scatterplot import render_markers
+        
+#        plot = self.component
+#        scatter = plot.plots['data'][0]
+#        if not plot or not scatter or not scatter.index or not scatter.value:
+#            return
+        
+#        w = plot.data.get_data('weights')
+#        inds = w==self.weightval
+        
+#        index_data = scatter.index.get_data()
+#        value_data = scatter.value.get_data()
+#        screen_pts = scatter.map_screen(np.array([index_data[inds],value_data[inds]]).T)
+#        screen_pts = screen_pts+[plot.x,plot.y]
+        
+#        props = ('line_width','marker_size','marker')
+#        markerprops = dict([(prop,getattr(scatter,prop)) for prop in props])
+        
+#        markerprops['color']=self.color_
+#        markerprops['outline_color']=self.color_
+        
+#        if markerprops.get('marker', None) == 'custom':
+#            markerprops['custom_symbol'] = scatter.custom_symbol
+        
+#        gc.save_state()
+#        gc.clip_to_rect(scatter.x+plot.x, scatter.y+plot.y, scatter.width, scatter.height)
+#        render_markers(gc, screen_pts, **markerprops)
+#        gc.restore_state()
+
+
     
 class FitGui(HasTraits):
     plot = Instance(Plot)
@@ -187,35 +243,45 @@ class FitGui(HasTraits):
     weights = Array
     weighttype = Enum(('custom','equal','lin bins','log bins'))
     weightsvary = Property(Bool)
-    weights0rem = Bool(False)
+    weights0rem = Bool(True)
     modelselector = NewModelSelector
     
     selbutton = Button('Selection...')    
-    scattertool = Enum(None,'clicktoggle','clicksingle','lassoadd','lassoremove','lassoinvert')
+    scattertool = Enum(None,'clicktoggle','clicksingle','clickimmediate','lassoadd','lassoremove','lassoinvert')
     selectedi = Property #indecies of the selected objects
     weightchangesel = Button('Set Selection To')
-    weightchangeto = Float
+    weightchangeto = Float(1.0)
     delsel = Button('Delete Selected')
+    unselectonaction = Bool(True)
+    clearsel = Button('Clear Selections')
+    lastselaction = Str('None')
+    
+    savews = Button('Save Weights')
+    loadws = Button('Load Weights')
+    _savedws = Array
     
     plotname = Property
     
     nmod = Int(1024)
-    #modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
+    #modelpanel = View(Label('empty'),kind='subpanel',title='model editor') 
     modelpanel = View
     
     traits_view = View(VGroup(
                        Item('plotcontainer', editor=ComponentEditor(),show_label=False),
-                       HGroup(VGroup(HGroup(Item('newmodel',show_label=False),
-                              Item('fitmodel',show_label=False),Item('weighttype',label='Weights:')),
-                              Item('weights0rem',label='Remove 0-weight points for fit?')
-                              Item('selbutton',show_label=False)
+                       HGroup(VGroup(HGroup(Item('weighttype',label='Weights:'),
+                                            Item('savews',show_label=False),
+                                            Item('loadws',enabled_when='_savedws',show_label=False)),
+                                Item('weights0rem',label='Remove 0-weight points for fit?'),
+                                HGroup(Item('newmodel',show_label=False),
+                                       Item('fitmodel',show_label=False),
+                                       Item('selbutton',show_label=False))  
                               ),
                               VGroup(HGroup(Item('autoupdate',label='Auto?'),
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
                               Item('nmod',label='Nmodel'))),
                        Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
                       ),
-                    resizable=True, title='Data Fitting',buttons=['OK','Cancel'],width=650,height=650
+                    resizable=True, title='Data Fitting',buttons=['OK','Cancel'],width=700,height=700
                     )
                     
     panel_view = View(VGroup(
@@ -225,20 +291,25 @@ class FitGui(HasTraits):
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate'),
                               Item('autoupdate',label='Auto?'))
                       ),
-                    title='Data Fitting'
+                    title='Model Data Fitter'
                     )
+                    
+                    
     selection_view = View(Group(
                            Item('scattertool',label='Selection Mode',
-                                 editor=EnumEditor(values={'No Selection':None,
-                                                           'Toggle on Click':'clicktoggle',
-                                                           'Select on Click':'clicksingle',
-                                                           'Add with Lasso':'lassoadd',
-                                                           'Remove with Lasso':'lassoremove',
-                                                           'Invert with Lasso':'lassoinvert'})),
+                                 editor=EnumEditor(values={None:'1:No Selection',
+                                                           'clicktoggle':'3:Toggle Select',
+                                                           'clicksingle':'2:Single Select',
+                                                           'clickimmediate':'7:Immediate',
+                                                           'lassoadd':'4:Add with Lasso',
+                                                           'lassoremove':'5:Remove with Lasso',
+                                                           'lassoinvert':'6:Invert with Lasso'})),
+                           Item('unselectonaction',label='Clear Selection on Action?'), 
+                           Item('clearsel',show_label=False),
                            Item('weightchangesel',show_label=False),
                            Item('weightchangeto',label='Weight'),
                            Item('delsel',show_label=False)
-                         ))
+                         ),title='Selection Options')
     
     def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**kwargs):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
@@ -255,12 +326,15 @@ class FitGui(HasTraits):
             self.weights = np.ones_like(xdata)
             self.weighttype = 'equal'
         else:
-            self.weights = weights
+            self.weights = np.array(weights,copy=True)
         
         pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
         self.plot = plot = Plot(pd,resizable='hv')
         
-        self.scatter = plot.plot(('xdata','ydata','weights'),name='data',type='cmap_scatter',color_mapper=_cmap,marker='circle')[0]
+        self.scatter = plot.plot(('xdata','ydata','weights'),name='data',
+                         color_mapper=_cmapblack if self.weights0rem else _cmap,
+                         type='cmap_scatter', marker='circle')[0]
+                        
         if not isinstance(mod,Model):
             self.fitmodel = True
             
@@ -271,6 +345,10 @@ class FitGui(HasTraits):
         
         plot.tools.append(PanTool(plot,drag_button='right'))
         plot.overlays.append(ZoomTool(plot))
+#        self.filloverlay = WeightFillOverlay(plot)
+#        if self.weights0rem:
+#            self.plot.overlays.append(self.filloverlay)
+        
         
         self.scattertool = None
         
@@ -303,6 +381,18 @@ class FitGui(HasTraits):
         container.add(colorbar)
         
         super(FitGui,self).__init__(**kwargs)
+        
+    def _weights0rem_changed(self,old,new):
+        if new:
+            self.plot.color_mapper = _cmapblack(self.plot.color_mapper.range)
+        else:
+            self.plot.color_mapper = _cmap(self.plot.color_mapper.range)
+        self.plot.request_redraw()
+#        if old and self.filloverlay in self.plot.overlays:
+#            self.plot.overlays.remove(self.filloverlay)
+#        if new:
+#            self.plot.overlays.append(self.filloverlay)
+#        self.plot.request_redraw()
         
     def _paramsChanged(self):
         self.updatemodelplot = True
@@ -369,6 +459,7 @@ class FitGui(HasTraits):
         self.fitmodel = True
         
     def _selbutton_fired(self,event):
+        #TODO: figure out how to set the parent 
         self.edit_traits(view='selection_view')            
                 
     def _get_nomodel(self):
@@ -393,26 +484,37 @@ class FitGui(HasTraits):
             val = [v.strip() for v in val]
         self.x_axis.title = val[0]
         self.y_axis.title = val[1]
-        
+    
+    
+    #selection-related
     def _scattertool_changed(self,old,new):
         if old is not None and 'lasso' in old:
-            if 'lasso' in new:
+            if new is not None and 'lasso' in new:
                 #connect correct callbacks
                 self.lassomode = new.replace('lasso','')
                 return
             else:
                 #TODO:test
-                self.scatter.tools[-1].on_trait_change(self._lasso_callback,
+                self.scatter.tools[-1].on_trait_change(self._lasso_handler,
                                             'selection_changed',remove=True) 
                 del self.scatter.overlays[-1]
                 del self.lassomode
-                
+        elif old == 'clickimmediate':
+            self.scatter.index.on_trait_change(self._immediate_handler,
+                                            'metadata_changed',remove=True)        
                 
         self.scatter.tools = []    
         if new is None:
             pass
         elif 'click' in new:
-            self.scatter.tools.append(ScatterInspector(self.scatter,selection_mode=new.replace('click','')))
+            smodemap = {'clickimmediate':'single','clicksingle':'single',
+                        'clicktoggle':'toggle'}
+            self.scatter.tools.append(ScatterInspector(self.scatter,
+                                      selection_mode=smodemap[new]))
+            if new == 'clickimmediate':
+                self.clearsel = True
+                self.scatter.index.on_trait_change(self._immediate_handler,
+                                                    'metadata_changed')
         elif 'lasso' in new:
             lasso_selection = LassoSelection(component=self.scatter,
                                     selection_datasource=self.scatter.index)
@@ -421,17 +523,40 @@ class FitGui(HasTraits):
                                          component=self.scatter)
             self.scatter.overlays.append(lasso_overlay)
             self.lassomode = new.replace('lasso','')
-            lasso_selection.on_trait_change(self._lasso_callback,'selection_changed')
+            lasso_selection.on_trait_change(self._lasso_handler,
+                                            'selection_changed')
         else:
             raise TraitsError('invalid scattertool value')
         
-    def _weightchangesel_fired(self,event):
+    def _weightchangesel_fired(self):
         self.weights[self.selectedi] = self.weightchangeto
+        if self.unselectonaction:
+            self.clearsel = True
+            
+        self._sel_alter_weights()
+        self.lastselaction = 'weightchangesel'
     
-    def _delsel_fired(self,event):
+    def _delsel_fired(self):
         self.weights[self.selectedi] = 0
+        if self.unselectonaction:
+            self.clearsel = True
         
-    def _lasso_callback(self,event):
+        self._sel_alter_weights()
+        self.lastselaction = 'delsel'
+        
+    def _sel_alter_weights(self):
+        if self.weighttype != 'custom':
+            self._customweights = self.weights
+            self.weighttype = 'custom'
+        self.weightsChanged()
+            
+    def _clearsel_fired(self,event):
+        if isinstance(event,list):
+            self.scatter.index.metadata['selections'] = event
+        else:
+            self.scatter.index.metadata['selections'] = list()
+        
+    def _lasso_handler(self):
         lassomask = self.scatter.index.metadata['selection'].astype(int)
         clickmask = np.zeros_like(lassomask)
         clickmask[self.scatter.index.metadata['selections']] = 1
@@ -446,6 +571,22 @@ class FitGui(HasTraits):
             raise TraitsError('lassomode is in invalid state')
         
         self.scatter.index.metadata['selections'] = list(np.where(mask)[0])
+        
+    def _immediate_handler(self):
+        sel = self.selectedi
+        if len(sel) > 1:
+            self.clearsel = True
+            raise TraitsError('selection error in immediate mode - more than 1 selection')
+        elif len(sel)==1:
+            if self.lastselaction != 'None':
+                setattr(self,self.lastselaction,True)
+            del sel[0]
+            
+    def _savews_fired(self):
+        self._savedws = self.weights
+    
+    def _loadws_fired(self):
+        self.weights = self._savedws
             
     def _get_selectedi(self):
         return self.scatter.index.metadata['selections']
@@ -558,7 +699,7 @@ class MultiFitGui(HasTraits):
                               Item('replot3d',show_label=False,visible_when='doplot3d'),
                               ),
                               Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
-                              resizable=True,width=1240,height=700,buttons=['OK','Cancel'])
+                              resizable=True,width=1240,height=700,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
     
     def __init__(self,data,names=None,models=None,weights=None,**traits):
         super(MultiFitGui,self).__init__(**traits)
