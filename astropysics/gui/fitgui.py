@@ -327,6 +327,7 @@ class FitGui(HasTraits):
             self.weighttype = 'equal'
         else:
             self.weights = np.array(weights,copy=True)
+            self.savews = True
         
         pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
         self.plot = plot = Plot(pd,resizable='hv')
@@ -583,7 +584,7 @@ class FitGui(HasTraits):
             del sel[0]
             
     def _savews_fired(self):
-        self._savedws = self.weights
+        self._savedws = self.weights.copy()
     
     def _loadws_fired(self):
         self.weights = self._savedws
@@ -699,7 +700,7 @@ class MultiFitGui(HasTraits):
                               Item('replot3d',show_label=False,visible_when='doplot3d'),
                               ),
                               Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
-                              resizable=True,width=1240,height=700,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
+                              resizable=True,width=1280,height=800,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
     
     def __init__(self,data,names=None,models=None,weights=None,**traits):
         super(MultiFitGui,self).__init__(**traits)
@@ -783,6 +784,14 @@ class MultiFitGui(HasTraits):
             self.replot3d = True
     def _plot3daxes_changed(self):
         self.replot3d = True
+        
+    @on_trait_change('weights',post_init=True)
+    def weightsChanged(self):
+        for fg in self.fgs:
+            if fg.weighttype != 'custom':
+                fg.weighttype = 'custom'
+            fg.weights = self.weights
+            
         
     @on_trait_change('data','fgs','replot3d','weights')
     def _do_3d(self):

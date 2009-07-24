@@ -1307,6 +1307,100 @@ class CompositeModel1D(FunctionModel1D):
     @property
     def ops(self):
         return self._ops  
+    
+class Grid1DModels(object):
+    """
+    A set of models that are matching types and represnt a grid of parameter
+    values.  The main purpose is to allow the grid to be inverted to extract
+    parameter values from the grid
+    """
+    
+    def __init__(self,models,nmodels=None,extraparams={},**params):
+        """
+        models can be a sequence of models (must be the same type) or a model
+        type.  If a type, the number of models to generate will be inferred
+        from the parameters (or nmodels if the parameters are all scalar)
+        """
+        from operator import isSequenceType
+        
+        n = nmodels
+        if isSequenceType(models) and not isinstance(models,basestring):
+            for i,m in enumerate(models):
+                if not isinstance(m,Model):
+                    raise TypeError('Invalid model given as sequence index %i'%i)
+            if n is not None and n != len(models):
+                raise ValueError('n does not match the number of models')
+            n = len(models)
+            modcls= None
+        else:
+            modcls = get_model(models)
+            d = params.copy()
+            d.update(extraparams)
+            for p,pv in d.iteritems():
+                if isSequenceType(pv):
+                    nn = len(pv)
+                    if n is not None:
+                        if n != nn:
+                            raise ValueError('param %s does not match previous value'%p)
+                    else:
+                        n = len(pv)
+        if n is None:
+            raise ValueError('must specify n if nothing else is a sequence')
+                
+        if modcls is not None:
+            models = [modcls() for i in range(n)]
+            
+        extraparams = dict([(p,pv) if isSequenceType(pv) else (p,pv*np.ones(n))for p,pv in extraparams.iteritems()])    
+        params = dict([(p,pv) if isSequenceType(pv) else (p,pv*np.ones(n))for p,pv in params.iteritems()]) 
+        
+        for i,m in enumerate(models):
+            for p,pv in params.iteritems():
+                setattr(m,p,pv[i])
+            
+        self.models = models
+        self.extraparams = extraparams
+        
+        self.interpmethod = 'lineary'
+        
+    def getParam(self,x,y,parname):
+        """
+        computes the value of the requested parameter that interpolates onto
+        the provided point
+        """        
+        isscalar = np.isscalar(x)
+        
+        x = np.atleast_1d(x)
+        y = np.atleast_1d(y)
+        if x.shape != y.shape:
+            raise ValueError("x and y do not match")
+        
+        if self.interpmethod == 'lineary':
+            modys = np.array([m(x) for m in self.models])
+            if parname in self.extraparams:
+                ps = self.extraparams[parname]
+            else:
+                ps = [getattr(m,parname) for m in self.models]
+            
+            res = np.array([np.interp(y[i],modys[:,i],ps) for i,xi in enumerate(x)])
+        elif self.interpmethod == 'linearx':
+            raise NotImplementedError('linearx not ready')
+        else:
+            raise NotImplementedError('invalid interpmethod')
+        
+        if isscalar:
+            return res[0]
+        else:
+            return res
+        
+    def plot(self,*args,**kwargs):
+        from matplotlib import pyplot as plt
+        
+        if kwargs.pop('clf',True):
+            plt.clf()
+        kwargs['clf'] = False
+        for m in self.models:
+            m.plot(*args,**kwargs)
+            
         
 #<-------------------------------Module functions ----------------------------->  
 __model_registry={}
@@ -1337,11 +1431,28 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     
     __model_registry[name]=model
     
-def get_model(modelname):
+def get_model(model):
     """
-    returns the class object for the requested model name in the model registry
+    returns the class object for the requested model in the model registry
+    
+    the model can be a name, instance, or class object
+    
+    KeyError is raise if a name is provided and it is incorrect, all other 
+    invalid inputs raise a TypeError
     """
-    return __model_registry[modelname]
+    from inspect import isclass
+    
+    if isinstance(model,basestring):    
+        return __model_registry[model]
+    elif isclass(model):
+        if issubclass(model,Model):
+            return model
+        else:
+            raise TypeError('class object is not a Model')
+    elif issubclass(model.__class__,Model):
+        return model.__class__
+    else:
+        raise TypeError('attempted to get invalid model')
 
 def list_models(ndims=None,include=None,exclude=None):
     """
