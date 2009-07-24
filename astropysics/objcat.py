@@ -491,7 +491,7 @@ class FieldNode(CatalogNode,Sequence):
         also extract the siblings (e.g. the parent subtree,
         except for the parent itself) , and overwrites includeself
         
-        see FieldNode.extractFieldFromNode for arguments
+        see FieldNode.extractFieldAtNode for arguments
         """
         sib = kwargs.pop('siblings',False)
         if sib and self.parent is not None:
@@ -505,7 +505,8 @@ class FieldNode(CatalogNode,Sequence):
     
     @staticmethod
     def extractFieldAtNode(node,fieldnames,traversal='postorder',missing='0',
-                           converter=None,asrec=False,includeself=True):
+                           converter=None,sources=False,asrec=False,
+                           includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
@@ -526,6 +527,12 @@ class FieldNode(CatalogNode,Sequence):
         
         converter is a function that is applied to the data before being 
         added to the array (or None to perform no conversion)
+        
+        sources determines if a sequence of sources should be returned - if
+        False, only the array is returned, if it evaluates to True, the function 
+        returns atuple with the array in the first element and the sources in 
+        the second.  If it is 'names', the names are returned instead of the 
+        source objects themselves
         
         asrec generates a record array instead of a regular array - for
         multiple fields, if this is False, the output will be f x N
@@ -571,6 +578,12 @@ class FieldNode(CatalogNode,Sequence):
                 return True
             except (KeyError,IndexError,TypeError,AttributeError):
                 return False 
+            
+        def srcfunc(node,fieldname):
+            try:
+                return getattr(node,fieldname).currentobj.source
+            except (KeyError,IndexError,TypeError,AttributeError):
+                return None 
         
         lsts = []
         masks = []
@@ -594,9 +607,17 @@ class FieldNode(CatalogNode,Sequence):
             masks = masks[0]
             
         if missing == 'mask':
-            return arr,masks
+            res = arr,masks
         else:
-            return arr
+            res = arr
+        
+        if sources:
+            srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
+            if sources == 'name' or sources == 'names':
+                srcs = [[str(s) for s in f]  for f in srcs]
+            res = (res,np.array(srcs))
+        
+        return res
 
 def generate_pydot_graph(node,graphfields=True):
     """
@@ -1783,6 +1804,7 @@ class DependentSource(Source):
         from weakref import ref
         
         self._str = 'dependent%i'%DependentSource._instcount
+        self._adscode = None
         self.depfieldrefs = depfieldrefs = []
         self.depstrs = depstrs = []
         self.pathnode = pathnode
