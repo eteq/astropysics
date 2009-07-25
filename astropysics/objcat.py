@@ -104,7 +104,7 @@ class CatalogNode(object):
     
     def reorderChildren(self,neworder):
         """
-        Change the order pf the children
+        Change the order of the children
         
         neworder can be either a sequence of  indecies (e.g. to reorder
         [a,b,c] to [c,a,b], neworder would be [2,0,1]), the string
@@ -126,7 +126,16 @@ class CatalogNode(object):
                     raise ValueError('input sequence has repeats')
                 newl.append(self._children[i])
                 added[i] = True
-                
+    
+    def addChild(self,node):
+        """
+        Adds a node as a child of this node.  Note that this will replace the
+        added node's current parent (if any)
+        """
+        if not isinstance(node,FieldNode):
+            raise ValueError('children must be FieldNodes')
+        node.parent = self
+    
     @property
     def nnodes(self):
         """
