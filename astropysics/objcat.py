@@ -502,6 +502,13 @@ class FieldNode(CatalogNode,Sequence):
             return FieldNode.extractFieldAtNode(self.parent,*args,**kwargs)
         else:
             return FieldNode.extractFieldAtNode(self,*args,**kwargs)
+        
+    def getFieldValueNodes(self,fieldname,value):
+        """
+        Searches through the tree and returns all nodes for which a particular 
+        field name has the requested value
+        """
+        return FieldName.getFieldValueNodesAtNode(self,fieldname,value)
     
     @staticmethod
     def extractFieldAtNode(node,fieldnames,traversal='postorder',missing='0',
@@ -618,6 +625,22 @@ class FieldNode(CatalogNode,Sequence):
             res = (res,np.array(srcs))
         
         return res
+    
+    @staticmethod
+    def getFieldValueNodesAtNode(node,fieldname,value,visitkwargs={}):
+        """
+        Searches through the tree and returns all nodes for which a particular 
+        field name has the requested value
+        """
+        def visitfunc(node):
+            if hasattr(node,fieldname):
+                v = getattr(node,fieldname)
+                if callable(v) and v() == value:
+                    return node
+        visitkwargs['filter'] = None    
+        return node.visit(visitfunc,**visitkwargs)
+    
+    
 
 def generate_pydot_graph(node,graphfields=True):
     """
@@ -1980,6 +2003,34 @@ class Catalog(CatalogNode):
         return hasattr(self,key)
     def __getitem__(self,key):
         return getattr(self,key)
+    
+class FieldCatalog(Catalog):
+    """
+    This class is a Catalog (e.g. the root of a tree of nodes) that is assumed
+    to contain FieldNodes and hence includes some convinience methods to 
+    simplify access to FieldNode searching functions
+    """
+    def extractField(self,*args,**kwargs):
+        """
+        walk through the tree starting from this object
+        
+        see FieldNode.extractFieldAtNode for arguments
+        """
+        kwargs['includeself']=False
+        return FieldNode.extractFieldAtNode(self,*args,**kwargs)
+    
+    def getFieldValueNodes(self,fieldname,value):
+        """
+        Searches the Catalog and finds all objects with the requested name
+        """
+        return FieldNode.getFieldValueNodesAtNode(self,fieldname,value,{'includeself':False})
+    
+    def locateName(self,name):
+        """
+        Searches the Catalog and finds all objects with the requested name
+        """
+        return FieldNode.getFieldValueNodesAtNode(self,'name',name,{'includeself':False})
+    
     
 class _StructuredFieldNodeMeta(ABCMeta):
     #Metaclass is used to check at class creation-time that fields all match names

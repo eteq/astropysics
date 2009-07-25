@@ -741,7 +741,8 @@ class MultiFitGui(HasTraits):
             for i,m in enumerate(models):
                 fg = self.fgs[i]
                 fg.tmodel = _TraitedModel(m)
-                fg.fitmodel = True
+                if not isinstance(m,Model):
+                    fg.fitmodel = True
         
         
         
