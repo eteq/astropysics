@@ -630,8 +630,8 @@ class FieldNode(CatalogNode,Sequence):
         if sources:
             srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
             if sources == 'name' or sources == 'names':
-                srcs = [[str(s) for s in f]  for f in srcs]
-            res = (res,np.array(srcs))
+                srcs = [[str(s)[7:] for s in f]  for f in srcs]
+            res = (res,np.array(srcs)[0])
         
         return res
     
@@ -2321,7 +2321,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         fields = dict([t for t in enumerate(fields)])
     else:
         fields = dict(fields) #copy
-        
+       
     if converters is None:
         pass
     elif not isMappingType(converters):
@@ -2343,6 +2343,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         for k in fields.keys():
             if k in nms:
                 fields[nms.index(k)] = fields[k]
+                del fields[k]
         for k in converters.keys():
             if k in nms:
                 converters[nms.index(k)] = converters[k]
@@ -2360,7 +2361,11 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         else:
             fi = fields[i]
             fieldseq.append(fi)
+            del fields[i]
     fieldseq = tuple(fieldseq)
+    
+    if fields:
+        raise ValueError('fields %s were not found in the array'%fields)
             
     convseq = []
     for i in range(len(array[0])):
@@ -2378,6 +2383,23 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
 #            else:
 #                raise TypeError('provided converter %i has incorrect number of arguments'%i)
     convseq = tuple(convseq)
+    
+    twoargseq =[]
+    for i,conv in enumerate(convseq):
+        if conv is None:
+            twoargseq.append(None)
+        else:
+            if not callable(conv):
+                raise ValueError('non-callable converter for field %s'%fieldseq[i])
+            else:
+                aspec = getargspec(conv)
+                if not aspec[1]:
+                    if len(aspec[0])==1:
+                        twoargseq.append(False)
+                    elif len(aspec[0])==2:
+                        twoargseq.append(True)
+                    else:
+                        raise ValueError('converter for field %s has wrong number of arguments'%fieldseq[i])
     
     if matcher is None and len(array) != len(nodes):
         raise ValueError('with no matcher, the number of nodes must match the size of the array')
@@ -2404,7 +2426,10 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         for k,v in enumerate(a):
             if fieldseq[k] is not None:
                 fi = getattr(n,fieldseq[k])
-                fi[source] = convseq[k](v)
+                if twoargseq[k]:
+                    fi[source] = convseq[k](v,a)
+                else:
+                    fi[source] = convseq[k](v)
                 if setcurr:
                     fi.currentobj = source
         
