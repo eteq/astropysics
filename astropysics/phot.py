@@ -1923,31 +1923,65 @@ def transform_dict_ugriz_UBVRI(d,ugrizprimed=False):
                 d['z']=z
         else:
             raise ValueError('need B and V to do anything')
+        
+        
+def ML_ratio_from_color(c,color='B-V'):
+    """
+    uses Bell&DeJong 01 relations - note that this is intended for 
+    normal spiral stellar pops
+    
+    
+    color can either be a 'B-V','B-R','V-I','V-J','V-H',or 'V-K'
+    
+    returns tuple of mass-to-light ratios for each c as
+    (mlrb,mlrv,mlrr,mlri,mlrJ,mlrH,mlrK)
+    """
+    bdj01table1 = np.array([[-.994,1.804,-.734,1.404,-.660,1.222,-.627,1.075,-.621,.794,-.663,.704,-.692,.652],
+         [-1.224,1.251,-.916,.976,-.820,.851,-.768,.748,-.724,.552,-.754,.489,-.776,.452],
+         [-1.919,2.214,-1.476,1.747,-1.314,1.528,-1.204,1.347,-1.040,0.987,-1.030,.870,-1.027,.800],
+         [-1.903,1.138,-1.477,.905,-1.319,.794,-1.209,.700,-1.029,.505,-1.014,.442,-1.005,0.402],
+         [-2.181,.978,-1.700,.779,-1.515,.684,-1.383,.603,-1.151,.434,-1.120,.379,-1.1,.345],
+         [-2.156,.895,-1.683,.714,-1.501,.627,-1.370,.553,-1.139,.396,-1.108,.346,-1.087,.314]])
+    colorrowmap={'B-V':0,'B-R':1,'V-I':2,'V-J':3,'V-H':4,'V-K':5}
+    if color not in colorrowmap:
+        raise ValueError('Unknown color')
+    a = bdj01table1[colorrowmap[color],0::2].reshape((7,1))
+    b = bdj01table1[colorrowmap[color],1::2].reshape((7,1))
+    
+    return tuple(10**(a+b*c))
+    
 
 def M_star_from_mags(B,V,R,I,color='B-V'):
     """
-    uses Bell&DeJong 01 relations
+    uses Bell&DeJong 01 relations - note that this is intended for 
+    normal spiral stellar pops
+    
+    
     color can either be a 'B-V','B-R','V-I', or 'mean'
+    
     returns stellar mass as mean,(B-derived,V-derived,R-derived,I-derived)
     """    
     if color=='B-V':
-        c=B-V
-        mlrb=10**(-0.994+1.804*c)
-        mlrv=10**(-0.734+1.404*c)
-        mlrr=10**(-0.660+1.222*c)
-        mlri=10**(-0.627+1.075*c)
+        mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(B-V,'B-V')[:4]
+#        c=B-V
+#        mlrb=10**(-0.994+1.804*c)
+#        mlrv=10**(-0.734+1.404*c)
+#        mlrr=10**(-0.660+1.222*c)
+#        mlri=10**(-0.627+1.075*c)
     elif color=='B-R':
-        c=B-R
-        mlrb=10**(-1.224+1.251*c)
-        mlrv=10**(-0.916+0.976*c)
-        mlrr=10**(-0.820+0.851*c)
-        mlri=10**(-0.768+0.748*c)
+        mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(B-R,'B-R')[:4]
+#        c=B-R
+#        mlrb=10**(-1.224+1.251*c)
+#        mlrv=10**(-0.916+0.976*c)
+#        mlrr=10**(-0.820+0.851*c)
+#        mlri=10**(-0.768+0.748*c)
     elif color=='V-I':
-        c=V-I
-        mlrb=10**(-1.919+2.214*c)
-        mlrv=10**(-1.476+1.747*c)
-        mlrr=10**(-1.314+1.528*c)
-        mlri=10**(-1.204+1.347*c)
+        mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(V-I,'V-I')[:4]
+#        c=V-I
+#        mlrb=10**(-1.919+2.214*c)
+#        mlrv=10**(-1.476+1.747*c)
+#        mlrr=10**(-1.314+1.528*c)
+#        mlri=10**(-1.204+1.347*c)
     elif color=='mean':
         bv=M_star_from_mags(B,V,R,I,'B-V')
         br=M_star_from_mags(B,V,R,I,'B-R')
