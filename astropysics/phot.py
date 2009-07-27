@@ -43,7 +43,7 @@ class PogsonMagnitude(Magnitude):
     a = -2.5/np.log(10.0)
     
     def mag_to_flux(self,mag):
-        return np.exp(mag/__maga)
+        return np.exp(mag/self.a)
     def magerr_to_fluxerr(self,err,mag):
         return -err*_m2f_pogson(mag)/self.a
     def flux_to_mag(self,flux):

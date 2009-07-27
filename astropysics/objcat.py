@@ -1016,6 +1016,12 @@ class Field(MutableSequence):
         returns a list of all the DerivedValue objects
         """
         return [o for o in self if isinstance(o,DerivedValue)]
+class ErrorField(Field):
+    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None):
+        raise NotImplementedError
+    
+    def __call__(self):
+        return self.value,uperr,lowerr
     
 class SEDField(Field):
     """
@@ -1612,7 +1618,7 @@ class FieldValue(object):
     
 class ObservedValue(FieldValue):
     """
-    This value is a observed or otherwise measured value for the field
+    This value is an observed or otherwise measured value for the field
     with the associated Source.
     """
     __slots__=('_value')
@@ -1637,6 +1643,44 @@ class ObservedValue(FieldValue):
     @property    
     def value(self):
         return self._value
+
+#class ObservedValueWithErrors(ObservedValue):
+#    """
+#    This value is an observed value with errorbars (symmetric or asymmetric)
+    
+#    The value is either (value,err) or (value,uperr,lowerr)
+#    """
+#    __slots__=('_upperr','_lowerr')
+#    def __init__(self,source,value):
+#        if len(value) <2 or len(value) > 3:
+#            raise TypeError('Values with error must be 2 or 3-tuples')
+#        super(ObservedValueWithErrors,self).__init__(self,source,value[0])
+#        self._uperr = value[1]
+#        if len(value) == 3:
+#            self._lowerr = value[2]
+        
+#    def __getstate__(self):
+#        d = super(ObservedValueWithErrors,self).__getstate__()
+#        d['_upperr'] = self._upperr
+#        d['_lowerr'] = self._lowerr
+#        return d
+#    def __setstate__(self,d):
+#        super(ObservedValueWithErrors,self).__setstate__(d)
+#        self._upperr = d['_upperr']
+#        self._lowerr = d['_lowerr']
+        
+#    def __str__(self):
+#        if self._lowerr is not None:
+#            return '%s:Value %s +%s -%s'%(self.source,self.value,self._upperr,self._lowerr)
+#        else:
+#            return '%s:Value %s +/- %s'%(self.source,self.value,self._upperr)
+        
+#    @property
+#    def value(self):
+#        if self._lowerr is not None:
+#            return (self._value,self._upperr,self._lowerr)
+#        else:
+#            return (self._value,self._upperr)
         
 class DerivedValue(FieldValue):
     """
