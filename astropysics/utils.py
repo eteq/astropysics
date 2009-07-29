@@ -86,6 +86,7 @@ class Pipeline(object):
                     raise ValueError('object %s is not a PipelineElement'%str(c))
                 
         self.components = list(components)
+        self.processcycles = [0 for i in range(len(components))]
         self.datadeques = [deque() for i in range(len(components)+1)]
     
     def feed(self,data,iterate=False):
@@ -101,7 +102,7 @@ class Pipeline(object):
         for dat in data:
             self.datadeques[0].appendleft(dat)
     
-    def extract(self,autoprocess=True,extractall=False):
+    def extract(self,extractall=False,autoprocess=False):
         """
         extract from the last stage of the pipeline.  
         
@@ -112,7 +113,7 @@ class Pipeline(object):
         from the final stage (combined with autoprocess, this will
         clear the pipeline)
         
-        returns None if there is nothing to be extracted
+        raises an IndexError if there is no data left to extract
         """              
         d = self.datadeques[-1]
           
@@ -120,7 +121,7 @@ class Pipeline(object):
             self.processToStage(-1,True)
         
         if len(d) == 0:
-            return None
+            extractall = False
         
         if extractall:
             alld = list(reversed(d))
@@ -131,49 +132,104 @@ class Pipeline(object):
         
     def _processStage(self,stagenum):
         st = self.components[stagenum]
-        lastst = self.components[stagenum-1] if stagenum != 0 else None
+        lastst = self.components[:(stagenum-1)] if stagenum != 0 else None
         
         data = self.datadeques[stagenum].pop()
         try:
             check_type(st._plintype,data) #does nothing if st._plintype is None
-            self.datadeques[stagenum+1].appendleft(st._plProcess(data,lastst,self))
+            newdata = st._plProcess(data,lastst,self)
+            if newdata is None:
+                newdata = st._plInteract(data,lastst,self)
+                if newdata is None:
+                    self.processcycles[stagenum] += 1
+                else:
+                    self.datadeques[stagenum+1].appendleft(newdata)
+                    self.processcycles[stagenum] = 0
+            else:
+                self.datadeques[stagenum+1].appendleft(newdata)
+                self.processcycles[stagenum] = 0
+        except TypeError,e:
+            #if type-checking fails, let the data disppear
+            raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
         except:
             self.datadeques[stagenum].append(data)
             raise
+    
+    def process(self,repeat=False):
+        """
+        process the pipeline to the end
         
-    def processToStage(self,stagenum=-1,fullyprocess=False):
+        if repeat is True, the pipeline will by processed continually, 
+        otherwise, only one step through the pipeline will be run
+        """
+        return self.processToStage(-1,repeat)
+    
+    def processSingle(self,input,processinglimit=10):
+        """
+        processes the input value through the pipeline, skipping over anything
+        in the queue and repeating a processing stage until complete
+        
+        processinglimit is the maximum number of times to run the 
+        processing of any given stage - if the processing is still 
+        incomplete, a PipelineError will be raised.  If it is 0,
+        no limit will be used (e.g. processing continues until 
+        completion)
+        
+        return value is the result of the full pipeline (automatically 
+        extracted)
+        """
+        self.datadeques[0].append(input)
+        for stage in range(len(self.components)):
+            self._processStage(stage)
+            while self.processcycles[stage]:
+                if processinglimit and self.processcycles[stage] >= processinglimit:
+                    raise PipelineError('hit processing limit at stage %i'%stage)
+                self._processStage(stage)
+            self.datadeques[stage+1].append(self.datadeques[stage].popleft())
+                
+        return self.datadeques[-1].pop()
+        
+    def processToStage(self,stagenum,repeat=False):
         """
         stage numbers are 0-indexed or can be negative to go from end
         
-        if fullyprocess is True, processing continue until all earlier
-        stages are empty
+        if repeat is True, processing will continue until all earlier
+        stages are empty.  If it is an integer, it will be taken as a 
+        maximum number of times to attempt any given stage before
+        a PipelineError is raised
         
-        returns the number of times the stage was fed and processed
+        returns the number of times all of the stages were fed and processed
         """
         if stagenum >= 0:
             stages = range(stagenum+1)
         else:
             stages = range(len(self.datadeques)+stagenum)
-        
+        counts = []    
         for st in stages:
             dd = self.datadeques[st]
             count=0
-            if fullyprocess:
+            if repeat:
                 while len(dd)>0:
                     self._processStage(st)
+                    while self.processcycles[st]:
+                        if repeat is not True and self.processcycles[st] >= repeat:
+                            raise PipelineError('hit processing limit at stage %i'%stage)
+                        self._processStage(st)
                     count+=1   
             else:
                 if len(dd)>0:
                     self._processStage(st)
-                    count=1
-        return count
+                    if not self.processcycles[st]:
+                        count=1
+            counts.append(count)
+        return counts
     
     def clear(self,stages=None):
         """
         clears the inputs of the stage(s) requested (all of them if None)
         """
         if stages is None:
-            stages = range(len(components)+1)
+            stages = range(len(self.components)+1)
         for st in stages:
             self.datadeques[st].clear()
     
@@ -181,24 +237,28 @@ class PipelineElement(object):
     """
     This class represents an element in a Pipeline.  Implementing classes
     must override the following method:
-    *_plProcess(self,data,src): process the data
+    *_plProcess(self,data,last,pipeline): process the data
     
-    this attribute may be set as a processing indicator:
+    This method may be overridden: 
+    *_plinteract(self,data,last,pipeline): perform interactive stage - 
+        typical intended calling order is _plProcess,_plInteract
+    
+    this attribute may be set (on classes or instances) as a processing 
+    indicator:
     *_plintype: the type expected for data fed into this PipelineElement - 
-    see `check_type` for valid types to use (None means no checking)
+        see `check_type` for valid types to use (None means no checking)
     """
     __metaclass__ = ABCMeta
     
     _plintype = None
     
     @abstractmethod
-    def _plProcess(self,data,srcstage,pipeline):
+    def _plProcess(self,data,srcstages,pipeline):
         """
         this method should perform the data processing steps that 
         this element of the pipeline is supposed to do.  
         
-        the srcstage is the stage that came before this one, or None if it is
-        the first stage.  
+        srcstages is a sequence of all the previous stages in the pipeline
         
         pipeline is the object that called the processing of this element
         
@@ -207,6 +267,14 @@ class PipelineElement(object):
         stage
         """
         raise NotImplementedError
+    
+    def _plInteract(self,data,srcstage,pipeline):
+        """
+        called if _plProcess retruns None and plinteract is True.  Should 
+        return the data to be passed into the next stage (if None, _plProcess
+        will be called again)
+        """
+        return None
         
     
 class PipelineError(Exception):
