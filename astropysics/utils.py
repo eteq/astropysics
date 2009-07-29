@@ -17,6 +17,52 @@ except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
+    
+    
+def check_type(types,val,acceptnone=True):
+    """
+    Call this function to check if the value matches the provided types.
+    
+    note that None will always be accepted if acceptnone is True
+    
+    types can be a single type, a sequence of types, or a callable that 
+    accepts one argument and will be called with the value - if it 
+    returns True, the value is the correct type. Otherwise, a TypeError
+    will be raised.
+    
+    if the type is a numpy dtype, the input array type is also checked
+    """
+    if val is None:
+        if acceptnone:
+            return
+        else:
+            raise TypeError('None is not a valid value')
+        
+    if types is not None:
+        from operator import isSequenceType
+        if np.iterable(types):
+            err = 'Type checking problem'
+            for ty in types:
+                if isinstance(ty,np.dtype):
+                    if not isinstance(val,np.ndarray):
+                        err = 'Value %s not a numpy array'%val
+                        continue
+                    if self.value.dtype != ty:
+                        err = 'Array %s does not match dtype %s'%(val,ty)
+                        continue
+                elif not isinstance(val,ty):
+                    err = 'Value %s is not of type %s'%(val,ty)
+                    continue
+                return
+            raise TypeError(err)
+        elif isinstance(types,type):
+            check_type((types,),val)
+        elif callable(types):
+            if not types(val):
+                raise TypeError('custom function type-checking failed')
+        else:
+            raise ValueError('invalid type to check')
+
 
 #<---------------------------data pipelining----------------------------------->
 
@@ -27,10 +73,10 @@ class Pipeline(object):
     
     dochecks validates the components as PipelineElements before accepting them
     into the pipeline
-    
-    TODO: conditional interrupts
     """
     def __init__(self,components,joins=None,dochecks=True):
+        from collections import deque
+        
         if joins is not None:
             raise NotImplementedError('non-linear pipelines not yet ready')
         
@@ -40,6 +86,7 @@ class Pipeline(object):
                     raise ValueError('object %s is not a PipelineElement'%str(c))
                 
         self.components = list(components)
+        self.datadeques = [deque() for i in range(len(components)+1)]
     
     def feed(self,data,iterate=False):
         """
@@ -52,7 +99,7 @@ class Pipeline(object):
             data = [data]
             
         for dat in data:
-            self.components[0]._plFeed(dat,None)
+            self.datadeques[0].appendleft(dat)
     
     def extract(self,autoprocess=True,extractall=False):
         """
@@ -61,26 +108,40 @@ class Pipeline(object):
         If autoprocess is True, the stages will be processed 
         so that at least one item is in the final stage
         
-        if extractall is True, this will continue until None is returned
-        """                
+        if extractall is true, a sequence of objects will be extracted
+        from the final stage (combined with autoprocess, this will
+        clear the pipeline)
+        
+        returns None if there is nothing to be extracted
+        """              
+        d = self.datadeques[-1]
+          
+        if autoprocess:
+            self.processToStage(-1,True)
+        
+        if len(d) == 0:
+            return None
         
         if extractall:
-            results = []
-            if autoprocess:
-                self.processToStage(-1,True)
-            results.append(self.components[-1]._plExtract())
-            while results[-1] is not None:
-                results.append(self.components[-1]._plExtract())
-            return results
-        
+            alld = list(reversed(d))
+            d.clear()
+            return alld
         else:
-            extracted = self.components[-1]._plExtract()
-            if autoprocess and extracted is None:
-                self.processToStage(-1,False)
-                extracted = self.components[-1]._plExtract()
-            return extracted
-    
-    def processToStage(stagenum,fullyprocess=False):
+            return d.pop()
+        
+    def _processStage(self,stagenum):
+        st = self.components[stagenum]
+        lastst = self.components[stagenum-1] if stagenum != 0 else None
+        
+        data = self.datadeques[stagenum].pop()
+        try:
+            check_type(st._plintype,data) #does nothing if st._plintype is None
+            self.datadeques[stagenum+1].appendleft(st._plProcess(data,lastst,self))
+        except:
+            self.datadeques[stagenum].append(data)
+            raise
+        
+    def processToStage(self,stagenum=-1,fullyprocess=False):
         """
         stage numbers are 0-indexed or can be negative to go from end
         
@@ -89,107 +150,70 @@ class Pipeline(object):
         
         returns the number of times the stage was fed and processed
         """
-        prestages = self.components[:stagenum]
-        finalstage = self.components[stagenum]
+        if stagenum >= 0:
+            stages = range(stagenum+1)
+        else:
+            stages = range(len(self.datadeques)+stagenum)
         
-        count = 0
-        fed = True
-        while fed:
-            tofeed = lastst = fed = None
-            for st in prestages:
-                if tofeed is not None:
-                    st._plFeed(tofeed,lastst)
-                st._plProcess()
-                tofeed = st._plextract()
-                if fullyprocess and tofeed is not None:
-                    fed = True
-                lastst = st
-                    
-            if tofeed is not None:
-                count+=1
-                finalstage._plFeed(tofeed,lastst)
-                finalstage._plProcess()
+        for st in stages:
+            dd = self.datadeques[st]
+            count=0
+            if fullyprocess:
+                while len(dd)>0:
+                    self._processStage(st)
+                    count+=1   
+            else:
+                if len(dd)>0:
+                    self._processStage(st)
+                    count=1
         return count
     
     def clear(self,stages=None):
         """
-        clears the stage(s) requested (all of them if None)
+        clears the inputs of the stage(s) requested (all of them if None)
         """
-        from operator import isSequenceType
         if stages is None:
-            stages=range(len(self.components))
-        if not isSequenceType(stages):
-            stages = [stages]
+            stages = range(len(components)+1)
         for st in stages:
-            self.components[stages]._plClear()
+            self.datadeques[st].clear()
     
 class PipelineElement(object):
     """
     This class represents an element in a Pipeline.  Implementing classes
-    must override the following methods:
-    *_plFeed(self,data,src): load data into the pipeline element.  Minimal 
-    processing should occur here (just whatever is necessary to set
-    parameters)
-    *_plProcess(self): process the data 
-    *_plExtract(self): return the processed data 
-    optionally, the following methods can be overriden:
-    *_plClear(self): clear any stored data associated with this element
+    must override the following method:
+    *_plProcess(self,data,src): process the data
+    
+    this attribute may be set as a processing indicator:
+    *_plintype: the type expected for data fed into this PipelineElement - 
+    see `check_type` for valid types to use (None means no checking)
     """
     __metaclass__ = ABCMeta
     
-    @abstractmethod
-    def _plFeed(self,data,src):
-        """
-        this method loads data from an earlier pipeline stage into this object
-        
-        data is the data from the earlier stage (interpretation is up to the
-        object), while src is a refernce to the object that is feeding in the 
-        data (or None if it is the first stage)
-        """
-        raise NotImplementedError
+    _plintype = None
     
     @abstractmethod
-    def _plProcess(self):
+    def _plProcess(self,data,srcstage,pipeline):
         """
         this method should perform the data processing steps that 
         this element of the pipeline is supposed to do.  
         
-        It should return None when processing is completed, otherwise some 
-        sort of informational object that is up to the Pipeline to interpret.
-        The pipeline will continue processing until None is returned, although 
-        there are pipeline mechanisms to interrupt at various points (see
-        Pipeline.setInterrupt)
+        the srcstage is the stage that came before this one, or None if it is
+        the first stage.  
+        
+        pipeline is the object that called the processing of this element
+        
+        this method should return None if processing was incomplete for any 
+        reason - otherwise, the return value will be passed to the next 
+        stage
         """
         raise NotImplementedError
-    
-    @abstractmethod
-    def _plExtract(self):
-        """
-        This method should return one piece of data from this stage of the pipeline 
-        for use in the next stage.  Generally, information about the data should be 
-        completely encapsulated in the object that is returned from this 
-        method.  If there is no data left to be extracted, this should return
-        None
-        """
-        raise NotImplementedError
-        return data
-    
-    def _plClear(self):
-        """
-        This method should clear any stored data in the pipeline. by default 
-        it processes and then extracts data until the pipeline returns None,
-        but overriding is recommended if processing will be expensive per-unit
-        """
-        while _plProcess() is not None:
-            pass
-        while _plExtract() is not None:
-            pass
+        
     
 class PipelineError(Exception):
     """
     This exception is used to indicate problems with the pipeline.  It
     should NOT be used to indicate data matching problems within 
-    PipelineElements --ValueError or TypeError should be used for 
+    PipelineElements -- ValueError or TypeError should be used for 
     that purpose
     """
     pass
