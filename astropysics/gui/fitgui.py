@@ -457,6 +457,13 @@ class FitGui(HasTraits):
                     self.tmodel = _TraitedModel(cls(self.modelselector.modelargnum))
                 else:
                     self.tmodel = _TraitedModel(cls())
+            else: #cancelled
+                return      
+            
+        #TODO:generalize this to a model auto-setting method?
+        from ..models import SmoothSplineModel
+        if isinstance(self.tmodel.model,SmoothSplineModel):
+                self.tmodel.model.s = len(self.data[0])
         self.fitmodel = True
         
     def _selbutton_fired(self,event):
@@ -651,7 +658,7 @@ class FitGui(HasTraits):
         return self.tmodel.model
             
             
-def fit_curve(xdata,ydata,model=None,**kwargs):
+def fit_data(xdata,ydata,model=None,**kwargs):
     """
     fit a 2d data set using the FitGui interface.  Returns the model or None
     if fitting is cancelled.
@@ -861,7 +868,7 @@ class MultiFitGui(HasTraits):
             d[v] = k
         return d
     
-def fit_curve_multi(data,names=None,weights=None,models=None):
+def fit_data_multi(data,names=None,weights=None,models=None):
     """
     fit a data set consisting of a variety of curves simultaneously
     

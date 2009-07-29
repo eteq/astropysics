@@ -15,7 +15,7 @@ to data.
 """
 try:
     from spectarget import SpecTarget
-    from fitgui import FitGui,fit_curve,MultiFitGui,fit_curve_multi
+    from fitgui import FitGui,fit_data,MultiFitGui,fit_data_multi
 except ImportError,e:
     if 'traits' in e.message:
         from warnings import warn
