@@ -1576,40 +1576,9 @@ class FieldValue(object):
         (or None to accept anything).  Any mismatches will throw
         a TypeError
         """
-        if typetocheck is not None:
-            from operator import isSequenceType
-            if isinstance(typetocheck,type):
-                self._doTypeCheck((typetocheck,),self.value)
-            elif callable(typetocheck):
-                if not typetocheck(self.value):
-                    raise TypeError('custom function type-checking failed')
-            elif isSequenceType(typetocheck):
-                self._doTypeCheck(typetocheck,self.value)
-            else:
-                raise ValueError('invalid type to check')
-        
-    def _doTypeCheck(self,types,val):
-        """
-        handles interpretation of types - subclasses
-        should call this with the val that should be checked
-        if it is not the regular value
-        """
-        if val is not None:
-            err = 'Type checking problem'
-            for type in types:
-                if isinstance(type,np.dtype):
-                    if not isinstance(val,np.ndarray):
-                        err = 'Value %s not a numpy array'%val
-                        continue
-                    if self.value.dtype != type:
-                        err = 'Array %s does not match dtype %s'%(val,type)
-                        continue
-                elif not isinstance(val,type):
-                    err = 'Value %s is not of type %s'%(val,type)
-                    continue
-                return
-            raise TypeError(err)
-    
+        from .utils import check_type
+        check_type(typetocheck,self.value)
+            
     def __call__(self):
         return self.value
     
@@ -2172,6 +2141,7 @@ class StructuredFieldNode(FieldNode):
     
     checkonload = 'warn'
     def __setstate__(self,d):
+        #function spends a lot of time in getmembers - optimize if possible?
         import inspect
         
         self._altered = d['_altered']
