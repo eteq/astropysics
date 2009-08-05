@@ -8,17 +8,23 @@ This package deals mostly with the raw CCD images themselves - for science tools
 see the phot and spec packages.
 """
 
-from __future__ import division,,with_statement
+from __future__ import division,with_statement
 import numpy as np
+
 try:
     #requires Python 2.6
     from abc import ABCMeta
     from abc import abstractmethod
     from abc import abstractproperty
+    from collections import Sequence
+    Sequence.register(np.ndarray) #register numpy array as a sequence TODO:remove?
 except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
+    Sequence = None
+    
+from .utils import PipelineElement
 
 class CCDImage(object):
     """
@@ -780,8 +786,301 @@ class FitsImage(CCDImage):
         self.activateRange(currrng)
     hdu = property(_getHdu,_setHdu,doc="""
     the hdu of the current fits file
-    """)       
+    """)      
     
+class ImageBiasSubtractor(PipelineElement):
+    """
+    Subtracts a dark/bias frame or uses an overscan region to define a 
+    bias or bias curve to subtract
+    
+    *biasframe: an image matching the input's shape that will be subtracted
+        or None to skip this step
+    *biasregion: a 4-tuple defining a region as (xmin,xmax,ymin,ymax)
+    *overscan: an integer defining the edge of the overscal region, or a 
+        2-tuple of the form (edge,bool) where the boolean indicates if the it 
+        is a left edge (True, default) or a right edge (False)
+    *overscanaxis: sets the axis along which the overscan
+        region is defined (typcally the readout axis): 'x'/0 or 'y'/1,
+        assumed for the overscan
+    *overscanfit: sets the default fitting method for the overscan region (if 
+        used) or None to just use the combined value directly
+    *interactive: if True, interactively fit the overscan curve
+    *combinemethod: method to 'mean','median','max','min' or a callable used
+        to combine the overscan area
+    *trim: trim off the overscan region if it is specified 
+    *save:if True, stores 'lastimage' and 'lastcurve' as appropriate
+    """
+    
+    def __init__(self):
+        self.biasframe = None
+        self.biasregion = None
+        self.overscan = None
+        self.overscanaxis = 0
+        self.overscanfit = None
+        self.interactive = False
+        self.combinemethod = 'mean'
+        self.trim = True
+        
+        self.save = True
+        self.lastimage = self.lastcurve = None
+        
+    def subtractFromImage(self,image):
+        """
+        subtract the bias from the provided image
+        """
+        if self.biasframe is not None:
+            image = image - self.biasframe
+            
+        if self.biasregion is not None:
+            try:
+                x1,x2,y1,y2 = self.biasregion
+            except (ValueError,TypeError):
+                raise TypeError('biasregion is not a 4-tuple or None')
+            
+            if self.combinemethod == 'mean':
+                bias = np.mean(image[x1:x2,y1:y2])
+            elif self.combinemethod == 'median':
+                bias = np.median(image[x1:x2,y1:y2])
+            elif self.combinemethod == 'max':
+                bias = np.max(image[x1:x2,y1:y2])
+            elif self.combinemethod == 'min':
+                bias = np.min(image[x1:x2,y1:y2])
+            elif callable(self.combinemethod):
+                bias = self.combinemethod(image)
+            else:
+                raise ValueError('invalid combinemethod %s'%self.combinemethod)
+            
+            image = image - bias
+        
+        if self.overscan is not None:
+            try:
+                if isinstance(self.overscan,int):
+                    edge = self.overscan
+                    left = True
+                elif len(self.overscan)==2:
+                    edge,left = self.overscan
+                    left = bool(left)
+                else:
+                    raise TypeError
+            except TypeError:
+                raise TypeError('overscan is not an integer or 2-tuple')
+            
+            if self.overscanaxis == 'x' or self.overscanaxis == 0:
+                pass
+            elif self.overscanaxis == 'y' or self.overscanaxis == 1:
+                image = image.T
+            else:
+                raise ValueError('invalid overscanaxis')
+            
+            if left:
+                overscan = image[edge:]
+            else:
+                overscan = image[:edge]
+            
+            if self.combinemethod == 'mean':
+                overscan = np.mean(overscan,axis=0)
+            elif self.combinemethod == 'median':
+                overscan = np.median(overscan,axis=0)
+            elif self.combinemethod == 'max':
+                overscan = np.max(overscan,axis=0)
+            elif self.combinemethod == 'min':
+                overscan = np.min(overscan,axis=0)
+            elif callable(self.combinemethod):
+                try:
+                    overscan = self.combinemethod(overscan,axis=0)
+                except TypeError:
+                    overscan = self.combinemethod(overscan)
+            else:
+                raise ValueError('invalid combinemethod %s'%self.combinemethod)
+            
+            x = arange(len(overscan))
+            if self.overscanfit:
+                if self.interactive:
+                    from .gui import fit_data
+                    m = fit_data(x,overscan,model=self.overscanfit)
+                else:
+                    from .models import get_model
+                    m = get_model(self.overscanfit)
+                    m.fitData(x,overscan)
+                fitcurve = m(x)
+            else:
+                fitcurve = overscan
+                
+            image = image - fitcurve
+            
+            if self.trim:
+                if left:
+                    image = image[edge:]
+                else:
+                    image = image[:edge]
+        else:
+            fitcurve = None
+        
+        if self.overscanaxis == 'y' or self.overscanaxis == 1:
+            image = image.T
+        
+        if self.save:
+            self.lastimage = image
+            self.lastcurve = fitcurve
+            
+        return image
+    
+    def _plProcess(self,data,pipeline,elemi):
+        if self.interactive:
+            return None #interactive fit will occur in self
+        else:
+            return self.subtractFromImage(data)
+    
+    def _plInteract(self,data,pipeline,elemi):
+        return self.subtractFromImage(data)
+
+
+class ImageCombiner(PipelineElement):
+    """
+    Combines a sequence of images into a single image.
+    
+    attributes that control combining are:
+    *method: can be 'mean', 'median', 'sum', or a callable that takes a 
+        sequence of matched images and returns an image of the size
+        of the inputs
+    *shifts: a sequence of 2-tuples that are taken as the amount to 
+        offset each image before combining (in pixels)
+    *shiftorder: order of the spline interpolation used when images are shifted
+    *trim: if True, the image is trimmed based on the shifts to only include
+        the pixels where the images overalap 
+    *sigclip: the number of standard deviations from the mean before a point
+        is rejected from the combination.  If None, no sigma clipping
+        is performed
+    *save: if True, the last set of operations will be stored for later use 
+        (see below)
+        
+    these attributes will be set at each operation if the :
+    *lastimage: the last result of combineImages
+    *mask: the mask of altered/rejected pixels from the last result
+    
+    """
+    _plintype = Sequence
+    
+    def __init__(self):
+        self.method = 'median'
+        self.shifts = None
+        self.trim = True
+        self.shiftorder = 3
+        self.sigclip = None
+        
+        self.save = True
+        self.lastimage = self.mask = None
+        
+    def combineImages(self,images):
+        outshape = images[0].shape
+        for im in images[1:]:
+            if im.shape != outshape:
+                raise ValueError("image sizes don't match")
+            
+        if self.shifts:
+            from scipy.ndimage import geometric_transform
+            from functools import partial
+            
+            shifts = np.array(self.shifts,copy=False)
+            #TODO: figure out swap!
+            xmin,xmax = np.min(shifts[:,1]),np.max(shifts[:,1])
+            ymin,ymax = np.min(shifts[:,0]),np.max(shifts[:,0])
+            xrange = np.ceil(xmax - xmin)
+            yrange = np.ceil(ymax - ymin)
+            
+            def shift_coords(coords,shift):
+                return (coords[0]-shift[0],coords[1]-shift[1])
+            
+            shiftedimages = []
+            for i,im in enumerate(images):
+                newim = geometric_transform(im,partial(shift_coords,shift=shifts[i]),
+                    output_shape=outshape,order=self.shiftorder)
+                shiftedimages.append(newim)
+            images = shiftedimages
+        
+        if self.method == 'median':
+            op = np.median if self.sigclip is None else np.ma.median
+        elif self.method == 'mean':
+            op = np.mean if self.sigclip is None else np.ma.mean
+        elif self.method == 'sum':
+            op = np.sum if self.sigclip is None else np.ma.sum
+        elif self.method == 'min':
+            op = np.min if self.sigclip is None else np.ma.min
+        elif self.method == 'max':
+            op = np.max if self.sigclip is None else np.ma.max
+        elif callable(self.method):
+            op = self.method
+        else:
+            raise ValueError('Incalid combining method %s'%self.method)
+        
+        if self.sigclip is not None:
+            sds = (images-np.mean(images,axis=0))/np.std(images,axis=0)
+            images = np.ma.masked_where(sds>self.sigclip,images)
+        
+        try:
+            image = op(images,axis=0)
+        except TypeError:
+            image = op(images)
+        
+        if self.trim and self.shifts:
+            xtrimlow = int(np.ceil(xmax))
+            xtrimhigh = image.shape[0] - int(np.ceil(xmin))
+            ytrimlow = int(np.ceil(ymax))
+            ytrimhigh = image.shape[1] - int(np.ceil(ymin))
+            image = image[xtrimlow:xtrimhigh,ytrimlow:ytrimhigh]
+            
+        if self.save:
+            self.lastimage = image
+            self.mask = None
+        return image
+    
+    def _plProcess(self,data,pipeline,elemi):
+        return self.combineImages(data)
+    
+    
+
+
+class ImageFlattener(PipelineElement):
+    """
+    This object flattens an image using a flat field image
+    
+    the following attributes determine the flatfielding behavior:
+    *flatfield: the field to use to generate the flatting response
+    *combine: 'mean','median','min','max', or a callable
+    *save: store 'lastimage' as the last image that was flatted
+    """
+    
+    def __init__(self):
+        self.flatfield = None
+        self.combine = 'mean'
+        
+        self.save = True
+        self.lastimage = None
+    
+    def flattenImage(self,image):
+        if self.combine == 'mean':
+            basevalue = np.mean(self.flatfield)
+        elif self.combine == 'median':
+            basevalue = np.median(self.flatfield)
+        elif self.combine == 'max':
+            basevalue = np.max(self.flatfield)
+        elif self.combine == 'min':
+            basevalue = np.min(self.flatfield)
+        elif callable(self.combine):
+            basevalue = self.combine(self.flatfield)
+        else:
+            raise ValueError('invalid combine value %s'%self.combine)
+        
+        if self.flatfield is not None:
+            image = image*basevalue/self.flatfield
+        
+        if self.save:
+            self.lastimage = image
+        
+        return image
+        
+    def _plProcess(self,data,pipeline,elemi):
+        return self.flattenImage(data)
     
 def load_image_file(fn,**kwargs):
     """
