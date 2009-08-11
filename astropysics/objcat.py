@@ -1016,12 +1016,98 @@ class Field(MutableSequence):
         returns a list of all the DerivedValue objects
         """
         return [o for o in self if isinstance(o,DerivedValue)]
+    
 class ErrorField(Field):
-    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None):
-        raise NotImplementedError
+    """
+    This is a field that stores its values as either (value,error) or
+    (value,uppererr,lowererr) - calling will retrieve the current value 
+    without error bars if noerroncall is True, otherwise a 3-tuple
+    (value,uperr,lowerr)
+    
+    TODO: store internally consistently? - support passing through errors?
+    """
+    
+            
+    def _checkConvInVal(self,val,dosrccheck=True):  
+        realtype = self._type
+        try:
+            self._type = None
+            val = super(ErrorField,self)._checkConvInVal(val,dosrccheck)
+            
+            if isinstance(val,ObservedValue):
+                v = val._value 
+                if not isinstance(v,Sequence):
+                    val._value = (v,0,0)
+                elif len(v) == 3:
+                    pass
+                elif len(v) == 2:
+                    val._value = (v[0],v[1],v[1])
+                elif len(v) == 1:
+                    val._value = (v[0],0,0)
+                else:
+                    raise TypeError('provided value has invalid sequence size')
+                    
+                    
+            
+            if realtype is not None:
+                if callable(realtype):
+                    for v in val():
+                        if not realtype(c):
+                            raise TypeError('invalid type in ErrorField')
+                else:
+                    for v in val():
+                        if not isinstance(v,realtype):
+                            raise TypeError('invalid type in ErrorField')
+                        
+            return val
+        finally:
+            self._type = realtype
+    
+    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None,noerroncall=True):
+        self._realtype = type
+        super(ErrorField,self).__init__(self,name,None,defaultval,usedef,units)
+        self._noerroncall = noerroncall
+        
+    
     
     def __call__(self):
-        return self.value,uperr,lowerr
+        v = self.currentobj.value
+        if self._noerroncall:
+            return v[0]
+        else:
+            return v
+    
+    @property
+    def error(self):
+        """
+        the error for the current object as (uppererr,lowererr)
+        """
+        v = self.currentobj.value
+        if len(v) == 2:
+            return v[1],v[1]
+        else:
+            return v[1:]
+        
+    @property
+    def errors(self):
+        """
+        returns the errors as (uppererr,lowererr) for all the objects in this 
+        field
+        """
+        for v in self._vals:
+            v = v()
+            if len(v) == 2:
+                vs.append((v[1],v[1]))
+            else:
+                vs.append(v[1:])
+        return vs
+        
+    @property
+    def values(self):
+        """
+        returns all the values (withour errors) in this field
+        """
+        return [v()[0] for v in self._vals]
     
 class SEDField(Field):
     """
