@@ -26,6 +26,39 @@ except ImportError: #support for earlier versions
     
 from .utils import PipelineElement
 
+def noise_model(adus,readnoise=0,gain=1,sens=0,output='err'):
+    """
+    adus is the signal in output units (ADUs), assumed to be bias subtracted
+    
+    gain is in e-/ADU
+    
+    readnoise is in e-
+    
+    sensnoise is the sensitivity noise as a fraction of the adu signal
+    
+    output can be:
+    *'var':returns the variance of the adu signal
+    *'err':returns the sqrt(var) of the adu signal
+    *'SNR':returns adu/sqrt(var) of the adu signal
+    """
+    #sigmasq = (rn/g)**2+ i/g + (s*i)**2
+    
+    rnaduerr = readnoise/gain
+    senserr = sens*adus
+    
+    var = rnaduerr*rnaduerr + adus/gain + senserr*senserr
+    
+    if output == 'var':
+        return var
+    elif output == 'err':
+        return var**0.5
+    elif output == 'SNR':
+        return adus*var**-0.5
+    else:
+        raise ValueError('invalid output')
+    
+    
+
 class CCDImage(object):
     """
     Represents a CCD image.  
