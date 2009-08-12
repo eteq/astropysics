@@ -382,7 +382,7 @@ class PipelineAccumulate(PipelineElement):
 
 
 #<--------------------Analysis/simple numerical functions---------------------->
-def centroid(val,axes=None,offset='median'):
+def centroid(val,axes=None,offset=None):
     """
     computes the centroid of an n-dimensional array
     
@@ -393,6 +393,7 @@ def centroid(val,axes=None,offset='median'):
     offset is an amount to subtract from the input array, can be:
     *'median'
     *'mean'
+    *'21' : 2*median - 1*mean
     *None
     """
     if offset:
@@ -400,6 +401,8 @@ def centroid(val,axes=None,offset='median'):
             val = val - np.median(val)
         elif offset == 'mean':
             val = val - np.mean(val)
+        elif offset == '21':
+            val = val - (2*np.median(val) - np.mean(val))
         else:
             raise ValueError('unrecognized offset type')
     
@@ -410,10 +413,10 @@ def centroid(val,axes=None,offset='median'):
         raise ValueError("input dimensions don't match axes")
     
     cens = []
-    for i,(s,a) in enumerate(zip(shp,axes)):
-        if s != len(a):
+    for i,(s,x) in enumerate(zip(shp,axes)):
+        if s != len(x):
             raise ValueError("axis #%i doesn't match array size"%i)
-        rng = range(len(s))
+        rng = range(len(shp))
         del rng[i]
         vsum = val
         for j in reversed(rng):
