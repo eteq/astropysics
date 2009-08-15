@@ -393,6 +393,8 @@ def centroid(val,axes=None,offset=None):
     offset is an amount to subtract from the input array, can be:
     *'median'
     *'mean'
+    *'32' : 3*median - 2*mean
+    *'2515' : 2.5*median - 1.5*mean
     *'21' : 2*median - 1*mean
     *None
     """
@@ -401,6 +403,10 @@ def centroid(val,axes=None,offset=None):
             val = val - np.median(val)
         elif offset == 'mean':
             val = val - np.mean(val)
+        elif offset == '32':
+            val = val - (3*np.median(val) - 2*np.mean(val))
+        elif offset == '2515':
+            val = val - (2.5*np.median(val) - 1.5*np.mean(val))
         elif offset == '21':
             val = val - (2*np.median(val) - np.mean(val))
         else:
