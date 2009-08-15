@@ -1761,6 +1761,21 @@ class LinearModel(FunctionModel1D):
         
         return B,A,sigmaB,sigmaA
     
+    def pointSlope(self,m,x0,y0):
+        """
+        sets model parameters for the given slope that passes through the point
+        """
+        self.m = m
+        self.b = y0-m*x0
+        
+    def twoPoint(self,x0,y0,x1,y1):
+        """
+        sets model parameters to pass through two lines (identical behavior
+        in fitData)
+        """
+        self.pointSlope((y0-y1)/(x0-x1),x0,y0)
+        
+    
 class QuadraticModel(FunctionModel1D):
     """
     2-degree polynomial
