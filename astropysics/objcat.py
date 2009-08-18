@@ -758,6 +758,14 @@ class Field(MutableSequence):
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
     
+    @property
+    def error(self):
+        o = self.currentobj
+        if hasattr(o,'errors'):
+            return o.errors
+        else:
+            return (0,0)
+    
     def strCurr(self):
         """
         returns a string with the current value instead of the list of 
@@ -1017,99 +1025,103 @@ class Field(MutableSequence):
         """
         return [o for o in self if isinstance(o,DerivedValue)]
     
-class ErrorField(Field):
-    """
-    This is a field that stores its values as either (value,error) or
-    (value,uppererr,lowererr) - calling will retrieve the current value 
-    without error bars if noerroncall is True, otherwise a 3-tuple
-    (value,uperr,lowerr)
-    
-    TODO: store internally consistently? - support passing through errors?
-    TODO: derived value error bars through getdeps
-    """
-    
-            
-    def _checkConvInVal(self,val,dosrccheck=True):  
-        realtype = self._type
-        try:
-            self._type = None
-            val = super(ErrorField,self)._checkConvInVal(val,dosrccheck)
-            
-            if isinstance(val,ObservedValue):
-                v = val._value 
-                if not isinstance(v,Sequence):
-                    val._value = (v,0,0)
-                elif len(v) == 3:
-                    pass
-                elif len(v) == 2:
-                    val._value = (v[0],v[1],v[1])
-                elif len(v) == 1:
-                    val._value = (v[0],0,0)
-                else:
-                    raise TypeError('provided value has invalid sequence size')
-                    
-                    
-            
-            if realtype is not None:
-                if callable(realtype):
-                    for v in val():
-                        if not realtype(c):
-                            raise TypeError('invalid type in ErrorField')
-                else:
-                    for v in val():
-                        if not isinstance(v,realtype):
-                            raise TypeError('invalid type in ErrorField')
-                        
-            return val
-        finally:
-            self._type = realtype
-    
-    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None,noerroncall=True):
-        self._realtype = type
-        super(ErrorField,self).__init__(name,None,defaultval,usedef,units)
-        self._noerroncall = noerroncall
-        
-    
-    
-    def __call__(self):
-        v = self.currentobj.value
-        if self._noerroncall:
-            return v[0]
-        else:
-            return v
-    
-    @property
-    def error(self):
-        """
-        the error for the current object as (uppererr,lowererr)
-        """
-        v = self.currentobj.value
-        if len(v) == 2:
-            return v[1],v[1]
-        else:
-            return v[1:]
-        
     @property
     def errors(self):
-        """
-        returns the errors as (uppererr,lowererr) for all the objects in this 
-        field
-        """
-        vs = []
-        for v in self._vals:
-            v = v()
-            if len(v) == 2:
-                vs.append((v[1],v[1]))
-            else:
-                vs.append(v[1:])
-        return vs
+        return [v.errors if hasattr(v,'errors') else (0,0) for v in self._vals]
+            
+#class ErrorField(Field):
+#    """
+#    This is a field that stores its values as either (value,error) or
+#    (value,uppererr,lowererr) - calling will retrieve the current value 
+#    without error bars if noerroncall is True, otherwise a 3-tuple
+#    (value,uperr,lowerr)
+    
+#    TODO: store internally consistently? - support passing through errors?
+#    TODO: derived value error bars through getdeps
+#    """
+    
+            
+#    def _checkConvInVal(self,val,dosrccheck=True):  
+#        realtype = self._type
+#        try:
+#            self._type = None
+#            val = super(ErrorField,self)._checkConvInVal(val,dosrccheck)
+            
+#            if isinstance(val,ObservedValue):
+#                v = val._value 
+#                if not isinstance(v,Sequence):
+#                    val._value = (v,0,0)
+#                elif len(v) == 3:
+#                    pass
+#                elif len(v) == 2:
+#                    val._value = (v[0],v[1],v[1])
+#                elif len(v) == 1:
+#                    val._value = (v[0],0,0)
+#                else:
+#                    raise TypeError('provided value has invalid sequence size')
+                    
+                    
+            
+#            if realtype is not None:
+#                if callable(realtype):
+#                    for v in val():
+#                        if not realtype(c):
+#                            raise TypeError('invalid type in ErrorField')
+#                else:
+#                    for v in val():
+#                        if not isinstance(v,realtype):
+#                            raise TypeError('invalid type in ErrorField')
+                        
+#            return val
+#        finally:
+#            self._type = realtype
+    
+#    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None,noerroncall=True):
+#        self._realtype = type
+#        super(ErrorField,self).__init__(name,None,defaultval,usedef,units)
+#        self._noerroncall = noerroncall
         
-    @property
-    def values(self):
-        """
-        returns all the values (withour errors) in this field
-        """
-        return [v()[0] for v in self._vals]
+    
+    
+#    def __call__(self):
+#        v = self.currentobj.value
+#        if self._noerroncall:
+#            return v[0]
+#        else:
+#            return v
+    
+#    @property
+#    def error(self):
+#        """
+#        the error for the current object as (uppererr,lowererr)
+#        """
+#        v = self.currentobj.value
+#        if len(v) == 2:
+#            return v[1],v[1]
+#        else:
+#            return v[1:]
+        
+#    @property
+#    def errors(self):
+#        """
+#        returns the errors as (uppererr,lowererr) for all the objects in this 
+#        field
+#        """
+#        vs = []
+#        for v in self._vals:
+#            v = v()
+#            if len(v) == 2:
+#                vs.append((v[1],v[1]))
+#            else:
+#                vs.append(v[1:])
+#        return vs
+        
+#    @property
+#    def values(self):
+#        """
+#        returns all the values (withour errors) in this field
+#        """
+#        return [v()[0] for v in self._vals]
     
 class SEDField(Field):
     """
@@ -1701,43 +1713,64 @@ class ObservedValue(FieldValue):
     def value(self):
         return self._value
 
-#class ObservedValueWithErrors(ObservedValue):
-#    """
-#    This value is an observed value with errorbars (symmetric or asymmetric)
+class ObservedErroredValue(ObservedValue):
+    """
+    This value is an observed value with errorbars
     
-#    The value is either (value,err) or (value,uperr,lowerr)
-#    """
-#    __slots__=('_upperr','_lowerr')
-#    def __init__(self,source,value):
-#        if len(value) <2 or len(value) > 3:
-#            raise TypeError('Values with error must be 2 or 3-tuples')
-#        super(ObservedValueWithErrors,self).__init__(self,source,value[0])
-#        self._uperr = value[1]
-#        if len(value) == 3:
-#            self._lowerr = value[2]
+    The value is either (value,err) or (value,uperr,lowerr)
+    """
+    __slots__=('_upperr','_lowerr')
+    def __init__(self,source,value,upperr=None,lowerr=None):
+        super(ObservedErroredValue,self).__init__(source,value)
+        if upperr is None and lowerr is not None:
+            raise ValueError('symmetric errors must be specified as upperr')        
+        self._upperr = upperr
+        self._lowerr = lowerr
+    def __getstate__(self):
+        d = super(ObservedErroredValue,self).__getstate__()
+        d['_upperr'] = self._upperr
+        d['_lowerr'] = self._lowerr
+        return d
+    def __setstate__(self,d):
+        super(ObservedErroredValue,self).__setstate__(d)
+        self._upperr = d['_upperr']
+        self._lowerr = d['_lowerr']
         
-#    def __getstate__(self):
-#        d = super(ObservedValueWithErrors,self).__getstate__()
-#        d['_upperr'] = self._upperr
-#        d['_lowerr'] = self._lowerr
-#        return d
-#    def __setstate__(self,d):
-#        super(ObservedValueWithErrors,self).__setstate__(d)
-#        self._upperr = d['_upperr']
-#        self._lowerr = d['_lowerr']
+    def __str__(self):
+        if self._lowerr is not None:
+            return '%s:Value %s +%s -%s'%(self.source,self.value,self._upperr,self._lowerr)
+        else:
+            return '%s:Value %s +/- %s'%(self.source,self.value,self._upperr)
         
-#    def __str__(self):
-#        if self._lowerr is not None:
-#            return '%s:Value %s +%s -%s'%(self.source,self.value,self._upperr,self._lowerr)
-#        else:
-#            return '%s:Value %s +/- %s'%(self.source,self.value,self._upperr)
-        
-#    @property
-#    def value(self):
-#        if self._lowerr is not None:
-#            return (self._value,self._upperr,self._lowerr)
-#        else:
-#            return (self._value,self._upperr)
+    def checkType(self,typetocheck):
+        """
+        ensure that the value and errors are of the requested Type
+        (or None to accept anything).  Any mismatches will raise
+        a TypeError
+        """
+        if typetocheck is not None: #fast skip
+            from .utils import check_type
+            check_type(typetocheck,self.value)
+
+            if self._upperr is not None:
+                check_type(typetocheck,self._upperr)
+            if self._lowerr is not None:
+                check_type(typetocheck,self._lowerr)
+    
+    @property
+    def errors(self):
+        u,l = self._upperr,self._lowerr
+        if u is None and l is None:
+            return 0,0
+        elif l is None:
+            return u,u
+        #elif u is None: #impossible case due to __init__
+        #    return l,l
+        else:
+            return u,l
+    
+    def hasSymmetricErrors(self):
+        return self._upperr==self._lowerr
         
 class DerivedValue(FieldValue):
     """
@@ -1763,7 +1796,7 @@ class DerivedValue(FieldValue):
     will be left invalid
     *'ignore':the value will be returned as None and will be marked valid
     """
-    __slots__=('_f','_value','_valid','_fieldwr')
+    __slots__=('_f','_value','_errs','_valid','_fieldwr')
     #TODO: auto-reassign nodepath from source if Field moves
     failedvalueaction = 'raise' 
     
@@ -1791,6 +1824,7 @@ class DerivedValue(FieldValue):
         
         self._valid = False
         self._value = None
+        self._errs = None
         
         self._fieldwr = None
         self._source = DependentSource(defaults,sourcenode,self._invalidateNotifier)
@@ -1877,8 +1911,16 @@ class DerivedValue(FieldValue):
         if self._valid:
             return self._value
         else:
-            try:
-                self._value = self._f(*self._source.getDeps())
+            try: 
+                deps = self._source.getDeps(geterrs = True)
+                if np.all([d[1] == d[2] == 0 for d in deps]):
+                    self._value = self._f(*[d[0] for d in deps])
+                    self._errs = (0,0)
+                else:
+                    self._value = val = self._f(*[d[0] for d in deps])
+                    uerr = self._f(*[d[0]+d[1] for d in deps]) - val
+                    lerr = val - self._f(*[d[0]-d[2] for d in deps])
+                    self._errs = (uerr,lerr)
                 self._valid = True
             except (ValueError,IndexError),e:
                 if self.failedvalueaction == 'raise':
@@ -1906,6 +1948,10 @@ class DerivedValue(FieldValue):
                     raise ValueError('invalid failedvalueaction')
             
             return self._value
+    @property
+    def errors(self):
+        v = self.value #need to compute value to make sure errors are up-to-date
+        return self._errs
 
 class DependentSource(Source):
     """
@@ -2080,15 +2126,25 @@ class DependentSource(Source):
         
         return refs
         
-    def getDeps(self,doerrs=False):
+    def getDeps(self,geterrs=False):
         """
-        get the values of the dependent fields
+        gets the values of the dependent field.
+        
+        the return value is a list of the values in the fields if geterrs is
+        False, or (value,upperr,lowerr) if it is True
         """
         fieldvals = [wr() for wr in self.depfieldrefs]    
         if None in fieldvals:
             fieldvals = self.populateFieldRefs()
-        if doerrs:
-            return [(fi(),fi.error[0],fi.error[1]) if isinstance(fi,ErrorField) else (fi(),0,0) for fi in fieldvals]
+        if geterrs:
+            fvs = []
+            for fi in fieldvals:
+                if hasattr(fi,'error'):
+                    es = fi.error
+                    fvs.append((fi(),es[0],es[1]))
+                else:
+                    fvs.append((fi(),0,0))
+            return fvs
         else:
             return [fi() for fi in fieldvals]
     
