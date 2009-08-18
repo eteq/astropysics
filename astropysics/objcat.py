@@ -1025,6 +1025,7 @@ class ErrorField(Field):
     (value,uperr,lowerr)
     
     TODO: store internally consistently? - support passing through errors?
+    TODO: derived value error bars through getdeps
     """
     
             
@@ -1065,7 +1066,7 @@ class ErrorField(Field):
     
     def __init__(self,name,type=None,defaultval=None,usedef=None,units=None,noerroncall=True):
         self._realtype = type
-        super(ErrorField,self).__init__(self,name,None,defaultval,usedef,units)
+        super(ErrorField,self).__init__(name,None,defaultval,usedef,units)
         self._noerroncall = noerroncall
         
     
@@ -1094,6 +1095,7 @@ class ErrorField(Field):
         returns the errors as (uppererr,lowererr) for all the objects in this 
         field
         """
+        vs = []
         for v in self._vals:
             v = v()
             if len(v) == 2:
@@ -2078,14 +2080,17 @@ class DependentSource(Source):
         
         return refs
         
-    def getDeps(self):
+    def getDeps(self,doerrs=False):
         """
         get the values of the dependent fields
         """
         fieldvals = [wr() for wr in self.depfieldrefs]    
         if None in fieldvals:
             fieldvals = self.populateFieldRefs()
-        return [fi() for fi in fieldvals]
+        if doerrs:
+            return [(fi(),fi.error[0],fi.error[1]) if isinstance(fi,ErrorField) else (fi(),0,0) for fi in fieldvals]
+        else:
+            return [fi() for fi in fieldvals]
     
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
@@ -2659,5 +2664,5 @@ def test_sed():
     return f
 
     
-del ABCMeta,abstractmethod,abstractproperty,Sequence,MutableSequence,pi,division #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
