@@ -1881,7 +1881,7 @@ class DoubleGaussianModel(FunctionModel1D):
     
 class LorentzianModel(FunctionModel1D):
     def f(self,x,A=1,gamma=1,mu=0):
-        return gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
+        return A*gamma/pi/(x*x-2*x*mu+mu*mu+gamma*gamma)
     
     def _getPeak(self):
         return self(self.mu)
