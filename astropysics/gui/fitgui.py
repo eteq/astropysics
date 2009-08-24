@@ -256,6 +256,9 @@ class FitGui(HasTraits):
     clearsel = Button('Clear Selections')
     lastselaction = Str('None')
     
+    datasymb = Button('Data Symbol...')
+    modline = Button('Model Line...')
+    
     savews = Button('Save Weights')
     loadws = Button('Load Weights')
     _savedws = Array
@@ -278,7 +281,8 @@ class FitGui(HasTraits):
                               ),
                               VGroup(HGroup(Item('autoupdate',label='Auto?'),
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
-                              Item('nmod',label='Nmodel'))),
+                              Item('nmod',label='Nmodel'),
+                              HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)))),
                        Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
                       ),
                     resizable=True, title='Data Fitting',buttons=['OK','Cancel'],width=700,height=700
@@ -468,7 +472,13 @@ class FitGui(HasTraits):
         
     def _selbutton_fired(self,event):
         #TODO: figure out how to set the parent 
-        self.edit_traits(view='selection_view')            
+        self.edit_traits(view='selection_view')
+        
+    def _datasymb_fired(self,event):
+        self.plot.plots['data'][0].edit_traits()
+    
+    def _modline_fired(self,event):
+        self.plot.plots['model'][0].edit_traits()
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
