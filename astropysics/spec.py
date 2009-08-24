@@ -726,12 +726,18 @@ class Spectrum(HasSpecUnits):
         if not (callable(model) and hasattr(model,'fitData')):
             raise ValueError('provided model object cannot fit data')
         
-        model.fitData(self.x,self.flux,weights=self.ivar if weighted else None)
+        model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
         
         if interactive:
-            from .gui import fit_data
-            model = fit_data(self.x,self.flux,model,weights=self.ivar if weighted else None)
-        
+            from .gui import fit_data,FitGui
+            #model = fit_data(self.x,self.flux,model,weights=(self.ivar if weighted else None))
+            fg = FitGui(self.x,self.flux,model,weights=(self.ivar if weighted else None))
+            fg.plot.plots['data'][0].marker = 'dot'
+            fg.plot.plots['data'][0].marker_size = 2
+            fg.plot.plots['model'][0].line_style = 'solid'
+            fg.configure_traits(kind='livemodal')
+            model = fg.tmodel.model
+            
         self.continuum = model(self.x) if evaluate else model
         
     def subtractContinuum(self):
