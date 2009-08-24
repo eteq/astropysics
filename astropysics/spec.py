@@ -21,7 +21,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 
 #Spectrum related io module functions
-from .io import load_deimos_spectrum,load_spylot_spectrum
+from .io import load_deimos_spectrum,load_all_deimos_spectra,load_spylot_spectrum
 
 class HasSpecUnits(object):
     """
@@ -696,7 +696,8 @@ class Spectrum(HasSpecUnits):
         
         return tuple(eyefluxes)
     
-    def fitContinuum(self,model='knotspline',weighted=False,evaluate=False,**kwargs):
+    def fitContinuum(self,model='uniformknotspline',weighted=False,evaluate=False,
+                          interactive=False,**kwargs):
         """
         this method computes a continuum fit to the spectrum using a model
         from astropysics.models (list_models will give all options) or
@@ -707,10 +708,17 @@ class Spectrum(HasSpecUnits):
         if weighted, the inverse variance will be used as weights to the 
         continuum fit
         
+        if interactive is True, the fitgui interface will be displayed to 
+        tune the continuum fit
+        
         the fitted model is assigned to self.continuum or evaluated at the
         spectrum points if evaluate is True and the results are set to 
         self.continuum
         """
+        #for the default, choose a reasonable number of knots
+        if model == 'uniformknotspline' and 'nknots' not in kwargs:
+            kwargs['nknots'] = 4
+        
         if isinstance(model,basestring):
             from .models import get_model
             model = get_model(model)(**kwargs)
@@ -719,6 +727,10 @@ class Spectrum(HasSpecUnits):
             raise ValueError('provided model object cannot fit data')
         
         model.fitData(self.x,self.flux,weights=self.ivar if weighted else None)
+        
+        if interactive:
+            from .gui import fit_data
+            model = fit_data(self.x,self.flux,model,weights=self.ivar if weighted else None)
         
         self.continuum = model(self.x) if evaluate else model
         
@@ -781,7 +793,7 @@ class Spectrum(HasSpecUnits):
         else:
             raise ValueError('no continuum action performed')
         
-    def plot(self,fmt=None,ploterrs=True,plotcontinuum=True,smoothing=None,clf=True,colors=('b','g','r','k'),**kwargs):
+    def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,clf=True,colors=('b','g','r','k'),**kwargs):
         """
         uses matplotlib to plot the Spectrum object
         
@@ -791,6 +803,12 @@ class Spectrum(HasSpecUnits):
         colors should be a 3-tuple that applies to 
         (spectrum,error,invaliderror,continuum) and kwargs go into spectrum
         and error plots
+        
+        if ploterrs or plotcontinuum is a number, the plot will be 
+        scaled so that the mean value matches the mean  of the spectrum 
+        times the numeric value
+        if True, the scaling will match the actual value
+        if False, the plots will not be shown
         """
         
         import matplotlib.pyplot as plt
@@ -833,24 +851,40 @@ class Spectrum(HasSpecUnits):
             
         if ploterrs and np.any(e):
             from operator import isMappingType
+            
+            m = (e < np.max(y)*2) & np.isfinite(e)
+            
+            if ploterrs is True:
+                scale = 1
+            elif np.isscalar(ploterrs):
+                scale = float(ploterrs)*np.mean(y)/np.mean(e[m])
+            
             if not isMappingType(ploterrs):
                 ploterrs = {}
             ploterrs.setdefault('ls','-')
             
-            m = (e < np.max(y)*2) & np.isfinite(e)
             if np.sum(m) > 0:
                 kwargs['c'] = colors[1]
-                res.append(plt.plot(x[m],e[m],**kwargs))
+                res.append(plt.plot(x[m],scale*e[m],**kwargs))
             if np.sum(~m) > 0:
-                res.append(plt.plot(x[~m],np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                res.append(plt.plot(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
         if plotcontinuum and self.continuum is not None:
+            
+            
+            
             if callable(self.continuum):
                 cont = self.continuum(self.x)
             else:
                 cont = self.continuum
+            
+            if plotcontinuum is True:
+                scale = 1
+            elif np.isscalar(plotcontinuum):
+                scale = float(plotcontinuum)*np.mean(y)/np.mean(cont)
+                
             kwargs['c'] = colors[3]
             kwargs['ls'] =  '--'
-            res.append(plt.plot(self.x,cont,**kwargs))
+            res.append(plt.plot(self.x,scale*cont,**kwargs))
                 
                 
         plt.xlim(np.min(x),np.max(x))

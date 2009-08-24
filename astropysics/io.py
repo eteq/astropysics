@@ -489,10 +489,9 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
                 fobj.smooth(smoothing,replace=True)
         
         if plot:
-#            from operator import isMappingType
-#            if not isMappingType(plot):
-#                plot={}
             from matplotlib import pyplot as plt
+            if plot != 'noclf':
+                plt.clf()
             plt.plot(fobj.x[:changei],fobj.flux[:changei],'-b')
             plt.plot(fobj.x[changei:],fobj.flux[changei:],'-r')
         
@@ -503,7 +502,39 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     finally:
         f.close()
         
-
+def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
+                            smoothing=None,verbose=True):
+    """
+    loads all deimos spectra found in the specified directory that
+    match the requested pattern and returns a list of the file names
+    and the Spectrum objects. 
+    
+    extraction and smoothing are the same as for load_deimos_spectrum
+    
+    verbose indicates if information should be printed
+    """
+    from glob import glob
+    from os.path import join
+    
+    fns = glob(join(dir,pattern))
+    fns.sort()
+    specs = []
+    
+    fnrem=[]
+    for i,fn in enumerate(fns):
+        if verbose:
+            print 'Loading spectrum',fn
+        try:
+            s = load_deimos_spectrum(fn,False,extraction,False,smoothing)
+            specs.append(s)
+        except Exception,e:
+            if verbose:
+                print 'Exception loading spectrum',fn,'skipping...'
+            fnrem.append(i)
+    for i in reversed(fnrem):
+        del fns[i]
+        
+    return fns,specs
     
 def load_spylot_spectrum(s,bandi):
     from .spec import Spectrum
