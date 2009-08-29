@@ -1907,11 +1907,11 @@ class VoigtModel(GaussianModel,LorentzianModel):
 class MoffatModel(FunctionModel1D):
     """
     Moffat function given by:
-    (beta-1)/(pi alpha^2) [1+(r/alpha)^2]^-beta
+    A*(beta-1)/(pi alpha^2) [1+(r/alpha)^2]^-beta
     """
-    def f(self,r,alpha=1,beta=4.765):
+    def f(self,r,A=1,alpha=1,beta=4.765):
         roa=r/alpha
-        return (beta-1)/(pi*alpha**2)*(1+roa*roa)**-beta
+        return A*(beta-1)/(pi*alpha**2)*(1+roa*roa)**-beta
     
 class ExponentialModel(FunctionModel1D):
     """
