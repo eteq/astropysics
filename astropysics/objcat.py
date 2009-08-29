@@ -521,8 +521,8 @@ class FieldNode(CatalogNode,Sequence):
     
     @staticmethod
     def extractFieldAtNode(node,fieldnames,traversal='postorder',missing='0',
-                           converter=None,sources=False,asrec=False,
-                           includeself=True):
+                           converter=None,sources=False,errors=False,
+                           asrec=False,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
@@ -550,10 +550,18 @@ class FieldNode(CatalogNode,Sequence):
         the second.  If it is 'names', the names are returned instead of the 
         source objects themselves
         
+        errors determines if the errors should be returned
+        
         asrec generates a record array instead of a regular array - for
         multiple fields, if this is False, the output will be f x N
         
         includeself determines if the node itself should be included
+        
+        return value:
+        *an array of values if sources and errors are False
+        *(values,sources,errors) if sources and errors are True
+        *(values,sources) if sources are True and errors are False
+        *(values,errors) if errors are True and sources are False
         """
         from functools import partial
         
@@ -595,11 +603,7 @@ class FieldNode(CatalogNode,Sequence):
             except (KeyError,IndexError,TypeError,AttributeError):
                 return False 
             
-        def srcfunc(node,fieldname):
-            try:
-                return getattr(node,fieldname).currentobj.source
-            except (KeyError,IndexError,TypeError,AttributeError):
-                return None 
+        
         
         lsts = []
         masks = []
@@ -626,14 +630,37 @@ class FieldNode(CatalogNode,Sequence):
             res = arr,masks
         else:
             res = arr
-        
+        #TODO:be smarter sources/errors in asrec
         if sources:
+            def srcfunc(node,fieldname):
+                try:
+                    return getattr(node,fieldname).currentobj.source
+                except (KeyError,IndexError,TypeError,AttributeError):
+                    return None 
             srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
             if sources == 'name' or sources == 'names':
                 srcs = [[str(s)[7:] for s in f]  for f in srcs]
-            res = (res,np.array(srcs)[0])
-        
-        return res
+            srcs = np.array(srcs)[0]
+            
+        if errors:
+            def errfunc(node,fieldname):
+                try:
+                    return getattr(node,fieldname).currentobj.errors
+                except (KeyError,IndexError,TypeError,AttributeError),e:
+                    return (0,0)
+                
+            errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
+            
+            errs = np.array(errs)[0]
+            
+        if sources and errors:
+            return (res,errs,srcs)    
+        elif sources:
+            return (res,srcs)
+        elif errors:
+            return (res,errs)
+        else:
+            return res
     
     @staticmethod
     def getFieldValueNodesAtNode(node,fieldname,value,visitkwargs={}):

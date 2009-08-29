@@ -1844,6 +1844,81 @@ class AperturePhotometry(object):
             plt.ylabel('$\\mu_{%s}$'%self.band.name)
             
         
+
+class Sextractor(object):
+    """
+    This class is an adaptor to the Sextractor program 
+    (Bertin & Arnouts 1996, http://astromatic.iap.fr/software/sextractor/).
+    Sextractor must be installed and on the path for this class to function.
+    """
+    
+    
+    
+    
+    def __init__(self,sexfile=None,paramfile=None):
+        from subprocess import Popen,PIPE
+        
+        try:
+            pconf = Popen('sex -dd',stdout=PIPE,stderr=PIPE)
+            pparm = Popen('sex -dp',stdout=PIPE,stderr=PIPE)
+            pconf.wait()
+            pparm.wait()
+            confstr = pconf.communicate()[0]
+            parmstr = pparm.communicate()[0]
+        except OSError:
+            raise OSError('sextractor not found on system path')
+        
+        opts = {}
+        pars = {}
+        parinfo = {}
+        
+        for l in confstr:
+            commenti = l.find('#')
+            if l > -1:
+                l = l[:commenti]
+            ls = l.split()
+            if len(ls) > 1:
+                k = ls[0].strip()
+                opts[k] = ls[1].strip()
+                
+        for l in parmstr:
+            ls = l.split()
+            if len(ls) > 1:
+                k = ls[0].strip().replace('#','')
+                pars[k] = False
+                info = ls[1].strip()
+                if len(ls) > 2:
+                    parinfo[k] = (info,ls[3].replace('[','').replace(']','').strip())
+                else:
+                    parinfo[k] = (info,None)
+                    
+        if sexfile:
+            with open(sexfile) as f:
+                for l in f:
+                    commenti = l.find('#')
+                    if l > -1:
+                        l = l[:commenti]
+                    ls = l.split()
+                    if len(ls) > 1:
+                        k = ls[0].strip()
+                        if k not in opts:
+                            raise ValueError('sexfile has invalid option %s'%k)
+                        opts[k] = ls[1].strip()
+                        
+        if paramfile:
+            with open(paramfile) as f:
+                for l in f:
+                    if not l.strip().startswith('#'):
+                        k = l.split()[0].strip()
+                        if k not in pars:
+                            raise ValueError('param file has invalid parameter %s'%k)
+                        pars[k] = True
+                        
+    def sextractImage(self,image):
+        from subprocess import Popen,PIPE
+        
+        raise NotImplementedError
+            
         
 #<------------------------conversion functions--------------------------------->
     
