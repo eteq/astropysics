@@ -9,9 +9,9 @@ from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
                                  Event,Property,on_trait_change,Array,List, \
                                  Tuple,Str,Dict,cached_property,Color,Enum, \
                                  TraitError
-from enthought.traits.ui.api import View,Item,Label,Group,VGroup,HGroup, \
-                                    InstanceEditor,EnumEditor,ListEditor, \
-                                    TupleEditor
+from enthought.traits.ui.api import View,Handler,Item,Label,Group,VGroup, \
+                                    HGroup, InstanceEditor,EnumEditor, \
+                                    ListEditor, TupleEditor
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
                                 ColorMapper,LinearMapper,ScatterInspectorOverlay,\
@@ -227,7 +227,19 @@ class NewModelSelector(HasTraits):
 #        render_markers(gc, screen_pts, **markerprops)
 #        gc.restore_state()
 
-
+class FGHandler(Handler):
+    def object_selbutton_changed(self,info):
+        info.object.edit_traits(parent=info.ui.control,view='selection_view')
+        
+    def object_datasymb_changed(self,info):
+        kind = info.ui.rebuild.__name__.replace('ui_','') #TODO:not hack!
+        info.object.plot.plots['data'][0].edit_traits(parent=info.ui.control,
+                                                      kind=kind)
+    
+    def object_modline_changed(self,info):
+        kind = info.ui.rebuild.__name__.replace('ui_','') #TODO:not hack!
+        info.object.plot.plots['model'][0].edit_traits(parent=info.ui.control,
+                                                       kind=kind)
     
 class FitGui(HasTraits):
     plot = Instance(Plot)
@@ -285,7 +297,12 @@ class FitGui(HasTraits):
                               HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)))),
                        Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
                       ),
-                    resizable=True, title='Data Fitting',buttons=['OK','Cancel'],width=700,height=700
+                    handler=FGHandler(),
+                    resizable=True, 
+                    title='Data Fitting',
+                    buttons=['OK','Cancel'],
+                    width=700,
+                    height=700
                     )
                     
     panel_view = View(VGroup(
@@ -469,16 +486,6 @@ class FitGui(HasTraits):
         if isinstance(self.tmodel.model,SmoothSplineModel):
                 self.tmodel.model.s = len(self.data[0])
         self.fitmodel = True
-        
-    def _selbutton_fired(self,event):
-        #TODO: figure out how to set the parent 
-        self.edit_traits(view='selection_view')
-        
-    def _datasymb_fired(self,event):
-        self.plot.plots['data'][0].edit_traits()
-    
-    def _modline_fired(self,event):
-        self.plot.plots['model'][0].edit_traits()
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
