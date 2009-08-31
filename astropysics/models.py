@@ -177,26 +177,36 @@ class _FuncMeta(ABCMeta):
             
     def __call__(cls,*args,**kwargs):
         if cls._args is None: #this is the case for *args in the function
-            args=list(args)
-            parsname = getattr(cls,'parsname') if hasattr(cls,'parsname') else 'p'
+            if len(args)>1:
+                raise ValueError('must pass parameters with keywords at initializer if variable argument numbers are used')
+            
+            if hasattr(cls,'paramsname'):
+                paramsnames = getattr(cls,'paramsname') 
+            elif hasattr(cls,'paramsnames'):
+                paramsnames = getattr(cls,'paramsnames')
+            else:
+                paramsnames =  ('p',)
+            if isinstance(paramsnames,basestring):
+                paramsnames = (paramsnames,)
             
             try:
-                nparams=args.pop(0) if 'nparams' not in kwargs else kwargs.pop('nparams')
+                nparams=args[0] if 'nparams' not in kwargs else kwargs.pop('nparams')
             except IndexError:
                 raise IndexError('No # of parameters found for variable-size function')
-            objkwargs = dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._statargs if not k.startswith(parsname)])
+            objkwargs = dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._statargs if not any([k.startswith(paramsname) for paramsname in paramsnames])])
             cls._currnparams = nparams #this is set in case the constructor needs to know for some reason
             obj = super(_FuncMeta,_FuncMeta).__call__(cls,**objkwargs) #object __init__ is called here
             del cls._currnparams
             pars = list(cls._statargs)
             
             for i in range(nparams):
-                p = parsname+str(i)
-                pars.append(p)
-                if not hasattr(cls,p):
-                    setattr(obj,p,1) #default varargs to 1
-                else: #let class variables specify defaults for varargs
-                    setattr(obj,p,getattr(cls,p))
+                for paramsname in paramsnames:
+                    p = paramsname+str(i)
+                    pars.append(p)
+                    if hasattr(cls,'_'+p+'_default'): #let class variables of the form "_param_default" specify defaults for varargs
+                        setattr(obj,p,getattr(cls,'_'+p+'_default'))
+                    else:
+                        setattr(obj,p,1) #default varargs to 1
             obj._args = tuple(pars)
         else: #this is the case for fixed functions
             objkwargs=dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._args])
@@ -381,8 +391,11 @@ class FunctionModel1D(FunctionModel):
     
     if f has a variable number of arguments, the first argument of the 
     constructor is taken to be the number of arguments that particular 
-    instance should have, and the 'parsname' class attribute can be used
-    to specify the prefix for the name of the parameters
+    instance should have, and the 'paramsname' class attribute can be used
+    to specify the prefix for the name of the parameters (and can be 
+    an iterator, in which case one of each name will be made for each var
+    arg, in sequence order).  default values can be given by adding class 
+    variables of the form "_param0_default"
     """
     ndims = (1,1)
     
@@ -1788,7 +1801,7 @@ class PolynomialModel(FunctionModel1D):
     arbitrary-degree polynomial
     """
     
-    parsname = 'c'
+    paramsname = 'c'
     
     #TODO: use polynomial objects that are only updated when necessary
     def f(self,x,*args): 
@@ -1800,6 +1813,23 @@ class PolynomialModel(FunctionModel1D):
     def integrate(self,lower,upper):
         p = np.polyint(np.array(self.parvals)[::-1])
         return p(upper)-p(lower)
+    
+class FourierModel(FunctionModel1D):
+    paramsnames = ('A','B')
+    #note that B0 has no effect
+    
+    def f(self,x,*args):
+        xr = x.ravel()
+        n = len(args)/2
+        As = np.array(args[::2]).reshape((n,1))
+        Bs = np.array(args[1::2]).reshape((n,1))
+        ns = np.arange(len(As)).reshape((n,1))
+        res = np.sum(As*np.sin(ns*xr),axis=0)+np.sum(Bs*np.cos(ns*xr),axis=0)
+        return res.reshape(x.shape)
+#        val = np.empty_like(x)
+#        for n,(A,B) in enumerate(zip(args[::2],args[:1:2])):
+#            val += A*sin(n*x)+B*cos(n*x)
+#        return val
 
 class GaussianModel(FunctionModel1D):
     """
@@ -2359,7 +2389,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
             ks.append(getattr(self,pn))
         return np.array(ks)
     
-    parsname = 'k'
+    paramsname = 'k'
     
     degree=3 #default cubic
     def f(self,x,degree,*args):
