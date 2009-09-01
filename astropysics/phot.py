@@ -1843,7 +1843,208 @@ class AperturePhotometry(object):
         else:
             plt.ylabel('$\\mu_{%s}$'%self.band.name)
             
+class IsophotalEllipse(object):
+    def __init__(self,imdata,level=None):
+        self.imdata = imdata
         
+        if level is None:
+            self.level = np.mean(self._imdata)
+            
+        self._fitted = False
+        
+        self._a = 1 #major axis
+        self._b = 1 #minor axis
+        self._phi = 0 #rotation
+        self._fitpoints = 100
+        self._x0 = self._imdata.shape[0]/2.0
+        self._y0 = self._imdata.shape[1]/2.0
+        self._fixcen = False
+        self._keepfrac = .01
+            
+    def _getImdata(self):
+        return self._imdata
+    def _setImdata(self,val):
+        val = np.array(val)
+        if len(val.shape) != 2:
+                raise ValueError('2D image data not provided')
+        self._imdata = val
+        self._fitted = False
+    imdata = property(_getImdata,_setImdata)
+    
+    def _getFitpoints(self):
+        return self._fitpoints
+    def _setFitpoints(self):
+        self._fitted = False
+    nfitpoints = property(_getFitpoints,_setFitpoints)
+    
+    def _getLevel(self):
+        return self._level
+    def _setLevel(self,val):
+        self._level = val
+        self._fitted = False
+    level = property(_getLevel,_setLevel)
+    
+    def _getFixcen(self):
+        return self._fixcen
+    def _setFixcen(self,val):
+        self._fixcen = val
+        self._fitted = False
+    fixcenter = property(_getLevel,_setLevel)
+    
+    def _getKeepfrac(self):
+        return self._keepfrac
+    def _setKeepfrac(self,val):
+        self._keepfrac = val
+        self._fitted = False
+    keepfrac=property(_getKeepfrac,_setKeepfrac)
+        
+    def polar(self,npoints):
+        """
+        returns the full ellipse as an (rho,theta) tuple
+        """
+        th = np.linspace(0,2*np.pi,npoints)
+        return self._th2r(th),th
+    
+    def _th2r(self,th):
+        a,b = self._a,self._b
+        aterm = a*np.sin(th-self._phi)
+        bterm = b*np.cos(th-self._phi)
+        return a*b*(aterm*aterm+bterm*bterm)**-0.5
+        
+    def cartesian(self,npoints):
+        """
+        returns the full ellipse as an (x,y) tuple
+        """
+        r,th = self.polar(npoints)
+        x = r*np.cos(th)
+        y = r*np.sin(th)
+        return x+self._x0,y+self._y0
+        
+    def _fitEllipse(self):
+        from scipy.optimize import leastsq
+        from scipy.ndimage import map_coordinates
+        
+        diff = self._imdata - self._level
+        maxdiff = max(np.max(diff)**2,np.min(diff)**2)
+        maxsz = np.min(diff.shape)/2
+        
+        xi,yi = np.meshgrid(np.arange(diff.shape[0]),np.arange(diff.shape[1]))
+        xi = xi.T.ravel()
+        yi = yi.T.ravel()
+        sorti = np.argsort(diff.ravel()**2)
+        nkeep = self._keepfrac*xi.size
+        xi = xi[sorti][:nkeep]
+        yi = yi[sorti][:nkeep]
+        keepdiffs = diff.ravel()[sorti][:nkeep]
+        
+        def f(vals,self):
+            self._a = np.abs(vals[0])
+            self._b = np.abs(vals[1])
+            self._phi = vals[2]
+            if not self._fixcen:
+                self._x0 = vals[3]
+                self._y0 = vals[4]
+            
+            xo,yo = xi-self._x0,yi-self._y0
+            
+            
+            sep = (xo*xo+yo*yo)**0.5 - self._th2r(np.arctan2(yo,xo))
+            
+            return sep*keepdiffs
+                
+        v0 = [self._a,self._b,self._phi] if self._fixcen else [self._a,self._b,self._phi,self._x0,self._y0]
+        diag = [1/diff.shape[0],1/diff.shape[1],1] if self._fixcen else [1/diff.shape[0],1/diff.shape[1],1,1,1]
+        soln,cov,infodict,mesg,ier = leastsq(f,v0,args=(self,),full_output=1,diag = diag)
+        
+        if not ier ==1:
+            print 'Possible fit problem:',mesg
+        if self._fixcen:
+            self._a,self._b,self._phi = soln
+        else:
+            self._a,self._b,self._phi,self._x0,self._y0 = soln
+        self.lastier = ier
+        self.lastmesg = mesg
+        
+        if self._a < self._b:
+            self._a,self._b = self._b,self._a
+            self._phi += np.pi/2
+            
+        if self._phi >= 2*np.pi:
+            self.phi -= 2*np.pi*np.floor(self.phi/2/np.pi)
+        elif self._phi < 0:
+            self._phi += 2*np.pi*np.floor(-self.phi/2/np.pi)
+        
+        self._fitted = True
+        
+    @property
+    def diff(self):
+        """
+        returns the difference between the fitted ellipse and the level
+        """
+        from scipy.ndimage import map_coordinates
+        if not self._fitted:
+            self._fitEllipse()
+        return map_coordinates(self._imdata-self._level,self.cartesian(self._fitpoints),mode='nearest')
+    
+    @property    
+    def e(self):
+        """
+        returns eccentricity
+        """
+        if not self._fitted:
+            self._fitEllipse()
+        ratio = self._a/self._b
+        return (1-ratio*ratio)**0.5
+    
+    @property
+    def axisratio(self):
+        """
+        returns major/minor axis ratio
+        """
+        if not self._fitted:
+            self._fitEllipse()
+        return self._a/self._b
+    
+    @property    
+    def major(self):
+        """
+        returns major axis length in image coordinates
+        """
+        if not self._fitted:
+            self._fitEllipse()
+        return self._a
+    a = major
+    
+    @property    
+    def minor(self):
+        """
+        returns major axis length in image coordinates
+        """
+        if not self._fitted:
+            self._fitEllipse()
+        return self._b
+    b = minor
+    
+    @property
+    def phi(self):
+        """
+        returns rotation angle clockwise from x-axis
+        """
+        if not self._fitted:
+            self._fitEllipse()
+        return self._phi
+    
+    def plot(self,clf=True):
+        from matplotlib import pyplot as plt
+        
+        if not self._fitted:
+            self._fitEllipse()
+        
+        if clf:
+            plt.clf()
+            
+        plt.imshow(self.imdata.T)
+        plt.plot(*self.cartesian(self._fitpoints),c='k')
 
 class Sextractor(object):
     """
