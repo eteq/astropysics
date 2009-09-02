@@ -288,7 +288,10 @@ class FunctionModel(Model):
     
     def getMCMC(self,x,y,priors={},datamodel=None):
         """
-        Note that this function requires PyMC (http://code.google.com/p/pymc/)
+        Generate an object to fit the data using Markov Chain Monte 
+        Carlo sampling.  
+        
+        The data to be fit is provided in the x and y arguments.
         
         To specify the priors, either supply pymc.Stochastric objects, a 2-tuple 
         (uniform lower and upper), a scalar > 0 (gaussian w/ the center given by 
@@ -298,17 +301,20 @@ class FunctionModel(Model):
         Any missing priors will raise a ValueError
         
         datamodel can be:
-        *None: a normal distribution with sigma given by the data's standard 
-        deviation is used as the data model
-        *a tuple: (dist,dataname,kwargs)the first element is the 
-        pymc.distribution to be used as the distribution representing the data
-        and the second is the name of the argument to be associated with the 
-        FunctionModel1D's output, and the third is kwargs for the distribution 
-        ("observed" and "data" will be ignored, as will the data argument)
-        *a scalar or sequence of length == data: a normal distribution is used 
-        with sigma specified by the scalar/sequence
         
-        returns a pymc.MCMC object for Markov Chain Monte Carlo sampling
+        * None: a normal distribution with sigma given by the data's standard 
+          deviation is used as the data model
+        * a tuple: (dist,dataname,kwargs)the first element is the 
+          pymc.distribution to be used as the distribution representing the data
+          and the second is the name of the argument to be associated with the 
+          FunctionModel1D's output, and the third is kwargs for the distribution 
+          ("observed" and "data" will be ignored, as will the data argument)
+        * a scalar or sequence of length == data: a normal distribution is used 
+          with sigma specified by the scalar/sequence
+        
+        returns a pymc.MCMC object
+        
+        *Note that this function requires PyMC (http://code.google.com/p/pymc/)*
         """
         import pymc
         from operator import isSequenceType
@@ -2532,19 +2538,28 @@ class EinastoModel(FunctionModel1D):
 class SersicModel(FunctionModel1D):
     """
     Sersic surface brightness profile:
-    A*exp(-b_n[(R/Re)^(1/n)-1])
+    Ae*exp(-b_n[(R/Re)^(1/n)-1])
+    
+    Ae is the value at the effective radius re
     """
-    def f(self,r,A=1,re=1,n=2):
+    def f(self,r,Ae=1,re=1,n=4):
         #return EinastoModel.f(self,r,A,rs,1/n)
         #return A*np.exp(-(r/rs)**(1/n))
-        return A*np.exp(-self.bn(n)*((r/re)**(1.0/n)-1))
+        return Ae*np.exp(-self.bn(n)*((r/re)**(1.0/n)-1))
+    
+    def _getA0(self):
+        return self.f(0,self.Ae,self.re,self.n)
+    def _setA0(self,val):
+        self.Ae *= val/self.f(0,self.Ae,self.re,self.n)
+    A0 = property(_getA0,_setA0,doc='value at r=0')
     
     _bncache={}
     _bnpoly1=np.poly1d([-2194697/30690717750,131/1148175,46/25515,4/405,-1/3])
     _bnpoly2=np.poly1d([13.43,-19.67,10.95,-0.8902,0.01945])
-    def bn(self,n,usecache=True):
+    def bn(self,n=None,usecache=True):
         """
-        bn is used to get the appropriate half-light radius
+        bn is used to get the appropriate half-light radius.  If n is 
+        None, the current n parameter will be used
         
         the form is a fit from MacArthur, Courteau, and Holtzman 2003 
         and is claimed to be good to ~O(10^-5)
@@ -2552,7 +2567,10 @@ class SersicModel(FunctionModel1D):
         if usecache is True, the cache will be searched, if False it will
         be saved but not used, if None, ignored
         """
+        if n is None:
+            n = self.n
         n = float(n) #sometimes 0d array gets passed in
+        
         if n  in SersicModel._bncache and usecache:
             val = SersicModel._bncache[n]
         else:
@@ -2598,12 +2616,6 @@ class SersicModel(FunctionModel1D):
         
         plt.ylim(*reversed(plt.ylim()))
         plt.xlim(lower,upper)
-
-class ExponentialDiskModel(SersicModel):
-    def f(self,rz,A=1,re=1,zs=.3):
-        r=rz[0]
-        z=rz[1]
-        return SersicModel.f(self,r,A,re,1)*np.exp(np.abs(z)/zs)
     
 class DeVaucouleursModel(SersicModel):
     def f(self,r,A=1,re=1):
