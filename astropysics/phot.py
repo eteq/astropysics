@@ -1675,10 +1675,12 @@ class AperturePhotometry(object):
     apertures in the specified units, or a sequence for fixed 
     aperture sizes in the specified units
     #TODO:TEST!
+    
+    type can be 'circular' or 'elliptical'
     """
-    def __init__(self,band = None,units='arcsec',apertures=10,usemags=True,circular=True):
-        self.circular = circular
-        self.usemags = usemags
+    def __init__(self,band = None,units='arcsec',apertures=10,usemags=True,type='circular'):
+        self.type = type
+        self.usemags = usemags #do this right
         self.apertures = apertures
         
         self.band = band
@@ -1738,45 +1740,47 @@ class AperturePhotometry(object):
         """
         input x,y,cen should be in un-converted units
         """        
-        if not self.circular:
-            raise NotImplementedError('elliptical fitting not supported yet')
-        r = np.sum((np.array((x,y),copy=False).T-cen)**2,axis=1)**0.5
-        
-        if np.isscalar(self.apertures):
-            if self.apertures<0:
-                rap = np.arange(0,np.max(r),self.apertures)+self.apertures
-            else:
-                rap = np.linspace(0,np.max(r),self.apertures+1)[1:]
-        else:    
-            rap = np.array(self.apertures)
+        if self.type == 'circular':
+                
+            r = np.sum((np.array((x,y),copy=False).T-cen)**2,axis=1)**0.5
             
-        r,rap = self._unitconv*r,self._unitconv*rap
-        
-        apmask = r.reshape((1,r.size)) <= rap.reshape((rap.size,1)) #new shape (rap.size,r.size)
-        fluxap = np.sum(apmask*flux,axis=1)
-        fluxann = fluxap-np.roll(fluxap,1)
-        fluxann[0] = fluxap[0] 
-        A = pi*rap*rap
-        A = A - np.roll(A,1)
-        A[0] = pi*rap[0]**2
-        sbap = fluxann/A
-        #TODO:better/correct SB?
-        
-#        valid = sbap > 0
-#        self.enclosed = self._outFluxConv(fluxap[valid])
-#        self.mu = self._outFluxConv(sbap[valid])
-#        self.rap = rap   [valid]
+            if np.isscalar(self.apertures):
+                if self.apertures<0:
+                    rap = np.arange(0,np.max(r),self.apertures)+self.apertures
+                else:
+                    rap = np.linspace(0,np.max(r),self.apertures+1)[1:]
+            else:    
+                rap = np.array(self.apertures)
+                
+            r,rap = self._unitconv*r,self._unitconv*rap
+            
+            apmask = r.reshape((1,r.size)) <= rap.reshape((rap.size,1)) #new shape (rap.size,r.size)
+            fluxap = np.sum(apmask*flux,axis=1)
+            fluxann = fluxap-np.roll(fluxap,1)
+            fluxann[0] = fluxap[0] 
+            A = pi*rap*rap
+            A = A - np.roll(A,1)
+            A[0] = pi*rap[0]**2
+            sbap = fluxann/A
+            #TODO:better/correct SB?
+            
+    #        valid = sbap > 0
+    #        self.enclosed = self._outFluxConv(fluxap[valid])
+    #        self.mu = self._outFluxConv(sbap[valid])
+    #        self.rap = rap   [valid]
 
-        highest = np.min(np.where(np.concatenate((sbap,(0,)))<=0))
-        self.enclosed = self._outFluxConv(fluxap[:highest])
-        self.mu = self._outFluxConv(sbap[:highest])
-        self.rap = rap[:highest]/self._unitconv
+            highest = np.min(np.where(np.concatenate((sbap,(0,)))<=0))
+            self.enclosed = self._outFluxConv(fluxap[:highest])
+            self.mu = self._outFluxConv(sbap[:highest])
+            self.rap = rap[:highest]/self._unitconv
+        else:
+            raise NotImplementedError('elliptical fitting not supported yet')
         
-    def pointSourcePhotometry(self,x,y,magorflux,cen='centroid'):
+    def pointSourcePhotometry(self,x,y,magorflux,cen='weighted'):
         """
         x,y,and magorflux are arrays of matching shape 
         
-        cen is 'centroid' to use tjhe raw centroid, 'weighted' to weight the
+        cen is 'centroid' to use the raw centroid, 'weighted' to weight the
         centroid by the flux, or a 2-sequence to manually assign a center
         """
         x = np.array(x,copy=False)
@@ -1800,7 +1804,7 @@ class AperturePhotometry(object):
         
         return self._fitPhot(x,y,flux,cen)
     
-    def imagePhotometry(self,input,platescale):
+    def imagePhotometry(self,input,platescale,cen='weighted'):
         """
         input must be a 2D array or a CCD
         
@@ -1816,9 +1820,9 @@ class AperturePhotometry(object):
             raise ValueError('input not 2D')
         flux = self._magorfluxToFlux(magorflux)
         
+        x,y = np.meshgrid(np.arange(flux.shape[0]),np.arange(flux.shape[1]))
         
-        raise NotImplementedError
-        return self._fitPhot(x,y,flux,cen)
+        return self._fitPhot(x.T+1,y.T+1,flux,cen)
     
     def plot(self,fmt='o-',logx=False,**kwargs):
         """
@@ -1844,11 +1848,15 @@ class AperturePhotometry(object):
             plt.ylabel('$\\mu_{%s}$'%self.band.name)
             
 class IsophotalEllipse(object):
-    def __init__(self,imdata,level=None):
+    """
+    Generates ellipses fitting a 
+    """
+    
+    def __init__(self,imdata,isolevel=None):
         self.imdata = imdata
         
-        if level is None:
-            self.level = np.mean(self._imdata)
+        if isolevel is None:
+            self.isolevel = np.mean(self._imdata)
             
         self._fitted = False
         
@@ -1859,7 +1867,7 @@ class IsophotalEllipse(object):
         self._x0 = self._imdata.shape[0]/2.0
         self._y0 = self._imdata.shape[1]/2.0
         self._fixcen = False
-        self._keepfrac = .01
+        self._keeppix = .01 #this could be auto-tuned but generally seems to give a good answer
             
     def _getImdata(self):
         return self._imdata
@@ -1882,7 +1890,7 @@ class IsophotalEllipse(object):
     def _setLevel(self,val):
         self._level = val
         self._fitted = False
-    level = property(_getLevel,_setLevel)
+    isolevel = property(_getLevel,_setLevel)
     
     def _getFixcen(self):
         return self._fixcen
@@ -1891,12 +1899,15 @@ class IsophotalEllipse(object):
         self._fitted = False
     fixcenter = property(_getLevel,_setLevel)
     
-    def _getKeepfrac(self):
-        return self._keepfrac
-    def _setKeepfrac(self,val):
-        self._keepfrac = val
+    def _getKeeppix(self):
+        return self._keeppix
+    def _setKeeppix(self,val):
+        self._keeppix = val
         self._fitted = False
-    keepfrac=property(_getKeepfrac,_setKeepfrac)
+    keeppix=property(_getKeeppix,_setKeeppix,doc="""
+    The pixels to keep for fitting, either as a fraction of the total
+    (if less than 1) or as a fixed number of pixels (if greater than 1)
+    """)
         
     def polar(self,npoints):
         """
@@ -1932,7 +1943,7 @@ class IsophotalEllipse(object):
         xi = xi.T.ravel()
         yi = yi.T.ravel()
         sorti = np.argsort(diff.ravel()**2)
-        nkeep = self._keepfrac*xi.size
+        nkeep = self._keeppix*xi.size if self._keeppix <= 1 else self._keeppix
         xi = xi[sorti][:nkeep]
         yi = yi[sorti][:nkeep]
         keepdiffs = diff.ravel()[sorti][:nkeep]
@@ -1976,15 +1987,19 @@ class IsophotalEllipse(object):
         
         self._fitted = True
         
-    @property
-    def diff(self):
+    def getDiff(self,fractional=False):
         """
-        returns the difference between the fitted ellipse and the level
+        returns the difference between the fitted ellipse and the flux level
         """
         from scipy.ndimage import map_coordinates
         if not self._fitted:
             self._fitEllipse()
-        return map_coordinates(self._imdata-self._level,self.cartesian(self._fitpoints),mode='nearest')
+        
+        if fractional:
+            res = map_coordinates(self._imdata-self._level,self.cartesian(self._fitpoints),mode='nearest')
+        else:
+            res = map_coordinates(1-self._level/self._imdata,self.cartesian(self._fitpoints),mode='nearest')
+        return res
     
     @property    
     def e(self):
