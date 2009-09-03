@@ -37,9 +37,11 @@ def noise_model(adus,readnoise=0,gain=1,sens=0,output='err'):
     sensnoise is the sensitivity noise as a fraction of the adu signal
     
     output can be:
-    *'var':returns the variance of the adu signal
-    *'err':returns the sqrt(var) of the adu signal
-    *'SNR':returns adu/sqrt(var) of the adu signal
+    
+    * 'var':returns the variance of the adu signal
+    * 'err':returns the sqrt(var) of the adu signal
+    * 'SNR':returns adu/sqrt(var) of the adu signal
+    
     """
     #sigmasq = (rn/g)**2+ i/g + (s*i)**2
     
@@ -67,16 +69,25 @@ class CCDImage(object):
     guidelines below to support various formats/file types.
     
     MUST implement:
-    *_extractArray(self,range) -- should return the 2d (x,y) array 
-    corresponding to the range (xlower,xupper,ylower,yupper) or None for entire 
-    image.  Raise IndexError if the range is not valid
     
-    *_applyArray(self,range,data) -- should take the provided range and apply 
-    the data to whatever the base store is for that range.  Raise IndexError if
-    the range is not valid, or AttributeError if the data should be read-only.
+    * _extractArray(self,range) -- should return the 2d (x,y) array 
+      corresponding to the range (xlower,xupper,ylower,yupper) or None
+      for entire image.  Raise IndexError if the range is not valid
     
-    MAY implement:    
-    * close(self) do any necessary file cleanup (default does nothing)
+    * _applyArray(self,range,data) -- should take the provided range and apply 
+      the data to whatever the base store is for that range.  Raise IndexError if
+      the range is not valid, or AttributeError if the data should be read-only.
+    
+    
+    Note that these two methods in principle operate independent of the 
+    CCDImage internal representation, so if desired, _applyArray can just
+    update the same backing store that _extractArray uses
+    
+    The following image properties are defined, defaulting to None.  They
+    may be set or overridden as appropriate
+    
+    * zeropoint
+    * pixelscale
     """
     __metaclass__ = ABCMeta
     
@@ -166,12 +177,6 @@ class CCDImage(object):
     @abstractmethod        
     def _applyArray(self,range,data):
         raise NotImplementedError
-    
-    def close(self):
-        """
-        default close method does nothing, override if file cleanup is necessary
-        """
-        pass
         
     def setScaling(self,scalefunc,invscalefunc=None):
         """
@@ -714,7 +719,7 @@ class CCDImage(object):
     def _setRange(self,value):
         self.activateRange(value)
     range = property(_getRange,_setRange,doc="""
-    returns or sets the range (setting is syntactic sugar for activateRange)
+    returns or sets the range (setting is same as calling activateRange)
     """)
     
             
