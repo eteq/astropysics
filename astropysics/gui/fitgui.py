@@ -26,7 +26,7 @@ from enthought.mayavi.tools.mlab_scene_model import MlabSceneModel
 from enthought.mayavi.core.ui.mayavi_scene import MayaviScene
 
 
-from ..models import list_models,get_model,Model,binned_weights
+from ..models import FunctionModel1D,list_models,get_model,binned_weights
 
 class ColorMapperFixSingleVal(ColorMapper):
     coloratval = ColorTrait('black')
@@ -72,7 +72,7 @@ def _cmap(range, **traits):
 class _TraitedModel(HasTraits):
     from inspect import isclass
     
-    model = Instance(Model,allow_none=True)
+    model = Instance(FunctionModel1D,allow_none=True)
     modelname = Property(Str)
     updatetraitparams = Event
     paramchange = Event
@@ -173,7 +173,7 @@ class NewModelSelector(HasTraits):
     def __init__(self,include_models=None,exclude_models=None,**traits):
         super(NewModelSelector,self).__init__(**traits)
         
-        self.modelnames = list_models(1,include_models,exclude_models)
+        self.modelnames = list_models(include_models,exclude_models,FunctionModel1D)
         self.modelnames.insert(0,'No Model')
         self.modelnames.sort()
         
@@ -357,7 +357,7 @@ class FitGui(HasTraits):
                          color_mapper=_cmapblack if self.weights0rem else _cmap,
                          type='cmap_scatter', marker='circle')[0]
                         
-        if not isinstance(mod,Model):
+        if not isinstance(mod,FunctionModel1D):
             self.fitmodel = True
             
         self.updatemodelplot = False #force plot update - generates xmod and ymod
@@ -682,7 +682,7 @@ def fit_data(xdata,ydata,model=None,**kwargs):
     """
     
     fg = FitGui(xdata,ydata,model,**kwargs)
-    if model is not None and not isinstance(model,Model):
+    if model is not None and not isinstance(model,FunctionModel1D):
         fg.fitmodel = True
     res = fg.configure_traits(kind='livemodal')
     
