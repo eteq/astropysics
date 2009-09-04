@@ -1433,7 +1433,7 @@ class CompositeModel1D(FunctionModel1D):
     def ops(self):
         return self._ops  
     
-class Grid1DModels(object):
+class ModelGrid1D(object):
     """
     A set of models that are matching types and represnt a grid of parameter
     values.  The main purpose is to allow the grid to be inverted to extract
@@ -1525,7 +1525,52 @@ class Grid1DModels(object):
         kwargs['clf'] = False
         for m in self.models:
             m.plot(*args,**kwargs)
-            
+Grid1DModel = ModelGrid1D #for old modules
+
+class FunctionModel2DScalar(FunctionModel):
+    """
+    This class is a FunctionModel that maps a two-dimensional input to a
+    scalar output for each 2D coordinate.  The input thus is at least a 
+    two-dimensional array, with the first dimension of length 2.
+    """
+    ftype='cartesian' #also need to set output type
+    
+    def __call__(self,x):
+        """
+        call the function on the input x,which will be flattened.  If not 1D,
+        the output will be reshaped to the input
+        """
+        arr = np.array(x,copy=False,dtype=float)
+        
+        if len(arr.shape) > 1:
+            subshape = arr.shape[1:]
+        elif len(arr.shape) == 1:
+            subshape = tuple()
+        else:
+            raise ModelTypeError('Scalar cannot be fed into 2D model')
+        
+        try:
+            arr = arr.reshape(2,np.prod(subshape))
+        except ValueError:
+            raise ModelTypeError('2D model input must have first dimension of length 2')
+        
+        return self._callfunc(arr,*self.parvals).reshape(subshape)
+    
+    def integrateCircular(self,outerr,innerr=0,theta=None):
+        """
+        if theta is None, do full circle, else it should be a (lower,upper)
+        tuple
+        """
+        raise NotImplementedError
+    
+    def integrateCartesian(self,xl,xu,yl,yu):
+        raise NotImplementedError
+    
+    def gradient(self,x):
+        raise NotImplementedError
+    
+    def pixelize(self,xl,xu,yl,yu,npix=100,integrate=True):
+        raise NotImplementedError
         
 #<-------------------------------Module functions ----------------------------->  
 __model_registry={}
