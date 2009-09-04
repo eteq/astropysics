@@ -2,7 +2,9 @@
 
 """
 This module contains various astropysics or python-related utility
-functions that have no obvious place in some other module
+functions that have no obvious place in some other module, as well
+as a variety of general-purpose algorithms that are not particular
+to a module.
 """
 
 from __future__ import division,with_statement
