@@ -8,7 +8,7 @@ bands.
 """
 
 from __future__ import division,with_statement
-from math import pi
+from .constants import pi
 import numpy as np
 try:
     #requires Python 2.6

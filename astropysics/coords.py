@@ -14,7 +14,7 @@ not at all without this package installed
 """
 
 from __future__ import division,with_statement
-from math import pi
+from .constants import pi
 import numpy as np
 
 

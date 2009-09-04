@@ -1913,7 +1913,7 @@ class IsophotalEllipse(object):
         """
         returns the full ellipse as an (rho,theta) tuple
         """
-        th = np.linspace(0,2*np.pi,npoints)
+        th = np.linspace(0,2*pi,npoints)
         return self._th2r(th),th
     
     def _th2r(self,th):
@@ -1978,12 +1978,12 @@ class IsophotalEllipse(object):
         
         if self._a < self._b:
             self._a,self._b = self._b,self._a
-            self._phi += np.pi/2
+            self._phi += pi/2
             
-        if self._phi >= 2*np.pi:
-            self.phi -= 2*np.pi*np.floor(self.phi/2/np.pi)
+        if self._phi >= 2*pi:
+            self.phi -= 2*pi*np.floor(self.phi/2/pi)
         elif self._phi < 0:
-            self._phi += 2*np.pi*np.floor(-self.phi/2/np.pi)
+            self._phi += 2*pi*np.floor(-self.phi/2/pi)
         
         self._fitted = True
         
