@@ -867,6 +867,8 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
 class NFWModel(FunctionModel1DAuto):
     """
     A Navarro, Frenk, and White 1996 profile
+    
+    united operations have r in kpc and rho in Msun kpc^-3
     """
     xaxisname = 'r'
     yaxisname = 'rho'
@@ -910,6 +912,12 @@ class NFWModel(FunctionModel1DAuto):
         self.rho0 = 1
         a0 = self.integrateSpherical(0,Rvir)
         self.rho0 = Mvir/a0
+        
+    def getC(self,z=0):
+        """
+        returns the concentration (rc/rvir)
+        """
+        return self.getRv(z)/self.rc
             
     def getRv(self,z=0):
         """
@@ -920,8 +928,8 @@ class NFWModel(FunctionModel1DAuto):
         from scipy.optimize import newton
         
         try:
-            from .constants import get_cosmology
-            rhoC = get_cosmology().rhoC()
+            from ..constants import get_cosmology,Ms
+            rhoC = get_cosmology().rhoC('cosmological')*1e-9 #Mpc^-3->kpc^-3
         except:
             raise ValueError('current cosmology does not support critical density')
         
@@ -932,6 +940,7 @@ class NFWModel(FunctionModel1DAuto):
     def Delta(z):
         """
         Virial overdensity - value is from Maller&Bullock 2004
+        (could do better)
         """
         return 360.0/(1.0+z)
     
@@ -1142,13 +1151,16 @@ class MaxwellBoltzmannSpeedModel(MaxwellBoltzmannModel):
     xaxisname = 'v'
     
     def f(self,v,T=273,m=me):
-        from .constants import kb,pi
+        from ..constants import kb,pi
         return 4*pi*v*v*(m/(2*pi*kb*T))**1.5*np.exp(-m*v*v/2/kb/T)
     
     @property
     def rangehint(self):
         from ..constants import kb,c
         return 0,min(3*(2*kb*self.T/self.m)**0.5,c)
+    
+        
+#<-------------------------------Other Models---------------------------------->
     
 class Plane(FunctionModel):
     """
