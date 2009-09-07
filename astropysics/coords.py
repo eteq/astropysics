@@ -463,73 +463,50 @@ class AngularPosition(object):
         return AngularPosition(self.__ra/other,self.__dec/other)
     def __pow__(self,other):
         return AngularPosition(self.__ra**other,self.__dec**other)    
-
-
-def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
-    """
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from operator import isSequenceType
-    
-    if type(l) == str:
-        l=AngularCoordinate(l).degrees
-        if strout is None:
-            strout=True
-    if type(b) == str:
-        b=AngularCoordinate(b).degrees
-        if strout is None:
-            strout=True
-    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
-    if strout:
-        if not isSequenceType(ra):
-            ra=[ra]
-        if not isSequenceType(dec):
-            dec=[dec]
-        rao,deco=[],[]
-        for rai in ra:
-            rao.append(AngularCoordinate(rai).getHmsStr())
-        for deci in dec:
-            deco.append(AngularCoordinate(deci).getDmsStr())
-        return rao,deco
-    else:
-        return ra,dec
     
     
-def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
-    """
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from operator import isSequenceType
-    
-    if type(ra) == str:
-        ra=AngularCoordinate(ra).degrees
-        if strout is None:
-            strout=True
-    if type(dec) == str:
-        dec=AngularCoordinate(dec).degrees
-        if strout is None:
-            strout=True
-    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
-    if strout:
-        if not isSequenceType(l):
-            l=[l]
-        if not isSequenceType(b):
-            b=[b]
-        lo,bo=[],[]
-        for li in l:
-            lo.append(AngularCoordinate(li).getDmsStr())
-        for bi in b:
-            bo.append(AngularCoordinate(bi).getDmsStr())
-        return lo,bo
-    else:
-        return l,b
-
-
 #<-------------basic transforms-------------------->
+def cartesian_to_polar(x,y,degrees=False):
+    """
+    Converts two arrays in 2D rectangular Cartesian coordinates to
+    polar coordinates.
+    
+    if degrees is True, the output theta angle will be in degrees, 
+    otherwise radians
+    
+    returns (r,theta) where theta is measured from the +x axis increasing
+    towards the +y axis
+    """
+    r = (x*x+y*y)**0.5
+    t = np.arctan2(y,x)
+    if degrees:
+        t = np.degrees(t)
+    
+    return r,t
+
+def polar_to_cartesian(r,t,degrees=False):
+    """
+    Converts two arrays in polar coordinates to
+    2D rectangular Cartesian coordinates.
+    
+    if degrees is True, the input angle t will be interpreted as given
+    in degrees, otherwise radians
+    
+    theta is measured from the +x axis increasing
+    towards the +y axis
+    
+    returns (x,y)
+    """
+    if degrees:
+        t=np.radians(t)
+        
+    return r*np.cos(t),r*np.sin(t)
+
 def cartesian_to_spherical(x,y,z,degrees=False):
     """
+    Converts three arrays in 3D rectangular cartesian coordinates to
+    spherical polar coordinates.
+    
     returns r,theta,phi in PHYSICIST convention - (1,0,pi/2) is x-axis
     """
     xsq,ysq,zsq=x*x,y*y,z*z
@@ -543,6 +520,9 @@ def cartesian_to_spherical(x,y,z,degrees=False):
 
 def spherical_to_cartesian(r,t,p,degrees=False):
     """
+    Converts three arrays in 3D spherical polar coordinates to
+    rectangular cartesian coordinates.
+    
     if degrees is true, converts from degrees to radians for theta and phi
     returns x,y,z in PHYSICIST convention - (1,0,pi/2) is x-axis
     """
@@ -552,6 +532,28 @@ def spherical_to_cartesian(r,t,p,degrees=False):
     y=r*np.sin(t)*np.sin(p)
     z=r*np.cos(t)
     
+    return x,y,z
+
+def cartesian_to_cylindrical(x,y,z,degrees=False):
+    """
+    Converts three arrays in 3D rectangular Cartesian coordinates
+    to cylindrical polar coordinates. 
+    
+    if degrees is true, outputtheta is in degrees, otherwise radians
+    returns s,theta,z (theta increasing from +x to +y, 0 at x-axis)
+    """
+    s,t = cartesian_to_polar(x,y)
+    return s,t,z
+    
+def cylindrical_to_cartesian(s,t,z,degrees=False):
+    """
+    Converts three arrays in cylindrical polar coordinates to
+    3D rectangular Cartesian coordinates. 
+    
+    if degrees is true, converts from degrees to radians for theta
+    returns x,y,z (theta increasing from +x to +y, 0 at x-axis)
+    """
+    x,y = poloar_to_cartesian(s,t,degrees)
     return x,y,z
     
 def proj_sep(rx,ty,pz,offset,spherical=False):
@@ -576,6 +578,7 @@ def proj_sep(rx,ty,pz,offset,spherical=False):
     
     ohat=(offset.T*np.sum(offset*offset,1)**-0.5)
     return np.array(np.matrix(np.c_[x,y,z])*np.matrix(ohat))
+
 
 
 
@@ -696,6 +699,67 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
     return rap,decp
 
 #<-------------convinience functions------------------------------------------->
+
+def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
+    """
+    convinience function for celestial_transforms
+    if strout is None, will automatically decide based on inputs
+    """
+    from operator import isSequenceType
+    
+    if type(l) == str:
+        l=AngularCoordinate(l).degrees
+        if strout is None:
+            strout=True
+    if type(b) == str:
+        b=AngularCoordinate(b).degrees
+        if strout is None:
+            strout=True
+    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
+    if strout:
+        if not isSequenceType(ra):
+            ra=[ra]
+        if not isSequenceType(dec):
+            dec=[dec]
+        rao,deco=[],[]
+        for rai in ra:
+            rao.append(AngularCoordinate(rai).getHmsStr())
+        for deci in dec:
+            deco.append(AngularCoordinate(deci).getDmsStr())
+        return rao,deco
+    else:
+        return ra,dec
+    
+    
+def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
+    """
+    convinience function for celestial_transforms
+    if strout is None, will automatically decide based on inputs
+    """
+    from operator import isSequenceType
+    
+    if type(ra) == str:
+        ra=AngularCoordinate(ra).degrees
+        if strout is None:
+            strout=True
+    if type(dec) == str:
+        dec=AngularCoordinate(dec).degrees
+        if strout is None:
+            strout=True
+    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
+    if strout:
+        if not isSequenceType(l):
+            l=[l]
+        if not isSequenceType(b):
+            b=[b]
+        lo,bo=[],[]
+        for li in l:
+            lo.append(AngularCoordinate(li).getDmsStr())
+        for bi in b:
+            bo.append(AngularCoordinate(bi).getDmsStr())
+        return lo,bo
+    else:
+        return l,b
 
 def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
     ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
