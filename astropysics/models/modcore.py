@@ -215,15 +215,20 @@ class FunctionModel(ParametricModel):
     numpy array input to an output (the function must be specified as the 
     "f" method)
     
-    The following attributes MUST be defined:
-    * f: a method that takes an array as the first argument and 
+    The following attributes *must* be defined:
+    
+    * 'f': a method that takes an array as the first argument and 
          returns another array
-    * _pars: a sequence of strings that define the names of attributes 
+    * '_pars': a sequence of strings that define the names of attributes 
       that are to be treated as the parameters for the model. If these are
       not defined, they will be initialized to the "defaultparval" value
+    
+    * '_filterfunc': a function that performs any processing of inputs and 
+      outputs.  Should call f and return f's return value.
       
     If type-checking is to be performed on the input, it should be performed
-    in __call__ (see docstring for __call__)
+    in __call__ (see docstring for __call__), but any mandatory input 
+    conversion should be done in _filterfunc, instead
     """
     
     defaultparval = 1
@@ -244,12 +249,12 @@ class FunctionModel(ParametricModel):
     
     
     
-    def _callfunc(self,*args,**kwargs):
+    def _filterfunc(self,*args,**kwargs):
         """
         this single-use function is in place to not need an __init__ method 
         to initially set the calling function
         """
-        self._callfunc = self.f
+        self._filterfunc = self.f
         return self.f(*args,**kwargs)
     
     def __call__(self,x):
@@ -258,11 +263,11 @@ class FunctionModel(ParametricModel):
         the result.
         
         if subclassing to do type-checking, the function should return the
-        result of self._callfunc(input,*self.parvals) or raise a 
+        result of self._filterfunc(input,*self.parvals) or raise a 
         ModelTypeError
         """
         arr = np.array(x,copy=False,dtype=float)
-        return self._callfunc(arr,*self.parvals)
+        return self._filterfunc(arr,*self.parvals)
     
     _pars=tuple() #default empty parameter sequence
         
@@ -275,7 +280,7 @@ class FunctionModel(ParametricModel):
     
     def _getParvals(self):
         try:
-            return [getattr(self,a) for a in self._pars]
+            return tuple([getattr(self,a) for a in self._pars])
         except AttributeError:
             self._autoInitPars()
             return self._getParvals()
@@ -308,7 +313,7 @@ class FunctionModel(ParametricModel):
             setattr(self,p,self.defaultparval)
             
     def fitData(self,x,y,method=None,fixedpars=None,weights=None,contraction='sumsq',
-                 updatepars=True,savedata=True,**kwargs):
+                 updatepars=True,fitf=False,savedata=True,**kwargs):
         """
         Adjust the parameters of the FunctionModel to fit the provided data 
         using algorithms from scipy.optimize
@@ -365,7 +370,12 @@ class FunctionModel(ParametricModel):
         """
         from scipy import optimize as opt
         
-        if self.f(x,*self.parvals).shape != y.shape:
+        if fitf:
+            fitfunc = self.f
+        else:
+            fitfunc = self._filterfunc
+        
+        if fitfunc(x,*self.parvals).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
         if weights is None:
             w = 1
@@ -416,11 +426,11 @@ class FunctionModel(ParametricModel):
                 pdict=dict([(p,getattr(self,p)) for p in fixedpars])
                 def f(x,v):
                     pdict.update(dict(zip(ps,v)))
-                    #return self.f(x,**pdict)
+                    #return fitfunc(x,**pdict)
                     params = [pdict[a] for a in self._pars]
-                    return self.f(x,*params).ravel()
+                    return fitfunc(x,*params).ravel()
             else:
-                f=lambda x,v:self.f(x,*v).ravel()
+                f=lambda x,v:fitfunc(x,*v).ravel()
                 
             if method == 'leastsq':
                 if 'frac' in contraction:
@@ -518,16 +528,44 @@ class FunctionModel(ParametricModel):
         """
         raise NotImplementedError('No custom fit function provided for this model')
     
-    def stdData(self,x,y):
+    def stdData(self,x=None,y=None):
         """
         determines the standard deviation of the model from the supplied data
+        
+        if x or y are None, they are determined from the pre-fitted data
         """
-        if x.shape != y.shape:
-            raise ValueError("x and y don't match")
+        if x is None or y is None:
+            if self.fitteddata is None:
+                raise ValueError('must either specify data or save fitted data')
+            x,y = self.fitteddata
+        
+        if self(x).shape != y.shape:
+            raise ModelTypeError('y array does not match output of model for input x')
         
         return np.std(self(x)-y,ddof=len(self.params))
     
-    def chi2Data(self,x,y,dy=None):
+    def residuals(self,x=None,y=None,retdata=False):
+        """
+        returns residuals of the provided data against the model (e.g.
+        y-model(x) ).  
+        
+        If x or y are None, data are determined from the already-fit data
+        
+        returns x,y,residuals if retdata is True, otherwise just residuals
+        """
+        if x is None or y is None:
+            if self.fitteddata is None:
+                raise ValueError('must either specify data or save fitted data')
+            x,y = self.fitteddata
+        
+        if self(x).shape != y.shape:
+            raise ModelTypeError('y array does not match output of model for input x')
+        if retdata:
+            return x,y,y-self(x)
+        else:
+            return y-self(x)
+    
+    def chi2Data(self,x=None,y=None,dy=None):
         """
         determines the chi-squared statistic for data with errors dy
         
@@ -536,8 +574,13 @@ class FunctionModel(ParametricModel):
         
         returns chi2,p-value
         """
-        if x.shape != y.shape:
-            raise ValueError("x and y don't match")
+        if x is None or y is None:
+            if self.fitteddata is None:
+                raise ValueError('must either specify data or save fitted data')
+            x,y = self.fitteddata
+        
+        if self(x,*self.parvals).shape != y.shape:
+            raise ModelTypeError('y array does not match output of model for input x')
         
         n=len(y)
         m=len(self.params)
@@ -563,7 +606,7 @@ class FunctionModel(ParametricModel):
         p=chisqprob(chi2,dof)
         return chi2,p
     
-    def bootstrapFits(self,x,y,n=250,prefit=True,plothist=False,**kwargs):
+    def bootstrapFits(self,x=None,y=None,n=250,prefit=True,plothist=False,**kwargs):
         """
         uses the fitData function to fit the function and then uses the
         "bootstrap" technique to estimate errors - that is, use sampling
@@ -574,8 +617,13 @@ class FunctionModel(ParametricModel):
         bootstrapping begins, and kwargs go into self.fitData
         """
         
-        if x.shape != y.shape:
-            raise ValueError("x and y don't match")
+        if x is None or y is None:
+            if self.fitteddata is None:
+                raise ValueError('must either specify data or save fitted data')
+            x,y = self.fitteddata
+        
+        if self(x).shape != y.shape:
+            raise ModelTypeError('y array does not match output of model for input x')
         
         xyn=len(x)
         inds=(xyn*np.random.rand(n,xyn)).astype(int)
@@ -732,7 +780,7 @@ class FunctionModel1D(FunctionModel):
         the output will be reshaped to the input
         """
         arr = np.array(x,copy=False,dtype=float)
-        res = self._callfunc(arr.ravel(),*self.parvals)
+        res = self._filterfunc(arr.ravel(),*self.parvals)
         return res.reshape(arr.shape)
     
     def inv(self,yval,*args,**kwargs):
@@ -850,7 +898,7 @@ class FunctionModel1D(FunctionModel):
     
         
     def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
-              powerx=False,powery=False,deriv=None,data='auto',fit = False,*args,**kwargs):
+              powerx=False,powery=False,deriv=None,data='auto',*args,**kwargs):
         """
         plot the model function from lower to upper with n samples
         
@@ -863,8 +911,7 @@ class FunctionModel1D(FunctionModel):
         extra args and kwargs go into the matplotlib plot function
         
         data is either an x,y pair of data points or a dictionary of kwargs into 
-        scatter fit determines if the model should be fit to the data before
-        plotting. If it is 'auto', the last data input to fitData will be used
+        scatter. If it is 'auto', the last data input to fitData will be used
         (if savedata was true).  If it evaluates to False, no data will be 
         plotted and lower and upper must be set
         
@@ -875,101 +922,102 @@ class FunctionModel1D(FunctionModel):
         from matplotlib import pyplot as plt
         from operator import isMappingType
         
-        if fit:
-            from operator import isMappingType
-            if not isMappingType(fit):
-                fit = {}
-            if data is None:
-                raise ValueError("Need to supply data to perform fit before plot")
-            self.fitData(*data,**fit)
-            
-        if data is 'auto':
-            if self.fitteddata:
-                data = self.fitteddata
-            else:
-                data = None
-                
-        if data is not None:
-            if lower is None:
-                lower=np.min(data[0])
-            if upper is None:
-                upper=np.max(data[0])
-        
-        if lower is None or upper is None:
-            rh = self.rangehint
-            if rh is None:
-                raise ValueError("Can't choose limits for plotting without data or a range hint")
-            else:
-                if lower is None:
-                    lower = rh[0]
-                if upper is None:
-                    upper = rh[1]
-        
-        if 'x' in logplot:
-            x = np.logspace(np.log10(lower),np.log10(upper),n)
-        else:
-            x = np.linspace(lower,upper,n)
-        
-        if powerx:
-            x=10**x
-            
-        if integrate is None and not deriv:
-            y = self(x)
-        elif deriv:
-            if integrate is not None:
-                raise ValueError("can't do derivative and integral simultaneously")
-            y=np.array([self.derivative(v,np.abs(upper-lower)/(10*n)) for v in x])
-        else: #integrate is not None
-            intfunc = self.integrate
-            if integrate is True:
-                base = lower
-            elif integrate is False:
-                base = upper
-            elif isinstance(integrate,basestring):
-                if integrate.startswith('s'): #spherical
-                    intfunc = self.integrateSpherical
-                    base = 0
-                elif integrate.startswith('c'): #circular
-                    intfunc = self.integrateCircular
-                    base = 0
+        isinter = plt.isinteractive()
+        try:
+            plt.ioff()
+            if data is 'auto':
+                if self.fitteddata:
+                    data = self.fitteddata
                 else:
-                    raise ValueError('unrecognized integrate string')
-            else:
-                base = float(integrate)
-            y=np.array([intfunc(base,v) for v in x])
+                    data = None
+                    
+            if data is not None:
+                if lower is None:
+                    lower=np.min(data[0])
+                if upper is None:
+                    upper=np.max(data[0])
             
-        if powery:
-            y= 10**y
-        
-        if clf:
-            plt.clf()
-        if 'x' in logplot and 'y' in logplot:
-            plt.loglog(x,y,*args,**kwargs)
-        elif 'x' in logplot:
-            plt.semilogx(x,y,*args,**kwargs)
-        elif 'y' in logplot:
-            plt.semilogy(x,y,*args,**kwargs)
-        else:
-            plt.plot(x,y,*args,**kwargs)
-        
-        if np.any(data):
-            if isMappingType(data):
-                if clf and 'c' not in data:
-                    data['c']='g'
-                plt.scatter(**data)
+            if lower is None or upper is None:
+                rh = self.rangehint
+                if rh is None:
+                    raise ValueError("Can't choose limits for plotting without data or a range hint")
+                else:
+                    if lower is None:
+                        lower = rh[0]
+                    if upper is None:
+                        upper = rh[1]
+            
+            if 'x' in logplot:
+                x = np.logspace(np.log10(lower),np.log10(upper),n)
             else:
-                if clf and len(data)<4:
-                    data=list(data)
-                    if len(data) < 3:
-                        data.append(20)
-                    data.append('r')
-                plt.scatter(*data)
-        plt.xlim(lower,upper)
-        
-        if self.xaxisname:
-            plt.xlabel(self.xaxisname)
-        if self.yaxisname:
-            plt.ylabel(self.yaxisname)
+                x = np.linspace(lower,upper,n)
+            
+            if powerx:
+                x=10**x
+                
+            if integrate is None and not deriv:
+                y = self(x)
+            elif deriv:
+                if integrate is not None:
+                    raise ValueError("can't do derivative and integral simultaneously")
+                y=np.array([self.derivative(v,np.abs(upper-lower)/(10*n)) for v in x])
+            else: #integrate is not None
+                intfunc = self.integrate
+                if integrate is True:
+                    base = lower
+                elif integrate is False:
+                    base = upper
+                elif isinstance(integrate,basestring):
+                    if integrate.startswith('s'): #spherical
+                        intfunc = self.integrateSpherical
+                        base = 0
+                    elif integrate.startswith('c'): #circular
+                        intfunc = self.integrateCircular
+                        base = 0
+                    else:
+                        raise ValueError('unrecognized integrate string')
+                else:
+                    base = float(integrate)
+                y=np.array([intfunc(base,v) for v in x])
+                                
+            if powery:
+                y= 10**y
+            
+            if clf:
+                plt.clf()
+            if 'x' in logplot and 'y' in logplot:
+                plt.loglog(x,y,*args,**kwargs)
+            elif 'x' in logplot:
+                plt.semilogx(x,y,*args,**kwargs)
+            elif 'y' in logplot:
+                plt.semilogy(x,y,*args,**kwargs)
+            else:
+                plt.plot(x,y,*args,**kwargs)
+            
+            if np.any(data):
+                if isMappingType(data):
+                    if clf and 'c' not in data:
+                        data['c']='g'
+                    plt.scatter(**data)
+                else:
+                    if clf and len(data)<4:
+                        data=list(data)
+                        if len(data) < 3:
+                            data.append(20)
+                        data.append('r')
+                    plt.scatter(*data)
+            plt.xlim(lower,upper)
+            
+            if self.xaxisname:
+                plt.xlabel(self.xaxisname)
+            if self.yaxisname:
+                plt.ylabel(self.yaxisname)
+                
+            if isinter:
+                    plt.draw()
+                    plt.show()
+        finally:
+            plt.interactive(isinter)
     
     #Can Override:
     def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
@@ -987,7 +1035,7 @@ class FunctionModel1D(FunctionModel):
         jac is the jacobian factor as a function f(x,*params)
         
         returns value
-        most methods will also store their result to "lastIntegrate"
+        most methods will also store their result to "lastintegrate"
         
         if subclassing, this should be overwritten with a function of the form
         integrate(lower,upper,[args])
@@ -1046,7 +1094,7 @@ class FunctionModel1D(FunctionModel):
                 raise ValueError('unrecognized integration method')
         
         
-        self.lastIntegrate = res
+        self.lastintegrate = res
         return res if np.isscalar(res) else res[0]
     
     def integrateCircular(self,lower,upper,*args,**kwargs):
@@ -1120,13 +1168,13 @@ class FunctionModel1D(FunctionModel):
             
         if type is None:
             if xtrans and ytrans: 
-                self._callfunc = MethodType(lambda self,x,*pars:ytrans(self.f(xtrans(x),*pars)),self,self.__class__)
+                self._filterfunc = MethodType(lambda self,x,*pars:ytrans(self.f(xtrans(x),*pars)),self,self.__class__)
             elif xtrans:
-                self._callfunc = MethodType(lambda self,x,*pars:self.f(xtrans(x),*pars),self,self.__class__)
+                self._filterfunc = MethodType(lambda self,x,*pars:self.f(xtrans(x),*pars),self,self.__class__)
             elif ytrans:
-                self._callfunc = MethodType(lambda self,x,*pars:ytrans(self.f(x,*pars)),self,self.__class__)
+                self._filterfunc = MethodType(lambda self,x,*pars:ytrans(self.f(x,*pars)),self,self.__class__)
             else:
-                self._callfunc = self.f
+                self._filterfunc = self.f
         else:
             try:
                 newf = getattr(self,type)
@@ -1208,9 +1256,9 @@ class FunctionModel1D(FunctionModel):
                         kwargs[xkw] = x
                         return newf(**kwargs)
                 
-            self._callfunc = MethodType(callfunc,self,self.__class__)
+            self._filterfunc = MethodType(callfunc,self,self.__class__)
             
-        self._callfunctype = (type,xts,yts)
+        self._filterfunctype = (type,xts,yts)
         
     def getCall(self):
         """
@@ -1218,8 +1266,8 @@ class FunctionModel1D(FunctionModel):
         a string like that of the type passed into `setCall`, or None if
         the model function itself is to be called.
         """
-        if hasattr(self,'_callfunctype'):
-            return self._callfunctype
+        if hasattr(self,'_filterfunctype'):
+            return self._filterfunctype
         else:
             return None
         
@@ -1527,13 +1575,83 @@ class ModelGrid1D(object):
             m.plot(*args,**kwargs)
 Grid1DModel = ModelGrid1D #for old modules
 
-class FunctionModel2DScalar(FunctionModel):
+class InputCoordinateTransformer(object):
+    """
+    This mixin (i.e. intnded to be subclassed) class converts 
+    FunctionModel input values from one coordinate system to another.
+    
+    In subclasses, the following should be defined at class level:
+    
+    * '_inputtransforms': a dictionary of dictionaries where the 
+      values are functions that define the transforms as
+      _intransforms[incoordsys][funccoordsys] = func
+    * 'incoordsys': the default input coordinate system
+    * 'fcoordsys': the coordinate system the function is defined in 
+    
+    to implement the transform, just call tranformCoordinates(input) and 
+    feed the return value into the f-function
+    """
+    _inputtransforms = {}
+    incoordsys = None
+    _fcoordsys = None
+    
+    def transformCoordinates(self,x,incoordsys=None,outcoordsys=None):
+        """
+        transform from the input coordinate system into that defined for 
+        the model function
+        
+        if incoordsys is None, self.incoordsys will be used
+        """
+        if incoordsys is None:
+            incoordsys = self.incoordsys
+        if outcoordsys is None:
+            outcoordsys = self._fcoordsys
+        if incoordsys == outcoordsys:
+            return x
+        else:
+            return self._inputtransforms[incoordsys][outcoordsys](*x)
+        
+    def addTransform(self,input,output,func):
+        """
+        add a new transform for this coordinate system with the given 
+        input and ouput names and the specified function.  Functions
+        are expected to take oen argument - an arrays with at least 2 
+        dimensions with the first dimension defining the coordinate system
+        """
+        import inspect
+        from collections import defaultdict
+        
+        try:
+            args, varargs, varkw, defaults = inspect.getargspec(func)
+            if len(args)-1 > len(defaults) or varkw:
+                raise TypeError('input function must take one argument')
+        except TypeError:
+            raise TypeError('input func is not a callable')
+        
+        #make sure we are in the instance
+        if '_inputtransforms' not in self.__dict__:
+            dd = defaultdict(dict)
+            dd.update(self._inputtransforms)
+            self._inputtransforms = dd
+            
+        dd[input][output] = func
+            
+
+class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     """
     This class is a FunctionModel that maps a two-dimensional input to a
     scalar output for each 2D coordinate.  The input thus is at least a 
     two-dimensional array, with the first dimension of length 2.
     """
-    ftype='cartesian' #also need to set output type
+    from ..coords import cartesian_to_polar,polar_to_cartesian
+    
+    _inputtransforms = {'cartesian':{'polar':cartesian_to_polar},
+                        'polar':{'cartesian':polar_to_cartesian}}
+    incoordsys = 'cartesian'
+    _fcoordsys = 'cartesian'
+    
+    def _filterfunc(self,x,*params):
+        return self.f(self.transformCoordinates(x),*params)
     
     def __call__(self,x):
         """
@@ -1554,23 +1672,475 @@ class FunctionModel2DScalar(FunctionModel):
         except ValueError:
             raise ModelTypeError('2D model input must have first dimension of length 2')
         
-        return self._callfunc(arr,*self.parvals).reshape(subshape)
+        return self._filterfunc(arr,*self.parvals).reshape(subshape)
     
-    def integrateCircular(self,outerr,innerr=0,theta=None):
+    def integrateCircular(self,outr,inr=0,theta=(0,2*pi),**kwargs):
         """
-        if theta is None, do full circle, else it should be a (lower,upper)
-        tuple
+        Integrates the function circularly from inr to outr 
+        (default is for inr to be 0)
+        
+        theta is a tuple of the form (lowertheta,uppertheta)
+        
+        kwargs are passed into scipy.integrate.dblquad
         """
-        raise NotImplementedError
+        import scipy.integrate as itg
+        oldcoordsys = self.incoordsys
+        try:
+            self.incoordsys = 'polar'
+            f = lambda th,r:r*self((r,th))
+            
+            res = itg.dblquad(f,inr,outr,lambda y:theta[0],lambda y:theta[1],**kwargs)
+        finally:
+            self.incoordsys = oldcoordsys
+            
+        self.lastintegrate = res
+        return res[0]
     
-    def integrateCartesian(self,xl,xu,yl,yu):
-        raise NotImplementedError
+    def integrateCartesian(self,xl,xu,yl,yu,**kwargs):
+        """
+        Integrates the function in a rectangular area
+        bounded to the left by xl, to the right by xu,
+        on the bottom by yl, and the top by yu
+        
+        kwargs are passed into scipy.integrate.dblquad
+        """
+        import scipy.integrate as itg
+        
+        oldcoordsys = self.incoordsys
+        try:
+            self.incoordsys = 'cartesian'
+            f = lambda y,x:self((x,y))
+            
+            res = itg.dblquad(f,xl,xu,lambda y:yl,lambda y:yu,**kwargs)
+        finally:
+            self.incoordsys = oldcoordsys
+            
+        self.lastintegrate = res
+        return res[0]
     
     def gradient(self,x):
         raise NotImplementedError
     
-    def pixelize(self,xl,xu,yl,yu,npix=100,integrate=True):
-        raise NotImplementedError
+    def pixelize(self,xl,xu,yl,yu,nx=100,ny=100,sampling=None):
+        """
+        generates a 2D array of the model covering the range given by
+        xl,xu,yl, and yu (same form as `integrateCartesian`), with
+        nx horizontal pixels and ny vertical pixels
+        
+        if sampling is None, each pixel will be computed by integrating the
+        model over the area of the pixel, and the resulting array will be set
+        to self.lastintegrate and returned
+        otherwise, sampling gives the factor to multiply nx and ny by to get
+        the total number of "virtual pixels" that will be averaged to get
+        the actual result at the given grid point.  If <=1, this is equivalent
+        to directly sampling the model.
+        """
+        import scipy.integrate as itg
+        
+        oldcoordsys = self.incoordsys
+        try:
+            self.incoordsys = 'cartesian'        
+            
+            if sampling is None:
+                xs = np.linspace(xl,xu,nx+1)
+                xs = np.vstack((xs,np.roll(xs,-1))).T[:-1]
+                ys = np.linspace(yl,yu,ny+1)
+                ys = np.vstack((ys,np.roll(ys,-1))).T[:-1]
+                
+                res = np.empty((2,nx,ny))
+                f = lambda y,x:self((x,y))
+                
+                #TODO:optimize more?
+                for i,(xl,xu) in enumerate(xs):
+                    for j,(yl,yu) in enumerate(ys):
+                        res[:,i,j] = itg.dblquad(f,xl,xu,lambda y:yl,lambda y:yu)
+                        
+                self.lastintegrate = res #res[0]= result, res[1]= integration error
+                return res[0]
+            else:
+                da = ((xu-xl)/nx)*((yu-yl)/ny)
+                sampling = int(sampling)
+                
+                if sampling<=1:
+                    xg,yg = np.mgrid[xl:xu:1j*nx,yl:yu:1j*ny]
+                    return self((xg,yg))*da
+                else:
+                    xg,yg = np.mgrid[xl:xu:1j*nx*sampling,yl:yu:1j*ny*sampling]
+                    res = self((xg,yg))
+                    res = res.reshape((nx*sampling,ny,sampling)).mean(axis=-1)
+                    res = res.reshape((nx,sampling,ny)).mean(axis=-2)
+                    return res*da
+            
+        finally:
+            self.incoordsys = oldcoordsys
+                
+    
+    def plot(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',
+                  log=False,**kwargs):
+        """
+        Plots the model over the range requested using the matplotlib 
+        imshow function.
+        
+        datarange should be in the form (xl,xu,yl,yu) or None.  If None, it 
+        will be inferred from the data, or a ValueError will be raised
+        if data is not present
+        
+        kwargs are passed into imshow
+        """
+        from matplotlib import pyplot as plt
+        from operator import isMappingType
+        
+        isinter = plt.isinteractive()
+        try:
+            plt.ioff()
+            if data == 'auto':
+                data = self.fitteddata or None
+                
+            maxmind = None
+            if data: #TODO:correct coord conv
+                xd,yd = data[0][0],data[0][1]
+                dataval = data[1]
+                if datarange is None:
+                    datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
+                maxmind = (np.max(dataval),np.min(dataval))
+            elif datarange is None:
+                if self.rangehint is None:
+                    raise ValueError("Can't choose limits for plotting without data or a range hint")
+                else:
+                    datarange = self.rangehint
+                
+            
+            grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
+            res = self(grid)
+            
+            if log:
+                res = np.log10(res)
+                if data:
+                    dataval = np.log10(dataval)
+                if maxmind is not None:
+                    maxmind = np.log10(maxmind)
+            
+            if maxmind:
+                norm = plt.normalize(min(np.min(res),maxmind[1]),max(np.max(res),maxmind[0]))
+            else:
+                norm = plt.normalize(np.min(res),np.max(res))
+            
+            if clf:
+                plt.clf()
+                
+            kwargs.setdefault('aspect','auto')
+            plt.imshow(res.T,norm=norm,extent=datarange,**kwargs)
+            
+            if cb:
+                if isMappingType(cb):
+                    plt.colorbar(**cb)
+                else:
+                    plt.colorbar()
+            
+            if data:
+                if isMappingType(data):
+                    kwscat = dict(data)
+                else:
+                    kwscat = {}
+                kwscat.setdefault('norm',norm)
+                kwscat.setdefault('c',dataval)
+                plt.scatter(xd,yd,**kwscat)
+                    
+            plt.xlim(datarange[0],datarange[1])
+            plt.ylim(datarange[2],datarange[3])
+            
+            if isinter:
+                plt.draw()
+                plt.show()
+        finally:
+            plt.interactive(isinter)
+    def plot3d(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',**kwargs):
+        """
+        Generate a 3D plot of the model using mayavi.
+        
+        See `plot` function for meaning of the arguments
+        
+        #TODO:test
+        """
+        from enthought.mayavi import mlab as M
+        from operator import isMappingType
+        
+        if data == 'auto':
+            data = self.fitteddata or None
+        
+        if data: #TODO:correct coord conv
+            xd,yd = data[0][0],data[0][1]
+            if datarange is None:
+                datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
+            maxmind = (np.max(data[1]),np.min(data[1]))
+        elif datarange is None:
+            if self.rangehint is None:
+                raise ValueError("Can't choose limits for plotting without data or a range hint")
+            else:
+                datarange = self.rangehint
+            maxmind = None
+        
+        grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
+        res = self(grid)
+        
+#        if maxmind:
+#            norm = plt.normalize(min(np.min(res),maxmind[1]),max(np.max(res),maxmind[0]))
+#        else:
+#            norm = plt.normalize(np.min(res),np.max(res))
+        
+        if clf:
+            plt.clf()
+            
+        M.mesh(grid[0],grid[1],res)
+        
+        if cb:
+            if isMappingType(cb):
+                M.colorbar(**cb)
+            else:
+                M.colorbar()
+        
+        if data:
+            if isMappingType(data):
+                kwscat = dict(data)
+            else:
+                kwscat = {}
+            kwscat.setdefault('norm',norm)
+            kwscat.setdefault('c',data[1])
+            M.points3d(xd,yd,**kwscat)
+                
+        #M.xlim(datarange[0],datarange[1])
+        #M.ylim(datarange[2],datarange[3])
+            
+    def plotResiduals(self,x=None,y=None,fmt='or',xaxis='r',clf=True,relative=False):
+        """
+        Plots residuals between data and the model.  If x and y are None,
+        the residuals will be inferred from the last-fit data.
+        
+        if relative is true, the plot will be relative residuals 
+        (e.g. residual/model) instead of the absolute residuals
+        
+        xaxis can be 'r','theta','x', or 'y'
+        """
+        from matplotlib import pyplot as plt
+        
+        isinter = plt.isinteractive()
+        try:
+            x,y,res = self.residuals(x,y,retdata=True)
+            if relative:
+                res = res/self(x)
+            
+            if xaxis=='r':
+                outcoordsys = 'polar'
+                cind = 0
+            elif xaxis=='theta':
+                outcoordsys = 'polar'
+                cind = 1
+            elif xaxis=='x':
+                outcoordsys = 'cartesian'
+                cind = 0
+            elif xaxis=='y':
+                outcoordsys = 'cartesian'
+                cind = 1
+            else:
+                raise ValueError('unrecognized x-axis type')
+            if clf:
+                plt.clf()
+            xt = self.transformCoordinates(x,outcoordsys=outcoordsys)[cind]
+            plt.plot(xt,res,fmt)
+            plt.axhline(0,color='k',ls=':')
+            plt.xlabel(xaxis)
+            if isinter:
+                    plt.draw()
+                    plt.show()
+        finally:
+            plt.interactive(isinter)
+    
+class FunctionModel2DScalarAuto(FunctionModel2DScalar):
+    """
+    A `FunctionModel2DScalar` that has its parameters set by the 'f' 
+    function following the method of `AutoParamsMeta`
+    """
+    __metaclass__ = AutoParamsMeta
+    
+class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
+    """
+    A `FunctionModel2DScalar` that is seperable and follows a radial and 
+    polar function that are just multiples
+    """
+    def __init__(self,rmodel,thetamodel=None):
+        """
+        rmodel is the name of a FunctionModel1D that 
+        """
+        if rmodel is None:
+            self.__dict__['_rmodel'] = None
+        elif isinstance(rmodel,FunctionModel1D):
+            self.__dict__['_rmodel'] = rmodel
+        else:
+            self.__dict__['_rmodel'] = get_model(rmodel,FunctionModel1D)()
+            
+        if thetamodel is None:
+            self.__dict__['_thetamodel'] = None    
+        elif isinstance(thetamodel,FunctionModel1D):
+            self.__dict__['_thetamodel'] = thetamodel
+        else:
+            self.__dict__['_thetamodel'] = get_model(thetamodel,FunctionModel1D)()
+            
+        self._fixParams()
+    
+    _fcoordsys = 'polar'
+    def f(self,x,*params):
+        self.parvals = params
+        R = self._rmodel(x[0]) if self._rmodel is not None else 1
+        T = self._thetamodel(x[1]) if self._thetamodel is not None else 1
+        return R*T
+    
+    def _gettmod(self):
+        return self._thetamodel
+    def _settmod(self,val):
+        if not (val is None or isinstance(val,FunctionModel1D)):
+            raise TypeError('input value is not a FunctionModel1D')
+        self._thetamodel = val
+        self._fixParams()
+        
+    def _getrmod(self):
+        return self._rmodel
+    def _setrmod(self,val):
+        if not (val is None or isinstance(val,FunctionModel1D)):
+            raise TypeError('input value is not a FunctionModel1D')
+        self._rmodel = val
+        self._fixParams()
+        
+    def _fixParams(self):
+        ps = list()
+        if self._rmodel is not None:
+            ps.extend(self._rmodel.params)
+        if self._thetamodel is not None:
+            ps.extend(self._thetamodel.params)
+        self._pars = ps
+        
+    def __getattr__(self,name):
+        if name in self.params:
+            if hasattr(self._rmodel,name):
+                return getattr(self._rmodel,name)
+            elif hasattr(self._thetamodel,name):
+                return getattr(self._thetamodel,name)
+        else:
+            raise AttributeError(name)
+        
+    def __setattr__(self,name,val):
+        if name in self.params:
+            if hasattr(self._rmodel,name):
+                return setattr(self._rmodel,name,val)
+            elif hasattr(self._thetamodel,name):
+                return setattr(self._thetamodel,name,val)
+        else:
+            super(FunctionModel2DScalarSeperable,self).__setattr__(name,val)
+            
+    @property
+    def rangehint(self):
+        if self._rmodels is None:
+            rh = (1,1)
+        else:
+            rh = self._rmodel.rangehint
+            
+        if rh is None:
+            return None
+        else:
+            return -rh[1],rh[1],-rh[1],rh[1] #assume theta is not localized
+            
+class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
+    """
+    A `FunctionModel2DScalar` with a profile that is flattened along an axis 
+    but has a radial form if unflattened
+    
+    atob is a ratio of the large to small axis, and pa is the
+    position angle measured in radians from the x-axis to the y-axis 
+    (e.g. west to north)
+    """
+    def __init__(self,rmodel,atob=1,pa=0):
+        if isinstance(rmodel,FunctionModel1D):
+            self.__dict__['_rmodel'] = rmodel
+        else:
+            self.__dict__['_rmodel'] = get_model(rmodel,FunctionModel1D)()
+        self.__dict__['_rmodel'].incoordsys = 'cartesian'
+        self._fixPars()
+        self.atob = atob
+        self.pa = pa
+        
+    _fcoordsys = 'cartesian'    
+    def f(self,arrin,*params):
+        #self.parvals = params
+        params = list(params)
+        pa = params.pop()
+        atob = params.pop()
+        
+        #xr=(-sinpa*x+cospa*y)/cosi
+        #yr=(x*cospa+y*sinpa)
+        x,y = arrin
+        sinpa,cospa = np.sin(pa),np.cos(pa)
+        xr=(-sinpa*x+cospa*y)
+        yr=(x*cospa+y*sinpa)/atob
+        return self._rmodel((xr*xr+yr*yr)**0.5)
+        
+        
+    def _fixPars(self):
+        ps = list(self._rmodel.params)
+        ps.append('atob')
+        ps.append('pa')
+        self.__dict__['_pars'] = tuple(ps)
+        
+    def _getrmodel(self):
+        return self._rmodel
+    def _setrmodel(self,val):
+        if not isinstance(val,FunctionModel1D):
+            raise TypeError('input value is not a FunctionModel1D')
+        self._rmodel = val
+        self._rmodel.incoordsys = 'cartesian'
+        self._fixPars()
+        
+    def __getattr__(self,name):
+        if hasattr(self._rmodel,name):
+            return getattr(self._rmodel,name)
+        else:
+            raise AttributeError(name)
+        
+    def __setattr__(self,name,val):
+        if hasattr(self._rmodel,name):
+            return setattr(self._rmodel,name,val)
+        else:
+            super(FunctionModel2DScalarDeformedRadial,self).__setattr__(name,val)
+            
+    def _getPaDeg(self):
+        np.degrees(self.pa)
+    def _setPaDeg(self,val):
+        self.pa = np.radians(val)     
+    padeg=property(_getPaDeg,_setPaDeg,"""position angle (from +x-axis
+            to +y-axis) in degrees
+            """)
+    
+    def _getInc(self):
+        return np.arccos(1/self.atob)
+    def _setInc(self,val):
+        self.atob = 1/np.cos(val)
+    inc=property(_getInc,_setInc,doc="""
+        inclination angle of object in radians - maps onto atob
+        """)
+        
+    def _getIncDeg(self):
+        return np.degrees(np.arccos(1/self.atob))
+    def _setIncDeg(self,val):
+        self.atob = 1/np.cos(np.radians(val))
+    incdeg=property(_getIncDeg,_setIncDeg,doc="""
+        inclination angle of object in degrees - maps onto atob
+        """)
+            
+    @property
+    def rangehint(self):
+        rh = self._rmodel.rangehint
+        if rh is None:
+            return None
+        else:
+            return -rh[1],rh[1],-rh[1],rh[1] #assume theta is not localized
         
 #<-------------------------------Module functions ----------------------------->  
 __model_registry={}
@@ -1601,11 +2171,15 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     
     __model_registry[name]=model
     
-def get_model(model):
+def get_model(model,baseclass=None):
     """
     returns the class object for the requested model in the model registry
     
     the model can be a name, instance, or class object
+    
+    if baseclass is not None, it can specify that the requested model 
+    me a subclass of the provided base class.  If not, a TypeError
+    will be raised.
     
     KeyError is raise if a name is provided and it is incorrect, all other 
     invalid inputs raise a TypeError
@@ -1613,16 +2187,22 @@ def get_model(model):
     from inspect import isclass
     
     if isinstance(model,basestring):    
-        return __model_registry[model]
+        res = __model_registry[model]
     elif isclass(model):
         if issubclass(model,ParametricModel):
-            return model
+            res = model
         else:
             raise TypeError('class object is not a Model')
     elif issubclass(model.__class__,ParametricModel):
-        return model.__class__
+        res = model.__class__
     else:
         raise TypeError('attempted to get invalid model')
+    
+    if baseclass:
+        if not issubclass(res,baseclass):
+            raise TypeError('%s is not a subclass of %s'%(res,baseclass))
+        
+    return res
 
 #TODO:fix ndims
 def list_models(include=None,exclude=None,baseclass=None):

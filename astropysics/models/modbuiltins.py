@@ -1159,7 +1159,48 @@ class MaxwellBoltzmannSpeedModel(MaxwellBoltzmannModel):
         from ..constants import kb,c
         return 0,min(3*(2*kb*self.T/self.m)**0.5,c)
     
+class Gaussian2DModel(FunctionModel2DScalarAuto):
+    _fcoordsys='cartesian'
+    def f(self,inarr,A=1,sigx=1,sigy=1,mux=0,muy=0):
+        x,y = inarr
+        xo = x-mux
+        xdenom = 2*sigx*sigx
+        yo = y-muy
+        ydenom = 2*sigy*sigy
+        return A*np.exp(-xo*xo/xdenom-yo*yo/ydenom)
+    
+    @property
+    def rangehint(self):
+        mux,muy = self.mux,self.muy
+        sigx,sigy = self.sigx,self.sigy
+        return (mux-4*sigx,mux+4*sigx,muy-4*sigy,muy+4*sigy)
         
+class EdgeOnDiskModel(FunctionModel2DScalarAuto):
+    _fcoordsys='cartesian'
+    def f(self,inarr,A=1,l=2,h=1,pa=0):
+        x,y = inarr
+        
+        sinpa,cospa = np.sin(pa),np.cos(pa)
+        xr = cospa*x+sinpa*y
+        yr = -sinpa*x+cospa*y
+        return A*np.exp(-np.abs(xr/l)-np.abs(yr/h))
+    
+    @property
+    def rangehint(self):
+        bigscale = max(self.h,self.l)
+        return (-2*bigscale,2*bigscale,-2*bigscale,2*bigscale)
+    
+class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
+    def __init__(self,inc,pa,degrees=True):
+        super(FunctionModel2DScalarDeformedRadial,self).__init__('sersic',pa=pa)
+        if degrees:
+            self.incdeg = inc
+        else:
+            self.inc = inc
+        self.n = 1
+    
+    
+    
 #<-------------------------------Other Models---------------------------------->
     
 class Plane(FunctionModel):
