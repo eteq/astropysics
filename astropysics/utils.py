@@ -393,12 +393,13 @@ def centroid(val,axes=None,offset=None):
     pixel value
     
     offset is an amount to subtract from the input array, can be:
-    *'median'
-    *'mean'
-    *'32' : 3*median - 2*mean
-    *'2515' : 2.5*median - 1.5*mean
-    *'21' : 2*median - 1*mean
-    *None
+    
+    * 'median'
+    * 'mean'
+    * '32' : 3*median - 2*mean
+    * '2515' : 2.5*median - 1.5*mean
+    * '21' : 2*median - 1*mean
+    * None
     """
     if offset:
         if offset == 'median':
@@ -432,5 +433,52 @@ def centroid(val,axes=None,offset=None):
         cens.append(np.sum(x*vsum)/np.sum(vsum))
     
     return tuple(cens)
+
+def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
+    """
+    This performs the sigma clipping algorithm - i.e. the data will
+    be iterated over `iters` times, each time rejecting points 
+    that are more than `sig` standard deviations discrepant 
+    
+    center can be any of:
+    * 'median'
+    * 'mean'
+    * '32' : 3*median - 2*mean
+    * '2515' : 2.5*median - 1.5*mean
+    * '21' : 2*median - 1*mean
+    * a callable that takes a 1D array and outputs a scalar
+    
+    if maout is True, returns a numpy.ma.Maskedarray with the filtered points
+    masked.  Otherwise, returns a tuple (filtereddata,mask) 
+    (mask is False for clipped points, shaped as original) 
+    """
+    if center == 'median':
+        center = np.median
+    elif center =='mean':
+        center = np.mean
+    elif callable(center):
+        pass
+    elif center == '32':
+        center = lambda x:3*np.median(x) - 2*np.mean(x)
+    elif center =='2515':
+        center = lambda x:2.5*np.median(x) - 1.5*np.mean(x)
+    elif enter == '21':
+        center = lambda x:2*np.median(x) - np.mean(x)
+    else:
+        raise ValueError('unrecognized center value')
+    
+    data = np.array(data,copy=False)
+    oldshape = data.shape
+    data = data.ravel()
+    
+    mask = np.ones(data.size,bool)
+    for i in iter:
+        do = data-center(data[mask])
+        mask = do*do <= np.var(data[mask])*sig
+        
+    if maout:
+        return np.ma.MaskedArray(data,~mask,copy=False)
+    else:
+        return data[mask],mask.reshape(oldshape)
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
