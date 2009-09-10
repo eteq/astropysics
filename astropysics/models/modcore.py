@@ -542,7 +542,7 @@ class FunctionModel(ParametricModel):
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
         
-        return np.std(self(x)-y,ddof=len(self.params))
+        return np.std(y-self(x),ddof=len(self.params))
     
     def residuals(self,x=None,y=None,retdata=False):
         """
@@ -565,15 +565,16 @@ class FunctionModel(ParametricModel):
         else:
             return y-self(x)
     
-    def chi2Data(self,x=None,y=None,dy=None):
+    def chi2Data(self,x=None,y=None):
         """
-        determines the chi-squared statistic for data with errors dy
+        Determines the chi-squared statistic for the data assuming this 
+        model.
         
-        if dy is None, the bootstrap technique will be used to derive errors
-        (possibly not correctly TODO:check)
         
-        returns chi2,p-value
+        returns chi2,reducedchi2,p-value
         """
+        from scipy.stats import chisqprob
+        
         if x is None or y is None:
             if self.fitteddata is None:
                 raise ValueError('must either specify data or save fitted data')
@@ -584,37 +585,24 @@ class FunctionModel(ParametricModel):
         
         n=len(y)
         m=len(self.params)
-        dof=n-m
+        dof=n-m-1 #extra 1 because the distribution must sum to n
         
-        if dy is None:
-            ps=self.parvals
-            try:
-                d=self.bootstrapFits(x,y)
-                dupper=dict([(k,(np.median(v)+np.std(v))) for k,v in d.iteritems()])
-                dlower=dict([(k,(np.median(v)-np.std(v))) for k,v in d.iteritems()])
-                self.pardict=dupper
-                yu=self(x)
-                self.pardict=dlower
-                yl=self(x)
-                dy=(yu+yl)/2.0-y
-            finally:
-                self.parvals=ps
-        chi2=(y-self(x))/dy
+        chi2=(y-self(x))**2/self(x)
         chi2=np.sum(chi2*chi2)
         
-        from scipy.stats import chisqprob
-        p=chisqprob(chi2,dof)
-        return chi2,p
+        return chi2,chi2/dof,chisqprob(chi2,dof)
     
-    def bootstrapFits(self,x=None,y=None,n=250,prefit=True,plothist=False,**kwargs):
+    def bootstrapFits(self,x=None,y=None,n=250,plothist=False):
         """
         uses the fitData function to fit the function and then uses the
         "bootstrap" technique to estimate errors - that is, use sampling
         w/replacement
         
         x and y are the data to fit, n is the number of iterations to perform,
-        prefit determines if the function is to be fit once before the
-        bootstrapping begins, and kwargs go into self.fitData
+        and plothist can be used to 
+        
+        Note that sampling is only perfermed on the last index of the input
+        and output arrays.
         """
         
         if x is None or y is None:
@@ -625,10 +613,8 @@ class FunctionModel(ParametricModel):
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
         
-        xyn=len(x)
-        inds=(xyn*np.random.rand(n,xyn)).astype(int)
-        xi,yi=x[inds],y[inds]
-        vs=[]
+        if y.shape[-1] != x.shape[-1]:
+            raise ModelTypeError('last index does not match for input and output')
         
         if prefit:
             self.fitData(x,y,**kwargs)

@@ -26,7 +26,7 @@ except ImportError: #support for earlier versions
     
 from .utils import PipelineElement
 
-def noise_model(adus,readnoise=0,gain=1,sens=0,output='err'):
+def noise_model(adus,readnoise=0,gain=1,snoise=0,output='err'):
     """
     adus is the signal in output units (ADUs), assumed to be bias subtracted
     
@@ -34,7 +34,7 @@ def noise_model(adus,readnoise=0,gain=1,sens=0,output='err'):
     
     readnoise is in e-
     
-    sensnoise is the sensitivity noise as a fraction of the adu signal
+    snoise is the 'sensitivity' or 'scale' noise as a fraction of the adu signal
     
     output can be:
     
@@ -43,12 +43,12 @@ def noise_model(adus,readnoise=0,gain=1,sens=0,output='err'):
     * 'SNR':returns adu/sqrt(var) of the adu signal
     
     """
-    #sigmasq = (rn/g)**2+ i/g + (s*i)**2
+    #var = (rn/g)**2+ i/g + (s*i)**2
     
-    rnaduerr = readnoise/gain
-    senserr = sens*adus
+    rnerr = readnoise/gain
+    senserr = snoise*adus
     
-    var = rnaduerr*rnaduerr + adus/gain + senserr*senserr
+    var = rnerr*rnerr + adus/gain + serr*serr
     
     if output == 'var':
         return var
