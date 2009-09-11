@@ -15,10 +15,14 @@ try:
     from abc import ABCMeta
     from abc import abstractmethod
     from abc import abstractproperty
+    from collections import MutableMapping
 except ImportError: #support for earlier versions
     abstractmethod = lambda x:x
     abstractproperty = property
     ABCMeta = type
+    MutableMapping = type
+    
+#<------------------------Python/generic utilities----------------------------->
     
     
 def check_type(types,val,acceptnone=True):
@@ -64,6 +68,123 @@ def check_type(types,val,acceptnone=True):
                 raise TypeError('custom function type-checking failed')
         else:
             raise ValueError('invalid type to check')
+        
+
+
+
+class SymmetricMapping(MutableMapping):
+    """
+    A dict-like object that maps in two directions - the keys for
+    one direction are the value for the other, and vice versa. 
+    
+    Note that this means all values most be unique and non-mutable.
+    (Not thread safe?)
+    """
+    def __init__(self,*args):
+        """
+        initialized same as a dict
+        """
+        self._right = _LinkedDict(None)
+        self._left = _LinkedDict(self._right)
+        self._right.link = self._left
+        if len(args)>0:
+            self._left.update(*args) #hackish - better way?
+        
+    @property
+    def forward(self):
+        return self._left
+    
+    @property
+    def backward(self):
+        return self._right
+    
+    def __getitem__(self,key):
+        return self._left[key]
+    def __setitem__(self,key,val):
+        self._left[key] = val
+    def __delitem__(self,key):
+        del self._left[key]
+    def __contains__(self,key):
+        return key in self._left
+    def __len__(self):
+        return len(self._left)
+    def __iter__(self):
+        return iter(self._left)
+    def __str__(self):
+        return str(self._left)+'/Symmetric'
+        
+class _LinkedDict(dict):
+    """
+    A dictionary that applies the reverse of it's operation to a linked
+    mapping (Not thread safe?)
+    """
+    def __init__(self,link,*args,**kwargs):
+        self.link = link
+        self.setting = False
+        self.deling = False
+        super(_LinkedDict,self).__init__(*args,**kwargs)
+        
+    def __getitem__(self,key):
+        return super(_LinkedDict,self).__getitem__(key)
+    def __setitem__(self,key,val):
+        if not self.setting:
+            print 'at',key,val
+            oldval = self[key] if key in self else None
+            print 'ov',oldval
+            if isinstance(self.link,_LinkedDict) and self.link.setting and (oldval is not None):
+                        raise KeyError('Tried to set a symmetric dict with value %s already present'%key)
+            
+            super(_LinkedDict,self).__setitem__(key,val)
+            if self.link is not None:
+                try:
+                    self.setting = True
+                    self.link[val] = key
+                except:
+                    if oldval is None:
+                        super(_LinkedDict,self).__delitem__(key)
+                    else:
+                        super(_LinkedDict,self).__setitem__(key,oldval)
+                    raise
+                finally:
+                    self.setting = False
+    def __delitem__(self,key):
+        if not self.deling:
+            val = self[key]
+            super(_LinkedDict,self).__delitem__(key)
+            if self.link is not None:
+                try:
+                    self.deling = True
+                    del self.link[val]
+                finally:
+                    self.deling = False
+    def update(self,val):
+        for k,v in dict(val).iteritems():
+            self[k] = v
+        
+    def pop(self,*args):
+        if len(args) > 2:
+            raise TypeError('pop expected at most 2 arguments, got '+str(len(args)))
+        elif len(args) == 2:
+            if key in self:
+                val = self[args[0]]
+                del self[args[0]]
+                return val
+            else:
+                return args[1]
+        elif len(args) == 1:
+            if key in self:
+                val = self[args[0]]
+                del self[args[0]]
+                return val
+            else:
+                raise KeyError(args[0])
+        else:
+            raise TypeError('pop expected at most 2 arguments, got 0')
+        if key in self:
+            val = self[key]
+            
+        else:
+            return default
 
 
 #<---------------------------data pipelining----------------------------------->

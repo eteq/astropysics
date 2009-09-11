@@ -312,7 +312,7 @@ class FunctionModel(ParametricModel):
         for p in self._pars:
             setattr(self,p,self.defaultparval)
             
-    def fitData(self,x,y,method=None,fixedpars=None,weights=None,contraction='sumsq',
+    def fitData(self,x,y,method=None,fixedpars='auto',weights=None,contraction='sumsq',
                  updatepars=True,fitf=False,savedata=True,**kwargs):
         """
         Adjust the parameters of the FunctionModel to fit the provided data 
@@ -330,8 +330,9 @@ class FunctionModel(ParametricModel):
         default is 'custom', or if not present, 'leastsq'
         
         fixedpars is a sequence of parameter names to leave fixed.  If it is
-        None, the fixed parameters are inferred from self.fixedpars (or 
-        all will be free parameters if self.fixedpars is absent)
+        'auto', the fixed parameters are inferred from self.fixedpars (or 
+        all will be free parameters if self.fixedpars is absent).  If None,
+        all parameters will be free.
         
         weights is an array of points that must match the output (or None for
         equal weights)
@@ -393,8 +394,10 @@ class FunctionModel(ParametricModel):
                 method = 'leastsq'
             
             
+        if fixedpars is 'auto' and hasattr(self,'fixedpars'):
+            fixedpars = self.fixedpars
         if fixedpars is None:
-            fixedpars = self.fixedpars if hasattr(self,'fixedpars') else ()
+            fixedpars = tuple()
             
         ps=list(self.params)
         v=list(self.parvals) #initial guess
@@ -725,6 +728,199 @@ class FunctionModel(ParametricModel):
         d[datamodel.__name__ ]=datamodel
         
         return pymc.MCMC(d)
+    
+class CompositeModel(FunctionModel):
+    """
+    This model contains a group of FunctionModel objects and evaluates them
+    as a single model.
+    
+    The models can either be FunctionModel objects, FunctionModel1classes,
+    or a string (in the later two cases, new instances will be generated)
+    
+    parameter names are of the form 'A0' and 'A1' where A is the parameter
+    name and the number is the sequential number of the model with that
+    parameter.  If autoshorten is True, the suffix will be removed if there
+    is only one of that parameter
+    
+    parnames is a dictionary that maps from names of the form 'A0' to a 
+    different name for the parameter.  If a parameter with the name already
+    exists, a ValueError will be raised.
+    
+    the operations can be any valid python operator, or a sequence of operators
+    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4), or a string
+    giving the expression to be evaluated, with  'm' in places where
+    the evaluated models (in order) should go (e.g. 'm + m * m + m' will do
+    mod1+mod2*mod3+mod4)    
+    
+    any extra kwargs will be used to specify default values of the parameters
+    
+    Note that no checking is performed here to ensure the model outputs are 
+    compatible - this should be done in subclasses 
+    """
+    
+    #TODO:initial vals
+    def __init__(self,models=[],operation='+',parnames={},autoshorten=True,
+                  **parvals):
+        from inspect import isclass
+        from collections import defaultdict
+        
+        self.__dict__['_pars'] = tuple() #necessary for later when getattr is invoked
+        
+        mods = [get_model_instance(m) for m in models]
+        self._models = tuple(mods)
+        
+        if isinstance(operation,basestring):
+            if len(operation.strip()) == 1:
+                operation = [operation for i in range(len(mods)-1)]
+            else:
+                operation = operation.split('m')[1:-1]
+        elif len(operation) != len(mods)-1:
+            raise ValueError('impossible number of operations')
+        
+        
+        self._ops = ops = tuple(operation)
+            
+        oplst = ['mval[%i]%s'%t for t in enumerate(ops)]
+        oplst += 'mval[%i]'%len(oplst)
+        self._opstr = ''.join(oplst)
+        
+        args = []
+        argmap = {}
+        #add all parameters with suffixes for their model number
+        for i,m in enumerate(self._models):
+            for p in m.params:
+                argn = p+str(i)
+                args.append(argn)
+                argmap[argn] = (i,p) 
+                
+        if parnames:
+            for k,v in parnames.iteritems():
+                try:
+                    i = args.index(k)
+                except ValueError:
+                    raise KeyError('parameter %s not present'%k)
+                if v in args:
+                    raise ValueError('attempted to specify a replacement parameter name that already exists')
+                args[i] = v
+                argmap[v] = argmap[k]
+                del argmap[k]
+        else:
+            parnames = {}
+                        
+        #remove suffixes if they are unique
+        if autoshorten:
+            cargs = list(args)
+            for i,a in enumerate(cargs):
+                if a not in parnames.values():
+                    argname = argmap[a][1]
+                    for j,a2 in enumerate(cargs):
+                        if a2.startswith(argname) and i != j:
+                            break
+                    else:
+                        argmap[argname] = argmap[a]
+                        del argmap[a]
+                        args[i] = argname
+            
+        self._pars = tuple(args)
+        self._argmap = argmap
+        
+        #finally apply kwargs
+        for k,v in parvals.iteritems():
+            setattr(self,k,v)
+        
+        #now generate the data structures to map CompositeModel par numbers
+        #to single model par numbers -- used for quick function evaluation
+        parlistpairs = []
+        parlistd = defaultdict(dict)
+        for i,p in enumerate(self._pars):
+            modi,n = argmap[p]
+            indinmodel = list(mods[modi].params).index(n)
+            parlistpairs.append((modi,indinmodel))
+            parlistd[modi][indinmodel] = mods[modi].parvals[indinmodel] #value not important but we give it current value just for checking
+            
+        parlists = []
+        for i in range(len(parlistd.keys())):
+            d = parlistd[i]
+            innerlist = [d[j] for j in range(len(d.keys()))]
+            parlists.append(innerlist)
+        
+        self._parlistmaps = tuple(parlistpairs)   
+        self._parlists = parlists
+        
+        
+    
+    def __getattr__(self,name):
+        if name in self._pars:
+            i,n = self._argmap[name]
+            return getattr(self._models[i],n)
+        raise AttributeError("'%s' has no attribute '%s'"%(self,name))
+    
+    def __setattr__(self,name,val):
+        if name in self._pars:
+            i,n = self._argmap[name]
+            setattr(self._models[i],n,val)
+        else:
+            self.__dict__[name] = val
+    
+    @property
+    def models(self):
+        return self._models
+    
+    @property
+    def ops(self):
+        return self._ops  
+    
+    def f(self,x,*args):
+        #TODO: switch back to this system if the mapping technique is too confusing
+#        for p,a in zip(self.params,args):
+#            setattr(self,p,a)
+#        mval = [m.f(x,*m.parvals) for m in self._models]
+        if len(args)!=len(self._pars):
+            raise ValueError('incorrect number of parameters')
+        
+        parlists = self._parlists
+        for a,(i,j) in zip(args,self._parlistmaps):
+            parlists[i][j] = a
+        
+        mval = [m.f(x,*parlists[i]) for i,m in enumerate(self._models)]
+        return eval(self._opstr)
+        
+    
+    def fitDataFixed(self,*args,**kwargs):
+        """
+        Calls fitData with kwargs and args, but ignores fixedpars 
+        argument and uses 'fixedmods' or 'freemods' kwarg to 
+        determine which parameters should be fixed
+        
+        freemods or fixedmods should be a sequence of indecies of 
+        models for which the parameters should be left free or held
+        fixed
+        """
+        fps = []
+        if 'fixedmods' in kwargs and 'freemods' in kwargs:
+            raise TypeError('fitDataFixed cannot have both fixedmod and freemod arguments')
+        elif 'fixedmods' in kwargs:
+            for i in kwargs.pop('fixedmods'):
+                stri = str(i)
+                for p in self._models[i].params:
+                    fps.append(p+stri)
+        elif 'freemods' in kwargs:
+            fps.extend(self.params)
+            for i in kwargs.pop('freemods'):
+                stri=str(i)
+                for p in self._models[i].params:
+                    fps.remove(p+stri)
+                
+        else:
+            raise TypeError('fitDataFixed must have fixedmods or freemods as arguments')
+            
+        
+        if len(args)>=4:
+            args[3] = fps
+        else:
+            kwargs['fixedpars'] = fps
+        return self.fitData(*args,**kwargs)
+            
 
 class FunctionModel1D(FunctionModel):
     
@@ -1266,140 +1462,32 @@ class FunctionModel1DAuto(FunctionModel1D):
     """
     __metaclass__ = AutoParamsMeta
 
-class CompositeModel1D(FunctionModel1D):
+class CompositeModel1D(FunctionModel1D,CompositeModel):
     """
-    This model contains a group of FunctionModel1D objects and evaluates them
-    as a single model.
-    
-    The models can either be FunctionModel1D objects, FunctionModel1D classes,
-    or a string (in the later two cases, new instances will be generated)
-    
-    parameter names are of the form 'A0' and 'A1' where A is the parameter
-    name and the number is the sequential number of the model with that
-    parameter.  If autoshorten is True, the suffix will be removed if there
-    is only one of that parameter
-    
-    parnames is a dictionary that maps from names of the form 'A0' to a 
-    different name for the parameter.  If a parameter with the name already
-    exists, a ValueError will be raised.
-    
-    the operations can be any valid python operator, or a sequence of operators
-    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4), or a string
-    giving the expression to be evaluated, with  'm' in places where
-    the evaluated models (in order) should go (e.g. 'm + m * m + m' will do
-    mod1+mod2*mod3+mod4)    
-    
-    any extra kwargs will be used to specify default values of the parameters
+    This model is a composite model of FunctionModel1D models with a few 
+    extra additions for 1D models.
     """
-    
-    #TODO:initial vals
-    def __init__(self,models=[],operation='+',parnames={},autoshorten=True,
-                  **parvals):
-        from inspect import isclass
-        
-        self.__dict__['_pars'] = tuple() #necessary for later when getattr is invoked
-        
-        mods = []
-
-        for m in models:
-            if isinstance(m,FunctionModel1D):
-                pass
-            elif isinstance(m,basestring):
-                m = get_model(m)()
-            elif isclass(m) and issubclass(m,FunctionModel1D):
-                m = m()
-            else:
-                raise ValueError('Supplied object is not a function model')
-            mods.append(m)
-            
-        self._models = tuple(mods)
-        
-        if isinstance(operation,basestring):
-            if len(operation.strip()) == 1:
-                operation = [operation for i in range(len(mods)-1)]
-            else:
-                operation = operation.split('m')[1:-1]
-        elif len(operation) != len(mods)-1:
-            raise ValueError('impossible number of operations')
-        
-        
-        self._ops = tuple(operation)
-            
-        oplst = ['mval[%i]%s'%t for t in enumerate(self._ops)]
-        oplst += 'mval[%i]'%len(oplst)
-        self._opstr = ''.join(oplst)
-        
-        args = []
-        argmap = {}
-        #add all parameters with suffixes for their model number
-        for i,m in enumerate(self._models):
-            for p in m.params:
-                argn = p+str(i)
-                args.append(argn)
-                argmap[argn] = (i,p) 
-                
-        if parnames:
-            for k,v in parnames.iteritems():
-                try:
-                    i = args.index(k)
-                except ValueError:
-                    raise KeyError('parameter %s not present'%k)
-                if v in args:
-                    raise ValueError('attempted to specify a replacement parameter name that already exists')
-                args[i] = v
-                argmap[v] = argmap[k]
-                del argmap[k]
-        else:
-            parnames = {}
-                        
-        #remove suffixes if they are unique
-        if autoshorten:
-            cargs = list(args)
-            for i,a in enumerate(cargs):
-                if a not in parnames.values():
-                    argname = argmap[a][1]
-                    for j,a2 in enumerate(cargs):
-                        if a2.startswith(argname) and i != j:
-                            break
-                    else:
-                        argmap[argname] = argmap[a]
-                        del argmap[a]
-                        args[i] = argname
-            
-        self._pars = tuple(args)
-        self._argmap = argmap
-        
+    def __init__(self,*args,**kwargs):
+        """
+        see `CompositeModel.__init__` for arguments
+        """
+        super(CompositeModel1D,self).__init__(*args,**kwargs)
+        for m in self._models:
+            if not isinstance(m,FunctionModel1D):
+                raise ModelTypeError('Input model %s is not a 1D model'%m)
         self._filters = None
+    #__init__.__doc__ = CompositeModel.__init__.__doc__
+    
+    def f(self,x,*pars):
+        res = CompositeModel.f(self,x,*pars)
         
-        for k,v in parvals.iteritems():
-            setattr(self,k,v)
-    
-    def __getattr__(self,name):
-        if name in self._pars:
-            i,n = self._argmap[name]
-            return getattr(self._models[i],n)
-        raise AttributeError("'%s' has no attribute '%s'"%(self,name))
-    
-    def __setattr__(self,name,val):
-        if name in self._pars:
-            i,n = self._argmap[name]
-            setattr(self._models[i],n,val)
-        else:
-            self.__dict__[name] = val
-    
-    def f(self,x,*args):
-        #TODO: find out if the commented part can be sometimes skipped somehow
-        for p,a in zip(self.params,args):
-            setattr(self,p,a)
-        mval = [m.f(x,*m.parvals) for m in self._models]
-        res = eval(self._opstr)
         if self._filters is None:
             return res
         else:
             for filter in self._filters:
                 res = filter(res)
             return res
-        
+    
     def addFilter(self,filter):
         """
         This adds a function to be applied after the model is evaluated
@@ -1424,48 +1512,7 @@ class CompositeModel1D(FunctionModel1D):
             return x
         self.addFilter(bndfunc)
         
-    def fitDataFixed(self,*args,**kwargs):
-        """
-        Calls fitData with kwargs and args, but ignores fixedpars 
-        argument and uses 'fixedmods' or 'freemods' kwarg to 
-        determine which parameters should be fixed
-        
-        freemods or fixedmods should be a sequence of indecies of 
-        models for which the parameters should be left free or held
-        fixed
-        """
-        fps = []
-        if 'fixedmods' in kwargs and 'freemods' in kwargs:
-            raise TypeError('fitDataFixed cannot have both fixedmod and freemod arguments')
-        elif 'fixedmods' in kwargs:
-            for i in kwargs.pop('fixedmods'):
-                stri = str(i)
-                for p in self._models[i].params:
-                    fps.append(p+stri)
-        elif 'freemods' in kwargs:
-            fps.extend(self.params)
-            for i in kwargs.pop('freemods'):
-                stri=str(i)
-                for p in self._models[i].params:
-                    fps.remove(p+stri)
-                
-        else:
-            raise TypeError('fitDataFixed must have fixedmods or freemods as arguments')
-            
-        
-        if len(args)>=4:
-            args[3] = fps
-        else:
-            kwargs['fixedpars'] = fps
-        return self.fitData(*args,**kwargs)
-            
-    @property
-    def models(self):
-        return self._models
     
-    @property
-    def ops(self):
-        return self._ops  
     
 class ModelGrid1D(object):
     """
@@ -1948,6 +1995,30 @@ class FunctionModel2DScalarAuto(FunctionModel2DScalar):
     """
     __metaclass__ = AutoParamsMeta
     
+class CompositeModel2DScalar(FunctionModel2DScalar,CompositeModel):
+    """
+    This model is a composite model of FunctionModel2DScalar models.
+    """
+    def __init__(self,*args,**kwargs):
+        """
+        see `CompositeModel.__init__` for arguments
+        """
+        super(CompositeModel2DScalar,self).__init__(*args,**kwargs)
+        for m in self._models:
+            if not isinstance(m,FunctionModel2DScalar):
+                raise ModelTypeError('Input model %s is not a 2D->scalar model'%m)
+        self.incoordsys = 'cartesian'
+        
+    def _getIncoordsys(self):
+        return self._incoordsys
+    def _setIncoordsys(self,val):
+        for m in self._models:
+            m.incoordsys = val
+        #this ensures the conversions never happen at the composite level
+        self._fcoordsys = self._incoordsys = val 
+    incoordsys = property(_getIncoordsys,_setIncoordsys,doc='Input coordinate system')
+    
+    
 class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
     """
     A `FunctionModel2DScalar` that is seperable and follows a radial and 
@@ -1962,14 +2033,14 @@ class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
         elif isinstance(rmodel,FunctionModel1D):
             self.__dict__['_rmodel'] = rmodel
         else:
-            self.__dict__['_rmodel'] = get_model(rmodel,FunctionModel1D)()
+            self.__dict__['_rmodel'] = get_model_instance(rmodel,FunctionModel1D)
             
         if thetamodel is None:
             self.__dict__['_thetamodel'] = None    
         elif isinstance(thetamodel,FunctionModel1D):
             self.__dict__['_thetamodel'] = thetamodel
         else:
-            self.__dict__['_thetamodel'] = get_model(thetamodel,FunctionModel1D)()
+            self.__dict__['_thetamodel'] = get_model_instance(thetamodel,FunctionModel1D)
             
         self._fixParams()
     
@@ -2047,7 +2118,7 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
         if isinstance(rmodel,FunctionModel1D):
             self.__dict__['_rmodel'] = rmodel
         else:
-            self.__dict__['_rmodel'] = get_model(rmodel,FunctionModel1D)()
+            self.__dict__['_rmodel'] = get_model_instance(rmodel,FunctionModel1D)
         self.__dict__['_rmodel'].incoordsys = 'cartesian'
         self._fixPars()
         self.atob = atob
@@ -2136,7 +2207,7 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     
     model is the class object
     
-    name is the name to assign (class name will be used if this is None)
+    name is the name to assign (lower case class name will be used if this is None)
     
     if overwrite is True, if a model already exists with the provided name, it
     will be silently overwritten, otherwise a KeyError will be raised
@@ -2189,6 +2260,22 @@ def get_model(model,baseclass=None):
             raise TypeError('%s is not a subclass of %s'%(res,baseclass))
         
     return res
+
+def get_model_instance(model,baseclass=None,**kwargs):
+    """
+    Returns an instance of the supplied model - if the input is actually an 
+    instance of a model, the same instance will be passed in - otherwise, 
+    a new instance will be created.
+    
+    kwargs will either be passed into the new model or applied as attributes
+    """
+    if isinstance(model,ParametricModel if baseclass is None else baseclass):
+        for k,v in kwargs.iteritems():
+            setattr(model,k,v)
+        return model
+    else:
+        return get_model(model,baseclass)(**kwargs)
+        
 
 #TODO:fix ndims
 def list_models(include=None,exclude=None,baseclass=None):
