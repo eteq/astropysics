@@ -491,19 +491,23 @@ class CCDImage(object):
             
         return self._lstatd
         
-    def plotImage(self,valrange='p99',flipaxis='y',invert=False,cb=True,clickinspect=True,clf=True,**kwargs):
+    def plotImage(self,valrange='p99',flipaxis='y',invert=False,cb=True,
+                scalebar=None,axes='image',clickinspect=True,clf=True,**kwargs):
         """
         This plots the associated active range of the image using matplotlib
         
         valrange can be:
-        a 2-tuple with (lower,upper) range to display
-        's#'/'sigma#'/'sig#' to use the specified S.D.s from the median
-        'n#' to ignore the highest and lowest n values
-        'p##.#' to use the central ## percent of the values for ranging
-        (p or n can be ##,## to give lower,upper bounds)
-        (if 'g' appears in any of the above codes, the global value is used)
-        'i#,#,#,#' to ignore the specified values in the calculation of the range
         
+        * a 2-tuple with (lower,upper) range to display
+        * 's#'/'sigma#'/'sig#' to use the specified S.D.s from the median
+        * 'n#' to ignore the highest and lowest n values
+        * 'p##.#' to use the central ## percent of the values for ranging
+        * (p or n can be ##,## to give lower,upper bounds)
+        * (if 'g' appears in any of the above codes, the global value is used)
+        * 'i#,#,#,#' to ignore the specified values in the calculation of the range
+        
+        scalebar can be False/None to show no scale bar, True (defaults to 
+        '"') or a string to choose the unit.
         
         if clickinspect is True, will return the cid of the matplotlib event
         
@@ -598,13 +602,41 @@ class CCDImage(object):
         preint=plt.isinteractive()    
         try:
             plt.ioff()
+            if axes == 'image':
+                kwargs['extent'] = self.range
+            elif axes == 'sky':
+                ps = (1,1) if self.pixelscale is None else self.pixelscale
+                xrange = ps[0]*(self.range[1]-self.range[0])
+                yrange = ps[1]*(self.range[3]-self.range[2])
+                kwargs['extent'] = (-xrange/2,xrange/2,-yrange/2,yrange/2)
+            elif not bool(axes):
+                pass
+            else:
+                raise ValueError('unrecognzied axes input %s'%axes)
             plt.imshow(-vals.T if invert else vals.T,norm=nrm,**kwargs)
+            
+            #TODO: fix orientations
+            if scalebar:
+                ext = kwargs.get('extent',self.range)
+                xr,yr = ext[1]-ext[0],ext[3]-ext[2]
+                scalsz = int(np.floor(xr/6))
+                xlscal = ext[0]+.5*scalsz
+                xuscal = xlscal+scalsz
+                yscal = ext[2]+yr/6
+                plt.plot([xlscal,xuscal],[yscal,yscal],'-r')
+                print xlscal+scalsz/2,yscal,'',str(scalsz)+('"' if scalebar is True else scalebar)
+                plt.text(xlscal+scalsz/2,yscal,str(scalsz)+('"' if scalebar is True else scalebar),horizontalalignment='center',color='r')
+            
             if cb:
                 plt.colorbar()
             if 'x' in flipaxis:
                 plt.xlim(*(plt.xlim()[::-1]))
             if 'y' in flipaxis:
                 plt.ylim(*(plt.ylim()[::-1]))
+                
+            if not bool(axes):
+                plt.xticks([])
+                plt.yticks([])
         finally:
             if preint:
                 plt.ion()
