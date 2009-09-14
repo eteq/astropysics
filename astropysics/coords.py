@@ -213,8 +213,8 @@ class AngularCoordinate(object):
         
         secform is the formatter for the seconds component
         
-        sep is the seperator between components - defaults to degree symbol,
-        ' and " symbols 
+        sep is the seperator between components - defaults to d,
+        ' and " symbols, can be a single string or a 3-tuple of strings
         
         sign forces sign to be present before degree component
         
@@ -234,6 +234,8 @@ class AngularCoordinate(object):
             s = secform%s
         
         if isinstance(sep,basestring):
+            if sep == 'dms':
+                sep = ('d','m','s')
             sep = (sep,sep)
         
         tojoin = []
@@ -279,6 +281,8 @@ class AngularCoordinate(object):
             s = secform%s
         
         if isinstance(sep,basestring):
+            if sep == 'hms':
+                sep = ('h','m','s')
             sep = (sep,sep)
         
         tojoin = []

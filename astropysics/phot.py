@@ -2134,6 +2134,17 @@ class Sextractor(object):
         from subprocess import Popen,PIPE
         
         raise NotImplementedError
+    
+class ModelPhotometry(object):
+    def __init__(self,model):
+        from . import models
+        self.model = models.get_model(model,models.FunctionModel2DScalar)
+        
+    def _getModel(self):
+        return self._model
+    def _setModel(self,val):
+        self._model = val
+    model = property(_getModel,_setModel)
             
         
 #<------------------------conversion functions--------------------------------->
