@@ -63,9 +63,7 @@ def noise_model(adus,readnoise=0,gain=1,snoise=0,output='err'):
 
 class CCDImage(object):
     """
-    Represents a CCD image.  
-    
-    Currently intended as an abstract base class -- subclasses should follow the
+    The base class for CCD images.  Subclasses should follow the
     guidelines below to support various formats/file types.
     
     MUST implement:
@@ -88,6 +86,7 @@ class CCDImage(object):
     
     * zeropoint
     * pixelscale
+    
     """
     __metaclass__ = ABCMeta
     
@@ -101,11 +100,13 @@ class CCDImage(object):
         self._changed = False
         self._fstatd = {}
         self._lstatd = {}
-        self._scaling = ''
+        self._scaling = LinearScaling()
+        self._scalefunc = self._scaling.transform
+        self._invscalefunc = self._scaling.invtransform
         self.applyChangesOnActivate = False#True #TODO:check this out for consistency
         
         self._rng = range
-        self._scalefunc = self._invscalefunc = None
+        
         self.setScaling(scaling) #implicitly calls activateRange and will NotImplementedError if not overridden
         
     def __del__(self):
@@ -178,140 +179,31 @@ class CCDImage(object):
     def _applyArray(self,range,data):
         raise NotImplementedError
         
-    def setScaling(self,scalefunc,invscalefunc=None):
+    def setScaling(self,scalefunc=None,**kwargs):
         """
-        scalefunc must be a callable or evaluate to False (linear mapping)
+        Sets the scaling to apply for this image - either a string for 
+        the name of a builtin scale function or a DataScaling object, in 
+        which case kwargs will be applied to the initializer
         
-        alternatively, it may be a string specifying one of the builtin types
-        of scaling
-        
-        if inverse function is None, changes cannot be saved
+        if None, LinearScaling will be used
         """
-        if scalefunc:
-            if isinstance(scalefunc,basestring):
-                if self._scaling == scalefunc: 
-                    return #if same scaling as before, do nothing
-                else:
-                    sfl=scalefunc.lower()
-                    if sfl=='linear':
-                        self.setScalingLinear()
-                    elif sfl=='log':
-                        self.setScalingLog()
-                    elif sfl=='sb':
-                        self.setScalingSurfaceBrightness()
-                    elif sfl=='exp':
-                        self.setScalingExp()
-                    elif sfl=='power':
-                        self.setScalingPower()
-                    elif sfl=='asinh' or sfl=='arcsinh':
-                        self.setScalingASinh()
-                    else:
-                        raise ValueError('Unrecognized scaling string')
-                    
-            elif not callable(scalefunc):
-                raise ValueError('scalefunc is not a callable')
-            newf=scalefunc
-            newif=invscalefunc
-            self._scaling = 'custom'
+        if isinstance(scalefunc,basestring):
+            scaleobj = DataScaling._scalingreg[scalefunc](self,**kwargs)
+        elif scalefunc is None:
+            if (not self._scaling) or self._scaling.name != 'linear':
+                scaleobj = LinearScaling()
+            else:
+                scaleobj = None
         else:
-            newf = lambda x:x
-            newif = newf
-            self._scaling = 'linear'
+            scaleobj = scalefunc
             
-        if self._scalefunc != newf or self._invscalefunc != newif :
-            self._scalefunc = newf
-            self._invscalefunc = newif    
+        if scaleobj is not None:
+            self._scaling = scaleobj
+            self._scalefunc = scaleobj.transform
+            self._invscalefunc = scaleobj.invtransform  
+            self._fstatd = None  
             self.activateRange(self._rng)
         
-    def setScalingLinear(self):
-        self.setScaling(None)
-        
-    def setScalingLog(self,lower=0,upper=3,base=10.0):
-        """
-        linearly maps the values to a range from 10^lower to 10^upper and applies
-        logarithmic scaling of the appropriate base to the result
-        
-        if upper is None, just offsets to the lower range
-        if lower is None, logarithmic scaling is applied directly
-        """
-        from math import e,log
-        if base == 10.0: 
-            logfunc=np.log10
-            denom=1
-        elif base == e:
-            logfun=np.log
-            denom=1
-        else:
-            logfunc=np.log
-            denom=log(base)
-        
-        if lower is None:
-            self._scalefunc=lambda x: logfunc(x)/denom
-            self._invscalefunc=lambda x:base**x
-        elif upper is None:
-            lower = base**lower
-            xmin=self._linearStats['min']
-            self._scalefunc=lambda x: logfunc(x-xmin+lower)/denom
-            self._invscalefunc=lambda x: base**(x)+xmin-lower
-        else:
-            upper = base**upper
-            lower = base**lower
-            xmin,xmax=self._linearStats['min'],self._linearStats['max']
-            range = (upper-lower)/(xmax-xmin)
-            
-            self._scalefunc=lambda x: logfunc((x-xmin)*range+lower)/denom
-            self._invscalefunc=lambda x:(((base**x)-lower)/range)+xmin
-        
-        self.activateRange(self._rng)
-        self._scaling = 'log'
-        
-    def setScalingSurfaceBrightness(self):
-        """
-        set the scaling so that output is magnitudes per square arcsecond.  Note
-        that the zeropoint and pixelscale properties must be set for this scaling
-        to work.
-        
-        note that if any part of the image is negative, errors can occur
-        """        
-        if self.zeropoint is None:
-            raise ValueError('no zero point set')
-        if self.pixelscale is None:
-            raise ValueError('No pixel scale set')
-        
-        zpt,A=self.zeropoint,self.pixelscale[0]*self.pixelscale[1]
-        offset = 2.5*np.log10(A) - zpt
-            
-        self._scalefunc = lambda im:-2.5*np.log10(im)+offset
-        self._invscalefunc = lambda imsb:10**((imsb-offset)/-2.5)
-        
-        self.activateRange(self._rng)
-        self._scaling = 'sb'
-        
-        
-    def setScalingExp(self,base=10):
-        from math import log
-        logbase=log(base)
-        self._scalefunc=lambda x:base**x
-        self._invscalefunc=lambda x:np.log(x)/logbase
-        
-        self.activateRange(self._rng)
-        self._scaling = 'exp'
-        
-    def setScalingPower(self,power=2):
-        self._scalefunc=lambda x:x**power
-        self._invscalefunc=lambda x:x**(1/power)
-        
-        self.activateRange(self._rng)
-        self._scaling = 'power'
-        
-    def setScalingASinh(self):
-        #TOOD:test
-        self._scalefunc = np.arcsinh
-        self._invscalefunc = np.sinh
-        
-        self.activateRange(self._rng)
-        self._scaling = 'asinh'
-    
     def _getScaling(self):
         return self._scaling
         
@@ -460,7 +352,7 @@ class CCDImage(object):
     @property
     def _fullStats(self):
         """
-        statistics for the full image 
+        statistics for the full image with current scaling
         """
         if not self._fstatd:
             v = self._scalefunc(self._extractArray(None).ravel())
@@ -491,8 +383,9 @@ class CCDImage(object):
             
         return self._lstatd
         
-    def plotImage(self,valrange='p99',flipaxis='y',invert=False,cb=True,
-                scalebar=None,axes='image',clickinspect=True,clf=True,**kwargs):
+    def plotImage(self,valrange='p99',flipaxis=None,invert=False,cb=True,
+                scalebar=None,axes='image',clickinspect=True,clf=True,
+                colormap='gray',**kwargs):
         """
         This plots the associated active range of the image using matplotlib
         
@@ -506,10 +399,12 @@ class CCDImage(object):
         * (if 'g' appears in any of the above codes, the global value is used)
         * 'i#,#,#,#' to ignore the specified values in the calculation of the range
         
-        scalebar can be False/None to show no scale bar, True (defaults to 
-        '"') or a string to choose the unit.
+        scalebar can be False/None to show no scale bar, a 2-tuple 
+        (color,unitstring) , or True (red with " scale)
         
         if clickinspect is True, will return the cid of the matplotlib event
+        
+        colormap is the name of a colormap (or None to not change the map)
         
         kwargs are passed into matplotlib imshow
         """
@@ -519,8 +414,6 @@ class CCDImage(object):
             
         if self.__examcid is not None:
             plt.gcf().canvas.mpl_disconnect(self.__examcid)
-        if clf:
-            plt.clf()
         if valrange:
             #if 'sig' in valrange or 'sigma' in valrange:
             if 's' in valrange:
@@ -601,7 +494,13 @@ class CCDImage(object):
         
         preint=plt.isinteractive()    
         try:
+            if clf:
+                plt.clf()
+            
             plt.ioff()
+            if colormap:
+                getattr(plt,colormap)()
+            
             if axes == 'image':
                 kwargs['extent'] = self.range
             elif axes == 'sky':
@@ -613,7 +512,9 @@ class CCDImage(object):
                 pass
             else:
                 raise ValueError('unrecognzied axes input %s'%axes)
-            plt.imshow(-vals.T if invert else vals.T,norm=nrm,**kwargs)
+            plt.imshow(-vals.T if invert else vals.T,norm=nrm,origin='lower',**kwargs)
+            xl = plt.xlim()
+            yl = plt.ylim()
             
             #TODO: fix orientations
             if scalebar:
@@ -624,15 +525,26 @@ class CCDImage(object):
                 xuscal = xlscal+scalsz
                 yscal = ext[2]+yr/6
                 plt.plot([xlscal,xuscal],[yscal,yscal],'-r')
-                print xlscal+scalsz/2,yscal,'',str(scalsz)+('"' if scalebar is True else scalebar)
-                plt.text(xlscal+scalsz/2,yscal,str(scalsz)+('"' if scalebar is True else scalebar),horizontalalignment='center',color='r')
+                yscal = plt.gca().transData.transform([0,yscal]) #>pixel coordinates
+                yscal += [0,3]#3-pixel offset
+                yscal = plt.gca().transData.inverted().transform(yscal)#>data coordinates
+                yscal = yscal[1]
+                if axes == 'image':
+                    scalestr = 'px'
+                else:
+                    scalestr = '"' if scalebar and not isinstance(scalebar,basestring) else scalebar
+                plt.text(xlscal+scalsz/2,yscal,str(scalsz)+(scalestr),horizontalalignment='center',color='r')
             
             if cb:
                 plt.colorbar()
-            if 'x' in flipaxis:
-                plt.xlim(*(plt.xlim()[::-1]))
-            if 'y' in flipaxis:
-                plt.ylim(*(plt.ylim()[::-1]))
+            if flipaxis and 'x' in flipaxis:
+                plt.xlim(*(xl[::-1]))
+            else:
+                plt.xlim(xl)
+            if flipaxis and 'y' in flipaxis:
+                plt.ylim(*(yl[::-1]))
+            else:
+                plt.ylim(yl)
                 
             if not bool(axes):
                 plt.xticks([])
@@ -744,6 +656,7 @@ class CCDImage(object):
     data = property(_getData,doc="""
     direct access to the array holding the current data.  If this data is 
     subsequently edited, applyChanges() should be called to ensure consistancy
+    orientation is such that array should be indexed as data[x,y]
     """)
     
     def _getRange(self):
@@ -754,6 +667,156 @@ class CCDImage(object):
     returns or sets the range (setting is same as calling activateRange)
     """)
     
+class DataScaling(object):
+    """
+    The base class for objects that scale the data in a CCDImage. Subclasses
+    should override:
+    
+    * 'name': an attribute with the name of the transform
+    * 'transform': accepts a 2D array of the image data and outputs a 
+      2D array of the same shape
+    * 'invtransform': accepts a 2D array of altered data and outpts a
+      2D array of the same shape.  Expected to match the property
+      x = invtransform(transform(x)) .  If it is set to None, 
+      it is assumed that an inverse transform is impossible
+      
+    the __init__ method can be overridden, but will be called with
+    the CCDImage object as the first argument
+    """
+    __metaclass__ = ABCMeta
+    name = None
+    def __init__(self,ccdimobj=None,**kwargs):
+        pass
+    
+    def transform(self,imagearray):
+        raise NotImplementedError
+    
+    def invtransform(self,invarray):
+        raise NotImplementedError
+    invtransform = None
+    
+    _scalingreg = {}
+    
+    @staticmethod
+    def _registerScalingName(name,scalingclass):
+        if not issubclass(scalingclass,DataScaling):
+            raise ValueError('provided class is not a subclass of DataScaling')
+        DataScaling._scalingreg[name] = scalingclass
+    
+class LinearScaling(DataScaling):
+    name = 'linear'
+    
+    def transform(self,imagearray):
+        return imagearray
+    
+    def invtransform(self,invarray):
+        return invarray
+    
+class LogScaling(DataScaling):
+    """
+    linearly maps the values to a valid range and applies
+    logarithmic scaling to the result, such that the output ranges
+    from lower to upper.
+    
+    Alternatively, if the base is specified, the log is taken with respect to
+    that base without ranging.
+    
+    if upper is None, just offsets to the lower range
+    if lower is None, logarithmic scaling is applied directly
+    
+    TODO:work out better inverse rescaling - for now setting it to None
+    """
+
+    name = 'log'
+    def __init__(self,ccdimobj,lower=0,upper=1,base=None):
+        if base is None:
+            self.base = None
+            self.lower = lower
+            self.upper = upper
+            self.max,self.min = ccdimobj._linearStats['max'],ccdimobj._linearStats['min']
+        elif base == 'e':
+            self.base = np.e
+        else:
+            self.base = base
+    
+    def transform(self,imagearray):
+        if self.base is None:
+            imagearray = (imagearray-self.min)
+            imagearray = (np.e-1)*imagearray/self.max+1
+            return np.log(imagearray)*(self.upper-self.lower)+self.lower #log and rescale
+        else:
+            if self._base == 10:
+                return np.log10(imagearray)
+            elif self.base == np.e:
+                return np.log(imagearray)
+            else:
+                return np.log(imagearray)/np.log(self.base)
+    
+    def invtransform(self,invarray):
+        if self.base is None: #shoudl be impossible
+            arr = np.exp(invarray-self.lower()/(self.upper-self.lower))
+            arr = arr*(self.max+1)/(np.e-1)
+            return arr+self.min
+        else:
+            return np.power(self.base,invarray)
+
+class ExponentialScaling(DataScaling):
+    name = 'exp'
+    
+    def transform(self,imagearray):
+        return np.exp(imagearray)
+    
+    def invtransform(self,invarray):
+        return np.log(invarray)
+    
+class ASinhScaling(DataScaling):
+    name = 'asinh'
+    
+    def transform(self,imagearray):
+        return np.arcsinh(imagearray)
+    
+    def invtransform(self,invarray):
+        return np.sinh(invarray)
+    
+class PowerScaling(DataScaling):
+    name = 'power'
+    def __init__(self,ccdimobj,power=2):
+        self.power = power
+    
+    def transform(self,imagearray):
+        return imagearray
+    
+    def invtransform(self,invarray):
+        return invarray
+
+class SurfaceBrightnessScaling(DataScaling):
+    name = 'sb'        
+        
+    def __init__(self,ccdimgobj):
+        if ccdimgobj.zeropoint is None:
+            raise ValueError('no zero point set')
+        if ccdimgobj.pixelscale is None:
+            raise ValueError('No pixel scale set')
+        
+        zpt = ccdimgobj.zeropoint
+        A = np.prod(ccdimgobj.pixelscale)
+        
+        self.offset = 2.5*np.log10(A) - zpt
+    
+    def transform(self,imagearray):
+        return self.offset-2.5*np.log10(imagearray)
+    
+    def invtransform(self,invarray):
+        return 10**((invarray-self.offset)/-2.5)
+
+for o in locals().values():
+    try:
+        if o.name is None:
+            raise ValueError
+        DataScaling._registerScalingName(o.name,o)
+    except (ValueError,AttributeError):
+        pass
+
             
 class FitsImage(CCDImage):
     def __init__(self,fn,range=None,scaling=None,hdu=0,memmap=0):
@@ -815,18 +878,18 @@ class FitsImage(CCDImage):
         return im
     
     
-    def _applyArray(self,range,imdata):
+    def _applyArray(self,range,imdata):        
         if self._invscalefunc is self._scalefunc: #linear mapping so changes already applied
             pass
         else:
             if range is None:
-                self.fitsfile[self._chdu].data = imdata.T
+                self.fitsfile[self._chdu].data = imdata
             elif len(range) == 4:
                 xl,xu,yl,yu = range
                 ny,nx = self.fitsfile[self._chdu].shape #fits files are flipped
                 if xl < 0 or xu > nx or yl < 0 or yu > ny:
                     raise IndexError('Attempted range %i,%i;%i,%i on image of size %i,%i!'%(xl,xu,yl,yu,nx,ny))
-                self.fitsfile[self._chdu].data[yl:yu,xl:xu] = imdata.T
+                self.fitsfile[self._chdu].data[yl:yu:-1,xl:xu] = imdata
             else:
                 raise ValueError('Unregonized form for range')
         
