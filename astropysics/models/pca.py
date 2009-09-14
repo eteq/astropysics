@@ -1,5 +1,8 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu)
 
+import numpy as np
+from ..constants import pi
+
 class Pca(object):
     """
     A basic class for Principal Component Analysis (PCA).
@@ -38,32 +41,50 @@ class Pca(object):
         self.names = None if names is None else tuple([str(n) for n in names])
         
         
-    def cov(self):
+    def getCovarianceMatrix(self):
+        """
+        returns the covariance matrix for the dataset
+        """
         return np.cov(self.N.T)
         
-    def eig(self):
+    def getEigensystem(self):
+        """
+        returns a tuple of (eigenvalues,eigenvectors) for the data set.
+        """
         if self._eig is None:
-            res = np.linalg.eig(self.cov())
+            res = np.linalg.eig(self.getCovarianceMatrix())
             sorti=np.argsort(res[0])[::-1]
             res=(res[0][sorti],res[1][:,sorti])
             self._eig=res
         return self._eig
-    def evals(self):
-        return self.eig()[0]
-    def evecs(self):
-        return self.eig()[1]
+        
+    def getEigenvalues(self):
+        return self.getEigensystem()[0]
+        
+    def getEigenvectors(self):
+        return self.getEigensystem()[1]
     
-    def energies(self):
-        v=self.evals()
+    def getEnergies(self):
+        """
+        "energies" are just normalized eigenvectors
+        """
+        v=self.getEigenvalues()
         return v/np.sum(v)
         
     def plot2d(self,ix=0,iy=1,clf=True):
+        """
+        Generates a 2-dimensional plot of the data set and principle components 
+        using matplotlib.
+        
+        ix specifies which p-dimension to put on the x-axis of the plot
+        and iy specifies which to put on the y-axis (0-indexed)
+        """
         import matplotlib.pyplot as plt
         x,y=self.N[:,ix],self.N[:,iy]
         if clf:
             plt.clf()
         plt.scatter(x,y)
-        vals,evs=self.eig()
+        vals,evs=self.getEigensystem()
         #evx,evy=evs[:,ix],evs[:,iy]
         xl,xu=plt.xlim()
         yl,yu=plt.ylim()
@@ -77,11 +98,18 @@ class Pca(object):
             plt.ylabel('$'+self.names[iy]+'/\\sigma$')
         
     def plot3d(self,ix=0,iy=1,iz=2,clf=True):
+        """
+        Generates a 3-dimensional plot of the data set and principle components
+        using mayavi.  
+        
+        ix, iy, and iz specify which of the input p-dimensions to place on each of
+        the x,y,z axes, respectively (0-indexed).
+        """
         import enthought.mayavi.mlab as M
         if clf:
             M.clf()
         z3=np.zeros(3)
-        v=(self.evecs()*self.evals())
+        v=(self.getEigenvectors()*self.getEigenvalues())
         M.quiver3d(z3,z3,z3,v[ix],v[iy],v[iz],scale_factor=5)
         M.points3d(self.N[:,ix],self.N[:,iy],self.N[:,iz],scale_factor=0.3)
         if self.names:
@@ -90,8 +118,17 @@ class Pca(object):
             M.axes()
         
     def sigclip(self,sigs):
+        """
+        clips out all data points that are more than a certain number
+        of standard deviations from the mean.  
+        
+        sigs can be either a single value or a length-p sequence that
+        specifies the number of standard deviations along each of the 
+        p dimensions.
+        """
         if np.isscalar(sigs):
             sigs=sigs*np.ones(self.N.shape[1])
+        sigs = sigs*np.std(self.N,axis=1)
         n = self.N.shape[0]
         m = np.all(np.abs(self.N) < sigs,axis=1)
         self.A=self.A[m]
@@ -103,13 +140,14 @@ class Pca(object):
         self.__calc()
         
         
-    def project(self,enthresh=None,nPCs=None,cumen=None,vals=None):
+    def project(self,vals=None,enthresh=None,nPCs=None,cumen=None):
         """
         projects the normalized values onto the components
         
         enthresh, nPCs, and cumen determine how many PCs to use
         
-        if vals is None, the normalized data vectors are the values to project
+        if vals is None, the normalized data vectors are the values to project.
+        Otherwise, it should be convertable to a p x N array
         
         returns n,p(>threshold) dimension array
         """
@@ -131,9 +169,10 @@ class Pca(object):
         if vals is None:
             vals = self.N.T
         else:
+            vals = np.array(vals,copy=False)
             if self.N.T.shape[0] != vals.shape[0]:
                 raise ValueError("shape for vals doesn't match")
-        proj = np.matrix(self.evecs()).T*vals
+        proj = np.matrix(self.getEigenvectors()).T*vals
         return proj[m].T
             
     def deproject(self,A,normed=True):
@@ -148,7 +187,7 @@ class Pca(object):
         if q > p :
             raise ValueError("q > p")
         
-        evinv=np.linalg.inv(np.matrix(self.evecs()).T)
+        evinv=np.linalg.inv(np.matrix(self.getEigenvectors()).T)
         
         zs = np.zeros((n,p))
         zs[:,:q]=A
