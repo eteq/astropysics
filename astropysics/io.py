@@ -512,6 +512,8 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
     extraction and smoothing are the same as for load_deimos_spectrum
     
     verbose indicates if information should be printed
+    
+    returns filenamelist,speclist
     """
     from glob import glob
     from os.path import join
