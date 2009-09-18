@@ -15,13 +15,18 @@ to data.
 """
 try:
     from spectarget import SpecTarget
-    from fitgui import FitGui,fit_data,MultiFitGui,fit_data_multi
+    from fitgui import FitGui,fit_data
+    try:
+        from fitgui import MultiFitGui,fit_data_multi
+    except ImportError:
+        pass #if mayavi is not present, a warning will have already been raised
 except ImportError,e:
     if 'traits' in e.message:
         from warnings import warn
         warn('Traits or Traits GUI not installed! most of gui module will be unuseable')
     else:
         raise
+        
     
 #Use lines below as imports for new gui apps
 #from __future__ import division
