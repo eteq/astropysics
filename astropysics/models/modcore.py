@@ -394,8 +394,8 @@ class FunctionModel(ParametricModel):
                 method = 'leastsq'
             
             
-        if fixedpars is 'auto' and hasattr(self,'fixedpars'):
-            fixedpars = self.fixedpars
+        if fixedpars is 'auto':
+            fixedpars = self.fixedpars if hasattr(self,'fixedpars') else ()
         if fixedpars is None:
             fixedpars = tuple()
             
@@ -1862,7 +1862,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 plt.clf()
                 
             kwargs.setdefault('aspect','auto')
-            plt.imshow(res.T,norm=norm,extent=datarange,**kwargs)
+            plt.imshow(res[::-1].T,norm=norm,extent=datarange,origin='lower',**kwargs)
             
             if cb:
                 if isMappingType(cb):
@@ -2135,8 +2135,8 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
         #yr=(x*cospa+y*sinpa)
         x,y = arrin
         sinpa,cospa = np.sin(pa),np.cos(pa)
-        xr=(-sinpa*x+cospa*y)
-        yr=(x*cospa+y*sinpa)/atob
+        yr=(-sinpa*x+cospa*y)*atob
+        xr=(x*cospa+y*sinpa)
         return self._rmodel((xr*xr+yr*yr)**0.5)
         
         
@@ -2162,7 +2162,7 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
             raise AttributeError(name)
         
     def __setattr__(self,name,val):
-        if hasattr(self._rmodel,name):
+        if name in self._rmodel.params:
             return setattr(self._rmodel,name,val)
         else:
             super(FunctionModel2DScalarDeformedRadial,self).__setattr__(name,val)

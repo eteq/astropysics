@@ -365,7 +365,8 @@ class ExponentialModel(FunctionModel1DAuto):
     
     @property
     def rangehint(self):
-        return(-1.5/self.k,1.5/self.k)
+        ak = np.abs(self.k)
+        return(-1.5/ak,1.5/ak)
     
 class PowerLawModel(FunctionModel1DAuto):
     """
@@ -1192,12 +1193,17 @@ class EdgeOnDiskModel(FunctionModel2DScalarAuto):
     
 class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
     def __init__(self,inc,pa,degrees=True):
-        super(FunctionModel2DScalarDeformedRadial,self).__init__('sersic',pa=pa)
+        super(InclinedDiskModel,self).__init__('sersic')
+        
+        self.n = 1
+        
         if degrees:
             self.incdeg = inc
+            self.padeg = pa
         else:
             self.inc = inc
-        self.n = 1
+            self.pa = pa
+        
     
     
     
