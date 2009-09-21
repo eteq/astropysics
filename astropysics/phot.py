@@ -1685,6 +1685,7 @@ class AperturePhotometry(object):
         
         self.band = band
         self.units = units
+        raise NotImplementedError('not usable yet')
         
         
     def _getUnit(self):
@@ -2064,15 +2065,143 @@ class IsophotalEllipse(object):
         
         
 class ModelPhotometry(object):
-    def __init__(self,model):
+    """
+    Represents a astropysics.models 2D model of the photometric flux
+    from an image.
+    
+    The normparam attribute defines which model parameter sets
+    the overall scaling.  If None, the scaling methods will not function.
+    """
+    def __init__(self,model,magzpt=0):
         from . import models
         self.model = model
+        self.magzpt = magzpt #TODO: get from a band/image?
+        
+    normparam = ('A','Ae')
         
     def _getModel(self):
         return self._model
     def _setModel(self,val):
-        self._model = models.get_model_instance(val,models.FunctionModel2DScalar)
+        from .models import get_model_instance,FunctionModel2DScalar
+        self._model = get_model_instance(val,FunctionModel2DScalar)
     model = property(_getModel,_setModel)
+    
+    def fitPhot(self,im):
+        raise NotImplementedError
+    
+    def _getTotalflux(self):
+        return self._model.integrateCircular(np.inf)
+    def _setTotalflux(self,val):
+        if self.normparam is None:
+            raise NotImplementedError('No auto-mult normalization built in yet')
+        elif isinstance(self.normparam,basestring):
+            normparam = (self.normparam,)
+        else:
+            normparam = self.normparam
+        normparam = [p in self._model.params for p in self.normparam]
+        if np.sum(normparam)!=1:
+            raise ValueError('could not find unique normalization parameter for this model')
+        normparam = self.normparam[normparam.index(True)]
+        
+        currflux = self._getTotalflux()
+        newnorm = getattr(self._model,normparam)*val/currflux
+        setattr(self._model,normparam,newnorm)
+    totalflux = property(_getTotalflux,_setTotalflux,doc=None)
+    
+    
+    def _getTotalmag(self):
+        return self.magzpt-2.5*np.log10(self.totalflux)
+    def _setTotalmag(self,val):
+        self.totalflux = 10**((val-self.magzpt)/-2.5)
+    totalmag = property(_getTotalmag,_setTotalmag,doc=None)
+    
+    def simulate(self,pixels,scale=1,background=0,noise=None,psf=None,sampling=None):
+        """
+        simulate how this model would appear on an image. 
+        
+        pixels is a 2D array that described the number of pixels to use, 
+        a scalar describing the number of pixels in both directions,
+        or a sequence (npixx,npixy)
+        
+        scale is either a scalar giving the pixel scale or a 2-sequence
+        (xscale,yscale) as units/pixel
+        
+        background is a scalar background level to assume or a 2D array
+        of matching shape as the simulation
+        
+        noise can be:
+        * None : no noise is applied
+        * 'poisson' : assumes the flux units are counts and returns the
+          poisson noise model
+        * a scalar : uniform gaussian noise with the scalar as sigma
+        * a 2d array : gaussian noise with the value at each array
+          point as sigma - array dimension must match simulation
+        * a callable : will be called as noise(imagearr2d) and
+          should return the value of the model+noise
+          
+        psf is the point-spread function to be applied before the noise,
+        either a scalar/2-tuple for a gaussian PSF (specifies the FWHM
+        in actual units, not pixels), or a 2D measured PSF to 
+        convolve with the model. If None, no psf will be included.
+        
+        sampling is passed into the model's `pixelize` method (see
+        `FunctionModel2DScalar.pixelize`)
+        """
+        pixels = np.array(pixels,copy=False)
+        if len(pixels.shape)==0:
+            nx = ny = int(pixels)
+        elif len(pixels.shape)==1:
+            nx,ny = pixels.astype(int)
+        elif len(pixels.shape)==2:
+            nx,ny = pixels.shape
+        else:
+            raise ValueError('Invalid input for pixels')
+        
+        if np.isscalar(scale):
+            xscale = yscale = scale
+        else:
+            xscale,yscale = scale
+            
+        xsize,ysize = nx*xscale,ny*yscale
+        
+        m = self._model
+        modim = m.pixelize(-xsize/2,xsize/2,-ysize/2,ysize/2,nx,ny,sampling)
+        
+        if psf: #TODO:generalize PSF in superclass
+            psf = np.array(psf,copy=False)
+            if len(psf.shape)==0:
+                from scipy.ndimage import gaussian_filter
+                sigtofwhm = 2*np.sqrt(2*np.log(2))
+                sigmas = (psf/xscale/sigtofwhm,psf/yscale/sigtofwhm)
+                modim = gaussian_filter(modim,sigmas,mode='nearest')
+                
+            elif len(psf.shape)==1:
+                from scipy.ndimage import gaussian_filter
+                sigtofwhm = 2*np.sqrt(2*np.log(2))
+                xpsf,ypsf = psf
+                sigmas = (xpsf/xscale/sigtofwhm,ypsf/yscale/sigtofwhm)
+                modim = gaussian_filter(modim,sigmas,mode='nearest')
+                
+            elif len(psf.shape)==2:
+                from scipy.ndimage import convolve
+                normpdf = psf/np.sum(psf)
+                modim = convolve(modim,normpsf,mode='nearest')
+                
+            else:
+                raise ValueError('input psf not valid')
+            
+        if background:
+            modim += background
+            
+        if noise:
+            if noise == 'poisson':
+                modim = np.random.poisson(modim)
+            elif callable(noise):
+                modim = noise(modim)
+            else:
+                modim = np.random.normal(modim,noise)
+                
+        return modim
     
 
 
@@ -2329,7 +2458,7 @@ except OSError:
     
 class SExtractorError(Exception):
     def __init__(self,*args):
-        return super(SExtractorError,self).__init__(*args)
+        super(SExtractorError,self).__init__(*args)
             
         
 #<------------------------conversion functions--------------------------------->
