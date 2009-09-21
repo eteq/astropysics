@@ -87,6 +87,8 @@ class CCDImage(object):
     * zeropoint
     * pixelscale
     
+    Note that the coordinate system in python is 0-based - the first pixel
+    is (0,0), NOT (1,1)
     """
     __metaclass__ = ABCMeta
     
@@ -108,6 +110,8 @@ class CCDImage(object):
         self._rng = range
         
         self.setScaling(scaling) #implicitly calls activateRange and will NotImplementedError if not overridden
+        if scaling is None:
+            self.activateRange(None) #doesn't happen for the None scaling in setScaling as that should mean no change
         
     def __del__(self):
         self.close()
@@ -159,17 +163,14 @@ class CCDImage(object):
     def applyChanges(self):
         if not self._invscalefunc:
             raise Exception('No inverse function available')
-        if self._invscalefunc is self._scalefunc: #linear mapping so changes already applied
+        if self.scaling.name == 'linear': #directly applied if linear mapping 
             pass
         else:
-            altim = self._invscalefunc(self._active)
-            range = self._rng
-            
-            self._applyArray(range,altim)
+            self._applyArray(self._rng,self._invscalefunc(self._active))
             
         self._changed = False
         self._lstatd.clear() 
-        self._gstatd.clear()
+        self._fstatd.clear()
     
     @abstractmethod    
     def _extractArray(self,range):
@@ -512,7 +513,7 @@ class CCDImage(object):
                 pass
             else:
                 raise ValueError('unrecognzied axes input %s'%axes)
-            plt.imshow(-vals.T if invert else vals.T,norm=nrm,origin='lower',**kwargs)
+            plt.imshow(-vals.T if invert else vals.T,norm=nrm,**kwargs)
             xl = plt.xlim()
             yl = plt.ylim()
             
@@ -834,7 +835,17 @@ class FitsImage(CCDImage):
         CCDImage.__init__(self,range=range,scaling=scaling)
         #self._updateFromHeader()#called implicity in CCDImage.__init__ through activateRange
         
+    def save(self,fn,**kwargs):
+        """
+        Save this image to a new fits file.  kwargs will be passed to
+        `pyfits.HDUList.writeto`
+        """
+        self._updateToHeader()
+        self.fitsfile.writeto(fn,**kwargs)
+        
     def close(self):
+        """
+        """
         self.fitsfile.close()
     
     def __del__(self):
@@ -886,10 +897,10 @@ class FitsImage(CCDImage):
                 self.fitsfile[self._chdu].data = imdata
             elif len(range) == 4:
                 xl,xu,yl,yu = range
-                ny,nx = self.fitsfile[self._chdu].shape #fits files are flipped
+                ny,nx = self.fitsfile[self._chdu]._dimShape() #fits files are flipped TODO:find out if _dimShape isn't supposed to be used
                 if xl < 0 or xu > nx or yl < 0 or yu > ny:
                     raise IndexError('Attempted range %i,%i;%i,%i on image of size %i,%i!'%(xl,xu,yl,yu,nx,ny))
-                self.fitsfile[self._chdu].data[yl:yu:-1,xl:xu] = imdata
+                self.fitsfile[self._chdu].data[yl:yu,xl:xu] = imdata
             else:
                 raise ValueError('Unregonized form for range')
         
@@ -910,6 +921,21 @@ class FitsImage(CCDImage):
             self.zeropoint=d['ZEROPOINT']
         elif 'ZEROPT' in d:
             self.zeropoint=d['ZEROPT']
+    def _updateToHeader(self):
+        d = dict(self.fitsfile[self._chdu].header.items())
+        
+        if 'PIXSCALE' in d:
+            d['PIXSCALE'] = np.prod(self.pixelscale)**0.5
+        elif 'PIXSCAL1' in d:
+            if 'PIXSCAL2' in d:
+                (d['PIXSCAL1'],d['PIXSCAL2']) = self.pixelscale
+            else:
+                d['PIXSCAL1'] = np.prod(self.pixelscale)**0.5
+                
+        if 'ZEROPOINT' in d:
+            d['ZEROPOINT'] = self.zeropoint
+        elif 'ZEROPT' in d:
+            d['ZEROPT'] = self.zeropoint
     
     def _getHdu(self):
         return self._chdu
