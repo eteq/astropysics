@@ -662,14 +662,13 @@ class FitGui(HasTraits):
             parstrs = []
             for p,v in mod.pardict.iteritems():
                 parstrs.append(p+'='+str(v))
-            if mod.__class__._args is None: #varargs need to have the first argument give the right number
+            if mod.__class__._pars is None: #varargs need to have the first argument give the right number
                 varcount = len(mod.params)-len(mod.__class__._statargs)
                 parstrs.insert(0,str(varcount))
             return '%s(%s)'%(mod.__class__.__name__,','.join(parstrs))
     
     def getModelObject(self):
         return self.tmodel.model
-            
             
 def fit_data(xdata,ydata,model=None,**kwargs):
     """
