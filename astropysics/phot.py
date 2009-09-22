@@ -2108,7 +2108,7 @@ class ModelPhotometry(object):
         setattr(self._model,normparam,newnorm)
     totalflux = property(_getTotalflux,_setTotalflux,doc=None)
     
-    
+    #TODO:fix for flux being per unit arcsec
     def _getTotalmag(self):
         return self.magzpt-2.5*np.log10(self.totalflux)
     def _setTotalmag(self,val):
@@ -2619,12 +2619,15 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     """
     compute the distance modulus given  a distance or redshift
     
-    for H=0/False/None, will treat z as a distance in pc, otherwise, redshift
-    will be used with hubble relation
+    intype can be:
+    * 'distance': will treat x as a distance in pc
+    * 'redshift': x is treated as a redshift
+     
+    if autocosmo is true, the cosmological calculation will be 
+    automatically  performed for z > 0.1.  If False, a 
+    non-cosmological calculation will be done.  If it is 'warn', 
+    a warning will be issued for any inputs where z>0.1
     
-    autocosmo determines if the cosmological calculation should be
-    automatically performed for z > 0.1 . if False, the only the basic
-    calculation will be done.  if 'warn,' a warning will be issued
     """
     from .coords import cosmo_z_to_dist
     from .constants import H0,c

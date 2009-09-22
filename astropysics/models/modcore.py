@@ -732,10 +732,10 @@ class FunctionModel(ParametricModel):
 class CompositeModel(FunctionModel):
     """
     This model contains a group of FunctionModel objects and evaluates them
-    as a single model.
+    as a single model.  The models themselves are called, rather than the `f` 
     
     The models can either be FunctionModel objects, FunctionModel1classes,
-    or a string (in the later two cases, new instances will be generated)
+    or a string (in the later two cases, new instances will be generated).
     
     parameter names are of the form 'A0' and 'A1' where A is the parameter
     name and the number is the sequential number of the model with that
@@ -808,18 +808,27 @@ class CompositeModel(FunctionModel):
             parnames = {}
                         
         #remove suffixes if they are unique
+        
         if autoshorten:
             cargs = list(args)
+            argnames = [argmap[a][1] for a in cargs]
             for i,a in enumerate(cargs):
                 if a not in parnames.values():
-                    argname = argmap[a][1]
-                    for j,a2 in enumerate(cargs):
-                        if a2.startswith(argname) and i != j:
-                            break
-                    else:
-                        argmap[argname] = argmap[a]
+                    if argnames.count(argnames[i])==1:
+                        argmap[argnames[i]] = argmap[a]
                         del argmap[a]
-                        args[i] = argname
+                        args[i] = argnames[i]
+#            for i,a in enumerate(cargs):
+#                if a not in parnames.values():
+#                    argname = argmap[a][1]
+#                    print argname,a
+#                    for j,a2 in enumerate(cargs):
+#                        if a2.startswith(argname) and i != j:
+#                            break
+#                    else:
+#                        argmap[argname] = argmap[a]
+#                        del argmap[a]
+#                        args[i] = argname
             
         self._pars = tuple(args)
         self._argmap = argmap
@@ -860,7 +869,7 @@ class CompositeModel(FunctionModel):
             i,n = self._argmap[name]
             setattr(self._models[i],n,val)
         else:
-            self.__dict__[name] = val
+            super(CompositeModel,self).__setattr__(name,val)
     
     @property
     def models(self):
@@ -882,7 +891,11 @@ class CompositeModel(FunctionModel):
         for a,(i,j) in zip(args,self._parlistmaps):
             parlists[i][j] = a
         
-        mval = [m.f(x,*parlists[i]) for i,m in enumerate(self._models)]
+        #mval = [m.f(x,*parlists[i]) for i,m in enumerate(self._models)]
+        #TODO:speed-up/cacheing?
+        for m,pl in zip(self._models,parlists):
+            m.parvals = pl
+        mval = [m(x) for m in self._models]
         return eval(self._opstr)
         
     
@@ -920,7 +933,23 @@ class CompositeModel(FunctionModel):
         else:
             kwargs['fixedpars'] = fps
         return self.fitData(*args,**kwargs)
-            
+    
+    @property
+    def rangehint(self):
+        rhints = []
+        for m in self._models:
+            if not hasattr(m,'rangehint'):
+                return None
+            else:
+                rhint = m.rangehint
+                if rhint is None:
+                    return None
+                else:
+                    rhints.append(rhint)
+        rhints = np.array(rhints)
+        mx,mi = np.max(rhints,0),np.min(rhints,0)
+        return mi[0],mx[1],mi[2],mx[3]
+                
 
 class FunctionModel1D(FunctionModel):
     
@@ -1862,7 +1891,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 plt.clf()
                 
             kwargs.setdefault('aspect','auto')
-            plt.imshow(res[::-1].T,norm=norm,extent=datarange,origin='lower',**kwargs)
+            #plt.imshow(res[::-1].T,norm=norm,extent=datarange,origin='lower',**kwargs)
+            plt.imshow(res.T,norm=norm,extent=datarange,origin='lower',**kwargs)
             
             if cb:
                 if isMappingType(cb):
@@ -2007,6 +2037,7 @@ class CompositeModel2DScalar(FunctionModel2DScalar,CompositeModel):
         for m in self._models:
             if not isinstance(m,FunctionModel2DScalar):
                 raise ModelTypeError('Input model %s is not a 2D->scalar model'%m)
+        
         self.incoordsys = 'cartesian'
         
     def _getIncoordsys(self):
@@ -2095,7 +2126,7 @@ class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
             
     @property
     def rangehint(self):
-        if self._rmodels is None:
+        if self._rmodel is None:
             rh = (1,1)
         else:
             rh = self._rmodel.rangehint
@@ -2168,7 +2199,7 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
             super(FunctionModel2DScalarDeformedRadial,self).__setattr__(name,val)
             
     def _getPaDeg(self):
-        np.degrees(self.pa)
+        return np.degrees(self.pa)
     def _setPaDeg(self,val):
         self.pa = np.radians(val)     
     padeg=property(_getPaDeg,_setPaDeg,"""position angle (from +x-axis

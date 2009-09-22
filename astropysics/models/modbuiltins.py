@@ -1159,7 +1159,9 @@ class MaxwellBoltzmannSpeedModel(MaxwellBoltzmannModel):
     def rangehint(self):
         from ..constants import kb,c
         return 0,min(3*(2*kb*self.T/self.m)**0.5,c)
-    
+
+
+#builtin 2D models
 class Gaussian2DModel(FunctionModel2DScalarAuto):
     _fcoordsys='cartesian'
     def f(self,inarr,A=1,sigx=1,sigy=1,mux=0,muy=0):
@@ -1192,8 +1194,8 @@ class EdgeOnDiskModel(FunctionModel2DScalarAuto):
         return (-2*bigscale,2*bigscale,-2*bigscale,2*bigscale)
     
 class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
-    def __init__(self,inc,pa,degrees=True):
-        super(InclinedDiskModel,self).__init__('sersic')
+    def __init__(self,inc=0,pa=0,degrees=True,**kwargs):
+        super(InclinedDiskModel,self).__init__('sersic',**kwargs)
         
         self.n = 1
         
@@ -1204,8 +1206,9 @@ class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
             self.inc = inc
             self.pa = pa
         
-    
-    
+class RoundBulgeModel(FunctionModel2DScalarSeperable):    
+    def __init__(self):
+        super(RoundBulgeModel,self).__init__('devaucouleurs')
     
 #<-------------------------------Other Models---------------------------------->
     
