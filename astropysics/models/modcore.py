@@ -1835,7 +1835,68 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             
         finally:
             self.incoordsys = oldcoordsys
+            
+    def getFluxSize(self,val=0.5,frac=True,mode='radial',cen=(0,0),**kwargs):
+        """
+        Compute the radius/area enclosing a specified amount of flux.
+        
+        val specifies the flux in model units, or if frac is True, 
+        a fraction of the total flux (computed with infinite integrals)
+        
+        the mode parameter can be:
+        
+        * 'radial' : computes the radius enclosing the specified flux - 
+          return value in this case is a single scalar
+        * 'square' : computes the square enclosing the specified flux - 
+          return value in this case is a single scalar with the box length
+        * 'rectangular' : computes the box enclosing the specified flux - 
+          return value in this case is a 2-tuple (xsize,ysize)
+      
+        cen specifies the center to assume.  Currently this must be (0,0) for
+        radial profiles
+        
+        kwargs are passed into scipy.optimize.fmin
+        """
+        from scipy.optimize import fmin
+        
+        if mode == 'radial':
+            if cen != (0,0):
+                raise NotImplementedError('radial profiles must be centered on (0,0)')
+            if frac:
+                total = self.integrateCircular(np.inf)
+                val *= total
+                print 'tot',total,val
+            def f(r):
+                intres = self.integrateCircular(r)-val
+                return intres*intres
+            v0 = (1,)
+        elif mode == 'square':
+            x0,y0 = cen
+            if frac:
+                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf)
+                val *= total
+            def f(l):
+                intres = self.integrateCartesian(x0-l,x0+l,x0-l,x0+l)-val
+                return intres*intres
+            v0 = (1,)
+        elif mode == 'rectangular':
+            x0,y0 = cen
+            if frac:
+                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf)
+                val *= total
+            def f(ls):
+                lx,ly = ls
+                intres = self.integrateCartesian(x0-lx,x0+lx,y0-ly,y0+ly)-val
+                return intres*intres
+            v0 = (1,1)
+        else:
+            raise ValueError('unrecognized mode')
                 
+        res = fmin(f,v0,full_output=1,**kwargs)
+        self.lastfluxsize = res
+        val = res[0]
+        
+        return val[0] if val.size == 1 else tuple(val)
     
     def plot(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',
                   log=False,**kwargs):
@@ -1846,6 +1907,9 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         datarange should be in the form (xl,xu,yl,yu) or None.  If None, it 
         will be inferred from the data, or a ValueError will be raised
         if data is not present
+        
+        log can be False, True (natural log), '10' (base-10), or 
+        'mag' (pogson magnitudes)
         
         kwargs are passed into imshow
         """
@@ -1876,11 +1940,17 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             res = self(grid)
             
             if log:
-                res = np.log10(res)
+                if log == 'mag':
+                    logfunc = lambda x:-2.5*np.log10(x)
+                elif log == '10':
+                    logfunc = np.log10
+                else:
+                    logfunc = np.log 
+                res = logfunc(res)
                 if data:
-                    dataval = np.log10(dataval)
+                    dataval = logfunc(dataval)
                 if maxmind is not None:
-                    maxmind = np.log10(maxmind)
+                    maxmind = logfunc(maxmind)
             
             if maxmind:
                 norm = plt.normalize(min(np.min(res),maxmind[1]),max(np.max(res),maxmind[0]))
