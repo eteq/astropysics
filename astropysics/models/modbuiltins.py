@@ -1146,8 +1146,8 @@ class SersicModel(FunctionModel1DAuto):
         plt.xlim(lower,upper)
     
 class DeVaucouleursModel(SersicModel):
-    def f(self,r,A=1,re=1):
-        return SersicModel.f(self,r,A,re,4)
+    def f(self,r,Ae=1,re=1):
+        return SersicModel.f(self,r,Ae,re,4)
 
 class MaxwellBoltzmannModel(FunctionModel1DAuto):
     xaxisname = 'v'
@@ -1221,9 +1221,19 @@ class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
             self.inc = inc
             self.pa = pa
         
-class RoundBulgeModel(FunctionModel2DScalarSeperable):    
-    def __init__(self):
-        super(RoundBulgeModel,self).__init__('devaucouleurs')
+class RoundBulgeModel(FunctionModel2DScalarSeperable):
+    """
+    A bulge modeled as a radially symmetric sersic profile
+    (by default the sersic index is kept fixed - to remove
+    this behavior, set the fixedpars attribute to None)
+    """
+    
+    fixedpars = ('n')    
+    def __init__(self,Ae=1,re=1,n=4):
+        super(RoundBulgeModel,self).__init__('sersic')
+        self.Ae = Ae
+        self.re = re
+        self.n = n
     
 #<-------------------------------Other Models---------------------------------->
     
