@@ -235,6 +235,14 @@ class GaussianModel(FunctionModel1DAuto):
         self.A = peakval/self._getPeak()
         
     peak=property(_getPeak,_setPeak)
+    
+    __fwhmfactor = 2*(2*np.log(2))**0.5
+    def _getFWHM(self):
+        return self.sig*self.__fwhmfactor
+    def _setFWHM(self,val):
+        self.sig = val/self.__fwhmfactor
+    FWHM = property(_getFWHM,_setFWHM,doc='Full Width at Half Maximum')
+    
         
     def derivative(self,x,dx=1):
         sig=self.sig
@@ -351,6 +359,13 @@ class MoffatModel(FunctionModel1DAuto):
     def f(self,r,A=1,alpha=1,beta=4.765):
         roa=r/alpha
         return A*(beta-1)/(pi*alpha**2)*(1+roa*roa)**-beta
+    
+    def _getFWHM(self):
+        return self.alpha*2*(2**(1/self.beta)-1)**0.5
+    def _setFWHM(self,val):
+        self.alpha = val*(4*(2**(1/self.beta)-1))**-0.5
+    FWHM = property(_getFWHM,_setFWHM,doc='Full Width at Half Maximum for this model - setting changes alpha for fixed beta')
+    
     
     @property
     def rangehint(self):
