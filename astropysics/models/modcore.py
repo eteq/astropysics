@@ -1908,8 +1908,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         will be inferred from the data, or a ValueError will be raised
         if data is not present
         
-        log can be False, True (natural log), '10' (base-10), or 
-        'mag' (pogson magnitudes)
+        log can be False, True (natural log), '10' (base-10), 'mag', or 
+        'mag##' (pogson magnitudes with ## as zeropoint)
         
         kwargs are passed into imshow
         """
@@ -1940,8 +1940,10 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             res = self(grid)
             
             if log:
-                if log == 'mag':
-                    logfunc = lambda x:-2.5*np.log10(x)
+                if 'mag' in log:
+                    lognomag = log.replace('mag','')
+                    zpt = float(lognomag) if lognomag.strip() != '' else 0
+                    logfunc = lambda x:zpt-2.5*np.log10(x)
                 elif log == '10':
                     logfunc = np.log10
                 else:
