@@ -505,55 +505,110 @@ class PipelineAccumulate(PipelineElement):
 
 
 #<--------------------Analysis/simple numerical functions---------------------->
-def centroid(val,axes=None,offset=None):
+def estimate_background(arr,method='median'):
     """
-    computes the centroid of an n-dimensional array
+    Estimates the background of the provided array following a technique
+    specified by the `method` keyword:
     
-    axes can either be a list of axis values for the array (must be
-    same length as the number of dimensions) or None to report just the 
-    pixel value
-    
-    offset is an amount to subtract from the input array, can be:
-    
-    * 'median'
-    * 'mean'
+    * 'median' : median of all the data
+    * 'mean' : mean of all the data
     * '32' : 3*median - 2*mean
     * '2515' : 2.5*median - 1.5*mean
     * '21' : 2*median - 1*mean
-    * None
+    * a callable that takes a 1D array and outputs a scalar
+    * a scalar : always returns that value
+    * None : always returns a 0 background
+    
+    outputs a scalar background estimate
+    """
+    arr = np.array(arr,copy=False).ravel()
+    
+    if method is None:
+        res = 0
+    elif np.isscalar(method):
+        res = method
+    elif callable(method):
+        res = method(arr)
+    if method == 'median':
+        res = np.median(arr)
+    elif method == 'mean':
+        res = np.mean(arr)
+    elif method == '32':
+        res = (3*np.median(arr) - 2*np.mean(arr))
+    elif method == '2515':
+        res = (2.5*np.median(arr) - 1.5*np.mean(arr))
+    elif method == '21':
+        res = (2*np.median(arr) - np.mean(arr))
+    else:
+        raise ValueError('unrecognized offset type')
+    
+    return res
+
+#def centroid(val,axes=None,offset=None):
+#    """
+#    computes the centroid of an n-dimensional array
+    
+#    axes can either be a list of axis values for the array (must be
+#    same length as the number of dimensions) or None to report just the 
+#    pixel value
+    
+#    offset is the estimation mode of the background to subtract from 
+#    the input array - see `estimate_background` for options
+#    """
+#    if offset:
+#        val = val - estimate_background(val,offset)
+    
+#    shp = val.shape
+#    if axes is None:
+#        axes=[np.arange(s) for s in shp]
+#    if len(shp) != len(axes):
+#        raise ValueError("input dimensions don't match axes")
+    
+#    cens = []
+#    for i,(s,x) in enumerate(zip(shp,axes)):
+#        if s != len(x):
+#            raise ValueError("axis #%i doesn't match array size"%i)
+#        rng = range(len(shp))
+#        del rng[i]
+#        vsum = val
+#        for j in reversed(rng):
+#            vsum = val.sum(axis = j)
+#        cens.append(np.sum(x*vsum)/np.sum(vsum))
+    
+#    return tuple(cens)
+
+def moments(arr,ms,axes=None,offset=None,norm=True,std=False):
+    """
+    Compute moments of the provided n-d array.
+    
+    TODO:describe
     """
     if offset:
-        if offset == 'median':
-            val = val - np.median(val)
-        elif offset == 'mean':
-            val = val - np.mean(val)
-        elif offset == '32':
-            val = val - (3*np.median(val) - 2*np.mean(val))
-        elif offset == '2515':
-            val = val - (2.5*np.median(val) - 1.5*np.mean(val))
-        elif offset == '21':
-            val = val - (2*np.median(val) - np.mean(val))
-        else:
-            raise ValueError('unrecognized offset type')
+        val = val - estimate_background(val,offset)
+    shp = arr.shape
     
-    shp = val.shape
+    #setup/check axes
     if axes is None:
-        axes=[np.arange(s) for s in shp]
-    if len(shp) != len(axes):
-        raise ValueError("input dimensions don't match axes")
+        axes = [np.arange(s) for s in shp]
+    elif len(axes) != len(shp):
+        raise ValueError('incorrect number of axes provided')
+    else:
+        axmatch = np.array([len(ax)==s for ax,s in zip(axes,shp)])
+        if np.any(~axmatch):
+            raise ValueError('axes %s do not match input array'%np.where(~axmatch))
+        
     
-    cens = []
-    for i,(s,x) in enumerate(zip(shp,axes)):
-        if s != len(x):
-            raise ValueError("axis #%i doesn't match array size"%i)
-        rng = range(len(shp))
-        del rng[i]
-        vsum = val
-        for j in reversed(rng):
-            vsum = val.sum(axis = j)
-        cens.append(np.sum(x*vsum)/np.sum(vsum))
     
-    return tuple(cens)
+    if norm:
+        res/=np.sum(arr)
+    return res
+
+def centroid(val,axes=None,offset=None):
+    """
+    Convinience function calling `moments`  to get just the first
+    normalized moment (e.g. the centroid)
+    """
+    return moments(val,1,axes,offsets,True,False)
 
 def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
     """
@@ -561,32 +616,13 @@ def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
     be iterated over `iters` times, each time rejecting points 
     that are more than `sig` standard deviations discrepant 
     
-    center can be any of:
-    * 'median'
-    * 'mean'
-    * '32' : 3*median - 2*mean
-    * '2515' : 2.5*median - 1.5*mean
-    * '21' : 2*median - 1*mean
-    * a callable that takes a 1D array and outputs a scalar
+    center is the estimation technique to compute the  assumed 
+    center of the clipping - see `estimate_background` for options
     
     if maout is True, returns a numpy.ma.Maskedarray with the filtered points
     masked.  Otherwise, returns a tuple (filtereddata,mask) 
     (mask is False for clipped points, shaped as original) 
     """
-    if center == 'median':
-        center = np.median
-    elif center =='mean':
-        center = np.mean
-    elif callable(center):
-        pass
-    elif center == '32':
-        center = lambda x:3*np.median(x) - 2*np.mean(x)
-    elif center =='2515':
-        center = lambda x:2.5*np.median(x) - 1.5*np.mean(x)
-    elif enter == '21':
-        center = lambda x:2*np.median(x) - np.mean(x)
-    else:
-        raise ValueError('unrecognized center value')
     
     data = np.array(data,copy=False)
     oldshape = data.shape
@@ -594,7 +630,7 @@ def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
     
     mask = np.ones(data.size,bool)
     for i in iter:
-        do = data-center(data[mask])
+        do = data-estimate_background(data[mask],center)
         mask = do*do <= np.var(data[mask])*sig
         
     if maout:
