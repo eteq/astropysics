@@ -601,5 +601,42 @@ def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
         return np.ma.MaskedArray(data,~mask,copy=False)
     else:
         return data[mask],mask.reshape(oldshape)
+    
+def nd_grid(*vecs):
+    """
+    Generates a grid of values given a sequence of 1D arrays. The inputs 
+    will be converted to 1-d vectors and the output is an array with
+    dimensions (nvecs,n1,n2,n3,...) varying only on the dimension 
+    corresponding to its input order
+    
+    
+    Example:
+    x = linspace(-1,1,10)
+    y = x**2+3
+    z = randn(13)
+    result = nd_grid(x,y,z)
+    xg,yg,zg = result
+    
+    result will be a (3,10,10,13) array, and each of xg,yg, and zg are 
+    (10,10,13)
+    """
+    vecs = [np.array(v,copy=False).ravel() for v in vecs]
+    shape = tuple([v.size for v in vecs])
+    sz = np.prod(shape)
+    
+    arrs = []
+    for i,(v,n) in enumerate(zip(vecs,shape)):
+        newshape = list(shape)
+        newshape.insert(0,newshape.pop(i))
+        
+        arr = np.repeat(v,sz/n).reshape(newshape)
+        
+        transorder = range(len(arr.shape))[1:]
+        transorder.insert(i,0)
+        
+        arrs.append(arr.transpose(transorder))
+    return np.array(arrs)
+    
+    
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
