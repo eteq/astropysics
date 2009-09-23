@@ -867,22 +867,27 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     else:
         return np.any(matches,axis=1),np.any(matches,axis=0)
     
-def seperation_matrix(v,tri=None):
+def seperation_matrix(v,w=None,tri=False):
     """
-    This function takes a n(x?x?x?) and produces a matrix given by
-    Aij = vi-vj
+    This function takes a n(x?x?x?) array and produces an array given by
+    A[i][j] = v[i]-v[j]. if w is not None, it produces A[i][j] = v[i]-w[j]
     
     If the input has more than 1 dimension, the first is assumed to be the 
     one to expand
     
     If tri is True, the lower triangular part of the matrix is set to 0
+    (this is really only useful if w is None)
     """
+    if w is None:
+        w = v
+    
     shape1 = list(v.shape)
     shape1.insert(1,1)
-    shape2 = list(v.shape)
+    shape2 = list(w.shape)
     shape2.insert(0,1)
     
-    A = v.reshape(shape1)-v.reshape(shape2)
+    A = v.reshape(shape1)-w.reshape(shape2)
+    
     if tri:
         return np.triu(A)
     else:
