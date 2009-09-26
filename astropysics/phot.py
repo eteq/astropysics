@@ -2115,6 +2115,13 @@ class ModelPhotometry(object):
         self.totalflux = 10**((val-self.magzpt)/-2.5)
     totalmag = property(_getTotalmag,_setTotalmag,doc=None)
     
+    def getHalfLightRadius(self,**kwargs):
+        """
+        computes the radius in which half the flux is encircled.  kwargs
+        are passed into `FunctionModel2DScalar.getFluxRadius`
+        """
+        return self.model.getFluxRadius(0.5,True,**kwargs)
+    
     def simulate(self,pixels,scale=1,background=0,noise=None,psf=None,sampling=None):
         """
         simulate how this model would appear on an image. 
