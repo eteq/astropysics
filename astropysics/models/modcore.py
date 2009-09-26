@@ -1836,7 +1836,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         finally:
             self.incoordsys = oldcoordsys
             
-    def getFluxSize(self,val=0.5,frac=True,mode='radial',cen=(0,0),**kwargs):
+    def getFluxSize(self,val=0.5,frac=True,mode='radial',cen=(0,0),v0=1,
+                    minfunc='fmin',intkwargs=None,**kwargs):
         """
         Compute the radius/area enclosing a specified amount of flux.
         
@@ -1855,48 +1856,69 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         cen specifies the center to assume.  Currently this must be (0,0) for
         radial profiles
         
-        kwargs are passed into scipy.optimize.fmin
+        v0 is the initial guess at which to start (for methods that require it)
+        
+        minfunc is the name of a function in scipy.optimize that should 
+        do the minimizing
+        
+        intkwargs can be a dict that is passed as kwargs into the integrate
+        method.
+        
+        kwargs are passed into the minimization function
         """
-        from scipy.optimize import fmin
+        import scipy.optimize
+        
+        fmin = getattr(scipy.optimize,minfunc)
+        
+        if intkwargs is None:
+            intkwargs = {}
         
         if mode == 'radial':
             if cen != (0,0):
                 raise NotImplementedError('radial profiles must be centered on (0,0)')
             if frac:
-                total = self.integrateCircular(np.inf)
-                val *= total
-                print 'tot',total,val
+                total = self.integrateCircular(np.inf,**intkwargs)
+                val = val * total
             def f(r):
-                intres = self.integrateCircular(r)-val
+                intres = self.integrateCircular(r,**intkwargs)-val
                 return intres*intres
-            v0 = (1,)
+            
+            if np.isscalar(v0):
+                v0 = (v0,)
         elif mode == 'square':
             x0,y0 = cen
             if frac:
-                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf)
-                val *= total
+                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf,**intkwargs)
+                val = val * total
             def f(l):
-                intres = self.integrateCartesian(x0-l,x0+l,x0-l,x0+l)-val
+                intres = self.integrateCartesian(x0-l,x0+l,x0-l,x0+l,**intkwargs)-val
                 return intres*intres
-            v0 = (1,)
+            
+            if np.isscalar(v0):
+                v0 = (v0,)
         elif mode == 'rectangular':
             x0,y0 = cen
             if frac:
-                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf)
-                val *= total
+                total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf,**intkwargs)
+                val = val * total
             def f(ls):
                 lx,ly = ls
-                intres = self.integrateCartesian(x0-lx,x0+lx,y0-ly,y0+ly)-val
+                intres = self.integrateCartesian(x0-lx,x0+lx,y0-ly,y0+ly,**intkwargs)-val
                 return intres*intres
-            v0 = (1,1)
+            
+            if np.isscalar(v0):
+                v0 = (v0,v0)
         else:
             raise ValueError('unrecognized mode')
                 
-        res = fmin(f,v0,full_output=1,**kwargs)
+        if minfunc!='brent':
+            res = fmin(f,v0,full_output=1,**kwargs)
+        else:
+            res = fmin(f,full_output=1,**kwargs)
         self.lastfluxsize = res
         val = res[0]
         
-        return val[0] if val.size == 1 else tuple(val)
+        return val.ravel()[0] if val.size == 1 else tuple(val)
     
     def plot(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',
                   log=False,**kwargs):
