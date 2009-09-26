@@ -597,7 +597,25 @@ def moments(arr,ms,axes=None,offset=None,norm=True,std=False):
         if np.any(~axmatch):
             raise ValueError('axes %s do not match input array'%np.where(~axmatch))
         
+    newax = []
+    for i,ax in enumerate(axes):
+        shi = np.ones(len(shp))
+        shi[i] = len(ax)
+        newax.append(ax.reshape(shi))
+    axes = newax
     
+    if np.isscalar(ms):
+        res = np.array([np.sum(arr*ax**ms) for ax in axes])
+    else:
+        if len(ms) != len(shp):
+            raise ValueError('moment sequence does not match data')
+        res = np.sum(arr*np.prod([ax**m for m,ax in zip(ms,axes)]))
+    
+    if std:
+        if np.isscalar(ms):
+            res = res/np.array([np.std(ax)**ms for ax in axes])
+        else:
+            res = res/np.prod([np.std(ax)**m for m,ax in zip(ms,axes)])
     
     if norm:
         res/=np.sum(arr)
