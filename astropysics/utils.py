@@ -609,7 +609,10 @@ def moments(arr,ms,axes=None,offset=None,norm=True,std=False):
     else:
         if len(ms) != len(shp):
             raise ValueError('moment sequence does not match data')
-        res = np.sum(arr*np.prod([ax**m for m,ax in zip(ms,axes)]))
+        #bcast = np.broadcast_arrays(*[ax**m for m,ax in zip(ms,axes)])
+        #res = np.sum(arr*np.prod(bcast,axis=0))
+        axprod = reduce(np.multiply,[ax**m for m,ax in zip(ms,axes)],np.ones_like(arr))
+        res = np.sum(arr*axprod)
     
     if std:
         if np.isscalar(ms):
