@@ -611,7 +611,7 @@ def moments(arr,ms,axes=None,offset=None,norm=True,std=False):
             raise ValueError('moment sequence does not match data')
         #bcast = np.broadcast_arrays(*[ax**m for m,ax in zip(ms,axes)])
         #res = np.sum(arr*np.prod(bcast,axis=0))
-        axprod = reduce(np.multiply,[ax**m for m,ax in zip(ms,axes)],np.ones_like(arr))
+        axprod = reduce(np.multiply,[ax**m for m,ax in zip(ms,axes)])
         res = np.sum(arr*axprod)
     
     if std:
