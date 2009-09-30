@@ -1661,192 +1661,293 @@ def _CMDtest(nf=100,nd=100,xA=0.3,yA=0.2,plot=False):
     return x,y,dx,dy,cmda
 
 
-
-class AperturePhotometry(object):
+class PhotometryBase(object):
     """
-    This class generates radial surface brightness profiles from
-    various sources and provides plotting and fitting of those 
-    profiles   
+    A base class for objects that perform photometric measurements from
+    an image.  
     
-    specifying a Band results in use of that band's zero point
+    Subclasses should:
     
-    apertures can be a positive number to specify a fixed number of
-    apertures, a negative number specifying the spacing between
-    apertures in the specified units, or a sequence for fixed 
-    aperture sizes in the specified units
-    #TODO:TEST!
+    * override `_compute` to take an image and perform the computation
+      steps necessary to generate the parameters
+    * pass any outputs through `_fluxToMag` to do flux>mag conversion
     
-    type can be 'circular' or 'elliptical'
+    all outputs will be in magnitudes with the zeropoint set by the
+    `zeropoint` attribute if `usemags` is True, otherwise they will
+    be 
     """
-    def __init__(self,band = None,units='arcsec',apertures=10,usemags=True,type='circular'):
-        self.type = type
-        self.usemags = usemags #do this right
-        self.apertures = apertures
+    __metaclass__ = ABCMeta
+    
+    image = None
+    psf = None
+    loc = None
+    _band = None
+    _zpt = None
+    
+    @abstractmethod
+    def _compute(self,image,loc,psf):
+        """
+        This method should be overridden in the base class to perform
+        the photometric measurement given an image, a psf (may be None) 
+        and a location (may be None).  Should set:
         
-        self.band = band
-        self.units = units
-        raise NotImplementedError('not usable yet')
+        * `self._totalflux` - total flux
         
+        whatever it returns will be returned from `computePhotometry`
+        """
+        raise NotImplementedError
+    
+    def computePhotometry(self,**kwargs):
+        """
+        Performs the primary computationally-intensive phase of the 
+        photometric measurement.  
         
-    def _getUnit(self):
-        return self._sunit
-    def _setUnit(self,unit):
-        if unit == 'arcsec':
-            self._sunit = 'arcsec'
-            self._unitconv = 1
-        elif unit == 'radians' or unit == 'sterradians' or unit == 'sr':
-            self._sunit = 'radians'
-            self._unitconv = 60*60*360/2/pi
-        elif 'deg' in unit:
-            self._sunit = 'degrees'
-            self._unitconv = 60*60
+        kwargs will be set as attributes on this object
+        """
+        for k,v in kwargs.iteritems():
+            setattr(self,k,v)
+        
+        if self.image is None:
+            raise ValueError('no image provided for photometry')
+        
+        return self._compute(image=self.image,loc=self.loc,psf=self.psf)
+    
+    def _fluxToMag(self,flux):
+        """
+        internally used to convert fluxes into the appropriate output form
+        """
+        return _flux_to_mag(flux) + self.zeropoint
+    
+    def _magToFlux(self,mag):
+        return _mag_to_flux(mag - self.zeropoint)
+        
+    
+    def _getZeropoint(self):
+        if self._zpt is None:
+            if hasattr(self.image,'zeropoint'):
+                return self.image.zeropoint
+            else:
+                return 0
         else:
-            raise ValueError('unrecognized unit')
-    units = property(_getUnit,_setUnit)
+            return self._zpt
+    def _setZeropoint(self,val):
+        self._zpt = val
+    zeropoint = property(_getZeropoint,_setZeropoint,doc='If set to None, zeropoint comes from image')
     
     def _getBand(self):
+        if self._band is None and hasattr(self.image,'band'):
+            return self.image.band
         return self._band
-    def _setBand(self,band):
-        if isinstance(band,basestring):
-            global bands
-            self._band = bands[band]
-        elif isinstance(band,Band):
-            self._band = band
-        elif band is None:
-            self._band = None
-        else:
-            raise ValueError("input band was not a Band or registered band name")
-    band = property(_getBand,_setBand)
+    def _setBand(self,val):
+        self._band = val
+    band = property(_getBand,_setBand,doc=None)
+    
+    @property
+    def totalflux(self):
+        return self._totalflux
+    
+    @property
+    def totalmag(self):
+        return self._magToFlux(self._totalflux)
+    
+    
+class PointSpreadFunction(object):
+    """
+    Represents a Point Spread Function (PSF) for an image.  
+    
+    The default ...
+    """
+    def __init__(self,im):
+        im = np.array(im)
+        if len(im.shape) != 2:
+            raise ValueError('input PSF is not a 2-d image')
+        self._kernel = im
+    
+#class AperturePhotometry(object):
+#    """
+#    This class generates radial surface brightness profiles from
+#    various sources and provides plotting and fitting of those 
+#    profiles   
+    
+#    specifying a Band results in use of that band's zero point
+    
+#    apertures can be a positive number to specify a fixed number of
+#    apertures, a negative number specifying the spacing between
+#    apertures in the specified units, or a sequence for fixed 
+#    aperture sizes in the specified units
+#    #TODO:TEST!
+    
+#    type can be 'circular' or 'elliptical'
+#    """
+#    def __init__(self,band = None,units='arcsec',apertures=10,usemags=True,type='circular'):
+#        self.type = type
+#        self.usemags = usemags #do this right
+#        self.apertures = apertures
         
-    def _magorfluxToFlux(self,magorflux):
-        if self.usemags:
-            zptf = 0 if (self._band is None) else self.band.zptflux
-            flux = zptf*_mag_to_flux(magorflux)
-        else:
-            flux = magorflux
-        return flux 
+#        self.band = band
+#        self.units = units
+#        raise NotImplementedError('not usable yet')
+        
+        
+#    def _getUnit(self):
+#        return self._sunit
+#    def _setUnit(self,unit):
+#        if unit == 'arcsec':
+#            self._sunit = 'arcsec'
+#            self._unitconv = 1
+#        elif unit == 'radians' or unit == 'sterradians' or unit == 'sr':
+#            self._sunit = 'radians'
+#            self._unitconv = 60*60*360/2/pi
+#        elif 'deg' in unit:
+#            self._sunit = 'degrees'
+#            self._unitconv = 60*60
+#        else:
+#            raise ValueError('unrecognized unit')
+#    units = property(_getUnit,_setUnit)
     
-    def _outFluxConv(self,flux):
-        """
-        convert flux back into mags if necessary and set zero-points appropriately
-        """
-        if self.usemags:
-            zptf = 0 if (self._band is None) else self.band.zptflux
-            out = _flux_to_mag(flux/zptf)
-        else:
-            out = flux
-        return out
+#    def _getBand(self):
+#        return self._band
+#    def _setBand(self,band):
+#        if isinstance(band,basestring):
+#            global bands
+#            self._band = bands[band]
+#        elif isinstance(band,Band):
+#            self._band = band
+#        elif band is None:
+#            self._band = None
+#        else:
+#            raise ValueError("input band was not a Band or registered band name")
+#    band = property(_getBand,_setBand)
+        
+#    def _magorfluxToFlux(self,magorflux):
+#        if self.usemags:
+#            zptf = 0 if (self._band is None) else self.band.zptflux
+#            flux = zptf*_mag_to_flux(magorflux)
+#        else:
+#            flux = magorflux
+#        return flux 
     
-    def _fitPhot(self,x,y,flux,cen,aps=''):
-        """
-        input x,y,cen should be in un-converted units
-        """        
-        if self.type == 'circular':
+#    def _outFluxConv(self,flux):
+#        """
+#        convert flux back into mags if necessary and set zero-points appropriately
+#        """
+#        if self.usemags:
+#            zptf = 0 if (self._band is None) else self.band.zptflux
+#            out = _flux_to_mag(flux/zptf)
+#        else:
+#            out = flux
+#        return out
+    
+#    def _fitPhot(self,x,y,flux,cen,aps=''):
+#        """
+#        input x,y,cen should be in un-converted units
+#        """        
+#        if self.type == 'circular':
                 
-            r = np.sum((np.array((x,y),copy=False).T-cen)**2,axis=1)**0.5
+#            r = np.sum((np.array((x,y),copy=False).T-cen)**2,axis=1)**0.5
             
-            if np.isscalar(self.apertures):
-                if self.apertures<0:
-                    rap = np.arange(0,np.max(r),self.apertures)+self.apertures
-                else:
-                    rap = np.linspace(0,np.max(r),self.apertures+1)[1:]
-            else:    
-                rap = np.array(self.apertures)
+#            if np.isscalar(self.apertures):
+#                if self.apertures<0:
+#                    rap = np.arange(0,np.max(r),self.apertures)+self.apertures
+#                else:
+#                    rap = np.linspace(0,np.max(r),self.apertures+1)[1:]
+#            else:    
+#                rap = np.array(self.apertures)
                 
-            r,rap = self._unitconv*r,self._unitconv*rap
+#            r,rap = self._unitconv*r,self._unitconv*rap
             
-            apmask = r.reshape((1,r.size)) <= rap.reshape((rap.size,1)) #new shape (rap.size,r.size)
-            fluxap = np.sum(apmask*flux,axis=1)
-            fluxann = fluxap-np.roll(fluxap,1)
-            fluxann[0] = fluxap[0] 
-            A = pi*rap*rap
-            A = A - np.roll(A,1)
-            A[0] = pi*rap[0]**2
-            sbap = fluxann/A
-            #TODO:better/correct SB?
+#            apmask = r.reshape((1,r.size)) <= rap.reshape((rap.size,1)) #new shape (rap.size,r.size)
+#            fluxap = np.sum(apmask*flux,axis=1)
+#            fluxann = fluxap-np.roll(fluxap,1)
+#            fluxann[0] = fluxap[0] 
+#            A = pi*rap*rap
+#            A = A - np.roll(A,1)
+#            A[0] = pi*rap[0]**2
+#            sbap = fluxann/A
+#            #TODO:better/correct SB?
             
-    #        valid = sbap > 0
-    #        self.enclosed = self._outFluxConv(fluxap[valid])
-    #        self.mu = self._outFluxConv(sbap[valid])
-    #        self.rap = rap   [valid]
+#    #        valid = sbap > 0
+#    #        self.enclosed = self._outFluxConv(fluxap[valid])
+#    #        self.mu = self._outFluxConv(sbap[valid])
+#    #        self.rap = rap   [valid]
 
-            highest = np.min(np.where(np.concatenate((sbap,(0,)))<=0))
-            self.enclosed = self._outFluxConv(fluxap[:highest])
-            self.mu = self._outFluxConv(sbap[:highest])
-            self.rap = rap[:highest]/self._unitconv
-        else:
-            raise NotImplementedError('elliptical fitting not supported yet')
+#            highest = np.min(np.where(np.concatenate((sbap,(0,)))<=0))
+#            self.enclosed = self._outFluxConv(fluxap[:highest])
+#            self.mu = self._outFluxConv(sbap[:highest])
+#            self.rap = rap[:highest]/self._unitconv
+#        else:
+#            raise NotImplementedError('elliptical fitting not supported yet')
         
-    def pointSourcePhotometry(self,x,y,magorflux,cen='weighted'):
-        """
-        x,y,and magorflux are arrays of matching shape 
+#    def pointSourcePhotometry(self,x,y,magorflux,cen='weighted'):
+#        """
+#        x,y,and magorflux are arrays of matching shape 
         
-        cen is 'centroid' to use the raw centroid, 'weighted' to weight the
-        centroid by the flux, or a 2-sequence to manually assign a center
-        """
-        x = np.array(x,copy=False)
-        y = np.array(x,copy=False)
-        flux = self._magorfluxToFlux(np.array(magorflux,copy=False))
+#        cen is 'centroid' to use the raw centroid, 'weighted' to weight the
+#        centroid by the flux, or a 2-sequence to manually assign a center
+#        """
+#        x = np.array(x,copy=False)
+#        y = np.array(x,copy=False)
+#        flux = self._magorfluxToFlux(np.array(magorflux,copy=False))
         
-        if x.shape != y.shape != flux.shape:
-            raise ValueError("shapes don't match!")
+#        if x.shape != y.shape != flux.shape:
+#            raise ValueError("shapes don't match!")
         
-        if isinstance(cen,basestring):
-            if cen == 'centroid':
-                cen = np.array((np.average(x),np.average(y)))
-            elif cen == 'weighted':
-                cen = np.array((np.average(x,weights=flux),np.average(y,weights=flux)))
-            else:
-                raise ValueError('unrecognized cen string')
-        else:
-            cen = np.array(cen,copy=False)
-            if cen.shape != (2,):
-                raise ValueError('cen not a 2-sequence')
+#        if isinstance(cen,basestring):
+#            if cen == 'centroid':
+#                cen = np.array((np.average(x),np.average(y)))
+#            elif cen == 'weighted':
+#                cen = np.array((np.average(x,weights=flux),np.average(y,weights=flux)))
+#            else:
+#                raise ValueError('unrecognized cen string')
+#        else:
+#            cen = np.array(cen,copy=False)
+#            if cen.shape != (2,):
+#                raise ValueError('cen not a 2-sequence')
         
-        return self._fitPhot(x,y,flux,cen)
+#        return self._fitPhot(x,y,flux,cen)
     
-    def imagePhotometry(self,input,platescale,cen='weighted'):
-        """
-        input must be a 2D array or a CCD
+#    def imagePhotometry(self,input,platescale,cen='weighted'):
+#        """
+#        input must be a 2D array or a CCD
         
-        platescale is linear units as specified by the units property per pixel
-        """
-        from .ccd import CCDImage
+#        platescale is linear units as specified by the units property per pixel
+#        """
+#        from .ccd import CCDImage
         
-        if isinstance(input,CCDImage):
-            raise NotImplementedError
+#        if isinstance(input,CCDImage):
+#            raise NotImplementedError
         
-        magorflux = np.array(input,copy=True)
-        if len(magorflux.shape) != 2:
-            raise ValueError('input not 2D')
-        flux = self._magorfluxToFlux(magorflux)
+#        magorflux = np.array(input,copy=True)
+#        if len(magorflux.shape) != 2:
+#            raise ValueError('input not 2D')
+#        flux = self._magorfluxToFlux(magorflux)
         
-        x,y = np.meshgrid(np.arange(flux.shape[0]),np.arange(flux.shape[1]))
+#        x,y = np.meshgrid(np.arange(flux.shape[0]),np.arange(flux.shape[1]))
         
-        return self._fitPhot(x.T+1,y.T+1,flux,cen)
+#        return self._fitPhot(x.T+1,y.T+1,flux,cen)
     
-    def plot(self,fmt='o-',logx=False,**kwargs):
-        """
-        plot the surface brightness profile (must be generated)
-        using matplotlib
+#    def plot(self,fmt='o-',logx=False,**kwargs):
+#        """
+#        plot the surface brightness profile (must be generated)
+#        using matplotlib
         
-        kwargs go into matplotlib.plot
-        """
+#        kwargs go into matplotlib.plot
+#        """
         
-        from matplotlib import pyplot as plt
-        if logx:
-            plt.semilogx()
-        if 'fmt':
+#        from matplotlib import pyplot as plt
+#        if logx:
+#            plt.semilogx()
+#        if 'fmt':
 
-            plt.plot(self.rap,self.mu,fmt,**kwargs)
+#            plt.plot(self.rap,self.mu,fmt,**kwargs)
         
-        plt.ylim(*reversed(plt.ylim()))
+#        plt.ylim(*reversed(plt.ylim()))
         
-        plt.xlabel('$r \\, [{\\rm arcsec}]$')
-        if self.band is None:
-            plt.ylabel('$\\mu$')
-        else:
-            plt.ylabel('$\\mu_{%s}$'%self.band.name)
+#        plt.xlabel('$r \\, [{\\rm arcsec}]$')
+#        if self.band is None:
+#            plt.ylabel('$\\mu$')
+#        else:
+#            plt.ylabel('$\\mu_{%s}$'%self.band.name)
             
 class IsophotalEllipse(object):
     """

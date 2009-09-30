@@ -86,6 +86,7 @@ class CCDImage(object):
     
     * zeropoint
     * pixelscale
+    * band
     
     Note that the coordinate system in python is 0-based - the first pixel
     is (0,0), NOT (1,1)
@@ -96,6 +97,7 @@ class CCDImage(object):
         #informational property attributes
         self._pixscale = None
         self._zpt = None
+        self.band = None
         
         #internal variables
         self.__examcid = None
