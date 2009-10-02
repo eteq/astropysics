@@ -29,19 +29,34 @@ from .utils import PipelineElement
 
 
 class NoiseModel(object):
+    """
+    Abstract base class for noise models.  subclasses should implement
+    the `_dataPlusNoise` method, and optionally, `var` (variance)
+    
+    the `floor` and `ceiling` attributes (if not None) set the 
+    lowest/highest values - any time noise results in a value smaller/larger 
+    than the value, it is set to this value
+    """
     __metaclass__ = ABCMeta
     
     @abstractmethod
     def _dataPlusNoise(self,data):
         raise NotImplementedError
     
+    floor = None
+    ceiling = None
     def __call__(self,data):
         """
         returns an array of the data+noise of the same shape as the input data
         in many cases this will generate random noise (i.e. calling twice on
         the same input will give different outputs)
         """
-        return self._dataPlusNoise(data)
+        dn = self._dataPlusNoise(data)
+        if self.ceiling is not None:
+            dn[dn>self.ceiling] = self.ceiling
+        if self.floor is not None:
+            dn[dn<self.floor] = self.floor
+        return dn
     
     def noise(self,data):
         """
@@ -50,7 +65,7 @@ class NoiseModel(object):
         return self(data)-data
     
     nvar = 100
-    def var(self,data)
+    def var(self,data):
         """
         returns the variance of this noise model for each
         point in the input data
@@ -71,12 +86,18 @@ class PoissonNoise(NoiseModel):
     def _dataPlusNoise(self,data):
         return np.random.poisson(data)
     
+    def var(self,data):
+        return data
+    
 class GaussianNoise(NoiseModel):
     def __init__(self,sigma):
         self.sigma = sigma
     
     def _dataPlusNoise(self,data):
-        return np.random.normal(data,self.sigma)
+        return np.random.normal(data,self.std(data))
+    
+    def var(self,data):
+        return np.ones_like(data)*self.sigma**2
     
 class UniformNoise(NoiseModel):
     def __init__(self,lower,upper,frac=False):
@@ -92,17 +113,16 @@ class UniformNoise(NoiseModel):
             lower,upper = self.lower,self.upper
         return data + np.random.uniform(lower,upper)
     
+    def var(self,data):
+        return np.ones_like(data)*(self.upper-self.lower)**2/12
+    
 class CCDNoise(NoiseModel):
     """
-    Noise model for a CCD with terms for a gain factor, read noise,
-    and sensitivity noise (e.g. noise proportional to the data)
-    
-    the `noisetype` can be 'normal' or 'poisson', and it will set the
-    actual distribution to use to generate the noise given the assumed
-    variance.  It can also be a function noisetype(data,var) that 
-    should return the new model_data.
+    Noise model for a CCD with a poissonian term for electrons/photons
+    and a gaussian term for read noise (constant noise), sensitivity 
+    noise (e.g. noise proportional to the data), and uniform noise
     """
-    def __init__(self,gain=1,readnoise=0,snoise=0,noisetype='poisson'):
+    def __init__(self,gain=1,readnoise=0,snoise=0,floor=None,ceiling=None):
         """
         gain is in e-/ADU
         
@@ -114,28 +134,26 @@ class CCDNoise(NoiseModel):
         self.gain = gain
         self.readnoise = readnoise
         self.snoise = snoise
-        self.noisetype = noisetype
-    
-    def _dataPlusNoise(self,data):
-        var = self.var(data)
+        self.floor = floor
+        self.ceiling = ceiling
         
-        if self.noisetype == 'poisson':
-            np.randn.poisson(var)
-            raise NotImplementedError
-        elif self.noisetype == 'normal':
-            res = np.random.normal(data,var**0.5)
-        elif callable(self.noisetype):
-            res = self.noisetype(data,var)
-        else:
-            raise ValueError('unrecognized noisetype')
-            
-        return res
+    def _dataPlusNoise(self,data):
+        es = data/self.gain
+        gvar = self.var(data) - es
+        
+        #need to tweak gaussian noise to be 0 for invalid vars
+        m0 = gvar<=0
+        gvar[m0] = 1
+        gnoise = np.random.normal(0,gvar**0.5)
+        gnoise[m0] = 0 
+        
+        return np.random.poisson(es) + gnoise
         
     def var(self,data):
-        rnerr = readnoise/gain
-        senserr = snoise*data
+        rnerr = self.readnoise/self.gain
+        senserr = self.snoise*data
         
-        return rnerr*rnerr + adus/gain + serr*serr
+        return rnerr*rnerr + data/self.gain + senserr*senserr
     
 
 class CCDImage(object):
