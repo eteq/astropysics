@@ -26,42 +26,116 @@ except ImportError: #support for earlier versions
     
 from .utils import PipelineElement
 
-def noise_model(adus,readnoise=0,gain=1,snoise=0,output='err'):
-    """
-    adus is the signal in output units (ADUs), assumed to be bias subtracted
-    
-    gain is in e-/ADU
-    
-    readnoise is in e-
-    
-    snoise is the 'sensitivity' or 'scale' noise as a fraction of the adu signal
-    
-    output can be:
-    
-    * 'var':returns the variance of the adu signal
-    * 'err':returns the sqrt(var) of the adu signal
-    * 'SNR':returns adu/sqrt(var) of the adu signal
-    
-    """
-    #var = (rn/g)**2+ i/g + (s*i)**2
-    
-    rnerr = readnoise/gain
-    senserr = snoise*adus
-    
-    var = rnerr*rnerr + adus/gain + serr*serr
-    
-    if output == 'var':
-        return var
-    elif output == 'err':
-        return var**0.5
-    elif output == 'SNR':
-        return adus*var**-0.5
-    else:
-        raise ValueError('invalid output')
+
 
 class NoiseModel(object):
-    def __call__(self,val):
-        pass
+    __metaclass__ = ABCMeta
+    
+    @abstractmethod
+    def _dataPlusNoise(self,data):
+        raise NotImplementedError
+    
+    def __call__(self,data):
+        """
+        returns an array of the data+noise of the same shape as the input data
+        in many cases this will generate random noise (i.e. calling twice on
+        the same input will give different outputs)
+        """
+        return self._dataPlusNoise(data)
+    
+    def noise(self,data):
+        """
+        computes the noise for the given input data.
+        """
+        return self(data)-data
+    
+    nvar = 100
+    def var(self,data)
+        """
+        returns the variance of this noise model for each
+        point in the input data
+        
+        the `nvar` attribute is used to determine the number of 
+        calculations to use to estimate the variance.  
+        """
+        vals = [self(data) for i in range(self.nvar)]
+        return np.var(vals,axis=0)
+    
+    def std(self,data):
+        return self.var(data)**0.5
+    
+    def SNR(self,data):
+        return data/self.std(data)
+    
+class PoissonNoise(NoiseModel):
+    def _dataPlusNoise(self,data):
+        return np.random.poisson(data)
+    
+class GaussianNoise(NoiseModel):
+    def __init__(self,sigma):
+        self.sigma = sigma
+    
+    def _dataPlusNoise(self,data):
+        return np.random.normal(data,self.sigma)
+    
+class UniformNoise(NoiseModel):
+    def __init__(self,lower,upper,frac=False):
+        self.lower = lower
+        self.upper = upper
+        self.frac = frac
+    
+    def _dataPlusNoise(self,data):
+        if self.frac:
+            lower = data*self.lower
+            upper = data*self.upper
+        else:
+            lower,upper = self.lower,self.upper
+        return data + np.random.uniform(lower,upper)
+    
+class CCDNoise(NoiseModel):
+    """
+    Noise model for a CCD with terms for a gain factor, read noise,
+    and sensitivity noise (e.g. noise proportional to the data)
+    
+    the `noisetype` can be 'normal' or 'poisson', and it will set the
+    actual distribution to use to generate the noise given the assumed
+    variance.  It can also be a function noisetype(data,var) that 
+    should return the new model_data.
+    """
+    def __init__(self,gain=1,readnoise=0,snoise=0,noisetype='poisson'):
+        """
+        gain is in e-/ADU
+        
+        readnoise is in e-
+        
+        snoise is the 'sensitivity' or 'scale' noise as a fraction of
+        the adu signal
+        """
+        self.gain = gain
+        self.readnoise = readnoise
+        self.snoise = snoise
+        self.noisetype = noisetype
+    
+    def _dataPlusNoise(self,data):
+        var = self.var(data)
+        
+        if self.noisetype == 'poisson':
+            np.randn.poisson(var)
+            raise NotImplementedError
+        elif self.noisetype == 'normal':
+            res = np.random.normal(data,var**0.5)
+        elif callable(self.noisetype):
+            res = self.noisetype(data,var)
+        else:
+            raise ValueError('unrecognized noisetype')
+            
+        return res
+        
+    def var(self,data):
+        rnerr = readnoise/gain
+        senserr = snoise*data
+        
+        return rnerr*rnerr + adus/gain + serr*serr
     
 
 class CCDImage(object):
