@@ -334,8 +334,12 @@ class FunctionModel(ParametricModel):
         all will be free parameters if self.fixedpars is absent).  If None,
         all parameters will be free.
         
-        weights is an array of points that must match the output (or None for
-        equal weights)
+        weights can be:
+        
+        * None for equal weights
+        * an array of points that must match the output
+        * a function called as f(params) that returns an array of weights 
+          that must match the output
         
         contraction applies for all except the 'leastsq' method  (for which only
         'frac' is meaningful) and is the technique used to convert vectors to
@@ -379,19 +383,28 @@ class FunctionModel(ParametricModel):
         if fitfunc(x,*self.parvals).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
         if weights is None:
-            w = 1
+            wf = lambda v:1
+        elif callable(weights):
+            wf = weights
         else:
             w = np.array(weights,copy=False)
             if w.shape != y.shape:
                 raise ModelTypeError('weights shape does not match y')
             w = w.ravel()
+            wf = lambda v:w
         y = y.ravel()
         
         if method is None:
-            if '_customFit' in self.__class__.__dict__:
+            try:
+                self._customFit(x,y)
                 method = 'custom'
-            else:
+            except NotImplementedError:
                 method = 'leastsq'
+#        if method is None:
+#            if '_customFit' in self.__class__.__dict__:
+#                method = 'custom'
+#            else:
+#                method = 'leastsq'
             
             
         if fixedpars is 'auto':
@@ -437,9 +450,9 @@ class FunctionModel(ParametricModel):
                 
             if method == 'leastsq':
                 if 'frac' in contraction:
-                    g=lambda v,x,y:w*(1-f(x,v)/y)
+                    g=lambda v,x,y:wf(v)*(1-f(x,v)/y)
                 else:
-                    g=lambda v,x,y:w*(y-f(x,v))
+                    g=lambda v,x,y:wf(v)*(y-f(x,v))
                 res=opt.leastsq(g,v,(x,y),**kwargs)
             else:
                 if 'frac' in contraction:
@@ -469,13 +482,13 @@ class FunctionModel(ParametricModel):
                             diff=y-f(x,v)
                             return np.diff
                 if 'sum' in contraction:
-                    g=lambda v,x,y:np.sum(w*g1(v,x,y),axis=None)
+                    g=lambda v,x,y:np.sum(wf(v)*g1(v,x,y),axis=None)
                 elif 'mean' in contraction:
-                    g=lambda v,x,y:np.mean(w*g1(v,x,y),axis=None)
+                    g=lambda v,x,y:np.mean(wf(v)*g1(v,x,y),axis=None)
                 elif 'median' in contraction:
-                    g=lambda v,x,y:np.median(w*g1(v,x,y),axis=None)
+                    g=lambda v,x,y:np.median(wf(v)*g1(v,x,y),axis=None)
                 elif 'prod' in contraction:
-                    g=lambda v,x,y:np.prod(w*g1(v,x,y),axis=None)
+                    g=lambda v,x,y:np.prod(wf(v)*g1(v,x,y),axis=None)
                 else:
                     raise ValueError('no valid contraction method provided')
                     
@@ -971,7 +984,8 @@ class FunctionModel1D(FunctionModel):
     * inv(yval,*args,**kwargs): inverse of the model at the requested yvalue
     * _customFit(x,y,fixedpars=(),weights=None,**kwargs): implement a
       specialized fitting algorithm for this model that will be called
-      if fitData is called with method='custom'
+      if fitData is called with method='custom'.  If this raises a 
+      NotImplementedError, the standard fit will be used.
     
     The following attributes may be set for additional information:
     * xaxisname: name of the input axis for this model
