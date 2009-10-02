@@ -117,9 +117,18 @@ class CCDImage(object):
         self.setScaling(scaling) #implicitly calls activateRange and will NotImplementedError if not overridden
         if scaling is None:
             self.activateRange(None) #doesn't happen for the None scaling in setScaling as that should mean no change
-        
-    def __del__(self):
-        self.close()
+    def __getstate__(self):
+        #bound methods cannot be pickled directly
+        d = self.__dict__.copy()
+        d.pop('_scalefunc',None)
+        d.pop('_invscalefunc',None)
+        return d
+    
+    def __setstate__(self,val):
+        self.__dict__.update(val)
+        #re-apply bound methods that are unpickable
+        self._scalefunc = self._scaling.transform
+        self._invscalefunc = self._scaling.invtransform
     
     def activateRange(self,range):
         """
@@ -953,22 +962,80 @@ class FitsImage(CCDImage):
     """)      
     
 class ArrayImage(CCDImage):
-    def __init__(self,range=None,scaling=None):
+    def __init__(self,arr,range=None,scaling=None,ival=None):
+        """
+        arr can be an array or a 2-tuple (nx,ny).  
+        
+        ival sets the initial value - if it is None, the array is 
+        not initialized.  Otherwise, the array is set to the ival 
+        value.
+        
+        range and scaling set those properties (see `CCDImage`)
+        """
+        arr = np.array(arr,copy=True)
+        if len(arr.shape)==2:
+            self._array = arr.copy()
+        elif len(arr.shape)==1:
+            if arr.size != 2:
+                raise ValueError('image array dimensions must be 2D')
+            self._array = np.empty(arr)
+            
+        else:
+            raise TypeError('invalid arr input')
+        
+        if ival is not None:
+            self._array[:] = ival
+            
         super(ArrayImage,self).__init__(range,scaling)
         
     def _extractArray(self,range):
-        raise NotImplementedError
+        if range is None:
+            return self._array
+        else:
+            xl,xu,yl,yu = range
+            return self._array[xl:xu,yl:yu]
     
     def _applyArray(self,range,data):
-        raise NotImplementedError
+        if range is None:
+            self._array[:] = data
+        else:
+            xl,xu,yl,yu = range
+            self._array[xl:xu,yl:yu] = data
     
     def save(self,fn):
-        raise NotImplementedError
+        import shutil
+        
+        if fn.endswith('.arrim'):
+            fn = fn[:-6]
+        
+        arr = self._array
+        try:
+            #first pull array out of object so that it goes explicitly in the file as saved
+            self._array = None
+            #save in npz format
+            np.savez(fn,arr=arr,imobj=self)
+            #rename from .npz to .aspec format
+            if fn.endswith('.npz'):
+                fn = fn[:-4]
+            shutil.move(fn+'.npz',fn+'.arrim')
+        finally:
+            #now put array back in place no matter what
+            self._array = arr
     
     @staticmethod
     def load(fn):
-        raise NotImplementedError
-        return arrim
+        f = np.load(fn)
+        try:
+            arr = f['arr']
+            imobj = f['imobj'].item()
+        except KeyError:
+            raise KeyError('Could not find - not an arrim file?')
+        finally:
+            f.zip.close()
+        #put array back into image object
+        imobj._array = arr
+        
+        return imobj
     
     
 class ImageBiasSubtractor(PipelineElement):
