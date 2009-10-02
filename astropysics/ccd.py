@@ -58,7 +58,10 @@ def noise_model(adus,readnoise=0,gain=1,snoise=0,output='err'):
         return adus*var**-0.5
     else:
         raise ValueError('invalid output')
-    
+
+class NoiseModel(object):
+    def __call__(self,val):
+        pass
     
 
 class CCDImage(object):
@@ -948,6 +951,25 @@ class FitsImage(CCDImage):
     hdu = property(_getHdu,_setHdu,doc="""
     the hdu of the current fits file
     """)      
+    
+class ArrayImage(CCDImage):
+    def __init__(self,range=None,scaling=None):
+        super(ArrayImage,self).__init__(range,scaling)
+        
+    def _extractArray(self,range):
+        raise NotImplementedError
+    
+    def _applyArray(self,range,data):
+        raise NotImplementedError
+    
+    def save(self,fn):
+        raise NotImplementedError
+    
+    @staticmethod
+    def load(fn):
+        raise NotImplementedError
+        return arrim
+    
     
 class ImageBiasSubtractor(PipelineElement):
     """

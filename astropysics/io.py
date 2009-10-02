@@ -536,7 +536,7 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
     for i in reversed(fnrem):
         del fns[i]
         
-    return fns,specs
+    return dict(zip(fns,specs))
     
 def load_spylot_spectrum(s,bandi):
     from .spec import Spectrum
