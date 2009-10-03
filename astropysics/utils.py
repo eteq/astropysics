@@ -544,47 +544,31 @@ def estimate_background(arr,method='median'):
     
     return res
 
-#def centroid(val,axes=None,offset=None):
-#    """
-#    computes the centroid of an n-dimensional array
-    
-#    axes can either be a list of axis values for the array (must be
-#    same length as the number of dimensions) or None to report just the 
-#    pixel value
-    
-#    offset is the estimation mode of the background to subtract from 
-#    the input array - see `estimate_background` for options
-#    """
-#    if offset:
-#        val = val - estimate_background(val,offset)
-    
-#    shp = val.shape
-#    if axes is None:
-#        axes=[np.arange(s) for s in shp]
-#    if len(shp) != len(axes):
-#        raise ValueError("input dimensions don't match axes")
-    
-#    cens = []
-#    for i,(s,x) in enumerate(zip(shp,axes)):
-#        if s != len(x):
-#            raise ValueError("axis #%i doesn't match array size"%i)
-#        rng = range(len(shp))
-#        del rng[i]
-#        vsum = val
-#        for j in reversed(rng):
-#            vsum = val.sum(axis = j)
-#        cens.append(np.sum(x*vsum)/np.sum(vsum))
-    
-#    return tuple(cens)
-
-def moments(arr,ms,axes=None,offset=None,norm=True,std=False):
+def moments(arr,ms,axes=None,bgmethod=None,norm=True,std=False):
     """
-    Compute moments of the provided n-d array.
+    Compute moments of the provided n-d array arr.
     
-    TODO:describe
+    The desired order of moment is given by the ms argument, which can
+    be a scalar, or a sequence of length equal to the input's dimensions.
+    If scalar, a sequence of moments (size equal to the number of input 
+    dimensions)
+    
+    If axes are None, the output axes will be in 0-based pixels.  Otherwise,
+    this should be a seqence of arrays where each element is of the same 
+    length as the corresponding input array dimension.
+    
+    If bgmethod is not None, a background estimate will be subtracted before
+    the moments are computed - see `estimate_background` method keywork 
+    for useable values.
+    
+    if norm is True, the moment will be normalized - i.e.
+    sum(x^m*arr)/sum(arr) instead of just sum(x^m*arr)
+    
+    if std is True, the output will be standardized (mth moment divided 
+    by standard deviation to the mth power)
     """
-    if offset:
-        val = val - estimate_background(val,offset)
+    if bgmethod:
+        val = val - estimate_background(val,bgmethod)
     shp = arr.shape
     
     #setup/check axes

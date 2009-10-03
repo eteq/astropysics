@@ -1135,6 +1135,57 @@ class SpectralFeature(HasSpecUnits):
     
 #<------------------------Spectrum-related functions--------------------------->
 
+def air_to_vacuum(airwl,nouvconv=True):
+    """
+    Returns vacuum wavelength of the provided air wavelength array or scalar.
+    Good to ~ .0005 angstroms.
+
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+    
+    Input must be in angstroms.
+    
+    Adapted from idlutils airtovac.pro, based on the IAU standard 
+    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
+    """
+    airwl = np.array(airwl,copy=False)
+    
+    #wavenumber squared
+    sig2 = (1e4/airwl)**2
+    
+    convfact = 1. + 6.4328e-5 + 2.94981e-2/(146. - sig2) +  2.5540e-4/( 41. - sig2)
+    newwl = airwl.copy() 
+    if nouvconv:
+        convmask = newwl>=2000
+        newwl[convmask] *= convfact[convmask]
+    else:
+        newwl[:] *= convfact
+    return newwl
+
+def vacuum_to_air(vacwl,nouvconv=True):
+    """
+    Returns air wavelength of the provided vacuum wavelength array or scalar.
+    Good to ~ .0005 angstroms.
+    
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+    
+    Input must be in angstroms.
+    
+    Adapted from idlutils vactoair.pro.
+    """
+    vacwl = np.array(vacwl,copy=False)
+    
+    #wavenumber squared
+    wave2 = vacwl*vacwl
+    
+    convfact = 1.0 + 2.735182e-4 + 131.4182/wave2 + 2.76249e8/(wave2*wave2)
+    newwl = vacwl.copy()/convfact
+    if nouvconv:    
+        #revert back those for which air < 2000
+        noconvmask = newwl<2000
+        newwl[noconvmask] *= convfact[noconvmask] 
+    
+    return newwl
+
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """
     resample the spectra in the sequence specs so that they all have the same 
