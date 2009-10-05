@@ -1762,6 +1762,23 @@ class PointSpreadFunction(object):
         if len(im.shape) != 2:
             raise ValueError('input PSF is not a 2-d image')
         self._kernel = im
+        
+    def convolve(self,im,fft=False,**kwargs):
+        """
+        convolve this psf with the supplied image
+        """
+        
+    def model(self,locs,coordsys='cartesian'):
+        """
+        return the value of the PSF at the locations
+        specified in `locs` parameter
+        """
+        
+    def fitPSF(self,image,loc=None):
+        """
+        set the PSF parameters from the provided 2D image array 
+        (possibly centered on a location) 
+        """
     
 #class AperturePhotometry(object):
 #    """
