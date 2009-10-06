@@ -374,7 +374,10 @@ class FunctionModel(ParametricModel):
         see also:getMCMC
         """
         from scipy import optimize as opt
-        
+
+        x = np.array(x,copy=False)
+        y = np.array(y,copy=False)
+         
         if fitf:
             fitfunc = self.f
         else:
