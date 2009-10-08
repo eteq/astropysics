@@ -1081,12 +1081,19 @@ class SersicModel(FunctionModel1DAuto):
         self.Ae *= val/self.f(0,self.Ae,self.re,self.n)
     A0 = property(_getA0,_setA0,doc='value at r=0')
     
+    def getBn(self,usecache=True):
+        """
+        Calls `bn` function on the current sersic index.
+        """
+        return self.bn(self.n,usecache)
+    
     _bncache={}
     _bnpoly1=np.poly1d([-2194697/30690717750,131/1148175,46/25515,4/405,-1/3])
     _bnpoly2=np.poly1d([13.43,-19.67,10.95,-0.8902,0.01945])
-    def bn(self,n=None,usecache=True):
+    @staticmethod
+    def bn(n,usecache=True):
         """
-        bn is used to get the appropriate half-light radius.  If n is 
+        bn is used to get the half-light radius.  If n is 
         None, the current n parameter will be used
         
         the form is a fit from MacArthur, Courteau, and Holtzman 2003 
@@ -1095,8 +1102,6 @@ class SersicModel(FunctionModel1DAuto):
         if usecache is True, the cache will be searched, if False it will
         be saved but not used, if None, ignored
         """
-        if n is None:
-            n = self.n
         n = float(n) #sometimes 0d array gets passed in
         
         if n  in SersicModel._bncache and usecache:
