@@ -1821,6 +1821,10 @@ class GaussianPointSpreadFunction(PointSpreadFunction):
         raise NotImplementedError
     
     def fit(self,arr2d,loc=None):
+        """
+        fits the image using a moment analysis - returns
+        (cenx,ceny),[sigx,sigy]
+        """
         from .utils import moments
         x0,y0 = moments(arr2d,1)
         sx,sy = moments(arr2d,2)
