@@ -1753,32 +1753,80 @@ class PhotometryBase(object):
     
 class PointSpreadFunction(object):
     """
-    Represents a Point Spread Function (PSF) for an image.  
+    Represents a Point Spread Function (PSF) for an image. 
     
-    The default ...
+    Coordinate system is always in pixel coordinates 
     """
-    def __init__(self,im):
-        im = np.array(im)
-        if len(im.shape) != 2:
-            raise ValueError('input PSF is not a 2-d image')
-        self._kernel = im
+    __metaclass__ = ABCMeta
         
-    def convolve(self,im,fft=False,**kwargs):
+    @abstractmethod
+    def convolve(self,arr2d,size=None,fft=False):
         """
-        convolve this psf with the supplied image
+        Convolve this psf with the supplied 2D Array
         """
+        raise NotImplementedError
         
-    def model(self,locs,coordsys='cartesian'):
-        """
-        return the value of the PSF at the locations
-        specified in `locs` parameter
-        """
-        
-    def fitPSF(self,image,loc=None):
+    @abstractmethod
+    def fit(self,arr2d,loc=None):
         """
         set the PSF parameters from the provided 2D image array 
         (possibly centered on a location) 
         """
+        raise NotImplementedError
+    
+class KernelPointSpreadFunction(PointSpreadFunction):
+    def __init__(self,kernelarr2d):
+        self._kernel = np.array(kernelarr2d)
+        if len(self._kernel.shape) != 2:
+            raise ValueError('Supplied kernel is not 2D')
+    
+    def convolve(self,arr2d,size=None,fft=False):
+        raise NotImplementedError
+    
+    def fit(self,arr2d,loc=None):
+        raise NotImplementedError
+    
+class ModelPointSpreadFunction(PointSpreadFunction):
+    def __init__(self,model):
+        self.model = model
+        
+    def _getModel(self):
+        return self._mod
+    def _setModel(self,val):
+        from .model import get_model_instance,FunctionModel2DScalar
+        self._mod = get_model_instance(val,FunctionModel2DScalar)
+        self._mod.incoordsys = 'polar'
+    model = property(_getModel,_setModel,doc=None)
+    
+    
+    def convolve(self,arr2d,size=None,fft=False):
+        raise NotImplementedError
+    
+    def fit(self,arr2d,loc=None):
+        raise NotImplementedError
+    
+class GaussianPointSpreadFunction(PointSpreadFunction):
+    def __init__(self,sigma=1):
+        self.sigma = sigma
+    
+    __fwhmtosig = np.sqrt(8*np.log(2))    
+    def _getFwhm(self):
+        return self.__fwhmtosig*self.sigma
+    def _setFwhm(self,val):
+        self.sigma = val/self.__fwhmtosig
+    fwhm = property(_getFwhm,_setFwhm,doc=None)
+    
+    
+    def convolve(self,arr2d,size=None,fft=False):
+        raise NotImplementedError
+    
+    def fit(self,arr2d,loc=None):
+        from .utils import moments
+        x0,y0 = moments(arr2d,1)
+        sx,sy = moments(arr2d,2)
+        self.sigma = (sx+sy)/2
+        
+        return (x0,y0),[sx,sy]
     
 #class AperturePhotometry(object):
 #    """
