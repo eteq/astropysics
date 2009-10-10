@@ -10,7 +10,7 @@ TODO: modules to also dynamically update via a web server.
 """
 
 from __future__ import division,with_statement
-from math.constants import pi
+from .constants import pi
 import numpy as np
 
 try:
