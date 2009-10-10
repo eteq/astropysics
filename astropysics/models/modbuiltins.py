@@ -41,11 +41,25 @@ class ConstantModel(FunctionModel1DAuto):
 class LinearModel(FunctionModel1DAuto):
     """
     y=mx+b linear fit
+    
+    A number of different fitting options are available - the `fittype`
+    attribute determines which type should be used on calls to
+    fitData.  It can be:
+    
+    * 'basic': analytically compute the parameters from simple least-squares
+       form.  If `weights` are provided they will be interpreted as
+       1/yerr or sqrt((x/xerr)^2+(y/yerr)^2) if a 2-tuple
+    * 'yerr': same as weighted version of basic, but `weights`
+      are interpreted as y-error instead of inverse
+    * 'fiterrxy': allows errors in both x and y using the chi^2
+      from the fitexy algorithm from numerical recipes.  `weights`
+      must be a 2-tuple (xerr,yerr)
     """
     
     def f(self,x,m=1,b=0):
         return m*x+b
     
+    fittype = 'basic'
     def _customFit(self,x,y,fixedpars=(),weights=None,**kwargs):
         """
         does least-squares fit on the x,y data
@@ -53,26 +67,48 @@ class LinearModel(FunctionModel1DAuto):
         fixint and fixslope can be used to specify the intercept or slope of the 
         fit or leave them free by having fixint or fixslope be False or None
         
-        lastfit stores ((m,b),dm,db,dy)
+        lastfit stores ((m,b),dm,db)
         """  
-        if weights is not None:
-            if fixedpars or len(kwargs)>0:
-                from warnings import warn
-                warn("customized exact linear fit not yet available for fixed pars")
-                kwargs=kwargs.copy()
-                kwargs['x']=x
-                kwargs['y']=y
-                kwargs['method']='leastsq'
-                kwargs['fixedpars']=fixedpars
-                kwargs['weights']=weights
-                return FunctionModel1D.fitData(self,**kwargs)
-            m,b,dm,db = self.weightedFit(x,y,1/weights,False)
-            dy = (y-m*x-b).std(ddof=1)
-            return (np.array((m,b)),dm,db,dy)
-        
-        fixslope = 'm' in fixedpars
-        fixint = 'b' in fixedpars
-        
+        if self.fittype == 'basic':
+            if weights is None:
+                (m,b),merr,berr,dy = self.fitBasic(x,y,'m' in fixedpars,'b' in fixedpars)
+            else:
+                if len(fixedpars)>0:
+                    raise ValueError('cannot fix parameters and do weighted fit')
+                weights = np.array(weights,copy=False)
+                if len(weights.shape) == 2:
+                    weights = ((x/weights[0])**2+(y/weights[1])**2)**0.5
+                m,b,merr,berr = self.fitWeighted(x,y,1/weights,**kwargs)
+        elif self.fittype == 'yerr':
+            weights = np.array(weights,copy=False)
+            if len(weights.shape) == 2:
+                weights = weights[1]
+            m,b,merr,berr = self.fitWeighted(x,y,weights,**kwargs)
+        elif self.fittype == 'fiterrxy':
+            if len(fixedpars)>0:
+                raise ValueError('cannot fix parameters and do fiterrxy fit')
+            if weights is None:
+                xerr = yerr = None
+            else:
+                xerr,yerr = weights
+            m,b = self.fitErrxy(x,y,xerr,yerr,**kwargs)
+            merr = berr = None
+        else:
+            raise ValueError('invalid fittype %s'%self.fittype)
+            
+        return ((m,b),merr,berr)
+    
+    def derivative(self,x,dx=1):
+        return np.ones_like(x)*m
+    
+    def integrate(self,lower,upper):
+        m,b = self.m,self.b
+        return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
+    
+    def fitBasic(self,x,y,fixslope=False,fixint=False):
+        """
+        Does the traditional fit based on simple least-squares
+        """
         N=len(x) 
         if not fixint and not fixslope:
             if len(y)!=N:
@@ -111,16 +147,25 @@ class LinearModel(FunctionModel1DAuto):
         else:
             raise ValueError("can't fix both slope and intercept")
         
-        return (np.array((m,b)),dm,db,dy)
+        return np.array((m,b)),dm,db,dy
+#        if weights is not None:
+#            if fixedpars or len(kwargs)>0:
+#                from warnings import warn
+#                warn("customized exact linear fit not yet available for fixed pars")
+#                kwargs=kwargs.copy()
+#                kwargs['x']=x
+#                kwargs['y']=y
+#                kwargs['method']='leastsq'
+#                kwargs['fixedpars']=fixedpars
+#                kwargs['weights']=weights
+#                return FunctionModel1D.fitData(self,**kwargs)
+#            m,b,dm,db = self.weightedFit(x,y,1/weights,False)
+#            dy = (y-m*x-b).std(ddof=1)
+#            return (np.array((m,b)),dm,db,dy)
+        
+        
     
-    def derivative(self,x,dx=1):
-        return np.ones_like(x)*m
-    
-    def integrate(self,lower,upper):
-        m,b = self.m,self.b
-        return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
-    
-    def weightedFit(self,x,y,sigmay=None,doplot=False):
+    def fitWeighted(self,x,y,sigmay=None,doplot=False):
         """
         does a linear weighted least squares fit and computes the coefficients 
         and errors
@@ -161,6 +206,38 @@ class LinearModel(FunctionModel1DAuto):
             legend(loc=0)
         
         return B,A,sigmaB,sigmaA
+    
+    def fitErrxy(self,x,y,xerr,yerr,**kwargs):
+        """
+        Uses the chi^2 statistic (ydata-ymodel)^2/(yerr^2+m^2*xerr^2)
+        to fit the data for errors in both x and y
+        
+        kwargs are passed into scipy.optimize.leastsq
+        
+        fitting results are saved to `lastfit`
+        """
+        from scipy.optimize import leastsq
+        if xerr is None and yerr is None:
+            def chi(v):
+                return y-self.f(x,*v)
+        elif xerr is None:
+            def chi(v):
+                wsqrt = xerr
+                return (y-self.f(x,*v))/wsqrt
+        elif yerr is None:
+            def chi(v):
+                wsqrt = yerr
+                return (y-self.f(x,*v))/wsqrt
+        else:
+            def chi(v):
+                wsqrt = (yerr**2+(v[0]**xerr)**2)**0.5
+                return (y-self.f(x,*v))/wsqrt
+        
+        kwargs.setdefault('full_output',1)
+        self.lastfit = leastsq(chi,(self.m,self.b),**kwargs)
+        self.fitteddata = (x,y)
+        
+        return self.lastfit[0]
     
     def pointSlope(self,m,x0,y0):
         """
