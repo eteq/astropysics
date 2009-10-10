@@ -76,6 +76,102 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
     return arr
 
 
+class FixedColumnParser:
+    """
+    Parses a data file composed of lines with a fixed set of columns
+    with the same number of bytes in each
+    
+    """
+    def __init__(self,skiprows=0,oneindexed=True,commentchars='#'):
+        self.cols = {}
+        self.skiprows = skiprows
+        self.commentchars = list(commentchars)
+        self.oneindexed = oneindexed
+        
+    def _overlapcheck(self,lower,upper,exclude=None):
+        for n,(l,u,f) in self.cols.iteritems():
+            if n != exclude and lower <= u and upper >= l:
+                raise ValueError('input range %i-%i overlaps on column %s'%(lower,upper,n))
+            
+        
+    
+    def addColumn(self,name,lower,upper,format=None):
+        """
+        lower and upper are the highest and lowest byte INCLUSIVE
+        """
+        if format is not None: #check that its a valid format specifier
+            format = np.dtype(format)
+        self._overlapcheck(lower,upper,name)
+        self.cols[name] = (lower,upper,format)
+        
+    def addColumnsFromFile(self,fn,linestart=None,comments='#',sep=None):
+        """
+        adds columns from a data file that has lines that can be
+        split into three or four columns in order name,lower,upper,format
+
+        linestart specifies the first 
+        """
+        with open(fn) as f:
+            for l in f:
+                ls = l.strip()
+                if not (comments is not None and ls.startswith(comments)):
+                    if linestart is None:
+                        linesplit = ls.split(sep) if sep else ls.split()
+                        linesplit[1] = int(linesplit[1])
+                        linesplit[2] = int(linesplit[2])
+                        self.addColumn(*linesplit)
+                    elif ls.startswith(linestart):
+                        lsr = ls.replace(linestart,'')
+                        linesplit = (lsr.split(sep) if sep else lsr.split())
+                        linesplit[1] = int(linesplit[1])
+                        linesplit[2] = int(linesplit[2])
+                        self.addColumn(*linesplit)
+                
+        
+    def delColumn(self,name):
+        del self.cols[name]
+        
+    def parseFile(self,fn):
+        lists = dict([(k,list()) for k in self.cols])
+        addi = -int(self.oneindexed)
+        
+        with open(fn) as f:
+            for i,row in enumerate(f):
+                rs = row.strip()
+                validrow = i >= self.skiprows and rs != '' and rs[0] not in self.commentchars
+                if validrow:
+                    for n,(l,u,f) in self.cols.iteritems():
+                        li,ui = l+addi,u+addi+1
+                        lists[n].append(row[li:ui])
+        
+        sorti = np.argsort([l for l,u,f in self.cols.values()])
+        sortnames = np.array(self.cols.keys())[sorti]
+        
+        alist = []
+        masks = []
+        for n in sortnames:
+            lst = [e if e.strip()!='' else None for e in lists[n]]
+            f = self.cols[n][2]
+            masks.append((n,np.array([l is not None and l is not '' for l in lst])))
+            
+            
+            if f is not None:
+                print 'converting field',n,'to type',f
+                if f.kind == 'i':
+                    arr = np.array([0 if l is None else l for l in lst])
+                else:
+                    arr = np.array(lst)
+                alist.append(arr.astype(f))
+            else:
+                alist.append(np.array(lst))
+        
+        recarr = np.rec.fromarrays(alist,names=','.join(sortnames))
+        
+        return recarr,dict(masks)
+                        
+                    
+
+
 #<------------------------VOTable classes-------------------------------------->
 class VOTable(object):
     """
@@ -391,58 +487,7 @@ class VOTable(object):
         return arr,mask
             
         
-#class VOTableElem(object):
-#    pass
 
-#class VOTable(VOTableElem):
-#    description=''
-#    infos=[]
-#    groups=[]
-#    params=[]
-#    resources=[]
-    
-#class Resource(VOTableElem):
-#    description=''
-#    infos=[]
-#    groups=[]
-#    params=[]
-#    resources=[]
-#    links=[]
-#    tables=[]
-    
-#class Table(VOTableElem):
-#    description=''
-#    infos=[]
-#    groups=[]
-#    params=[]
-#    links=[]
-#    fields=[]
-#    data=None
-    
-#class Field(VOTableElem):
-#    description=''
-#    values=None
-#    links=[]
-    
-#class Data(VOTableElem):
-#    pass
-
-#class Group(VOTableElem):
-#    description=''
-#    fieldrefs=[]
-#    params=[]
-#    paramrefs=[]
-#    groups=[]
-    
-#class Info(VOTableElem):
-#    description=''
-#    values=None
-#    links=[]
-
-#class Values(VOTableElem):
-#    min=None
-#    max=None
-#    options=[]
 
 #<--------------------------Spectrum loaders----------------------------------->
 
