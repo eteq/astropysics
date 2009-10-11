@@ -1760,35 +1760,61 @@ class PointSpreadFunction(object):
     __metaclass__ = ABCMeta
         
     @abstractmethod
-    def convolve(self,arr2d,size=None,fft=False):
+    def convolve(self,arr2d,background=0):
         """
-        Convolve this psf with the supplied 2D Array
+        Convolve this psf with the supplied 2D Array.
+        
+        background sets the value of the background to assume around the
+        edges. 
         """
         raise NotImplementedError
         
     @abstractmethod
-    def fit(self,arr2d,loc=None):
+    def fit(self,arr2d):
         """
         set the PSF parameters from the provided 2D image array 
-        (possibly centered on a location) 
         """
         raise NotImplementedError
     
 class KernelPointSpreadFunction(PointSpreadFunction):
     def __init__(self,kernelarr2d):
-        self._kernel = np.array(kernelarr2d)
-        if len(self._kernel.shape) != 2:
+        self.kernel = kernelarr2d
+        self.fftconvolve = False
+        self.convmode = 'constant'
+        
+    def _getKernel(self):
+        return self._kernel
+    def _setKernel(self,val):
+        kernel = np.array(val)
+        if len(self.kernel.shape) != 2:
             raise ValueError('Supplied kernel is not 2D')
+        self._kernel = kernel
+        self._Kft = None
+    kernel = property(_getKernel,_setKernel,doc=None)        
     
-    def convolve(self,arr2d,size=None,fft=False):
-        raise NotImplementedError
+    def convolve(self,arr2d,background=0):
+        if self.fftconvolve:
+            fft = np.fft.fftn
+            ifft = np.fft.ifftn
+            
+            if self._Kft is None:
+                self._Kft = K = fft(self._kernel)
+            else:
+                K = self._Kft
+            return np.fft.ifftshift(ifft(fft(arr2d)*K))
+        else:
+            from scipy.ndimage import convolve
+            return convolve(arr2d,self._kernel,mode=self.convmode,cval=background)
     
-    def fit(self,arr2d,loc=None):
-        raise NotImplementedError
+    def fit(self,arr2d):
+        self.kernel = arr2d
     
 class ModelPointSpreadFunction(PointSpreadFunction):
     def __init__(self,model):
         self.model = model
+        self.convsize = None
+        self.convsampling = None
+        self.convmode = 'constant'
         
     def _getModel(self):
         return self._mod
@@ -1799,15 +1825,33 @@ class ModelPointSpreadFunction(PointSpreadFunction):
     model = property(_getModel,_setModel,doc=None)
     
     
-    def convolve(self,arr2d,size=None,fft=False):
-        raise NotImplementedError
+    def convolve(self,arr2d,background=False):
+        from scipy.ndimage import convolve
+        if self.convsize is None:
+            nx,ny = arr2d.shape
+        else:
+            if np.isscalar(self.convsize):
+                nx = ny = self.convsize
+            else:
+                nx,ny = self.convsize
+            
+        k = self.model.pixelize(-nx/2,nx/2,-ny/2,ny/2,nx,ny,sampling=self.convsampling)
+        return convolve(arr2d,k,mode=self.convmode,cval=background)
     
-    def fit(self,arr2d,loc=None):
-        raise NotImplementedError
+    def fit(self,arr2d,**kwargs):
+        """
+        kwargs are passed into the model `fitData` method
+        """
+        nx,ny = arr2d.shape
+        x = np.arange(nx)-nx/2
+        y = np.arange(nx)-ny/2
+        
+        self.model.fitData([x,y],arr2d,**kwargs)
     
 class GaussianPointSpreadFunction(PointSpreadFunction):
     def __init__(self,sigma=1):
         self.sigma = sigma
+        self.convmode = 'constant'
     
     __fwhmtosig = np.sqrt(8*np.log(2))    
     def _getFwhm(self):
@@ -1817,10 +1861,11 @@ class GaussianPointSpreadFunction(PointSpreadFunction):
     fwhm = property(_getFwhm,_setFwhm,doc=None)
     
     
-    def convolve(self,arr2d,size=None,fft=False):
-        raise NotImplementedError
+    def convolve(self,arr2d,background=0):
+        from scipy.ndimage import gaussian_filter
+        return gaussian_filter(arr2d,self.sigma,mode=self.convmode,cval=background)
     
-    def fit(self,arr2d,loc=None):
+    def fit(self,arr2d):
         """
         fits the image using a moment analysis - returns
         (cenx,ceny),[sigx,sigy]
