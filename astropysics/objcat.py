@@ -520,9 +520,9 @@ class FieldNode(CatalogNode,Sequence):
         return FieldName.getFieldValueNodesAtNode(self,fieldname,value)
     
     @staticmethod
-    def extractFieldAtNode(node,fieldnames,traversal='postorder',missing='0',
-                           converter=None,sources=False,errors=False,
-                           asrec=False,includeself=True):
+    def extractFieldAtNode(node,fieldnames,traversal='postorder',filter=False,
+                           missing='0',converter=None,sources=False,
+                           errors=False,asrec=False,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
@@ -531,10 +531,10 @@ class FieldNode(CatalogNode,Sequence):
         fieldnames can be a single field name, a sequence of fieldnames,
         or a comma-seperated string of field names
         
-        traversal is of an argument like that for CatalogNode.visit
+        traversal and filter accept arguments like CatalogNode.visit
         
         missing determines the behavior in the event that a field is not 
-        present (or a non FieldNode is encounterd) it can be:
+        present (or a non FieldNode is encountered) it can be:
         *'exception': raise an exception if the field is missing
         *'skip': do not include this object in the final array
         *'0': put 0 in the array location - this also replaces Nones with 0
@@ -608,8 +608,8 @@ class FieldNode(CatalogNode,Sequence):
         lsts = []
         masks = []
         for fn in fieldnames:
-            lsts.append(node.visit(partial(visitfunc,fieldname=fn),traversal=traversal,includeself=includeself))
-            masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,includeself=includeself))
+            lsts.append(node.visit(partial(visitfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
+            masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
             
         if missing=='skip':
             lsts=[l[m] for l,m in zip(lsts,maks)]
@@ -637,7 +637,7 @@ class FieldNode(CatalogNode,Sequence):
                     return getattr(node,fieldname).currentobj.source
                 except (KeyError,IndexError,TypeError,AttributeError):
                     return None 
-            srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
+            srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
             if sources == 'name' or sources == 'names':
                 srcs = [[str(s)[7:] for s in f]  for f in srcs]
             srcs = np.array(srcs)[0]
@@ -649,7 +649,7 @@ class FieldNode(CatalogNode,Sequence):
                 except (KeyError,IndexError,TypeError,AttributeError),e:
                     return (0,0)
                 
-            errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,includeself=includeself) for fn in fieldnames]
+            errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
             
             errs = np.array(errs)[0]
             
@@ -805,20 +805,25 @@ class Field(MutableSequence):
     
     def _checkConvInVal(self,val,dosrccheck=True):
         """
-        auto-converts tuples to ObservedValues
+        auto-converts tuples to ObservedValues or ObservedErroredValues
+        taking the first element to be the source, and if the second
+        is a tuple, it will be passed into ObservedErroredValue init
         #TODO: auto-convert callables with necessary information to derivedvalues
         
         dosrccheck = True -> check if source is present
         dosrccheck = string/Source -> ensure that value matches specified 
         string/Source
-        dosrcchecj = False -> do nothing but convert
+        dosrccheck = False -> do nothing but convert
         """
         
-        if isinstance(val,tuple) and self.type is not tuple:
-            val = ObservedValue(*val)   
-        
-        if not (isinstance(val,FieldValue) or (hasattr(val,'source') and hasattr(val,'value'))):
-            raise TypeError('Input %s not FieldValue-compatible'%str(val))
+        if not isinstance(val,FieldValue):
+            if isinstance(val,tuple) and len(val)==2:
+                if isinstance(val[1],tuple) and self.type is not tuple:
+                    val = ObservedErroredValue(val[0],*val[1])
+                else:
+                    val = ObservedValue(val[0],val[1])
+            elif not (hasattr(val,'source') and hasattr(val,'value')):
+                raise TypeError('Input %s not FieldValue-compatible'%str(val))
         
         if dosrccheck:
             if isinstance(dosrccheck,Source):
@@ -916,7 +921,7 @@ class Field(MutableSequence):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
             if not isinstance(val,FieldValue) and key in self:
-                val = ObservedValue(key,val)
+                val = (key,val)
             val = self._checkConvInVal(val,self._vals[i].source)
             if i == 0:
                 self.notifyValueChange(self._vals[0],val)
@@ -933,7 +938,7 @@ class Field(MutableSequence):
                 raise TypeError('specified key not a recognized Source')
             #val = self._checkConvInVal(val if s is None else ObservedValue(s,val))
             if not isinstance(val,FieldValue):
-                val = ObservedValue(s,val)
+                val = (s,val)
             val = self._checkConvInVal(val)
             self._vals.append(val)
         
@@ -1339,15 +1344,15 @@ class SEDField(Field):
             e = np.r_[e,s.err]
         
         for p in self.phots:
-            pf,pe = p.flux,p.err
+            pf,pe = p.flux,p.fluxerr
             px,pw = p.getBandInfo()
             px = np.tile(px/pw,np.prod(px.shape)/len(p))
             px = px.reshape((len(p),np.prod(px.shape)/len(p)))
             pf = pf.reshape((len(p),np.prod(pf.shape)/len(p)))
             pe = pe.reshape((len(p),np.prod(pe.shape)/len(p)))
-            x = np.r_[x,px]
-            f = np.r_[f,pf]
-            e = np.r_[e,pe]
+            x = np.r_[x,px.ravel()]
+            f = np.r_[f,pf.ravel()]
+            e = np.r_[e,pe.ravel()]
             
         return Spectrum(x,f,e,unit=self.unit)
         
@@ -1672,6 +1677,9 @@ class Source(object):
         return kws,type
     
 class FieldValue(object):
+    """
+    Superclass for values that belong to a field.
+    """
     __metaclass__ = ABCMeta
     __slots__ = ('_source')
     
@@ -1750,7 +1758,9 @@ class ObservedErroredValue(ObservedValue):
     def __init__(self,source,value,upperr=None,lowerr=None):
         super(ObservedErroredValue,self).__init__(source,value)
         if upperr is None and lowerr is not None:
-            raise ValueError('symmetric errors must be specified as upperr')        
+            #symmetric errors should be stored internally on upperr
+            upperr = lowerr
+            lowerr = None
         self._upperr = upperr
         self._lowerr = lowerr
     def __getstate__(self):
@@ -2181,18 +2191,18 @@ class Catalog(CatalogNode):
     This class represents a catalog of objects or catalogs.
     
     A Catalog is essentially a node in the object tree that 
-    must act as a root.
+    is typically (although not necessarily) the root of the 
+    catalog tree.
     """    
     def __init__(self,name='default Catalog'):
         super(Catalog,self).__init__(parent=None)
         self.name = name
         
+    def isRoot(self):
+        return self._parent is None
+        
     def __str__(self):
-        return 'Catalog %s'%self.name 
-    
-    @property
-    def parent(self):
-        return None    
+        return 'Catalog %s'%self.name  
     
     #these methods allow support for doing uniform mapping-like lookups over a catalog
     def __contains__(self,key):
@@ -2700,7 +2710,7 @@ class AstronomicalObject(StructuredFieldNode):
     sed = SEDField('sed')
 
 class Test1(AstronomicalObject):
-    num = Field('num',float,4.2)
+    num = Field('num',(float,int),4.2)
     
     @StructuredFieldNode.derivedFieldFunc(defaultval='f')
     def f(num='num'):
