@@ -2275,7 +2275,7 @@ class IsophotalEllipse(object):
             plt.clf()
             
         plt.imshow(self.imdata.T)
-        plt.plot(*self.cartesian(self._fitpoints),c='k')
+        plt.plot(*self.cartesian(self._fitpoints),**{'c':'k'})
         
         
         

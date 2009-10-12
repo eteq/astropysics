@@ -17,7 +17,7 @@ from __future__ import division,with_statement
 #    abstractproperty = property
 #    ABCMeta = type
 
-from .modcore import *
+from modcore import *
 from ..spec import HasSpecUnits as _HasSpecUnits
 
 
