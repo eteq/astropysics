@@ -27,28 +27,28 @@ except ImportError: #support for earlier versions
 class Magnitude(object):
     __metaclass__ = ABCMeta
     @abstractmethod
-    def mag_to_flux(self,mag):
+    def magToFlux(self,mag):
         raise NotImplementedError
     @abstractmethod
-    def magerr_to_fluxerr(self,err,mag):
+    def magerrToFluxerr(self,err,mag):
         raise NotImplementedError
     @abstractmethod
-    def flux_to_mag(self,flux):
+    def fluxToMag(self,flux):
         raise NotImplementedError
     @abstractmethod
-    def fluxerr_to_magerr(self,err,flux):
+    def fluxerrToMagerr(self,err,flux):
         raise NotImplementedError
     
 class PogsonMagnitude(Magnitude):
     a = -2.5/np.log(10.0)
     
-    def mag_to_flux(self,mag):
+    def magToFlux(self,mag):
         return np.exp(mag/self.a)
-    def magerr_to_fluxerr(self,err,mag):
-        return -err*_m2f_pogson(mag)/self.a
-    def flux_to_mag(self,flux):
+    def magerrToFluxerr(self,err,mag):
+        return -err*self.magToFlux(mag)/self.a
+    def fluxToMag(self,flux):
         return self.a*np.log(flux)
-    def fluxerr_to_magerr(self,err,flux):
+    def fluxerrToMagerr(self,err,flux):
         return -self.a*err/flux
 
 class AsinhMagnitude(Magnitude):
@@ -64,13 +64,13 @@ class AsinhMagnitude(Magnitude):
         self._logb = np.log(b)
     b= property(_getb,_setb)
     
-    def mag_to_flux(self,mag):
+    def magToFlux(self,mag):
         return 2*b*np.sinh(mag/self.a-self._logb)
-    def magerr_to_fluxerr(self,err,mag):
+    def magerrToFluxerr(self,err,mag):
         b = self.b
         #TODO:fix/test
-        return 2*b*err/-self.a*(1+_m2f_asinh(mag)**2)**0.5
-    def flux_to_mag(self,flux):
+        return 2*b*err/-self.a*(1+self.magToFlux(mag)**2)**0.5
+    def fluxToMag(self,flux):
         b = self.b
         return self.a*(np.arcsinh(flux/2/b)+self._logb)
     def fluxerr_to_magerr(self,err,flux):
@@ -95,10 +95,10 @@ def choose_magnitude_system(system):
     else:
         raise ValueError('unrecognized ')
     
-    _mag_to_flux = _magsys.mag_to_flux
-    _magerr_to_fluxerr = _magsys.magerr_to_fluxerr
-    _flux_to_mag = _magsys.flux_to_mag
-    _fluxerr_to_magerr = _magsys.fluxerr_to_magerr   
+    _mag_to_flux = _magsys.magToFlux
+    _magerr_to_fluxerr = _magsys.magerrToFluxerr
+    _flux_to_mag = _magsys.fluxToMag
+    _fluxerr_to_magerr = _magsys.fluxerrToMagerr   
     
 choose_magnitude_system('pogson')
 
