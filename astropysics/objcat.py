@@ -558,10 +558,14 @@ class FieldNode(CatalogNode,Sequence):
         includeself determines if the node itself should be included
         
         return value:
-        *an array of values if sources and errors are False
-        *(values,sources,errors) if sources and errors are True
-        *(values,sources) if sources are True and errors are False
-        *(values,errors) if errors are True and sources are False
+        
+        * a record array if asrec is True
+        * an array of values if sources and errors are False
+        * (values,errors,sources) if sources and errors are True
+        * (values,sources) if sources are True and errors are False
+        * (values,errors) if errors are True and sources are False
+        
+        if missing='mask', values will be (values,mask)
         """
         from functools import partial
         
@@ -612,25 +616,11 @@ class FieldNode(CatalogNode,Sequence):
             masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
             
         if missing=='skip':
-            lsts=[l[m] for l,m in zip(lsts,maks)]
-            
-         
-        if asrec:
-            arr = np.rec.fromarrays(lsts,names=fieldnames)
-            masks = np.rec.fromarrays(masks,names=fieldnames)
+            lsts = [np.array(l)[m] for l,m in zip(lsts,masks)]
         else:
-            arr = np.array(lsts)
-            masks = np.array(masks)
-            
-        if arr.shape[0]==1:
-            arr = arr[0]
-            masks = masks[0]
-            
-        if missing == 'mask':
-            res = arr,masks
-        else:
-            res = arr
-        #TODO:be smarter sources/errors in asrec
+            lsts = [np.array(l) for l in lsts]
+        
+
         if sources:
             def srcfunc(node,fieldname):
                 try:
@@ -640,7 +630,7 @@ class FieldNode(CatalogNode,Sequence):
             srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
             if sources == 'name' or sources == 'names':
                 srcs = [[str(s)[7:] for s in f]  for f in srcs]
-            srcs = np.array(srcs)[0]
+            #srcs = np.array(srcs)[0]
             
         if errors:
             def errfunc(node,fieldname):
@@ -650,17 +640,55 @@ class FieldNode(CatalogNode,Sequence):
                     return (0,0)
                 
             errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
+            #errs = np.array(errs)[0]
+
+        if asrec:
+            errarrs = [np.array(err) for err in errs]
             
-            errs = np.array(errs)[0]
+            ralists = []
+            newfnms = []
+            for i,(fnm,lst,msk) in enumerate(zip(fieldnames,lsts,masks)):
+                newfnms.append(fnm)
+                ralists.append(lst)
+                if errors:
+                    newfnms.append(fnm+'_lerr')
+                    ralists.append(errarrs[i][:,0])
+                    newfnms.append(fnm+'_uerr')
+                    ralists.append(errarrs[i][:,1])
+                if sources:
+                    newfnms.append(fnm+'_src')
+                    ralists.append(srcs[i])
+                if missing == 'mask':
+                    newfnms.append(fnm+'_mask')
+                    ralists.append(msk)
+                
+            return np.rec.fromarrays(ralists,names=newfnms)
             
-        if sources and errors:
-            return (res,errs,srcs)    
-        elif sources:
-            return (res,srcs)
-        elif errors:
-            return (res,errs)
         else:
-            return res
+            arr = np.array(lsts)
+            
+            if len(arr)==1:
+                print 'arg'
+                arr = arr[0]
+                masks = masks[0]
+                if sources:
+                    srcs = srcs[0]
+                if errors:
+                    errs = errs[0]
+                    
+            if missing == 'mask':
+                res = arr,np.array(masks)
+            else:
+                res = arr
+            
+            if sources and errors:
+                return (res,errs,srcs)    
+            elif sources:
+                return (res,srcs)
+            elif errors:
+                return (res,errs)
+            else:
+                return res
     
     @staticmethod
     def getFieldValueNodesAtNode(node,fieldname,value,visitkwargs={}):
@@ -2724,7 +2752,7 @@ class Test2(AstronomicalObject):
         return num+1
     
 def test_cat():
-    c=Catalog()
+    c=FieldCatalog()
     ao=AstronomicalObject(c,'group')
     t1=Test1(ao)
     t12=Test1(ao)
