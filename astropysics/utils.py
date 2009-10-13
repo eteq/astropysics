@@ -677,6 +677,30 @@ def nd_grid(*vecs):
         
         arrs.append(arr.transpose(transorder))
     return np.array(arrs)
+
+def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
+    """
+    maps linear values onto the range [lower,upper] and then applies the
+    requested base of logarithm
+    """
+    if lower > upper:
+        raise ValueError('lower must be less than upper')
+    if lower <= 0:
+        raise ValueError('lower must be greater than 0')
+    
+    val = np.array(val,copy=False)
+    #offset to [0,something]
+    val = val - val.min()
+    #reacale to [0,range]
+    val *= ((upper-lower)/val.max())
+    val += lower
+
+    if base is None:
+        return np.log(val)
+    elif base==10:
+        return np.log10(val)
+    else:
+        return np.log(val)/np.log(base)
     
     
 
