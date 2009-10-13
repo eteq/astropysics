@@ -506,9 +506,9 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
         raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
     
     if extraction == 'horne':
-        extname = 'HORNE'
+        extname = 'Horne' if pyfits.NP_pyfits._extensionNameCaseSensitive else 'HORNE'
     elif extraction == 'boxcar':
-        extname = 'BXSPF'
+        extname = 'Bxspf'if pyfits.NP_pyfits._extensionNameCaseSensitive else 'BXSPF'
     else:
         raise ValueError('unrecgnized extraction type %s'%extraction)
     
