@@ -2226,9 +2226,6 @@ class Catalog(CatalogNode):
         super(Catalog,self).__init__(parent=None)
         self.name = name
         
-    def isRoot(self):
-        return self._parent is None
-        
     def __str__(self):
         return 'Catalog %s'%self.name  
     
@@ -2237,6 +2234,20 @@ class Catalog(CatalogNode):
         return hasattr(self,key)
     def __getitem__(self,key):
         return getattr(self,key)
+    
+    def isRoot(self):
+        return self._parent is None
+    
+    def mergeNode(self,node):
+        """
+        merges the given FieldNode into the catalog by reassigning all of 
+        it's children to this Catalog
+        
+        returns the number of objects added
+        """
+        for i,c in enumerate(node.children):
+            c.parent = self
+        return i+1
     
 class FieldCatalog(Catalog):
     """
@@ -2493,14 +2504,14 @@ class StructuredFieldNode(FieldNode):
             return dv,fi
         
         
-def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
-                  namefield=None,setcurr=True):
+def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
+                 converters=None,namefield=None,setcurr=True):
     """
     Applies values from an array to CatalogNodes.
     
-    array must be a 2-dimensional array or a 1-dimensional structured array.
-    If a 2D array, the first dimension should be the number of nodes, while
-    the second dimension should match the number of fields
+    values must be a 2-dimensional array or a 1-dimensional structured array.
+    If a 2D array, the first dimension should be the fields, while the
+    second dimension should be the nodes to be created.
     
     source is a Source object or a string that will be converted to a Source
     object
@@ -2512,6 +2523,10 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
     the array's second index dimension) or a mapping from indecies to field
     names or structured array field names to FieldNode field names
     
+    if errors is not None, it should either be an object matching values 
+    in shape, or a tuple (upper,lower) and will be applied as the errors
+    on the values
+    
     matcher is a callable called as matcher(arrayrow,node) - if it returns 
     False, the array will be matched to the next node - if True, the array
     values will be applied to the node
@@ -2519,7 +2534,10 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
     converters  are either a sequence of callables or a mapping from indecies 
     to callables or structured array field names to callables that will be
     called on each array element before being added to the FieldNode as 
-    converter(value).  If converters is None, no converting is performed.
+    converter(value).  If errors are provided, the converter will be called
+    as converter((value,uerr,lerr)). If converters is None, no converting 
+    is performed.
+    
     
     namefield is a field name that will be set to a unique code of the form
     'src-i' where i is element index of the array row (or None to apply 
@@ -2542,8 +2560,10 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         nodes = nodes.visit(lambda n:n,traversal,lambda n:isinstance(n,FieldNode))
     else:
         nodes = list(nodes)
-        
-    if not isMappingType(fields):
+    
+    if isinstance(fields,basestring):
+            fields={0:fields}    
+    elif not isMappingType(fields):
         fields = dict([t for t in enumerate(fields)])
     else:
         fields = dict(fields) #copy
@@ -2555,7 +2575,14 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
     else:
         converters = dict(converters) #copy
     
-    array = np.array(array,copy=False)
+    array = np.array(values,copy=False).T #now first dimension is along nodes and second is fields
+    if errors is None:
+        lerrors = uerrors = None
+    elif isinstance(errors,tuple):
+        uerrors,lerrors = errors
+    else:
+        uerrors = errors
+        lerrors = None
     
     if converters is None:
         converters = {}
@@ -2573,10 +2600,21 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
         for k in converters.keys():
             if k in nms:
                 converters[nms.index(k)] = converters[k]
+    elif len(array.shape)==1:
+        #1d array
+        if len(fields)!=1:
+            raise ValueError('input array is 1D but multiple fields were given')
+        array = array.reshape((array.size,1)) #make 2D for the rest
+        if uerrors is not None:
+            uerrors = np.array(uerrors,copy=False)
+            uerrors = uerrors.reshape((1,uerrors.size)) #errors are dimension (field,node)
+        if lerrors is not None:
+            lerrors = np.array(lerrors,copy=False)
+            lerrors = lerrors.reshape((1,lerrors.size)) #errors are dimension (field,node)
     elif array.dtype.names is None and len(array.shape) == 2:
         #2d array
         if array.shape[1] != len(fields):
-            raise ValueError('second dimension of array does not match number of fields')
+            raise ValueError('first dimension of array does not match number of fields')
     else:
         raise ValueError('invalid input array')
     
@@ -2636,7 +2674,7 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
             n = nodes[0]
             del nodes[0]
         else:
-            #find the node that a matcher matches, and remove it it is matched to get log(N) run time
+            #find the node that a matcher matches, and remove it if it is matched to get log(N) run time
             for j,n in enumerate(nodes):
                 if matcher(a,n):
                     break
@@ -2649,17 +2687,20 @@ def arrayToNodes(array,source,fields,nodes,matcher=None,converters=None,
             if fi is not None and fi not in n.fieldnames:
                 n.addField(fi)
         
-        for k,v in enumerate(a):
-            if fieldseq[k] is not None:
-                fi = getattr(n,fieldseq[k])
-                if twoargseq[k]:
-                    fi[source] = convseq[k](v,a)
+        for fiind,v in enumerate(a):
+            if fieldseq[fiind] is not None:
+                fi = getattr(n,fieldseq[fiind])
+                if uerrors[fiind] is not None:
+                    ue = uerrors[fiind][i]
+                    v = (v,ue,ue if lerrors is None else lerrors[fiind][i])
+                if twoargseq[fiind]:
+                    fi[source] = convseq[fiind](v,a)
                 else:
-                    fi[source] = convseq[k](v)
+                    fi[source] = convseq[fiind](v)
                 if setcurr:
                     fi.currentobj = source
         
-def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
+def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFieldNode,
                    converters=None,filter=None,namefield=None,nameconv=None,
                    setcurr=True):
     """
@@ -2698,9 +2739,11 @@ def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
     else:
         filter = lambda a:True
         matcher = None
+
+    array = np.array(values,copy=False)
     
     nodes = []
-    for i,a in enumerate(array):
+    for i,a in enumerate(array.T):
         if filter(a):
             n = nodetype(parent=parent)
             nodes.append(n)
@@ -2712,7 +2755,8 @@ def arrayToCatalog(array,source,fields,parent,nodetype=StructuredFieldNode,
                     del nfi[None]
                 nfi[source] = nameconv(i)
     
-    arrayToNodes(array,source,fields,nodes,converters=converters,matcher=matcher,setcurr=setcurr)
+    arrayToNodes(array,source,fields,nodes,errors=errors,converters=converters,
+                 matcher=matcher,setcurr=setcurr)
     
     if parent is None:
         return nodes
