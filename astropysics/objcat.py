@@ -2238,16 +2238,35 @@ class Catalog(CatalogNode):
     def isRoot(self):
         return self._parent is None
     
-    def mergeNode(self,node):
+    def mergeNode(self,node,skipdup=False,testfunc=None):
         """
         merges the given FieldNode into the catalog by reassigning all of 
         it's children to this Catalog
+
+        testfunc is a function that will be called on the node to
+        be transferred, and if it is True, the node will be moved, or
+        if not it will be left alone.  If it is None, this 
+        test will be skipped
+        
+        if skipdup is True, any nodes that already have an object of the same
+        name will not be transferred
         
         returns the number of objects added
         """
+        if testfunc is None:
+            testfunc = lambda n:True
+        
+        nms = [n['name'] for n in self.children]
+        
+        i = -1
+        countoffset = 1
         for i,c in enumerate(node.children):
-            c.parent = self
-        return i+1
+            if (skipdup and c['name'] in nms) or not testfunc(c):
+                countoffset -= 1    
+            else:
+                c.parent = self
+            
+        return i+countoffset
     
 class FieldCatalog(Catalog):
     """
