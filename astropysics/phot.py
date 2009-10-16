@@ -3058,6 +3058,18 @@ def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     else:
         return M
     
+def color_to_flux_ratio(color,band1,band2):
+    """
+    transforms a color as band1mag-band2mag into a flux ratio flux1/flux2
+    """
+    return mag_to_lum(color,band1)/mag_to_lum(0,band2)
+
+def flux_ratio_to_color(ratio,band1,band2):
+    """
+    transforms a flux ratio band1flux/band2flux to a color band1mag-band2mag
+    """
+    return lum_to_mag(ratio,band1) - lum_to_mag(1,band2)
+    
 def intensities_to_sig(Is,In,exposure=1,area=1):
     """
     converts photon count intensities (i.e. photon cm^-2 sr^-1) to signficance
