@@ -328,7 +328,7 @@ class FitGui(HasTraits):
                            Item('delsel',show_label=False)
                          ),title='Selection Options')
     
-    def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**kwargs):
+    def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**traits):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
         self.tmodel = _TraitedModel(mod)
@@ -398,7 +398,7 @@ class FitGui(HasTraits):
         container.add(plot)
         container.add(colorbar)
         
-        super(FitGui,self).__init__(**kwargs)
+        super(FitGui,self).__init__(**traits)
         
     def _weights0rem_changed(self,old,new):
         if new:
@@ -764,7 +764,7 @@ try:
                 for i,m in enumerate(models):
                     fg = self.fgs[i]
                     fg.tmodel = _TraitedModel(m)
-                    if not isinstance(m,Model):
+                    if not isinstance(m,FunctionModel1D):
                         fg.fitmodel = True
             
             

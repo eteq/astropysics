@@ -668,7 +668,6 @@ class FieldNode(CatalogNode,Sequence):
             arr = np.array(lsts)
             
             if len(arr)==1:
-                print 'arg'
                 arr = arr[0]
                 masks = masks[0]
                 if sources:
