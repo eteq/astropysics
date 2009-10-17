@@ -783,6 +783,7 @@ class Field(MutableSequence):
                     Field._okDVs.remove(v)
                 else:
                     from warnings import warn
+                    print Field._okDVs
                     warn("can't pickle DerivedValue in %s"%self)
             else:
                 prunedvals.append(v)
@@ -2220,6 +2221,12 @@ class Catalog(CatalogNode):
     A Catalog is essentially a node in the object tree that 
     is typically (although not necessarily) the root of the 
     catalog tree.
+    
+    Iterator access is over the children, as is container testing and 
+    index access.  
+    
+    Attributes can also be accessed as catobj[attrname] (this allows 
+    access to Catalog attributes in the same way as FieldNodes)
     """    
     def __init__(self,name='default Catalog'):
         super(Catalog,self).__init__(parent=None)
@@ -2228,11 +2235,19 @@ class Catalog(CatalogNode):
     def __str__(self):
         return 'Catalog %s'%self.name  
     
-    #these methods allow support for doing uniform mapping-like lookups over a catalog
     def __contains__(self,key):
-        return hasattr(self,key)
+        if isinstance(key,basestring):
+            return hasattr(self,key)
+        else:
+            return key in self._children
     def __getitem__(self,key):
+        if isinstance(key,int):
+            return self._children[key]
         return getattr(self,key)
+    def __len__(self):
+        return len(self._children)
+    def __iter__(self):
+        return iter(self._children)
     
     def isRoot(self):
         return self._parent is None
@@ -2301,7 +2316,13 @@ class _StructuredFieldNodeMeta(ABCMeta):
         cls = super(_StructuredFieldNodeMeta,mcs).__new__(mcs,name,bases,dct)
         for k,v in dct.iteritems():
             if isinstance(v,Field) and k != v.name:
-                raise ValueError('StructuredFieldNode class %s has conficting field names - Node attribute:%s, Field.name:%s'%(name,k,v.name))
+                raise ValueError('StructuredFieldNode class %s has conficting \
+                      field names - Node attribute:%s, Field.name:%s'%(name,k,v.name))
+            elif isinstance(v,tuple) and len(v)==2 and \
+                 isinstance(v[1],Field) and k != v[1].name: 
+                 #derived values in the class should also be checked
+                raise ValueError('StructuredFieldNode class %s has conficting \
+                      derived field names - Node attribute:%s, Field.name:%s'%(name,k,v[1].name))
         return cls
 
 class StructuredFieldNode(FieldNode):
@@ -2389,7 +2410,7 @@ class StructuredFieldNode(FieldNode):
         super(StructuredFieldNode,self).__setstate__(d)
         
         if StructuredFieldNode.checkonload:
-            consistent = True
+            inconsistent = False
             fields = []
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
             if isinstance(v,tuple):
@@ -2410,23 +2431,23 @@ class StructuredFieldNode(FieldNode):
             #consistency check to ensure that the object has the necessary fields
             if StructuredFieldNode.checkonload:
                 fields.append(k)
-                if consistent and getattr(self,k) is getattr(self.__class__,k) or not isinstance(getattr(self,k),Field):
-                    consistent = False
+                if (not inconsistent) and getattr(self,k) is getattr(self.__class__,k) or not isinstance(getattr(self,k),Field):
+                    inconsistent = k
                 
         #do consistency check to ensure that there are no extra fields that shouldn't be present
         if StructuredFieldNode.checkonload:
             for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
                 if k not in fields:
-                    consistent = False
+                    inconsistent = str(k)+' not in '+str(fields)
                     break
                 
-            if not consistent:
+            if inconsistent is not False:
                 if 'raise' in StructuredFieldNode.checkonload:
-                    raise ValueError("object %s is not consistent with it's class definition"%self)
+                    raise ValueError("object %s is not consistent with it's class definition due to %s"%(self,inconsistent))
                 
                 if 'warn' in StructuredFieldNode.checkonload or StructuredFieldNode.checkonload is True:
                     from warnings import warn
-                    warn("object %s is not consistent with it's class definition"%self)
+                    warn("object %s is not consistent with it's class definition due to %s"%(self,inconsistent))
                     
                 if 'revert' in StructuredFieldNode.checkonload:
                     self.revert()
@@ -2708,7 +2729,7 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
         for fiind,v in enumerate(a):
             if fieldseq[fiind] is not None:
                 fi = getattr(n,fieldseq[fiind])
-                if uerrors[fiind] is not None:
+                if uerrors is not None and uerrors[fiind] is not None:
                     ue = uerrors[fiind][i]
                     v = (v,ue,ue if lerrors is None else lerrors[fiind][i])
                 if twoargseq[fiind]:
@@ -2724,7 +2745,7 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
     """
     Generates a catalog of nodes from the array of data.  
     
-    See ``arrayToNodes`` for array,source,fields, and covnerter arguments.
+    See ``arrayToNodes`` for values,source,fields, and covnerter arguments.
     
     parent is the object to use as the parent for all of the nodes (which will
     be returned, a string (in which case a Catalog object will be created
