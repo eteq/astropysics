@@ -311,9 +311,21 @@ class FunctionModel(ParametricModel):
         """
         for p in self._pars:
             setattr(self,p,self.defaultparval)
-            
-    def fitData(self,x,y,method=None,fixedpars='auto',weights=None,contraction='sumsq',
-                 updatepars=True,fitf=False,savedata=True,**kwargs):
+    
+    fittype ='leastsq'
+    _optfittypes = ('leastsq','fmin','fmin_powell','fmin_cg','fmin_bfgs',
+                 'fmin_ncg','anneal','global','brute')
+    @property
+    def fittypes(self):
+        ls = list()
+        for cls in self.__class__.__mro__:
+            if hasattr(cls,'_fittypes'):
+                ls.extend(cls._fittypes)
+        ls.extend(self._optfittypes)
+        return tuple(ls)
+    
+    def fitData(self,x=None,y=None,fixedpars='auto',weights=None,savedata=True,
+                 updatepars=True,fitf=False,contraction='sumsq',**kwargs):
         """
         Adjust the parameters of the FunctionModel to fit the provided data 
         using algorithms from scipy.optimize
@@ -323,11 +335,9 @@ class FunctionModel(ParametricModel):
         the value the model should have at that point.  If the output of the
         model does not match the shape of y, a ModelTypeError will be raised. 
         
-        method can be any of the optimize functions (except constrained or
-        scalar optimizers) or 'custom'.  If 'custom', the _custumFit method
-        of the model will be called as 
-        self._customFit(x,y,fixedpars=fixedpars,weights=weights,**kwargs) 
-        default is 'custom', or if not present, 'leastsq'
+        the fitting technique is sepcified by the `fittype` attribute, which 
+        by default can be any of the optimization types in the `scipy.optimize`
+        package (except for scalar minimizers)
         
         fixedpars is a sequence of parameter names to leave fixed.  If it is
         'auto', the fixed parameters are inferred from self.fixedpars (or 
@@ -340,9 +350,12 @@ class FunctionModel(ParametricModel):
         * an array of points that must match the output
         * a function called as f(params) that returns an array of weights 
           that must match the output
+          
+        if fitf is True, the fit is performed directly against the `f` 
+        function instead of against the model as evaluated if called
         
-        contraction applies for all except the 'leastsq' method  (for which only
-        'frac' is meaningful) and is the technique used to convert vectors to
+        contraction only applies for optimize-based methods
+        and is the technique used to convert vectors to
         figures of merit.  this is composed of multiple string segments:
         
         #. these will be applied to each element of the vector first:
@@ -359,7 +372,8 @@ class FunctionModel(ParametricModel):
            - 'prod': product of all the elements 
            
         * optionally,the string can include 'frac' to use the fractional 
-          version of the differnce vector instead of raw values
+          version of the differnce vector instead of raw values.  For the 
+          leastsq method, this is the only applicable value
         
         kwargs go into the fitting function
         
@@ -374,9 +388,24 @@ class FunctionModel(ParametricModel):
         see also:getMCMC
         """
         from scipy import optimize as opt
-
-        x = np.array(x,copy=False)
-        y = np.array(y,copy=False)
+        from operator import isMappingType
+        from functools import partial
+        
+        if x is None:
+            if hasattr(self,'fitteddata') and self.fitteddata is not None:
+                x = self.fitteddata[0]
+            else: 
+                raise ValueError('No x data provided and no fitted data already present')
+        else:
+            x = np.array(x,copy=False)
+        
+        if y is None:
+            if hasattr(self,'fitteddata') and self.fitteddata is not None:
+                y = self.fitteddata[0]
+            else: 
+                raise ValueError('No y data provided and no fitted data already present')
+        else:
+            y = np.array(y,copy=False)
          
         if fitf:
             fitfunc = self.f
@@ -388,17 +417,10 @@ class FunctionModel(ParametricModel):
         
         y = y.ravel()
         
-        if method is None:
-            try:
-                self._customFit(x,y)
-                method = 'custom'
-            except NotImplementedError:
-                method = 'leastsq'
-#        if method is None:
-#            if '_customFit' in self.__class__.__dict__:
-#                method = 'custom'
-#            else:
-#                method = 'leastsq'
+        if self.fittype is None:
+            method = self.fittypes[0]
+        else:
+            method = self.fittype
             
         if fixedpars is 'auto':
             fixedpars = self.fixedpars if hasattr(self,'fixedpars') else ()
@@ -408,8 +430,21 @@ class FunctionModel(ParametricModel):
         ps=list(self.params)
         v=list(self.parvals) #initial guess
         
-        if method == 'custom':
-            res = self._customFit(x,y,fixedpars=fixedpars,weights=weights,**kwargs) 
+        if method not in self._optfittypes:
+            for cls in self.__class__.__mro__:
+                if hasattr(cls,'_fittypes') and isMappingType(cls._fittypes):
+                    if method in cls._fittypes:
+                        fitter = partial(cls._fittypes[method],self)
+                        break
+            else:
+                fitter = 'fit'+method[0].upper()+method[1:]
+                if hasattr(self,fitter):
+                    fitter = getattr(self,fitter)
+                else:
+                    raise ValueError('could not locate fitting function for fitting method '+method)
+            
+            res = fitter(x,y,fixedpars=fixedpars,weights=weights,**kwargs) 
+            
             #ensure that res is at least a tuple with parameters in elem 0
             from operator import isSequenceType
             if not isSequenceType(res[0]):
@@ -533,18 +568,6 @@ class FunctionModel(ParametricModel):
             self.fitteddata = (x,y)
         
         return v
-    
-    def _customFit(self,x,y,fixedpars=(),weights=None,**kwargs):
-        """
-        Must be overridden to use 'custom' fit technique
-        
-        fixedpars will be a sequence of parameters that should be kept fixed
-        for the fitting (possibly/typically empty)
-        
-        should return a tuple where the first element gives the best fit
-        parameter vector 
-        """
-        raise NotImplementedError('No custom fit function provided for this model')
     
     def stdData(self,x=None,y=None):
         """
@@ -1064,10 +1087,6 @@ class FunctionModel1D(FunctionModel):
     * derivative(self,x,dx): derivative of the model at x, optinally using 
       spacing dx
     * inv(yval,*args,**kwargs): inverse of the model at the requested yvalue
-    * _customFit(x,y,fixedpars=(),weights=None,**kwargs): implement a
-      specialized fitting algorithm for this model that will be called
-      if fitData is called with method='custom'.  If this raises a 
-      NotImplementedError, the standard fit will be used.
     
     The following attributes may be set for additional information:
     * xaxisname: name of the input axis for this model

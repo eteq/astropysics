@@ -59,8 +59,7 @@ class LinearModel(FunctionModel1DAuto):
     def f(self,x,m=1,b=0):
         return m*x+b
     
-    fittype = 'basic'
-    def _customFit(self,x,y,fixedpars=(),weights=None,**kwargs):
+    def _linearFit(self,x,y,fixedpars=(),weights=None,**kwargs):
         """
         does least-squares fit on the x,y data
         
@@ -90,13 +89,20 @@ class LinearModel(FunctionModel1DAuto):
             if weights is None:
                 xerr = yerr = None
             else:
-                xerr,yerr = weights
+                weights = np.array(weights,copy=False)
+                if len(weights.shape)==1:
+                    xerr = yerr = weights*2**-0.5
+                else:
+                    xerr,yerr = weights
             m,b = self.fitErrxy(x,y,xerr,yerr,**kwargs)
             merr = berr = None
         else:
             raise ValueError('invalid fittype %s'%self.fittype)
             
         return ((m,b),merr,berr)
+    
+    _fittypes = {'basic':_linearFit,'yerr':_linearFit,'fiterrxy':_linearFit}
+    fittype = 'basic'
     
     def derivative(self,x,dx=1):
         return np.ones_like(x)*m
@@ -705,8 +711,11 @@ class SmoothSplineModel(FunctionModel1DAuto):
         self._oldd=self._olds=self._ws=None
         self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
         self.fitData(*self.fitteddata)
-            
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    
+    _fittypes=['spline']
+    fittype = 'spline'
+    
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):
         """
         just fits the spline with the current s-value - if s is not changed,
         it will execute very quickly after
@@ -738,7 +747,7 @@ class SmoothSplineModel(FunctionModel1DAuto):
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
     
@@ -764,7 +773,11 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
         self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
         self.fitData(*self.fitteddata)
             
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+            
+    _fittypes = ['spline']
+    fittype = 'spline'
+    
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):
         """
         just fits the spline with the current s-value - if s is not changed,
         it will execute very quickly after
@@ -795,7 +808,7 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
     def f(self,x,degree=3):        
         if self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
     
@@ -829,8 +842,11 @@ class _KnotSplineModel(FunctionModel1DAuto):
     def f(self,x):
         raise NotImplemetedError
     
+    _fittypes = ['spline']
+    fittype = 'spline'
+    
     @abstractmethod    
-    def _customFit(self,x,y,fixedpars=(),**kwargs):        
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):        
         from scipy.interpolate import LSQUnivariateSpline
         
         self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=kwargs['weights'] if 'weights' in kwargs else None)
@@ -861,10 +877,10 @@ class UniformKnotSplineModel(_KnotSplineModel):
         super(UniformKnotSplineModel,self).__init__()
         self.fitData(*self.fitteddata)
     
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):
         self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
         
-        super(UniformKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        super(UniformKnotSplineModel,self).fitSpline(x,y,fixedpars,**kwargs)
         
         self._oldk = self.nknots
         self._oldd = self.degree
@@ -874,7 +890,7 @@ class UniformKnotSplineModel(_KnotSplineModel):
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
     
@@ -886,14 +902,14 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
         super(UniformCDFKnotSplineModel,self).__init__()
         self.fitData(*self.fitteddata)
     
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):
         cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
         mask = cdf!=0
         cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
         cdf = np.hstack((0,np.cumsum(cdf)/np.sum(cdf)))
         self.iknots = np.interp(np.linspace(0,1,self.nknots+2)[1:-1],cdf,xcdf)
         
-        super(UniformCDFKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        super(UniformCDFKnotSplineModel,self).fitSpline(x,y,fixedpars,**kwargs)
         
         self._oldk = self.nknots
         self._oldd = self.degree
@@ -903,7 +919,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
             xd,yd = self.fitteddata
-            self._customFit(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
 
@@ -915,7 +931,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         
         self.setKnots(np.linspace(-1,1,self.nknots))
     
-    def _customFit(self,x,y,fixedpars=(),**kwargs):
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):
         """
         just fits the spline with the current s-value - if s is not changed,
         it will execute very quickly after
@@ -923,7 +939,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         self.iknots = np.array([v for k,v in self.pardict.iteritems() if k.startswith('k')])
         self.iknots.sort()
         
-        super(SpecifiedKnotSplineModel,self)._customFit(x,y,fixedpars,**kwargs)
+        super(SpecifiedKnotSplineModel,self).fitSpline(x,y,fixedpars,**kwargs)
         
         self._oldd = self.degree
         
@@ -951,7 +967,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         #TODO:faster way to do the arg check?
         if self._oldd != degree or np.any(self.iknots != np.array(args)):
             xd,yd = self.fitteddata
-            self._customFit(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
     

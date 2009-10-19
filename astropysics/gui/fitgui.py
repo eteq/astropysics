@@ -22,7 +22,7 @@ from enthought.enable.api import ColorTrait,ComponentEditor
 
 
 
-from ..models import FunctionModel1D,list_models,get_model,binned_weights
+from ..models import FunctionModel1D,list_models,get_model,get_model_instance,binned_weights
 
 class ColorMapperFixSingleVal(ColorMapper):
     coloratval = ColorTrait('black')
@@ -73,6 +73,8 @@ class _TraitedModel(HasTraits):
     updatetraitparams = Event
     paramchange = Event
     fitdata = Event
+    fittype = Property(Str)
+    fittypes = Property
     
     def __init__(self,model,**traits):
         super(_TraitedModel,self).__init__(**traits)
@@ -80,7 +82,7 @@ class _TraitedModel(HasTraits):
         from inspect import isclass
         
         if isinstance(model,basestring):
-            model = get_model(model)()
+            model = get_model_instance(model)
         elif isclass(model):
             model = model()
             
@@ -92,7 +94,11 @@ class _TraitedModel(HasTraits):
             g.content.append(Label('No Model Selected'))
         else:
             #g = Group(label=self.modelname,show_border=False,orientation='horizontal',layout='flow')
-            g = Group(label=self.modelname,show_border=True,orientation='horizontal',scrollable=True)
+            g = Group(label=self.modelname,show_border=True,orientation='vertical')
+            hg = HGroup(Item('fittype',label='Fit Technique',
+                             editor=EnumEditor(name='fittypes')))
+            g.content.append(hg)
+            gp = HGroup(scrollable=True)
             for p in self.model.params:
                 gi = Group(orientation='horizontal',label=p)
                 self.add_trait(p,Float)
@@ -106,7 +112,8 @@ class _TraitedModel(HasTraits):
                 self.on_trait_change(self._param_change_handler,ffp)
                 gi.content.append(Item(ffp,label='Fix?'))
                 
-                g.content.append(gi)
+                gp.content.append(gi)
+            g.content.append(gp)
             
         return View(g,buttons=['Apply','Revert','OK','Cancel'])
     
@@ -154,6 +161,18 @@ class _TraitedModel(HasTraits):
             return 'None'
         else:
             return self.model.__class__.__name__
+    
+    def _get_fittype(self):
+        if self.model is None:
+            return None
+        else:
+            return self.model.fittype
+        
+    def _set_fittype(self,val):
+        self.model.fittype = val
+        
+    def _get_fittypes(self):
+        return self.model.fittypes
         
 class NewModelSelector(HasTraits):
     modelnames = List
@@ -328,10 +347,10 @@ class FitGui(HasTraits):
                            Item('delsel',show_label=False)
                          ),title='Selection Options')
     
-    def __init__(self,xdata,ydata,mod=None,weights=None,include_models=None,exclude_models=None,**traits):
+    def __init__(self,xdata,ydata,model=None,weights=None,include_models=None,exclude_models=None,**traits):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
-        self.tmodel = _TraitedModel(mod)
+        self.tmodel = _TraitedModel(model)
 
         self.on_trait_change(self._paramsChanged,'tmodel.paramchange')
         
@@ -345,15 +364,19 @@ class FitGui(HasTraits):
         else:
             self.weights = np.array(weights,copy=True)
             self.savews = True
+            
+        weights1d = self.weights
+        while len(weights1d.shape)>1:
+            weights1d = np.sum(weights1d**2,axis=0)
         
-        pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=self.weights)
+        pd = ArrayPlotData(xdata=self.data[0],ydata=self.data[1],weights=weights1d)
         self.plot = plot = Plot(pd,resizable='hv')
         
         self.scatter = plot.plot(('xdata','ydata','weights'),name='data',
                          color_mapper=_cmapblack if self.weights0rem else _cmap,
                          type='cmap_scatter', marker='circle')[0]
                         
-        if not isinstance(mod,FunctionModel1D):
+        if not isinstance(model,FunctionModel1D):
             self.fitmodel = True
             
         self.updatemodelplot = False #force plot update - generates xmod and ymod
@@ -623,7 +646,11 @@ class FitGui(HasTraits):
         
     @on_trait_change('weights',post_init=True)    
     def weightsChanged(self):
-        self.plot.data.set_data('weights',self.weights)
+        weights = self.weights
+        while len(weights.shape)>1:
+            weights = sum(weights**2,axis=0)
+        print 'arg',weights.shape
+        self.plot.data.set_data('weights',weights)
         self.plot.plots['data'][0].color_mapper.range.refresh()
         
         if self.weightsvary:
