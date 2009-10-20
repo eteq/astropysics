@@ -1030,7 +1030,7 @@ class NFWModel(FunctionModel1DAuto):
             
     def getRv(self,z=0):
         """
-        get the virial radius at a given redshift (uses NFWModel.Delta(z))
+        get the virial radius at a given redshift
         
         WARNING: may not be working right unit-wise
         """
@@ -1038,48 +1038,49 @@ class NFWModel(FunctionModel1DAuto):
         
         try:
             from ..constants import get_cosmology,Ms
-            rhoC = get_cosmology().rhoC('cosmological')*1e-9 #Mpc^-3->kpc^-3
+            cosmo =get_cosmology()
+            rhoC = cosmo.rhoC('cosmological')*1e-9 #Mpc^-3->kpc^-3
+            rhov = cosmo.deltavir(z)*rhoC
         except:
             raise ValueError('current cosmology does not support critical density')
         
-        rhov = self.Delta(z)*rhoC
         return self.inv(rhov,1)
-        
-    @staticmethod
-    def Delta(z):
-        """
-        Virial overdensity - value is from Maller&Bullock 2004
-        (could do better)
-        """
-        return 360.0/(1.0+z)
     
     @staticmethod
     def Rvir_to_Mvir(Rvir,z=0,h=.72,Omega0=1):
         """
         M_sun,kpc
         """
-        return 1e12/h*(Omega0*NFWModel.Delta(z)/97.2)*(Rvir*(1+z)/203.4/h)**3
+        from ..constants import get_cosmology
+        
+        return 1e12/h*(Omega0*get_cosmology().deltavir(z)/97.2)*(Rvir*(1+z)/203.4/h)**3
     
     @staticmethod
     def Mvir_to_Rvir(Mvir,z=0,h=.72,Omega0=1):
         """
         M_sun,kpc
         """
-        return 203.4/h*(Omega0*NFWModel.Delta(z)/97.2)**(-1/3)*(Mvir/1e12/h)**(1/3)/(1+z)
+        from ..constants import get_cosmology
+        
+        return 203.4/h*(Omega0*get_cosmology().deltavir(z)/97.2)**(-1/3)*(Mvir/1e12/h)**(1/3)/(1+z)
     
     @staticmethod
     def Mvir_to_Vvir(Mvir,z=0,h=.72,Omega0=1):
         """
         km/s,M_sun
         """
-        return 143.8*(Omega0*NFWModel.Delta(z)/97.2)**(1/6)*(Mvir/1e12/h)**(1/3)*(1+z)**0.5
+        from ..constants import get_cosmology
+        
+        return 143.8*(Omega0*get_cosmology().deltavir(z)/97.2)**(1/6)*(Mvir/1e12/h)**(1/3)*(1+z)**0.5
     
     @staticmethod
     def Vvir_to_Mvir(Vvir,z=0,h=.72,Omega0=1):
         """
         km/s,M_sun
         """
-        return (Omega0*NFWModel.Delta(z)/97.2)**-0.5*(1+z)**-1.5*h*1e12*(Vvir/143.8)**3
+        from ..constants import get_cosmology
+        
+        return (Omega0*get_cosmology().deltavir(z)/97.2)**-0.5*(1+z)**-1.5*h*1e12*(Vvir/143.8)**3
 
 class PlummerModel(FunctionModel1DAuto):
     xaxisname = 'r'

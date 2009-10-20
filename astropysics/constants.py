@@ -112,7 +112,8 @@ class Cosmology(object):
 class FRWCosmology(Cosmology):
     """
     A cosmology based on the FRW metric  with a global density, a matter 
-    density, and a radiation density, and a comological constant
+    density, and a radiation density, and a comological constant as 
+    specified at z=0
     
     default values are approximately LambdaCDM
     """
@@ -124,22 +125,53 @@ class FRWCosmology(Cosmology):
     omegaM=0.3 #matter density
     omegaL=0.7 #dark energy density
     
+    @property
+    def omegaK(self):
+        return 1-self.omegaR-self.omegaM-self.omegaL
+    
     def H(self,z):
         z=np.array(z)
         M,L,R=self.omegaM,self.omegaL,self.omegaR
         K=1-M-L-R
         a=1/(1+z)
-        H=self.H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
-    
-    def rhoC(self,units='cgs'):
+        return self.H0*(R*a**-4 + M*a**-3 + L + K*a**-2)**0.5
+        
+    def computeOmegaRz(self,z):
         """
-        critical density
+        compute radiation density at arbitrary redshift
+        """
+        a=1/(1+z)
+        return (self.rhoC(0)/self.rhoC(z))*self.omegaR*a**-4
+        
+    def computeOmegaMz(self,z):
+        """
+        compute matter density at arbitrary redshift
+        """
+        a=1/(1+z)
+        return (self.rhoC(0)/self.rhoC(z))*self.omegaM*a**-3
+    
+    def computeOmegaLz(self,z):
+        """
+        compute cosmological constant density at arbitrary redshift
+        """
+        return self.omegaL*(self.rhoC(0)/self.rhoC(z))
+    
+    def computeOmegaKz(self,z,units='cgs'):
+        """
+        compute curvature density at arbitrary redshift
+        """
+        a=1/(1+z)
+        return (self.rhoC(0)/self.rhoC(z))*self.omegaK*a**-2
+    
+    def rhoC(self,z=0,units='cgs'):
+        """
+        critical density at a given redshift
         
         units can be 'cgs' or 'cosmological' (Mpc,Msun)
         TODO:check
         """
-        H0 = self.H0*1e5*1e-6*pcpercm #km/s->cm/s, Mpc->cm
-        cgsres = 3*H0*H0/(8*pi*G)
+        H = self.H(z)*1e5*1e-6*pcpercm #km/s->cm/s, Mpc->cm
+        cgsres = 3*H*H/(8*pi*G)
         
         if units == 'cgs':
             return cgsres
@@ -149,11 +181,23 @@ class FRWCosmology(Cosmology):
             raise ValueError('unrecognized units')
         
     
-    def rho(self):
+    def rho(self,z=0,units='cgs'):
         """
         mean density in this cosmology
+        
+        units can be 'cgs' or 'cosmological' (Mpc,Msun)
         """
-        return self.omega*self.rhoC()
+        return self.omega*self.rhoC(z,units)
+    
+    def deltavir(self,z=0):
+        """
+        virial overdensity as paramaterized in Bryan&Norman 98 for omega=1
+        """
+        if self.omegaK !=0:
+            raise NotImplementedError("can't compute for omega!=1")
+        om = self.computeOmegaMz(z)
+        x= om - 1
+        return (18*pi**2+82*x-39*x**2)/om
     
 class WMAP5Cosmology(FRWCosmology):
     _params_=('t0','sigma8')
