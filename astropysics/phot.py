@@ -2801,25 +2801,10 @@ def M_star_from_mags(B,V,R,I,color='B-V'):
     """    
     if color=='B-V':
         mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(B-V,'B-V')[:4]
-#        c=B-V
-#        mlrb=10**(-0.994+1.804*c)
-#        mlrv=10**(-0.734+1.404*c)
-#        mlrr=10**(-0.660+1.222*c)
-#        mlri=10**(-0.627+1.075*c)
     elif color=='B-R':
         mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(B-R,'B-R')[:4]
-#        c=B-R
-#        mlrb=10**(-1.224+1.251*c)
-#        mlrv=10**(-0.916+0.976*c)
-#        mlrr=10**(-0.820+0.851*c)
-#        mlri=10**(-0.768+0.748*c)
     elif color=='V-I':
         mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(V-I,'V-I')[:4]
-#        c=V-I
-#        mlrb=10**(-1.919+2.214*c)
-#        mlrv=10**(-1.476+1.747*c)
-#        mlrr=10**(-1.314+1.528*c)
-#        mlri=10**(-1.204+1.347*c)
     elif color=='mean':
         bv=M_star_from_mags(B,V,R,I,'B-V')
         br=M_star_from_mags(B,V,R,I,'B-R')
@@ -2835,7 +2820,58 @@ def M_star_from_mags(B,V,R,I,color='B-V'):
     mstar.append(mag_to_lum(I,'I')*mlri)
     
     return np.mean(mstar),tuple(mstar)
-
+def ML_ratio_from_color_SDSS(c,color='g-r'):
+    """
+    uses Bell 03 relations derived from SDSS
+    
+    color can either be a 'u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z'
+    
+    returns tuple of mass-to-light ratios for each c as
+    (mlrg,mlrr,mlri,mlrz,mlrJ,mlrH,mlrK)
+    """
+    b03table=np.array([[-0.221, -0.099, -0.053, -0.105, -0.128, -0.209, -0.26 ,  0.485,
+         0.345,  0.268,  0.226,  0.169,  0.133,  0.123],
+       [-0.39 , -0.223, -0.151, -0.178, -0.172, -0.237, -0.273,  0.417,
+         0.299,  0.233,  0.192,  0.138,  0.104,  0.091],
+       [-0.375, -0.212, -0.144, -0.171, -0.169, -0.233, -0.267,  0.359,
+         0.257,  0.201,  0.165,  0.119,  0.09 ,  0.077],
+       [-0.4  , -0.232, -0.161, -0.179, -0.163, -0.205, -0.232,  0.332,
+         0.239,  0.187,  0.151,  0.105,  0.071,  0.056],
+       [-0.499, -0.306, -0.222, -0.223, -0.172, -0.189, -0.209,  1.519,
+         1.097,  0.864,  0.689,  0.444,  0.266,  0.197],
+       [-0.379, -0.22 , -0.152, -0.175, -0.153, -0.186, -0.211,  0.914,
+         0.661,  0.518,  0.421,  0.283,  0.179,  0.137],
+       [-0.367, -0.215, -0.153, -0.171, -0.097, -0.117, -0.138,  0.698,
+         0.508,  0.402,  0.322,  0.175,  0.083,  0.047],
+       [-0.106, -0.022, -0.052, -0.079, -0.148, -0.186,  1.982,  1.431,
+         0.006,  1.114,  0.923,  0.65 ,  0.437,  0.349],
+       [-0.124, -0.041, -0.018, -0.041, -0.011, -0.059, -0.092,  1.067,
+         0.78 ,  0.623,  0.463,  0.224,  0.076,  0.019]])
+    colorrowmap=dict([(ci,i) for i,ci in enumerate(['u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z'])])
+    
+    a = b03table[colorrowmap[color],0::2].reshape((7,1))
+    b = b03table[colorrowmap[color],1::2].reshape((7,1))
+    
+    return tuple(10**(a+b*c))
+    
+def M_star_from_mags_SDSS(u,g,r,i,z,J=None,H=None,K=None,color='mean'):
+    mags = {'u':u,'g':g,'r':r,'i':i,'z':z,'J':J,'H':H,'K':K}
+    
+    if color=='mean':
+        mstars = []
+        for c in ['u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z']:
+            mstars.append(M_star_from_mags_SDSS(u,g,r,i,z,J,H,K,c)[1])
+        mstars = np.array(mstars)
+        return mstars.mean(),mstars
+    elif '-' in color:
+        c1,c2 = color.split('-')
+        mlrs = ML_ratio_from_color_SDSS(mags[c1]-mags[c2],color)
+    else:
+        raise ValueError('invalid Color')
+    
+    mstar=[mag_to_lum(mag,bstr)*mlr for mag,bstr,mlr in zip(mags.values(),mags.keys(),mlrs) if mag is not None]
+    
+    return np.mean(mstar),tuple(mstar)
 
 def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     """
