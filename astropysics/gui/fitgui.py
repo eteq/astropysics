@@ -15,7 +15,8 @@ from enthought.traits.ui.api import View,Handler,Item,Label,Group,VGroup, \
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
                                 ColorMapper,LinearMapper,ScatterInspectorOverlay,\
-                                LassoOverlay,AbstractOverlay
+                                LassoOverlay,AbstractOverlay,ErrorBarPlot, \
+                                ArrayDataSource
 from enthought.chaco.tools.api import PanTool, ZoomTool,SelectTool,LassoSelection,\
                                       ScatterInspector
 from enthought.enable.api import ColorTrait,ComponentEditor
@@ -358,6 +359,7 @@ class FitGui(HasTraits):
         
         self.data = [xdata,ydata]
         
+        
         if weights is None:
             self.weights = np.ones_like(xdata)
             self.weighttype = 'equal'
@@ -375,6 +377,8 @@ class FitGui(HasTraits):
         self.scatter = plot.plot(('xdata','ydata','weights'),name='data',
                          color_mapper=_cmapblack if self.weights0rem else _cmap,
                          type='cmap_scatter', marker='circle')[0]
+                         
+        self.errorplots = None
                         
         if not isinstance(model,FunctionModel1D):
             self.fitmodel = True
@@ -647,9 +651,43 @@ class FitGui(HasTraits):
     @on_trait_change('weights',post_init=True)    
     def weightsChanged(self):
         weights = self.weights
+        if 'errorplots' in self.trait_names():
+            #TODO:switch this to updating error bar data/visibility changing
+            if self.errorplots is not None:
+                self.plot.remove(self.errorplots[0])
+                self.plot.remove(self.errorplots[1])
+                self.errorbarplots = None
+                
+            if len(weights.shape)==2 and weights.shape[0]==2:
+                xerr,yerr = weights
+                
+                high = ArrayDataSource(self.scatter.index.get_data()+xerr)
+                low = ArrayDataSource(self.scatter.index.get_data()-xerr)
+                ebpx = ErrorBarPlot(orientation='v',
+                                   value_high = high,
+                                   value_low = low,
+                                   index = self.scatter.value,
+                                   value = self.scatter.index,
+                                   index_mapper = self.scatter.value_mapper,
+                                   value_mapper = self.scatter.index_mapper
+                                )
+                self.plot.add(ebpx)
+                
+                high = ArrayDataSource(self.scatter.value.get_data()+yerr)
+                low = ArrayDataSource(self.scatter.value.get_data()-yerr)
+                ebpy = ErrorBarPlot(value_high = high,
+                                   value_low = low,
+                                   index = self.scatter.index,
+                                   value = self.scatter.value,
+                                   index_mapper = self.scatter.index_mapper,
+                                   value_mapper = self.scatter.value_mapper
+                                )
+                self.plot.add(ebpy)
+                
+                self.errorplots = (ebpx,ebpy)
+
         while len(weights.shape)>1:
-            weights = sum(weights**2,axis=0)
-        print 'arg',weights.shape
+            weights = np.sum(weights**2,axis=0)
         self.plot.data.set_data('weights',weights)
         self.plot.plots['data'][0].color_mapper.range.refresh()
         
