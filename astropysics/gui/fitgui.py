@@ -385,6 +385,7 @@ class FitGui(HasTraits):
             
         self.updatemodelplot = False #force plot update - generates xmod and ymod
         plot.plot(('xmod','ymod'),name='model',type='line',line_style='dash',color='black',line_width=2)
+        del plot.x_mapper.range.sources[-1]  #remove the line plot from the x_mapper source so only the data is tied to the scaling
         
         self.on_trait_change(self._rangeChanged,'plot.index_mapper.range.updated')
         
