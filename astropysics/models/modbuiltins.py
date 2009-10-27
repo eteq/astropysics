@@ -79,8 +79,8 @@ class LinearModel(FunctionModel1DAuto):
                     weights = ((x/weights[0])**2+(y/weights[1])**2)**0.5
                 m,b,merr,berr = self.fitWeighted(x,y,1/weights,**kwargs)
         elif self.fittype == 'yerr':
-            weights = np.array(weights,copy=False)
-            if len(weights.shape) == 2:
+            weights = np.array(weights,copy=False) if weights is not None else None
+            if weights is not None and len(weights.shape) == 2:
                 weights = weights[1]
             m,b,merr,berr = self.fitWeighted(x,y,weights,**kwargs)
         elif self.fittype == 'fiterrxy':

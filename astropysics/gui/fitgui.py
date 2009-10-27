@@ -428,6 +428,9 @@ class FitGui(HasTraits):
         
         super(FitGui,self).__init__(**traits)
         
+        if weights is not None and len(weights)==2:
+            self.weightsChanged() #update error bars
+        
     def _weights0rem_changed(self,old,new):
         if new:
             self.plot.color_mapper = _cmapblack(self.plot.color_mapper.range)
@@ -476,9 +479,11 @@ class FitGui(HasTraits):
             self.autoupdate = False
             xd,yd = self.data
             kwd = {'x':xd,'y':yd}
-            if xd.shape == self.weights.shape:
+            if self.weights is not None:
                 w = self.weights
-                if self.weights0rem:
+                if xd.shape != w.shape:
+                    print 'TODO:figure out the shapes here'
+                if self.weights0rem and xd.shape == w.shape:
                     m = w!=0
                     w = w[m]
                     kwd['x'] = kwd['x'][m]
