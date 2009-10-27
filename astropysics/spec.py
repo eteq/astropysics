@@ -47,7 +47,7 @@ class HasSpecUnits(object):
         the old x-axis and flux axis into new x axes and flux values
         
         xtrans and xitrans are of the form newx = xtrans(oldx)
-        and oldx = xtrans(newx)
+        and oldx = xitrans(newx)
         
         xftrans is a function with the signature newx,newf = xftrans(oldx,oldf)
         x is expected to be 1D, and f is expected to be either 1D or must have
@@ -61,7 +61,7 @@ class HasSpecUnits(object):
     @staticmethod
     def strToUnit(typestr):
         """
-        converts a unit string into a standardized for
+        converts a unit string into a standardized form
         
         returns phystype,unit,scaling
         (scaling relative to cgs)
@@ -70,7 +70,7 @@ class HasSpecUnits(object):
             raise TypeError('invalid type provided as unit')
         
         u = typestr.lower()
-        if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength-angstrom':
+        if u == 'wl' or u == 'lambda' or u == 'ang' or u == 'angstroms' or u == 'wavelength' or u == 'wavelength-angstrom':
             val =  'wavelength-angstrom'
             scaling=1e-8
         elif u == 'nm' or u == 'wavelength-nm':
@@ -85,7 +85,7 @@ class HasSpecUnits(object):
         elif u == 'cm' or u == 'wavelength-cm':
             val =  'wavelength-cm'
             scaling=1
-        elif u == 'f' or u == 'nu' or u == 'hz' or u == 'frequency-hz':
+        elif u == 'f' or u == 'nu' or u == 'hz' or u == 'frequency' or u == 'frequency-hz':
             val =  'frequency-Hz'
             scaling=1
         elif u == 'thz' or u == 'frequency-THz':
@@ -251,7 +251,7 @@ class Spectrum(HasSpecUnits):
     Note that operations are performed in-place, and properties retrieve the 
     same versions that are changed (except ivar)
     """
-    def __init__(self,x,flux,err=None,ivar=None,unit='wl',copy=True):
+    def __init__(self,x,flux,err=None,ivar=None,unit='wl',name='',copy=True):
         """
         sets the x-axis values and the flux.  Optionally, an error can be
         given by supplying an error or an inverse variance (bot not both)
@@ -293,6 +293,9 @@ class Spectrum(HasSpecUnits):
         self._err = err
         
         self.continuum = None
+        
+        self.name = name
+        self.z = 0 #redshift
         
     def copy(self):
         """
@@ -378,8 +381,14 @@ class Spectrum(HasSpecUnits):
         if x.shape != self._flux.shape:
             raise ValueError("new x doesn't match flux shape")
         self._x = np.array(x)
-    x = property(_getX,_setX)
+    x = property(_getX,_setX,doc='x-axis as measured')
     
+    def _getX0(self):
+        return self._x/(self.z+1)
+    def _setX0(self,x):
+        self.x = x
+        self._x*=(self.z+1)
+    x0 = property(_getX0,_setX0,doc='x-axis in rest frame')
     
     
     #<----------------------Tests/Info--------------------------------->
@@ -799,7 +808,8 @@ class Spectrum(HasSpecUnits):
         else:
             raise ValueError('no continuum action performed')
         
-    def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,clf=True,colors=('b','g','r','k'),**kwargs):
+    def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
+                  clf=True,colors=('b','g','r','k'),restframe=True,**kwargs):
         """
         uses matplotlib to plot the Spectrum object
         
@@ -809,6 +819,8 @@ class Spectrum(HasSpecUnits):
         colors should be a 3-tuple that applies to 
         (spectrum,error,invaliderror,continuum) and kwargs go into spectrum
         and error plots
+        
+        if restframe is True, the x-axis is in the rest frame
         
         if ploterrs or plotcontinuum is a number, the plot will be 
         scaled so that the mean value matches the mean  of the spectrum 
@@ -820,9 +832,9 @@ class Spectrum(HasSpecUnits):
         import matplotlib.pyplot as plt
         
         if smoothing:
-            x,(y,e) = self.x,self.smooth(smoothing,replace=False)
+            x,(y,e) = self.x0 if restframe else self.x,self.smooth(smoothing,replace=False)
         else:
-            x,y,e = self.x,self.flux,self.err
+            x,y,e = self.x0 if restframe else self.x,self.flux,self.err
         
         if 'ls' not in kwargs and 'linestyle' not in kwargs:
             kwargs['ls']='steps'
@@ -1098,7 +1110,7 @@ class ModelSpectrum(FunctionSpectrum):
 
 class SpectralFeature(HasSpecUnits):
     """
-    This class represents a Spectral Feature.
+    This class represents a Spectral Feature/line in a Spectrum.
     
     All SpecralFeatures have a rest value,observed value (possibly with
     error), flux value (possibly with error), and equivalent width (possibly
@@ -1133,6 +1145,158 @@ class SpectralFeature(HasSpecUnits):
     def name(self):
         raise NotImplementedError
     
+class KnownFeature(HasSpecUnits):
+    """
+    Represents a spectral feature with known location to be matched
+    to an unknown feature (or included in line lists).
+    
+    The strength attribute can be positive to imply emmission, negative to
+    mean absorption, or None to leave unspecified
+    """
+    
+    def __init__(self,loc,name='',strength=None,unit='wavelength'):
+        super(KnownFeature,self).__init__(unit)
+        
+        self.loc = loc
+        if name == '':
+            name = str(loc)
+        self.name = name
+        
+        self.strength = None
+        
+    def _str_(self):
+        return self.name
+            
+    def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
+        if self.strength is None:
+            self.loc = xtrans(self.loc)
+        else:
+            self.loc,self.strength = xftrans(self.loc,self.strength)
+            
+    def getUnitLoc(self,unit):
+        """
+        gets the location in the specified units (without changing the current
+        unit)
+        """
+        if unit == self.unit:
+            return self.loc
+        else:
+            oldunit = self.unit
+            try:
+                self.unit = unit
+                return self.loc
+            finally:
+                self.unit = oldunit
+            
+def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
+    """
+    Generates a spectral line list.
+    
+    lst can be:
+    
+    * either 'galaxy' or 'stellar' to load built-in line lists
+      of common optical features
+    * a filename for a file with one spectral feature per line - either 
+      one column of the spectral location, two columns (name,location), or 
+      three columns (name,location,strength)
+    * a sequence of KnownFeature objects.
+    
+    tol is the seperation between locations allowed until two features
+    are considered duplicates (or None to require an exact match)
+    
+    ondup specifies the action to take if a duplicate is encountered: 
+    
+    * 'raise':raise an IndexError
+    * 'warn': issue a warning
+    * 'remove':removes all but last in a set of duplicates
+    * None: ignore
+    
+    The list will be sorted in increasing (decreasing) order if sort is 
+    positive (negative), or no sorting will be done if it is 0/False
+    
+    returns a list of KnownFeature objects 
+    """
+    from warnings import warn
+    from .io import _get_package_data
+    
+    if isinstance(lst,basestring):
+        name = lst
+        if name in ('galaxy','stellar'):
+            #load builtin line list
+            f = _get_package_data(name+'_lines.dat').split('\n')
+            fopen = False
+        else:
+            f = open(name)
+            fopen = True
+            
+        try:
+            kfs = []
+            for i,l in enumerate(f):
+                llstrip = l.lstrip()
+                if llstrip != '' and llstrip[0]!='#':
+                    ls = l.split()
+                    if len(ls)==1:
+                        loc = float(ls[0])
+                        name = ''
+                        strength = None
+                    elif len(ls)==2:
+                        loc = float(ls[1])
+                        name = ls[0]
+                        strength = None
+                    elif len(ls) == 3:
+                        loc = float(ls[1])
+                        name = ls[0]
+                        strength = ls[2]
+                    else:
+                        raise ValueError('could not parse line #'+str(i))
+                                           
+                    kfs.append(KnownFeature(loc,name,strength,unit)) 
+        finally:
+            if fopen:
+                f.close()
+    else:
+        kfs = lst
+        
+    if tol is None:
+        tol = 0
+    dupset = []
+    ignores = []
+    for i,kf in enumerate(kfs):
+        if i not in ignores:
+            locarr = np.array([kfi.loc for kfi in kfs])
+            dups=[j for j,dup in  enumerate(np.abs(locarr-kf.loc) <= tol) if dup]
+            if len(dups)>1:
+                dups.append(i)
+                dupset.append(set(dups))
+                ignores.extend(dupset[-1])
+    
+    torem = []
+    for ds in dupset:
+        if ondup == 'raise':
+            raise IndexError('Lines '+str(ds)[4:-1]+' are duplicates')
+        elif ondup == 'warn':
+            
+            warn('Lines '+str(ds)[4:-1]+' are duplicates')
+        elif ondup == 'remove':
+            torem.extend(ds)
+            del torem[-1]
+        elif not ondup:
+            pass
+        else:
+            raise ValueError('invalid ondup')
+        
+    for i in sorted(torem,reverse=True):
+        del kfs[i]
+        
+    if sort:
+        if int(sort) > 0: #increasing order
+            kfs.sort(key=lambda o:o.loc)
+        else: #decreasing
+            kfs.sort(key=lambda o:-o.loc)
+        
+    return kfs
+    
+    
 #<------------------------Spectrum-related functions--------------------------->
 
 def air_to_vacuum(airwl,nouvconv=True):
@@ -1147,7 +1311,9 @@ def air_to_vacuum(airwl,nouvconv=True):
     Adapted from idlutils airtovac.pro, based on the IAU standard 
     for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
     """
-    airwl = np.array(airwl,copy=False)
+    isscal = np.isscalar(airwl)
+    airwl = np.array(airwl,copy=False,dtype=float)
+    airwl = np.atleast_1d(airwl)
     
     #wavenumber squared
     sig2 = (1e4/airwl)**2
@@ -1159,7 +1325,7 @@ def air_to_vacuum(airwl,nouvconv=True):
         newwl[convmask] *= convfact[convmask]
     else:
         newwl[:] *= convfact
-    return newwl
+    return newwl[0] if isscal else newwl
 
 def vacuum_to_air(vacwl,nouvconv=True):
     """
@@ -1172,19 +1338,22 @@ def vacuum_to_air(vacwl,nouvconv=True):
     
     Adapted from idlutils vactoair.pro.
     """
-    vacwl = np.array(vacwl,copy=False)
+    isscal = np.isscalar(vacwl)
+    vacwl = np.array(vacwl,copy=False,dtype=float)
+    vacwl = np.atleast_1d(vacwl)
     
     #wavenumber squared
     wave2 = vacwl*vacwl
     
     convfact = 1.0 + 2.735182e-4 + 131.4182/wave2 + 2.76249e8/(wave2*wave2)
     newwl = vacwl.copy()/convfact
+    
     if nouvconv:    
         #revert back those for which air < 2000
         noconvmask = newwl<2000
         newwl[noconvmask] *= convfact[noconvmask] 
     
-    return newwl
+    return newwl[0] if isscal else newwl
 
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """
@@ -1221,8 +1390,6 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     
     logres = 'log' in ressample
         
-    
-    
     
     if logres:
         reses=[s.getDlogx() for s in specs]
