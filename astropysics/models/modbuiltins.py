@@ -91,9 +91,9 @@ class LinearModel(FunctionModel1DAuto):
             else:
                 weights = np.array(weights,copy=False)
                 if len(weights.shape)==1:
-                    xerr = yerr = weights*2**-0.5
+                    xerr = yerr = 1/(weights*2**-0.5)
                 else:
-                    xerr,yerr = weights
+                    xerr,yerr = 1/weights
             m,b = self.fitErrxy(x,y,xerr,yerr,**kwargs)
             merr = berr = None
         else:
@@ -224,24 +224,26 @@ class LinearModel(FunctionModel1DAuto):
         """
         from scipy.optimize import leastsq
         if xerr is None and yerr is None:
-            def chi(v):
+            def chi(v,x,y,xerr,yerr):
                 return y-self.f(x,*v)
         elif xerr is None:
-            def chi(v):
+            def chi(v,x,y,xerr,yerr):
                 wsqrt = xerr
                 return (y-self.f(x,*v))/wsqrt
         elif yerr is None:
-            def chi(v):
+            def chi(v,x,y,xerr,yerr):
                 wsqrt = yerr
                 return (y-self.f(x,*v))/wsqrt
         else:
-            def chi(v):
-                wsqrt = (yerr**2+(v[0]**xerr)**2)**0.5
+            def chi(v,x,y,xerr,yerr):
+                wsqrt = (yerr**2+(v[0]*xerr)**2)**0.5
                 return (y-self.f(x,*v))/wsqrt
         
         kwargs.setdefault('full_output',1)
-        self.lastfit = leastsq(chi,(self.m,self.b),**kwargs)
-        self.fitteddata = (x,y)
+        self.lastfit = leastsq(chi,(self.m,self.b),args=(x,y,xerr,yerr),**kwargs)
+        self.fitteddata = (x,y,(xerr,yerr))
+        
+        self._fitchi2 = np.sum(chi(self.lastfit[0],x,y,xerr,yerr)**2)
         
         return self.lastfit[0]
     
@@ -709,7 +711,7 @@ class SmoothSplineModel(FunctionModel1DAuto):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1))
         self.fitData(*self.fitteddata)
     
     _fittypes=['spline']
@@ -770,7 +772,7 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
         super(InterpolatedSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata=(np.arange(self.degree+1),np.arange(self.degree+1))
+        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1))
         self.fitData(*self.fitteddata)
             
             
@@ -836,7 +838,7 @@ class _KnotSplineModel(FunctionModel1DAuto):
         
         self._ws = None
         
-        self.fitteddata=(np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
+        self.fitteddata = (np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
     
     @abstractmethod        
     def f(self,x):

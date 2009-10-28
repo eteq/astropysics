@@ -292,6 +292,9 @@ class FitGui(HasTraits):
     _savedws = Array
     
     plotname = Property
+    chi2 = Property(Float,depends_on='fitmodel,model')
+    chi2r = Property(Float,depends_on='fitmodel,model')
+    
     
     nmod = Int(1024)
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor') 
@@ -305,12 +308,14 @@ class FitGui(HasTraits):
                                 Item('weights0rem',label='Remove 0-weight points for fit?'),
                                 HGroup(Item('newmodel',show_label=False),
                                        Item('fitmodel',show_label=False),
-                                       Item('selbutton',show_label=False))  
+                                       Item('selbutton',show_label=False))
                               ),
                               VGroup(HGroup(Item('autoupdate',label='Auto?'),
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
                               Item('nmod',label='Nmodel'),
                               HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)))),
+                       HGroup(Item('chi2',label='Chi-squared:',style='readonly',visible_when='tmodel.model is not None'),
+                              Item('chi2r',label='reduced Chi-squared:',style='readonly',visible_when='tmodel.model is not None')), 
                        Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
                       ),
                     handler=FGHandler(),
@@ -318,7 +323,7 @@ class FitGui(HasTraits):
                     title='Data Fitting',
                     buttons=['OK','Cancel'],
                     width=700,
-                    height=700
+                    height=800
                     )
                     
     panel_view = View(VGroup(
@@ -348,10 +353,32 @@ class FitGui(HasTraits):
                            Item('delsel',show_label=False)
                          ),title='Selection Options')
     
-    def __init__(self,xdata,ydata,model=None,weights=None,include_models=None,exclude_models=None,**traits):
+    def __init__(self,xdata,ydata,weights=None,model=None,
+                 include_models=None,exclude_models=None,fittype=None,**traits):
+        """
+        Intializes the FitGui object:
+        
+        xdaya and ydata are the data to be fit
+        
+        model is a `models.FunctionModel`, a string specifying the name of a
+        model, or None.  
+        
+        wieghtsorerrs are either a sequence of weights of shape matching
+        the input data or (xerr,yerr) where xerr and yerr must match the 
+        inputs
+        
+        include_models and exclude_models can be used to specify which models
+        should be available (see `models.list_models` for syntax).
+        
+        fittype, if given, will allow explicitly setting the fittype 
+        for the initial model.
+        """
+        
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
         self.tmodel = _TraitedModel(model)
+        if model is not None and fittype is not None:
+            self.tmodel.model.fittype = fittype
 
         self.on_trait_change(self._paramsChanged,'tmodel.paramchange')
         
@@ -474,6 +501,7 @@ class FitGui(HasTraits):
             self.plot.data.set_data('ymod',[])
     
     def _fitmodel_fired(self):
+        from warnings import warn
         preaup = self.autoupdate
         try:
             self.autoupdate = False
@@ -481,13 +509,14 @@ class FitGui(HasTraits):
             kwd = {'x':xd,'y':yd}
             if self.weights is not None:
                 w = self.weights
-                if xd.shape != w.shape:
-                    print 'TODO:figure out the shapes here'
-                if self.weights0rem and xd.shape == w.shape:
-                    m = w!=0
-                    w = w[m]
-                    kwd['x'] = kwd['x'][m]
-                    kwd['y'] = kwd['y'][m]
+                if self.weights0rem: 
+                    if xd.shape == w.shape:
+                        m = w!=0
+                        w = w[m]
+                        kwd['x'] = kwd['x'][m]
+                        kwd['y'] = kwd['y'][m]
+                    elif np.any(w==0):
+                        warn("can't remove 0-weighted points if weights don't match data")
                 kwd['weights'] = w
             self.tmodel.fitdata = kwd
         finally:
@@ -515,6 +544,20 @@ class FitGui(HasTraits):
         if isinstance(self.tmodel.model,SmoothSplineModel):
                 self.tmodel.model.s = len(self.data[0])
         self.fitmodel = True
+        
+    @cached_property
+    def _get_chi2(self):
+        try:
+            return self.tmodel.model.chi2Data()[0]
+        except:
+            return None
+        
+    @cached_property
+    def _get_chi2r(self):
+        try:
+            return self.tmodel.model.chi2Data()[1]
+        except:
+            return None
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
@@ -665,7 +708,7 @@ class FitGui(HasTraits):
                 self.errorbarplots = None
                 
             if len(weights.shape)==2 and weights.shape[0]==2:
-                xerr,yerr = weights
+                xerr,yerr = 1/weights
                 
                 high = ArrayDataSource(self.scatter.index.get_data()+xerr)
                 low = ArrayDataSource(self.scatter.index.get_data()-xerr)

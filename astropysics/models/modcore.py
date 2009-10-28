@@ -391,6 +391,8 @@ class FunctionModel(ParametricModel):
         from operator import isMappingType
         from functools import partial
         
+        self._fitchi2 = None #clear saved chi-squared if it exists
+        
         if x is None:
             if hasattr(self,'fitteddata') and self.fitteddata is not None:
                 x = self.fitteddata[0]
@@ -401,7 +403,7 @@ class FunctionModel(ParametricModel):
         
         if y is None:
             if hasattr(self,'fitteddata') and self.fitteddata is not None:
-                y = self.fitteddata[0]
+                y = self.fitteddata[1]
             else: 
                 raise ValueError('No y data provided and no fitted data already present')
         else:
@@ -565,7 +567,7 @@ class FunctionModel(ParametricModel):
                 setattr(self,par,newv)
                 
         if savedata: 
-            self.fitteddata = (x,y)
+            self.fitteddata = (x,y,weights)
         
         return v
     
@@ -578,7 +580,7 @@ class FunctionModel(ParametricModel):
         if x is None or y is None:
             if self.fitteddata is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y = self.fitteddata
+            x,y,weights = self.fitteddata
         
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
@@ -597,7 +599,7 @@ class FunctionModel(ParametricModel):
         if x is None or y is None:
             if self.fitteddata is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y = self.fitteddata
+            x,y,weights = self.fitteddata
         
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
@@ -606,30 +608,43 @@ class FunctionModel(ParametricModel):
         else:
             return y-self(x)
     
-    def chi2Data(self,x=None,y=None):
+    _fitchi2 = None #save so that fitData can store a chi2 if desired
+    def chi2Data(self,x=None,y=None,weights=None):
         """
         Determines the chi-squared statistic for the data assuming this 
-        model.
+        model.  If both are None, the internal data is used
+        
+        weights are taken here to be inverse-variance
         
         
         returns chi2,reducedchi2,p-value
         """
         from scipy.stats import chisqprob
         
+        chi2 = None
         if x is None or y is None:
             if self.fitteddata is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y = self.fitteddata
+            x,y,weights = self.fitteddata
+            if self._fitchi2 is not None:
+                chi2 = self._fitchi2
         
-        if self(x,*self.parvals).shape != y.shape:
+        if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
         
         n=len(y)
         m=len(self.params)
         dof=n-m-1 #extra 1 because the distribution must sum to n
         
-        chi2=(y-self(x))**2/self(x)
-        chi2=np.sum(chi2*chi2)
+        if chi2 is None:
+            if weights is None:
+                mody=self(x)
+                chi2 = np.sum((y-mody)**2/mody)
+            else:
+                while len(weights.shape)>1:
+                    weights = np.sum(weights*weights,axis=0)**0.5
+                mody=self(x)
+                chi2 = np.sum(weights*(y-mody)**2)
         
         return chi2,chi2/dof,chisqprob(chi2,dof)
     
@@ -667,7 +682,7 @@ class FunctionModel(ParametricModel):
         
         kwargs are passed into fitData
         
-        sets `fitteddata` to (x,y,xerr,yerr)
+        sets `fitteddata` to (x,y,(xerr,yerr))
         
         returns a dictionary mapping parameters to their histograms and the 
         covariance matrix of the parameters in parameter order
@@ -757,7 +772,7 @@ class FunctionModel(ParametricModel):
                 plt.ylabel('N')
                 plt.title('Median$=%3.3f$ $\\sigma=%3.3f$ Fit$=%3.3f$'%(med,std,self.pardict[p]))
                 
-        self.fitteddata = (x,y,xerr,yerr)
+        self.fitteddata = (x,y,(xerr,yerr))
         if medianpars:
             for p,v in d.iteritems():
                 setattr(self,p,np.median(v))
@@ -2182,7 +2197,10 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         from operator import isMappingType
         
         if data == 'auto':
-            data = self.fitteddata or None
+            if self.fitteddata:
+                data = self.fitteddata[:2]
+            else:
+                data = None
         
         if data: #TODO:correct coord conv
             xd,yd = data[0][0],data[0][1]
@@ -2561,7 +2579,6 @@ def get_model_instance(model,baseclass=None,**kwargs):
         return get_model(model,baseclass)(**kwargs)
         
 
-#TODO:fix ndims
 def list_models(include=None,exclude=None,baseclass=None):
     """
     lists the registered model objects in the package
@@ -2586,14 +2603,18 @@ def list_models(include=None,exclude=None,baseclass=None):
     if include is not None:
         if exclude is not None:
             raise TypeError("can't specify both included models and excluded models")
-        if isinstance(include,basestring) or not isSequenceType(include):
+        if isinstance(include,basestring):
+            include = include.split(',')
+        elif not isSequenceType(include):
             include = [include]
         for m in include:
             if m not in res:
                 raise ValueError('modelname to include %s not a valid model name'%m)
             res = include
     elif exclude is not None:
-        if isinstance(exclude,basestring) or not isSequenceType(exclude):
+        if isinstance(exclude,basestring):
+            exclude = exclude.split(',')
+        elif not isSequenceType(exclude):
             exclude = [exclude]
         for m in exclude:
             if m not in res:
@@ -2620,8 +2641,8 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     from scipy.optimize import brentq
     
     if bounds is None:
-        data1 = m1.fitteddata if hasattr(m1,'fitteddata') else None
-        data2 = m2.fitteddata if hasattr(m2,'fitteddata') else None
+        data1 = m1.fitteddata[:2] if hasattr(m1,'fitteddata') else None
+        data2 = m2.fitteddata[:2] if hasattr(m2,'fitteddata') else None
         
         if data1 is None and data2 is None:
             raise ValueError('must supply bounds if neither model has data')
