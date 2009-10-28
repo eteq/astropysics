@@ -1473,24 +1473,27 @@ class FunctionModel1D(FunctionModel):
         
         if xu is None and n is None:
             xorxl = np.array(xorxl)
+            
             if not edge:
                 dx = (xorxl[-1]-xorxl[0])/(len(xorxl)-1)
-                edges = np.concatenate(xorxl-dx/2,(xorxl[-1]+dx/2,))
+                edges = np.concatenate((xorxl-dx/2,(xorxl[-1]+dx/2,)))
+                n = xorxl.size
             else:
                 edges = xorxl
+                n = xorxl.size-1
         else:
             if edge:
                 edges = np.linspace(xorxl,xu,n+1)
             else:
                 dx = (xu-xorxl)/(n-1)
                 edges = np.linspace(xorxl,xu+dx,n+1)-dx/2
-        dx = np.convolve(edges,[1,-1],mode='valid')
         
         if sampling is None:
-            arr = [self.integrate(edges[i],edges[i+1])/d for i,d in enumerate(dx)]
-            arr = np.array(arr)
+            dx = np.convolve(edges,[1,-1],mode='valid')
+            arr = [self.integrate(edges[i],edges[i+1]) for i in range(n)]
+            arr = np.array(arr)/dx
         else:
-            arr = [np.mean(self(np.linspace(edges[i],edges[i+1],sampling)))/d for i,d in enumerate(dx)]
+            arr = [np.mean(self(np.linspace(edges[i],edges[i+1],sampling))) for i in range(n)]
             arr = np.array(arr)
             
         return arr
