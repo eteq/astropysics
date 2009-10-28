@@ -1165,7 +1165,10 @@ class KnownFeature(HasSpecUnits):
         self.strength = None
         
     def _str_(self):
-        return self.name
+        if '_' in self.name:
+            return self.name
+        else:
+            return '%s_%i'%(self.name,self.loc)
             
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         if self.strength is None:
@@ -1299,62 +1302,6 @@ def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
     
 #<------------------------Spectrum-related functions--------------------------->
 
-def air_to_vacuum(airwl,nouvconv=True):
-    """
-    Returns vacuum wavelength of the provided air wavelength array or scalar.
-    Good to ~ .0005 angstroms.
-
-    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
-    
-    Input must be in angstroms.
-    
-    Adapted from idlutils airtovac.pro, based on the IAU standard 
-    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
-    """
-    isscal = np.isscalar(airwl)
-    airwl = np.array(airwl,copy=False,dtype=float)
-    airwl = np.atleast_1d(airwl)
-    
-    #wavenumber squared
-    sig2 = (1e4/airwl)**2
-    
-    convfact = 1. + 6.4328e-5 + 2.94981e-2/(146. - sig2) +  2.5540e-4/( 41. - sig2)
-    newwl = airwl.copy() 
-    if nouvconv:
-        convmask = newwl>=2000
-        newwl[convmask] *= convfact[convmask]
-    else:
-        newwl[:] *= convfact
-    return newwl[0] if isscal else newwl
-
-def vacuum_to_air(vacwl,nouvconv=True):
-    """
-    Returns air wavelength of the provided vacuum wavelength array or scalar.
-    Good to ~ .0005 angstroms.
-    
-    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
-    
-    Input must be in angstroms.
-    
-    Adapted from idlutils vactoair.pro.
-    """
-    isscal = np.isscalar(vacwl)
-    vacwl = np.array(vacwl,copy=False,dtype=float)
-    vacwl = np.atleast_1d(vacwl)
-    
-    #wavenumber squared
-    wave2 = vacwl*vacwl
-    
-    convfact = 1.0 + 2.735182e-4 + 131.4182/wave2 + 2.76249e8/(wave2*wave2)
-    newwl = vacwl.copy()/convfact
-    
-    if nouvconv:    
-        #revert back those for which air < 2000
-        noconvmask = newwl<2000
-        newwl[noconvmask] *= convfact[noconvmask] 
-    
-    return newwl[0] if isscal else newwl
-
 def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
     """
     resample the spectra in the sequence specs so that they all have the same 
@@ -1410,6 +1357,63 @@ def align_spectra(specs,ressample='super',interpolation='linear',copy=False):
         s.resample(x,interpolation)
     
     return specs
+#<---------------------spectral utility functions------------------------------>
+
+def air_to_vacuum(airwl,nouvconv=True):
+    """
+    Returns vacuum wavelength of the provided air wavelength array or scalar.
+    Good to ~ .0005 angstroms.
+
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+    
+    Input must be in angstroms.
+    
+    Adapted from idlutils airtovac.pro, based on the IAU standard 
+    for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
+    """
+    isscal = np.isscalar(airwl)
+    airwl = np.array(airwl,copy=False,dtype=float)
+    airwl = np.atleast_1d(airwl)
+    
+    #wavenumber squared
+    sig2 = (1e4/airwl)**2
+    
+    convfact = 1. + 6.4328e-5 + 2.94981e-2/(146. - sig2) +  2.5540e-4/( 41. - sig2)
+    newwl = airwl.copy() 
+    if nouvconv:
+        convmask = newwl>=2000
+        newwl[convmask] *= convfact[convmask]
+    else:
+        newwl[:] *= convfact
+    return newwl[0] if isscal else newwl
+
+def vacuum_to_air(vacwl,nouvconv=True):
+    """
+    Returns air wavelength of the provided vacuum wavelength array or scalar.
+    Good to ~ .0005 angstroms.
+    
+    If nouvconv is True, does nothing for air wavelength < 2000 angstroms.
+    
+    Input must be in angstroms.
+    
+    Adapted from idlutils vactoair.pro.
+    """
+    isscal = np.isscalar(vacwl)
+    vacwl = np.array(vacwl,copy=False,dtype=float)
+    vacwl = np.atleast_1d(vacwl)
+    
+    #wavenumber squared
+    wave2 = vacwl*vacwl
+    
+    convfact = 1.0 + 2.735182e-4 + 131.4182/wave2 + 2.76249e8/(wave2*wave2)
+    newwl = vacwl.copy()/convfact
+    
+    if nouvconv:    
+        #revert back those for which air < 2000
+        noconvmask = newwl<2000
+        newwl[noconvmask] *= convfact[noconvmask] 
+    
+    return newwl[0] if isscal else newwl
 
 def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verbose=True,interpolation = None):
     """
@@ -1589,7 +1593,78 @@ def lag_to_z(x,lag,xunit='ang',avgbad=True):
         zs[i] = z
     
     return zs[0] if scalarout else zs
-    
 
+
+def build_model_spectrum(n=1024,T=5800,range=None,peak=1,z=0,noise=None,lines=None,linesampling=1):
+    """
+    constructs a basic spectral object composed of a blackbody with
+    temperature T, a set of lines, and noise.  
+    
+    peak sets the peak of the blackbody curve, z is the redshift.
+    
+    noise can be:
+    
+    * positive: additive gaussian noise with the specified amplitude
+    * negative: multiplicative uniform noise with the specified amplitude
+    * True: poisson
+    * False/None: no noise
+    
+    lines can be None or a sequence, where each element of the sequence is:
+    * a 3-sequence (location,amplitude,width) where if width is
+      positive it gives a gaussian sigma, or negative gives a lorentzian FWHM
+    * a 4-sequence (location,amplitude,sigma,FWHM) to use a voigt profile
+    * a  FunctionModel1D for the line flux
+    
+    linesampling is passed into FunctionModel1D.pixelize or the models will
+    be called directly if it is 1
+    """
+    from . import models
+    bm = models.BlackbodyModel(T=T)
+    bm.peak = peak
+    
+    if range is None:
+        range = bm.rangehint
+    x = np.linspace(range[0],range[1],n)
+    x0 = x/(z+1)
+    
+    flux = bm(x0)
+    
+    if lines:
+        for l in lines:
+            if isinstance(l,models.FunctionModel1D):
+                lmod = l
+            elif len(l) == 3:
+                loc,A,w = l
+                if w>0:
+                    lmod = models.GaussianModel(mu=loc,sig=w)
+                    lmod.peak = A
+                else:
+                    lmod = models.LorentzianModel(mu=loc,gamma=-w)
+                    lmod.peak = A
+            elif len(l) ==4 :
+                loc,A,sig,w = l
+                lmod = models.VoigtModel(mu=loc,sig=sig,gamma=w)
+                lmod.peak = A
+            else:
+                raise ValueError('unrecognized line specifier %s'%l)
+            if linesampling == 1:
+                flux += lmod(x0)
+            else:
+                flux += lmod.pixelize(x0,sampling=linesampling)
+    if noise:
+        if noise is True:
+            flux = np.random.poisson(flux)
+            err = flux**0.5
+        else:
+            noise = float(noise)
+            if noise > 0:
+                err = np.random.randn(flux.size)*noise
+            else:
+                err = flux*(1+(2*np.random.rand(flux.size)-1)*-noise) - flux
+            flux = flux + err
+    else:
+        err = None
+                
+    return Spectrum(x,flux,err,name='Model')
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
