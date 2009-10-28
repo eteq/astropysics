@@ -43,18 +43,18 @@ class LineListEditor(HasTraits):
     lineplot = Instance(LinePlot)
     
     major_view = View(Item('selectednames',editor=SetEditor(name='candidatenames',
-                                        left_column_title='Candidate Lines',
-                                        right_column_title='Selected Lines'),
-                                        show_label=False),
-                                        Item('lineplot',show_label=False,style='custom'),
-                                        title='Major Lines')
+                                    left_column_title='Candidate Lines',
+                                    right_column_title='Selected Lines'),
+                                    show_label=False),
+                        Item('lineplot',show_label=False,style='custom'),
+                        title='Major Lines')
                                         
     minor_view = View(Item('selectednames',editor=SetEditor(name='candidatenames',
-                                        left_column_title='Candidate Lines',
-                                        right_column_title='Selected Lines'),
-                                        show_label=False),
-                                        Item('lineplot',show_label=False,style='custom'),
-                                        title='Minor Lines')
+                                    left_column_title='Candidate Lines',
+                                    right_column_title='Selected Lines'),
+                                    show_label=False),
+                        Item('lineplot',show_label=False,style='custom'),
+                        title='Minor Lines')
 
     @cached_property
     def _get_candidatenames(self):
