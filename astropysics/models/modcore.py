@@ -1453,6 +1453,48 @@ class FunctionModel1D(FunctionModel):
         """
         return (self(x+dx)-self(x))/dx
     
+    def pixelize(self,xorxl,xu=None,n=None,edge=False,sampling=None):
+        """
+        this method integrates over the model for a number of ranges
+        to get a 1D pixelized version of the model.  
+        
+        if xorxl is an array and xu and n are None, it specifies the center
+        of each of the pixels if edge is False (assumes even spacing) or 
+        the edges of the pixels if edge is True.  Otherwise, xorxl and xu
+        specify the centers of the lower and upper pixels (if edge is False),
+        or the lower and upper edges (if edge is True). 
+          
+        
+        sampling can be None to integrate, or an integer to specify the 
+        number of sub-samples.
+        """
+        if xu is None and n is not None or xu is not None and n is None:
+            raise TypeError('must specify both xu and n')
+        
+        if xu is None and n is None:
+            xorxl = np.array(xorxl)
+            if not edge:
+                dx = (xorxl[-1]-xorxl[0])/(len(xorxl)-1)
+                edges = np.concatenate(xorxl-dx/2,(xorxl[-1]+dx/2,))
+            else:
+                edges = xorxl
+        else:
+            if edge:
+                edges = np.linspace(xorxl,xu,n+1)
+            else:
+                dx = (xu-xorxl)/(n-1)
+                edges = np.linspace(xorxl,xu+dx,n+1)-dx/2
+        dx = np.convolve(edges,[1,-1],mode='valid')
+        
+        if sampling is None:
+            arr = [self.integrate(edges[i],edges[i+1])/d for i,d in enumerate(dx)]
+            arr = np.array(arr)
+        else:
+            arr = [np.mean(self(np.linspace(edges[i],edges[i+1],sampling)))/d for i,d in enumerate(dx)]
+            arr = np.array(arr)
+            
+        return arr
+                
     
     #TODO:move this up into FunctionModel
     def setCall(self,type=None,xtrans=None,ytrans=None,**kwargs):
