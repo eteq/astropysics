@@ -344,12 +344,15 @@ class FunctionModel(ParametricModel):
         all will be free parameters if self.fixedpars is absent).  If None,
         all parameters will be free.
         
-        weights can be:
+        weights are statistically interpreted as inverse errors (NOT 
+        inverse variance) and can be:
         
         * None for equal weights
         * an array of points that must match the output
+        * a 2-sequence of arrays (xierr,yierr) such that xierr matches the
+          x-data and yierr matches the y-data
         * a function called as f(params) that returns an array of weights 
-          that must match the output
+          that match one of the above two conditions
           
         if fitf is True, the fit is performed directly against the `f` 
         function instead of against the model as evaluated if called
@@ -464,9 +467,13 @@ class FunctionModel(ParametricModel):
                 wf = weights
             else:
                 w = np.array(weights,copy=False)
-                if w.shape != y.shape:
+                if w.shape == y.shape:
+                    w = w.ravel()
+                elif w.shape[1:] == y.shape and w.shape[0]==2:
+                    w = (w[0]**2+w[1]**2)**0.5
+                else:
                     raise ModelTypeError('weights shape does not match y')
-                w = w.ravel()
+                
                 wf = lambda v:w
                 
             kwargs['full_output'] = 1
@@ -608,13 +615,15 @@ class FunctionModel(ParametricModel):
         else:
             return y-self(x)
     
-    _fitchi2 = None #save so that fitData can store a chi2 if desired
+    _fitchi2 = None #option to save so that fitData can store a chi2 if desired
     def chi2Data(self,x=None,y=None,weights=None):
         """
         Determines the chi-squared statistic for the data assuming this 
-        model.  If both are None, the internal data is used
+        model.  If both are None, the internal data is used.  In some
+        cases the chi-squared statistic may be pre-computed in the fitting
+        step rather than in this method.
         
-        weights are taken here to be inverse-variance
+        weights are taken here to be inverse-error
         
         
         returns chi2,reducedchi2,p-value
@@ -644,7 +653,8 @@ class FunctionModel(ParametricModel):
                 while len(weights.shape)>1:
                     weights = np.sum(weights*weights,axis=0)**0.5
                 mody=self(x)
-                chi2 = np.sum(weights*(y-mody)**2)
+                #assumes weights are inverse error, not ivar
+                chi2 = np.sum((weights*(y-mody))**2)
         
         return chi2,chi2/dof,chisqprob(chi2,dof)
     
@@ -1337,7 +1347,7 @@ class FunctionModel1D(FunctionModel):
             else:
                 plt.plot(x,y,*args,**kwargs)
             
-            if np.any(data):
+            if data is not None:
                 if isMappingType(data):
                     if clf and 'c' not in data:
                         data['c']='g'
@@ -1345,7 +1355,11 @@ class FunctionModel1D(FunctionModel):
                 else:
                     plt.scatter(data[0],data[1],c='r',zorder=10)
                     if len(data)>2:
-                        plt.errorbar(data[0],data[1],data[3],data[2],fmt=None,ecolor='k')
+                        if len(data)==3:
+                            if data[2] is not None: 
+                                plt.errorbar(data[0],data[1],data[2][1],data[2][0],fmt=None,ecolor='k')
+                        else:
+                            plt.errorbar(data[0],data[1],data[3],data[2],fmt=None,ecolor='k')
             plt.xlim(lower,upper)
             
             if self.xaxisname:
