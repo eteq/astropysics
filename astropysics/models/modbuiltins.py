@@ -333,6 +333,17 @@ class GaussianModel(FunctionModel1DAuto):
         sig=self.sig
         return self(x)*-x/sig/sig
     
+    def integrate(self,lower,upper,**kwargs):
+        if len(kwargs)>0:
+            return super(GaussianModel,self).integrate(lower,upper,**kwargs)
+        else:
+            from scipy.special import erf
+            l = (lower-self.mu)/self.sig
+            u = (upper-self.mu)/self.sig
+            uval = erf(u*2**-0.5)
+            lval = erf(-l*2**-0.5)
+            return self.A*(uval+lval)/2
+        
     @property
     def rangehint(self):
         return(self.mu-self.sig*4,self.mu+self.sig*4)
