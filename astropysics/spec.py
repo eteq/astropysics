@@ -21,7 +21,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 
 #Spectrum related io module functions
-from .io import load_deimos_spectrum,load_all_deimos_spectra,load_spylot_spectrum,load_wcs_spectrum
+from .io import load_deimos_spectrum,load_all_deimos_spectra,load_wcs_spectrum
 
 class HasSpecUnits(object):
     """
@@ -1596,7 +1596,7 @@ def lag_to_z(x,lag,xunit='ang',avgbad=True):
     return zs[0] if scalarout else zs
 
 
-def build_model_spectrum(n=1024,T=5800,range=None,peak=1,z=0,noise=None,lines=None,linesampling=1):
+def build_model_spectrum(n=1024,T=5800,range=None,peak=1,z=0,noise=None,lines=None,linesampling=1,name='Model'):
     """
     constructs a basic spectral object composed of a blackbody with
     temperature T, a set of lines, and noise.  
@@ -1666,6 +1666,6 @@ def build_model_spectrum(n=1024,T=5800,range=None,peak=1,z=0,noise=None,lines=No
     else:
         err = None
                 
-    return Spectrum(x,flux,err,name='Model')
+    return Spectrum(x,flux,err,name=name)
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
