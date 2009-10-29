@@ -491,6 +491,55 @@ class VOTable(object):
 
 #<--------------------------Spectrum loaders----------------------------------->
 
+def load_wcs_spectrum(fn,fluxext=1,errext=None,hdrext=None,errtype='err'):
+    """
+    Loads a spectrum from a fits file with WCS keywords CD1_1 and CRVAL_1
+    
+    fluxext specifies the extension to use for the flux data, while errext
+    specifies err source (or None for no errors) - errtype gives the form
+    of the error data - either 'err','ierr','var', or 'ivar'
+    
+    hdrext specifies which extension to use to look for the header keywords - 
+    by default this is the same as the flux extension
+    """
+    import pyfits
+    from .spec import Spectrum
+    
+    f=pyfits.open(fn)
+    try:
+        hdr = f[fluxext if hdrext is None else hdrext].header
+        
+        for k in ('CTYPE1','CRVAL1','CD1_1'):
+            if k not in hdr:
+                raise ValueError('missing header keyword %s'%k)
+        
+        if not hdr['CTYPE1'] == 'LINEAR':
+            raise ValueError('Spectrum coordinates must be linear')
+        
+        flux = f[fluxext].data
+        x = np.arange(flux.size)*hdr['CD1_1']+hdr['CRVAL1']
+        
+        if errext is not None:
+            err = f[errext].data
+        else:
+            err = None
+            
+        if errtype == 'err':
+            fobj = Spectrum(x,flux,err=err) 
+        elif errtype == 'ierr':
+            fobj = Spectrum(x,flux,err=1/err) 
+        elif errtype == 'var':
+            fobj = Spectrum(x,flux,ivar=1/err) 
+        elif errtype == 'ivar':
+            fobj = Spectrum(x,flux,ivar=err) 
+        else:
+            raise ValueError('Unrecognized errtype %s'%errtype)
+        
+        return fobj  
+    finally:
+        f.close()
+        
+
 def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing=None):
     """
     extraction type can 'horne' or 'boxcar'
@@ -524,7 +573,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
         
         changei = len(bd.LAMBDA[0])
         
-        fobj = Spectrum(x,flux,ivar)
+        fobj = Spectrum(x,flux,ivar=ivar)
         fobj.sky = sky
         
         if smoothing:
@@ -583,7 +632,7 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
         
     return dict(zip(fns,specs))
     
-def load_spylot_spectrum(s,bandi):
+def _load__old_spylot_spectrum(s,bandi):
     from .spec import Spectrum
     x=s.getCurrentXAxis()
     f=s.getCurrentData(bandi=bandi)

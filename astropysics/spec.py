@@ -21,7 +21,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 
 #Spectrum related io module functions
-from .io import load_deimos_spectrum,load_all_deimos_spectra,load_spylot_spectrum
+from .io import load_deimos_spectrum,load_all_deimos_spectra,load_spylot_spectrum,load_wcs_spectrum
 
 class HasSpecUnits(object):
     """
@@ -811,7 +811,8 @@ class Spectrum(HasSpecUnits):
     def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
                   clf=True,colors=('b','g','r','k'),restframe=True,**kwargs):
         """
-        uses matplotlib to plot the Spectrum object
+        uses matplotlib to plot the Spectrum object.  The resulting plot
+        shows the flux, error (if present), and continuum (if present)
         
         if the linestyle is 'steps' (the default), the spectrum will
         be offset so that the steps are centered on the pixels
