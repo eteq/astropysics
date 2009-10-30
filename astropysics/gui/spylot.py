@@ -128,7 +128,10 @@ class Spylot(HasTraits):
     fluxformat = Button('Flux Line Format')
     errformat = Button('Error Line Format')
     showgrid = Bool(True)
-    showzero = Bool(False)
+    
+    contsub = Button('Continuum...')
+    showcont = Bool(False)
+    contformat = Button('Continuum Line Format')
     
     _titlestr = Str('Spectrum 0/0')
     _oldunit = Str('')
@@ -151,8 +154,8 @@ class Spylot(HasTraits):
                                      Item('scaleerrfrac',show_label=False,enabled_when='scaleerr'),
                                      Item('fluxformat',show_label=False),
                                      Item('errformat',show_label=False),
-                                     Item('showgrid',label='Grid?'),
-                                     Item('showzero',label='Zero line?'),spring),
+                                     Item('showgrid',label='Grid?'),spring),
+                              HGroup(spring,Item('contsub',show_label=False),Item('showcont',label='Continuum line?'),Item('contformat',show_label=False),spring),  
                               Item('plot',editor=ComponentEditor(),show_label=False,width=768),
                               Item('z',editor=RangeEditor(low_name='lowerZ',high_name='upperZ',format='%.3f',auto_set=True)),
                               HGroup(Item('lowerZ'),spring,
@@ -170,6 +173,7 @@ class Spylot(HasTraits):
         pd.set_data('majory',[0,1])#reset by majorlines change
         pd.set_data('minorx',[1,1])#reset by minorlines change
         pd.set_data('minory',[0,1])#reset by minorlines change
+        pd.set_data('continuum',[0,0])#reset by minorlines change
         
         self.plot = plot = Plot(pd,resizeable='hv')
         plot.plot(('x','flux'),name='flux',type='line',line_style='solid',color='blue')
@@ -197,13 +201,15 @@ class Spylot(HasTraits):
         del plot.x_mapper.range.sources[-1]  #remove the line plot from the x_mapper sources so scaling is only on the spectrum
         self.minorlineeditor = LineListEditor(lineplot=minorlineplot)
         
-        idat = ArrayDataSource((0.0,1.0))
-        vdat = ArrayDataSource((0.0,0.0))
-        self.zeroline = LinePlot(index=idat,value=vdat,line_style='solid',color='black')
-        self.zeroline.index_mapper = LinearMapper(range=DataRange1D(high=0.9,low=0.1))
-        self.zeroline.value_mapper = self.plot.y_mapper
-        self.zeroline.visible = self.showzero
-        self.plot.add(self.zeroline)
+        self.contline = plot.plot(('x','continuum'),name='continuum',type='line',line_style='solid',color='black')[0]
+        self.contline.visible = self.showcont
+#        idat = ArrayDataSource((0.0,1.0))
+#        vdat = ArrayDataSource((0.0,0.0))
+#        self.zeroline = LinePlot(index=idat,value=vdat,line_style='solid',color='black')
+#        self.zeroline.index_mapper = LinearMapper(range=DataRange1D(high=0.9,low=0.1))
+#        self.zeroline.value_mapper = self.plot.y_mapper
+#        self.zeroline.visible = self.showcont
+#        self.plot.add(self.zeroline)
         
         if Spylot.defaultlines:
             defaultlines = _get_default_lines(Spylot.defaultlines)
@@ -300,6 +306,8 @@ class Spylot(HasTraits):
         #p.data.set_data('x0',x0)
         p.data.set_data('flux',flux)
         p.data.set_data('err',err)
+        cmodel = self.currspec.continuum
+        p.data.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
         
         self.z  = s.z
         self.zqual = s.zqual
@@ -377,15 +385,29 @@ class Spylot(HasTraits):
         v.title = 'Error Line Format'
         plot.edit_traits(view=v)
         
+    def _contformat_fired(self):
+        from copy import copy
+        plot = self.plot.plots['continuum'][0]
+        v = copy(plot.trait_view())
+        v.title = 'Continuum Line Format'
+        plot.edit_traits(view=v)
+        
     def _showgrid_changed(self,new):
         p = self.plot
         p.x_grid.visible = new
         p.y_grid.visible = new
         p.request_redraw()
         
-    def _showzero_changed(self,new):
-        self.zeroline.visible = new
+    def _showcont_changed(self,new):
+        self.contline.visible = new
         self.plot.request_redraw()
+        
+    def _contsub_fired(self):
+        self.currspec.fitContinuum(interactive=True)
+        pd = self.plot.data
+        cmodel = self.currspec.continuum
+        x = pd.get_data('x')
+        pd.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)

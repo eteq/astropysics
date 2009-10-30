@@ -760,7 +760,7 @@ class SmoothSplineModel(FunctionModel1DAuto):
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
             xd,yd,weights = self.fitteddata
-            self.fitSpline(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     
@@ -821,7 +821,7 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
     def f(self,x,degree=3):        
         if self._oldd != degree:
             xd,yd,weights = self.fitteddata
-            self.fitSpline(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     
@@ -903,7 +903,7 @@ class UniformKnotSplineModel(_KnotSplineModel):
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
             xd,yd,weights = self.fitteddata
-            self.fitSpline(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     
@@ -932,7 +932,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
             xd,yd,weights = self.fitteddata
-            self.fitSpline(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
 
@@ -980,7 +980,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
         #TODO:faster way to do the arg check?
         if self._oldd != degree or np.any(self.iknots != np.array(args)):
             xd,yd,weights = self.fitteddata
-            self.fitSpline(xd,yd,weights=self._ws)
+            self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     

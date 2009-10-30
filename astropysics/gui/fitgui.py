@@ -11,7 +11,7 @@ from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
                                  TraitError
 from enthought.traits.ui.api import View,Handler,Item,Label,Group,VGroup, \
                                     HGroup, InstanceEditor,EnumEditor, \
-                                    ListEditor, TupleEditor
+                                    ListEditor, TupleEditor,spring
 from enthought.traits.ui.menu import ModalButtons
 from enthought.chaco.api import Plot,ArrayPlotData,jet,ColorBar,HPlotContainer,\
                                 ColorMapper,LinearMapper,ScatterInspectorOverlay,\
@@ -244,8 +244,8 @@ class NewModelSelector(HasTraits):
 #        gc.restore_state()
 
 class FGHandler(Handler):
-    def object_selbutton_changed(self,info):
-        info.object.edit_traits(parent=info.ui.control,view='selection_view')
+#    def object_selbutton_changed(self,info):
+#        info.object.edit_traits(parent=info.ui.control,view='selection_view')
         
     def object_datasymb_changed(self,info):
         kind = info.ui.rebuild.__name__.replace('ui_','') #TODO:not hack!
@@ -274,7 +274,7 @@ class FitGui(HasTraits):
     weights0rem = Bool(True)
     modelselector = NewModelSelector
     
-    selbutton = Button('Selection...')    
+    #selbutton = Button('Selection...')    
     scattertool = Enum(None,'clicktoggle','clicksingle','clickimmediate','lassoadd','lassoremove','lassoinvert')
     selectedi = Property #indecies of the selected objects
     weightchangesel = Button('Set Selection To')
@@ -300,32 +300,6 @@ class FitGui(HasTraits):
     #modelpanel = View(Label('empty'),kind='subpanel',title='model editor') 
     modelpanel = View
     
-    traits_view = View(VGroup(
-                       Item('plotcontainer', editor=ComponentEditor(),show_label=False),
-                       HGroup(VGroup(HGroup(Item('weighttype',label='Weights:'),
-                                            Item('savews',show_label=False),
-                                            Item('loadws',enabled_when='_savedws',show_label=False)),
-                                Item('weights0rem',label='Remove 0-weight points for fit?'),
-                                HGroup(Item('newmodel',show_label=False),
-                                       Item('fitmodel',show_label=False),
-                                       Item('selbutton',show_label=False))
-                              ),
-                              VGroup(HGroup(Item('autoupdate',label='Auto?'),
-                              Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
-                              Item('nmod',label='Nmodel'),
-                              HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)))),
-                       HGroup(Item('chi2',label='Chi-squared:',style='readonly',visible_when='tmodel.model is not None'),
-                              Item('chi2r',label='reduced Chi-squared:',style='readonly',visible_when='tmodel.model is not None')), 
-                       Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
-                      ),
-                    handler=FGHandler(),
-                    resizable=True, 
-                    title='Data Fitting',
-                    buttons=['OK','Cancel'],
-                    width=700,
-                    height=800
-                    )
-                    
     panel_view = View(VGroup(
                        Item('plot', editor=ComponentEditor(),show_label=False),
                        HGroup(Item('tmodel.modelname',show_label=False,style='readonly'),
@@ -352,6 +326,49 @@ class FitGui(HasTraits):
                            Item('weightchangeto',label='Weight'),
                            Item('delsel',show_label=False)
                          ),title='Selection Options')
+    
+    traits_view = View(VGroup(
+                       Item('plotcontainer', editor=ComponentEditor(),show_label=False),
+                       HGroup(VGroup(HGroup(Item('weighttype',label='Weights:'),
+                                            Item('savews',show_label=False),
+                                            Item('loadws',enabled_when='_savedws',show_label=False)),
+                                Item('weights0rem',label='Remove 0-weight points for fit?'),
+                                HGroup(Item('newmodel',show_label=False),
+                                       Item('fitmodel',show_label=False),
+                                       VGroup(Item('chi2',label='Chi2:',style='readonly',format_str='%6.6g',visible_when='tmodel.model is not None'),
+                                             Item('chi2r',label='reduced:',style='readonly',format_str='%6.6g',visible_when='tmodel.model is not None'))
+                                       )#Item('selbutton',show_label=False))
+                              ,springy=False),spring,
+                              VGroup(HGroup(Item('autoupdate',label='Auto?'),
+                              Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
+                              Item('nmod',label='Nmodel'),
+                              HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)),springy=False)),
+                       '_',       
+                       HGroup(Item('scattertool',label='Selection Mode',
+                                 editor=EnumEditor(values={None:'1:No Selection',
+                                                           'clicktoggle':'3:Toggle Select',
+                                                           'clicksingle':'2:Single Select',
+                                                           'clickimmediate':'7:Immediate',
+                                                           'lassoadd':'4:Add with Lasso',
+                                                           'lassoremove':'5:Remove with Lasso',
+                                                           'lassoinvert':'6:Invert with Lasso'})),
+                           Item('unselectonaction',label='Clear Selection on Action?'), 
+                           Item('clearsel',show_label=False),
+                           Item('weightchangesel',show_label=False),
+                           Item('weightchangeto',label='Weight'),
+                           Item('delsel',show_label=False),
+                         layout='flow'),
+                       Item('tmodel',show_label=False,style='custom',editor=InstanceEditor(kind='subpanel'))
+                      ),
+                    handler=FGHandler(),
+                    resizable=True, 
+                    title='Data Fitting',
+                    buttons=['OK','Cancel'],
+                    width=700,
+                    height=900
+                    )
+                    
+    
     
     def __init__(self,xdata,ydata,weights=None,model=None,
                  include_models=None,exclude_models=None,fittype=None,**traits):
@@ -550,14 +567,14 @@ class FitGui(HasTraits):
         try:
             return self.tmodel.model.chi2Data()[0]
         except:
-            return None
+            return 0
         
     @cached_property
     def _get_chi2r(self):
         try:
             return self.tmodel.model.chi2Data()[1]
         except:
-            return None
+            return 0
                 
     def _get_nomodel(self):
         return self.tmodel.model is None
