@@ -296,6 +296,25 @@ class Spectrum(HasSpecUnits):
         
         self.name = name
         self.z = 0 #redshift
+        self._zqual = -1 #redshift quality
+    
+    _zqmap = {-1:'unknown',0:'none',1:'bad',2:'average',3:'good',4:'excellent'}
+    _zqmapi = dict([(v,k) for k,v in _zqmap.iteritems()])
+    def _getZqual(self):
+        return self._zqual
+    def _setZqual(self,val):
+        if isinstance(val,basestring):
+            self.zqual = self._zqmapi[val]
+        else:
+            val = int(val)
+            if val in self._zqmap.keys():
+                self._zqual = val
+            else:
+                raise KeyError('invalid zqual value')
+    zqual = property(_getZqual,_setZqual,doc=None)
+    
+    def getZQualStr(self):
+        return self._zqmap[self._zqual]
         
     def copy(self):
         """
@@ -740,7 +759,7 @@ class Spectrum(HasSpecUnits):
         if interactive:
             from .gui import fit_data,FitGui
             #model = fit_data(self.x,self.flux,model,weights=(self.ivar if weighted else None))
-            fg = FitGui(self.x,self.flux,model,weights=(self.ivar if weighted else None))
+            fg = FitGui(self.x,self.flux,model=model,weights=(self.ivar if weighted else None))
             fg.plot.plots['data'][0].marker = 'dot'
             fg.plot.plots['data'][0].marker_size = 2
             fg.plot.plots['model'][0].line_style = 'solid'

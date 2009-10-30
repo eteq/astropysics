@@ -722,8 +722,8 @@ class SmoothSplineModel(FunctionModel1DAuto):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1))
-        self.fitData(*self.fitteddata)
+        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
+        self.fitData(self.fitteddata[0],self.fitteddata[1])
     
     _fittypes=['spline']
     fittype = 'spline'
@@ -759,7 +759,7 @@ class SmoothSplineModel(FunctionModel1DAuto):
     
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
-            xd,yd = self.fitteddata
+            xd,yd,weights = self.fitteddata
             self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
@@ -783,8 +783,8 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
         super(InterpolatedSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1))
-        self.fitData(*self.fitteddata)
+        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
+        self.fitData(self.fitteddata[0],self.fitteddata[1])
             
             
     _fittypes = ['spline']
@@ -820,7 +820,7 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
     
     def f(self,x,degree=3):        
         if self._oldd != degree:
-            xd,yd = self.fitteddata
+            xd,yd,weights = self.fitteddata
             self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
@@ -849,7 +849,7 @@ class _KnotSplineModel(FunctionModel1DAuto):
         
         self._ws = None
         
-        self.fitteddata = (np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1))
+        self.fitteddata = (np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1),self._ws)
     
     @abstractmethod        
     def f(self,x):
@@ -888,7 +888,7 @@ class UniformKnotSplineModel(_KnotSplineModel):
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformKnotSplineModel,self).__init__()
-        self.fitData(*self.fitteddata)
+        self.fitData(self.fitteddata[0],self.fitteddata[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
@@ -902,7 +902,7 @@ class UniformKnotSplineModel(_KnotSplineModel):
     
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
-            xd,yd = self.fitteddata
+            xd,yd,weights = self.fitteddata
             self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
@@ -913,7 +913,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformCDFKnotSplineModel,self).__init__()
-        self.fitData(*self.fitteddata)
+        self.fitData(self.fitteddata[0],self.fitteddata[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
@@ -931,7 +931,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
-            xd,yd = self.fitteddata
+            xd,yd,weights = self.fitteddata
             self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)
@@ -979,7 +979,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
     def f(self,x,degree,*args):
         #TODO:faster way to do the arg check?
         if self._oldd != degree or np.any(self.iknots != np.array(args)):
-            xd,yd = self.fitteddata
+            xd,yd,weights = self.fitteddata
             self.fitSpline(xd,yd,weights=self._ws)
         
         return self.spline(x)

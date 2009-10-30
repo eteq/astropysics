@@ -116,6 +116,8 @@ class Spylot(HasTraits):
     z = Float
     lowerZ = Float(0.0)
     upperZ = Float(1.0)
+    _zql,_zqh = min(spec.Spectrum._zqmap.keys()),max(spec.Spectrum._zqmap.keys())
+    zqual = Range(_zql,_zqh,-1)
     
     spechanged = Event
     specleft = Button('<')
@@ -153,7 +155,9 @@ class Spylot(HasTraits):
                                      Item('showzero',label='Zero line?'),spring),
                               Item('plot',editor=ComponentEditor(),show_label=False,width=768),
                               Item('z',editor=RangeEditor(low_name='lowerZ',high_name='upperZ',format='%.3f',auto_set=True)),
-                              HGroup(Item('lowerZ'),spring,Item('upperZ'))
+                              HGroup(Item('lowerZ'),spring,
+                                     Item('zqual',style='custom',label='Z quality',editor=RangeEditor(cols=_zqh-_zql+1,low=_zql,high=_zqh)),
+                                     spring,Item('upperZ'))
                       ),
                        resizable=True, 
                        title='Spectrum Plotter',
@@ -260,6 +264,9 @@ class Spylot(HasTraits):
         self._minorlines_changed()
         self._update_upperaxis_range()
         
+    def _zqual_changed(self):
+        self.currspec.zqual = self.zqual
+        
     def _scaleerr_changed(self):
         self.spechanged = True #TODO: control more finely
         
@@ -295,6 +302,7 @@ class Spylot(HasTraits):
         p.data.set_data('err',err)
         
         self.z  = s.z
+        self.zqual = s.zqual
         
         units = tuple(s.unit.split('-'))
         p.x_axis.title = '%s/%s'%units
