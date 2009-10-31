@@ -8,10 +8,11 @@ import numpy as np
 
 from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                  Float,Event,Bool,DelegatesTo,Dict,Str,List, \
-                                 Button,cached_property,on_trait_change
+                                 Button,cached_property,on_trait_change,Enum
 from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
-                                    VGroup,HFlow,SetEditor,spring
-
+                                    VGroup,HFlow,SetEditor,spring,Handler, \
+                                    TextEditor
+from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
 from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinearMapper, \
                                 DataRange1D,DataLabel,LinePlot,ArrayDataSource
 from enthought.chaco.tools.api import PanTool, ZoomTool,BroadcasterTool
@@ -58,7 +59,7 @@ class LineListEditor(HasTraits):
 
     @cached_property
     def _get_candidatenames(self):
-        return tuple([line.name for line in self.candidates])
+        return tuple([str(line) for line in self.candidates])
     
     @cached_property
     def _get_selectedlocs(self):
@@ -73,7 +74,7 @@ class LineListEditor(HasTraits):
         cs,cns,cls = [],[],[]
         for c in self.candidates:
             cs.append(c)
-            cns.append(c.name)
+            cns.append(str(c))
             cls.append(c.loc)
         
         names = []
@@ -91,6 +92,23 @@ class LineListEditor(HasTraits):
                     raise ValueError('line object '+str(v)+' not found')
                 names.append(cns[cs.index(v)])
         self.names = names
+        
+        
+class SpylotHandler(Handler):
+    def nextSpec(self,info):
+        info.object.specright = True
+    
+    def prevSpec(self,info):
+        info.object.specleft = True
+    
+spylotkeybindings = KeyBindings(
+                       KeyBinding(binding1='<',binding2='Ctrl-,',
+                                  description='Previous spectrum',      
+                                  method_name='prevSpec'),
+                       KeyBinding(binding1='>',binding2='Ctrl-.',
+                                  description='Next spectrum',      
+                                  method_name='nextSpec')
+                    )
 
 class Spylot(HasTraits):
     defaultlines = 'galaxy' #can be 'galaxy' or 'stellar' or None
@@ -103,19 +121,19 @@ class Spylot(HasTraits):
     showmajorlines = Bool(True)
     showminorlines = Bool(False)
     
-    #majorlabels = List(DataLabel)
-    #showmajorlabels = Bool(False)
+    labels = List(DataLabel)
+    showlabels = Bool(False)
     editmajor = Button('Edit Major')
-    #minorlabels = List(DataLabel)
-    #showminorlabels = Bool(False)
     editminor = Button('Edit Minor')
     
     specs = List(Instance(spec.Spectrum))
     currspeci = Int
     currspec = Property
     z = Float
-    lowerZ = Float(0.0)
-    upperZ = Float(1.0)
+    lowerz = Float(0.0)
+    upperz = Float(1.0)
+    coarserz = Button('Coarser')
+    finerz = Button('Finer')
     _zql,_zqh = min(spec.Spectrum._zqmap.keys()),max(spec.Spectrum._zqmap.keys())
     zqual = Range(_zql,_zqh,-1)
     
@@ -124,10 +142,14 @@ class Spylot(HasTraits):
     specright = Button('>')
     
     scaleerr = Bool(False)
-    scaleerrfrac = Float(0.7)
+    scaleerrfraclow = Range(0.0,1.0,1.0)
+    scaleerrfrachigh = Float(1.0)
     fluxformat = Button('Flux Line Format')
     errformat = Button('Error Line Format')
     showgrid = Bool(True)
+    
+    dosmoothing = Bool(False)
+    smoothing = Float(3)
     
     contsub = Button('Continuum...')
     showcont = Bool(False)
@@ -136,37 +158,56 @@ class Spylot(HasTraits):
     _titlestr = Str('Spectrum 0/0')
     _oldunit = Str('')
     
-    traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),spring,
-                                     Item('_titlestr',style='readonly',show_label=False),spring,
+    featureselmode = Enum(['No Selection','Click Select','Range Select'])
+    showfeatures = Button('Features...')
+    
+    traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
+                                     spring,
+                                     Item('_titlestr',style='readonly',show_label=False),
+                                     spring,
                                      Item('specright',show_label=False,enabled_when='currspeci<(len(specs)-1)')),
-                               HGroup(spring,Item('showmajorlines',label='Show major lines?'),
-                                     Item('editmajor',show_label=False),
-                                     Item('showmajorlines',label='Show major lines?'),
-                                     Item('editmajor',show_label=False),spring),     
-#                              HGroup(spring,Item('showmajorlines',label='Show major lines?'),
-#                                     Item('showmajorlabels',label='Show major labels?'),
-#                                     Item('editmajor',show_label=False),spring),
-#                              HGroup(spring,Item('showminorlines',label='Show minor lines?'),
-#                                     Item('showminorlabels',label='Show minor labels?'),
-#                                     Item('editminor',show_label=False),spring),
                               HGroup(spring,
-                                     Item('scaleerr',label='Scale Error to flux?'),
-                                     Item('scaleerrfrac',show_label=False,enabled_when='scaleerr'),
                                      Item('fluxformat',show_label=False),
                                      Item('errformat',show_label=False),
-                                     Item('showgrid',label='Grid?'),spring),
-                              HGroup(spring,Item('contsub',show_label=False),Item('showcont',label='Continuum line?'),Item('contformat',show_label=False),spring),  
+                                     Item('scaleerr',label='Scale Error?'),
+                                     Item('scaleerrfraclow',label='Lower',enabled_when='scaleerr',editor=TextEditor(evaluate=float)),
+                                     Item('scaleerrfrachigh',label='Upper',enabled_when='scaleerr'),
+                                     Item('showgrid',label='Grid?'),
+                                     spring),
+                              HGroup(spring,
+                                     Item('showmajorlines',label='Show major?'),
+                                     Item('editmajor',show_label=False),
+                                     Item('showlabels',label='Labels?'),
+                                     Item('showminorlines',label='Show minor?'),
+                                     Item('editminor',show_label=False),
+                                     spring,
+                                     Item('showfeatures',show_label=False),
+                                     Item('featureselmode',show_label=False),
+                                     spring),     
+                              HGroup(spring,
+                                     Item('contsub',show_label=False),
+                                     Item('showcont',label='Continuum line?'),
+                                     Item('contformat',show_label=False),
+                                     Item('dosmoothing',label='Smooth?'),
+                                     Item('smoothing',show_label=False,enabled_when='dosmoothing'),
+                                     spring),  
                               Item('plot',editor=ComponentEditor(),show_label=False,width=768),
-                              Item('z',editor=RangeEditor(low_name='lowerZ',high_name='upperZ',format='%.3f',auto_set=True)),
-                              HGroup(Item('lowerZ'),spring,
+                              Item('z',editor=RangeEditor(low_name='lowerz',high_name='upperz',format='%.4f')),
+                              HGroup(Item('lowerz',show_label=False),
+                                     Item('coarserz',show_label=False),
+                                     spring,
                                      Item('zqual',style='custom',label='Z quality',editor=RangeEditor(cols=_zqh-_zql+1,low=_zql,high=_zqh)),
-                                     spring,Item('upperZ'))
+                                     spring,
+                                     Item('finerz',show_label=False),
+                                     Item('upperz',show_label=False))
                       ),
                        resizable=True, 
                        title='Spectrum Plotter',
+                       handler = SpylotHandler(),
+                       key_bindings = spylotkeybindings
                        )
                       
-    def __init__(self,specs):
+    def __init__(self,specs,**traits):
         #pd = ArrayPlotData(x=[1],x0=[1],flux=[1],err=[1]) #reset by spechanged event
         pd = ArrayPlotData(x=[1],flux=[1],err=[1]) #reset by spechanged event
         pd.set_data('majorx',[1,1])#reset by majorlines change
@@ -184,6 +225,9 @@ class Spylot(HasTraits):
         plot.x_mapper.on_trait_change(self._update_upperaxis_screen,'updated')
         self.upperaxis = PlotAxis(plot,orientation='top',mapper=topmapper)
         plot.overlays.append(self.upperaxis)
+        
+        self.errmapper = LinearMapper(range=DataRange1D(high=1.0,low=0))
+        plot.x_mapper.on_trait_change(self._update_errmapper_screen,'updated')
         
         plot.padding_top = 30 #default is a bit much
         
@@ -219,7 +263,8 @@ class Spylot(HasTraits):
             self.minorlineeditor.selectednames = defaultlines[2]
         
         plot.tools.append(PanTool(plot))
-        plot.overlays.append(ZoomTool(plot))
+        plot.tools.append(ZoomTool(plot))
+        plot.overlays.append(plot.tools[-1])
         
         if specs is None:
             specs = []
@@ -232,6 +277,8 @@ class Spylot(HasTraits):
         self.on_trait_change(self._majorlines_changed,'majorlineeditor.selectedobjs')
         self.on_trait_change(self._minorlines_changed,'minorlineeditor.selectedobjs')
         
+        super(Spylot,self).__init__(**traits)
+        
     def _update_upperaxis_range(self):
         newlow = self.plot.x_mapper.range.low/(self.z+1)
         newhigh = self.plot.x_mapper.range.high/(self.z+1)
@@ -239,6 +286,9 @@ class Spylot(HasTraits):
         
     def _update_upperaxis_screen(self):
         self.upperaxis.mapper.screen_bounds = self.plot.x_mapper.screen_bounds
+        
+    def _update_errmapper_screen(self):
+        self.errmapper.screen_bounds = self.plot.y_mapper.screen_bounds
         
     def _get_currspec(self):
         return self.specs[self.currspeci]
@@ -262,6 +312,28 @@ class Spylot(HasTraits):
         
     def _histplot_changed(self):
         self.spechanged = True
+        
+    def _coarserz_changed(self):
+        rng = self.upperz - self.lowerz
+        newrng = rng*2
+        lowerz = self.z-newrng/2
+        if lowerz > 0:
+            self.lowerz = lowerz
+            self.upperz = self.z+newrng/2
+        else:
+            self.lowerz = 0
+            self.upperz = newrng
+    
+    def _finerz_changed(self):
+        rng = self.upperz - self.lowerz
+        newrng = rng/2
+        lowerz = self.z-newrng/2
+        if lowerz > 0:
+            self.lowerz = lowerz
+            self.upperz = self.z+newrng/2
+        else:
+            self.lowerz = 0
+            self.upperz = newrng
     
     def _z_changed(self):
         self.currspec.z = self.z
@@ -273,11 +345,25 @@ class Spylot(HasTraits):
     def _zqual_changed(self):
         self.currspec.zqual = self.zqual
         
-    def _scaleerr_changed(self):
-        self.spechanged = True #TODO: control more finely
+    def _scaleerr_changed(self,new):
+        if new:
+            self._scaleerrfrac_changed()
+            self._update_errmapper_screen() #not sure why this is necessary, but apparently it is
+        self.spechanged = True #TODO: control more finely?
         
+    @on_trait_change('scaleerrfraclow,scaleerrfrachigh')
     def _scaleerrfrac_changed(self):
-        self.spechanged = True #TODO: control more finely
+        if self.scaleerrfraclow==1:
+            self.errmapper.range.low = self.plot.data.get_data('err').min()
+        else:
+            self.errmapper.range.low = self.scaleerrfraclow*self.plot.data.get_data('err').max()
+        self.errmapper.range.high = self.scaleerrfrachigh*self.plot.data.get_data('err').max()
+        if self.scaleerr:
+            self._scaleerr_changed(False)
+    
+    @on_trait_change('smoothing,dosmoothing')    
+    def _update_smoothing(self):
+        self.spechanged = True #TODO: control more finely?
         
     def _spechanged_fired(self):
         p = self.plot
@@ -288,19 +374,33 @@ class Spylot(HasTraits):
             self._majorlines_changed()
             self._oldunit = s.unit
         
-        if self.histplot:
-            x = _hist_sample_x(s.x)
-            #x0 = _hist_sample_x(s.x0)
-            flux = _hist_sample_y(s.flux)
-            err = _hist_sample_y(s.err)
+        x = s.x
+        #x0 = s.x0
+        if self.dosmoothing:
+            smoothing = self.smoothing
+            if smoothing < 0:
+                smoothing *=-1
+                smtype = 'boxcar'
+            else:
+                smtype = 'gaussian'
+            flux,err = s.smooth(smoothing,smtype,replace=False)
         else:
-            #x0 = s.x0
-            x = s.x
-            flux = s.flux
-            err = s.err
+            flux = s.flux.copy()
+            err = s.err.copy()
+            
+        if self.histplot:
+            x = _hist_sample_x(x)
+            #x0 = _hist_sample_x(x0)
+            flux = _hist_sample_y(flux)
+            err = _hist_sample_y(err)
         
         if self.scaleerr:
-            err = err*self.scaleerrfrac*flux.max()/err.max()
+            p.plots['err'][0].value_mapper = self.errmapper
+        else:
+            p.plots['err'][0].value_mapper = p.y_mapper
+           
+        flux[~np.isfinite(flux)] = 0
+        err[~np.isfinite(err)] = 0
             
         p.data.set_data('x',x)
         #p.data.set_data('x0',x0)
@@ -321,10 +421,45 @@ class Spylot(HasTraits):
         self._titlestr = 'Spectrum %i/%i: %s'%(self.currspeci+1,len(self.specs),s.name)
         
     def _specleft_fired(self):
-        self.currspeci -= 1
+        if self.currspeci > 0:
+            self.currspeci -= 1
     
     def _specright_fired(self):
-        self.currspeci += 1
+        if self.currspeci < len(self.specs)-1:
+            self.currspeci += 1
+            
+    def _showlabels_changed(self):
+        if len(self.labels) == 0:
+            self._rebuild_labels()
+        else:
+            for l in self.labels:
+                l.visible = self.showlabels
+        self.plot.request_redraw()
+        
+    def _rebuild_labels(self):
+        for dl in self.labels:
+                if dl in self.plot.overlays:
+                    self.plot.overlays.remove(dl)
+        self.labels = []
+        
+        if self.showlabels:
+            majorlines = self.majorlineeditor.selectedobjs
+            linestrs = [str(l) for l in majorlines]
+            linelocs = [l.loc for l in majorlines]
+            lfact = self.z+1
+            xd,yd = self.plot.data.get_data('x'),self.plot.data.get_data('flux')
+            for s,l in zip(linestrs,linelocs):
+                x = l*lfact
+                y = np.interp(x,xd,yd)
+#                xs,ys = self.plot.map_screen((x,y))
+#                x,y = self.plot.map_data((xs,ys+50))
+                dl = DataLabel(self.plot,data_point=(x,y),lines=[s],
+                               label_position="top", padding_bottom=10,
+                               arrow_visible=False)
+                self.labels.append(dl)
+                self.plot.overlays.append(dl)
+                
+        
 
     def _majorlines_changed(self):
         majorlines = self.majorlineeditor.selectedobjs
@@ -335,6 +470,7 @@ class Spylot(HasTraits):
             linex.sort()
             liney = np.tile((0,1,1,0),np.ceil(len(majorlines)/2))[:len(majorlines)*2]
             self.plot.data.set_data('majorx',linex*(self.z+1))
+            self._rebuild_labels()
             self.plot.data.set_data('majory',liney)
             self.plot.plots['majorlineplot'][0].request_redraw()
         else:
@@ -408,15 +544,28 @@ class Spylot(HasTraits):
         cmodel = self.currspec.continuum
         x = pd.get_data('x')
         pd.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
+        
+    def _featureselmode_changed(self,new):
+        if new == 'No Selection':
+            self.plot.tools[0].drag_button = 'left'
+        elif new == 'Click Select':
+            self.plot.tools[0].drag_button = 'right'
+        elif new == 'Range Select':
+            self.plot.tools[0].drag_button = 'right'
+        else:
+            assert True,'enum invalid!'
+        
+    def _showfeatures_fired(self):
+        raise NotImplementedError
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)
     if linetypes == 'galaxy':
         major=['Ly_alpha','H_alpha','H_beta','H_gamma','[OIII]_5007','[OIII]_4959','[OII]_3727','Balmer_limit','[SII]_6717','[SII]_6731']
-        return candidates,major,[c.name for c in candidates if c.name not in major]
+        return candidates,[str(c) for c in candidates if c.name in major],[str(c) for c in candidates if c.name not in major]
     elif linetypes == 'stellar':
         major = ['Halpha']
-        return candidates,major,[c.name for c in candidates if c not in major]
+        return candidates,[str(c) for c in candidates if c.name in major],[str(c) for c in candidates if c not in major]
     else:
         return candidates,[],[]
     

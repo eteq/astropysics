@@ -622,6 +622,7 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
             print 'Loading spectrum',fn
         try:
             s = load_deimos_spectrum(fn,False,extraction,False,smoothing)
+            s.name = fn
             specs.append(s)
         except Exception,e:
             if verbose:

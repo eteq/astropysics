@@ -763,10 +763,13 @@ class Spectrum(HasSpecUnits):
             fg.plot.plots['data'][0].marker = 'dot'
             fg.plot.plots['data'][0].marker_size = 2
             fg.plot.plots['model'][0].line_style = 'solid'
-            fg.configure_traits(kind='livemodal')
-            model = fg.tmodel.model
-            
-        self.continuum = model(self.x) if evaluate else model
+            if fg.configure_traits(kind='livemodal'):
+                model = fg.tmodel.model
+            else:
+                model = None
+                
+        if model is not None:    
+            self.continuum = model(self.x) if evaluate else model
         
     def subtractContinuum(self):
         """
@@ -1184,11 +1187,12 @@ class KnownFeature(HasSpecUnits):
         
         self.strength = None
         
-    def _str_(self):
-        if '_' in self.name:
-            return self.name
+    def __str__(self):
+        ls = str(int(round(self.loc)))
+        if ls not in self.name:
+            return '%s(%s)'%(self.name,ls)
         else:
-            return '%s_%i'%(self.name,self.loc)
+            return self.name
             
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         if self.strength is None:
