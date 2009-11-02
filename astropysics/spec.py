@@ -724,12 +724,16 @@ class Spectrum(HasSpecUnits):
         
         return tuple(eyefluxes)
     
-    def fitContinuum(self,model='uniformknotspline',weighted=False,evaluate=False,
+    def fitContinuum(self,model=None,weighted=False,evaluate=False,
                           interactive=False,**kwargs):
         """
         this method computes a continuum fit to the spectrum using a model
         from astropysics.models (list_models will give all options) or
         an callable with a fitData(x,y) function
+        
+        if model is None, the existing model will be used if present, 
+        or if there is None, the default is 'uniformknotspline'.  Otherwise,
+        it may be any acceptable model (see `models.get_model`)
         
         kwargs are passed into the constructor for the model
         
@@ -743,29 +747,48 @@ class Spectrum(HasSpecUnits):
         spectrum points if evaluate is True and the results are set to 
         self.continuum
         """
+        
+        if model is None and self.continuum is None:
+            model = 'uniformknotspline'
+        
         #for the default, choose a reasonable number of knots
         if model == 'uniformknotspline' and 'nknots' not in kwargs:
             kwargs['nknots'] = 4
         
-        if isinstance(model,basestring):
-            from .models import get_model
-            model = get_model(model)(**kwargs)
+        if model is None and self.continuum is not None:
+            model = self.continuum
+            if not interactive:
+                model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
+        else:
+            if isinstance(model,basestring):
+                from .models import get_model
+                model = get_model(model)(**kwargs)
         
-        if not (callable(model) and hasattr(model,'fitData')):
-            raise ValueError('provided model object cannot fit data')
-        
-        model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
+            if not (callable(model) and hasattr(model,'fitData')):
+                raise ValueError('provided model object cannot fit data')
+            
+            model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
         
         if interactive:
             from .gui.fitgui import FitGui
-            fg = FitGui(self.x,self.flux,model=model,weights=(self.ivar if weighted else None))
-            fg.plot.plots['data'][0].marker = 'dot'
-            fg.plot.plots['data'][0].marker_size = 2
-            fg.plot.plots['model'][0].line_style = 'solid'
+            
+            if interactive == 'reuse' and hasattr(self,'_contfg'):
+                fg = self._contfg
+            else:
+                fg = FitGui(self.x,self.flux,model=model,weights=(self.ivar if weighted else None))
+                fg.plot.plots['data'][0].marker = 'dot'
+                fg.plot.plots['data'][0].marker_size = 2
+                fg.plot.plots['model'][0].line_style = 'solid'
+                
             if fg.configure_traits(kind='livemodal'):
                 model = fg.tmodel.model
             else:
                 model = None
+                
+            if interactive == 'reuse':
+                self._contfg = fg
+            elif hasattr(self,'_contfg'):
+                del self._contfg
                 
         if model is not None:    
             self.continuum = model(self.x) if evaluate else model
