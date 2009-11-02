@@ -441,7 +441,7 @@ class FitGui(HasTraits):
         
         self.on_trait_change(self._rangeChanged,'plot.index_mapper.range.updated')
         
-        plot.tools.append(PanTool(plot,drag_button='right'))
+        plot.tools.append(PanTool(plot,drag_button='left'))
         plot.overlays.append(ZoomTool(plot))
 #        self.filloverlay = WeightFillOverlay(plot)
 #        if self.weights0rem:
@@ -503,6 +503,10 @@ class FitGui(HasTraits):
     
     def _rangeChanged(self):
         self.updatemodelplot = True
+        
+    @on_trait_change('plot.value_scale,plot.index_scale',post_init=True)
+    def _scale_changes(self):
+        self.plot.request_redraw()
     
     def _updatemodelplot_fired(self,new):
         #if False (e.g. button click), update regardless, otherwise check for autoupdate
@@ -623,6 +627,10 @@ class FitGui(HasTraits):
     
     #selection-related
     def _scattertool_changed(self,old,new):
+        if new == 'No Selection':
+            self.plot.tools[0].drag_button='left' 
+        else:
+            self.plot.tools[0].drag_button='right' 
         if old is not None and 'lasso' in old:
             if new is not None and 'lasso' in new:
                 #connect correct callbacks
