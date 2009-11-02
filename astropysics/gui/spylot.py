@@ -409,7 +409,13 @@ class Spylot(HasTraits):
         cmodel = self.currspec.continuum
         p.data.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
         
-        self.z  = s.z
+        rng = self.upperz - self.lowerz
+        self.z = z = s.z
+        if (z - rng/2.0) >=0:
+            self.upperz,self.lowerz = z+rng/2.0,z-rng/2.0
+        else:
+            self.lowerz = 0
+            self.upperz = rng
         self.zqual = s.zqual
         
         units = tuple(s.unit.split('-'))
