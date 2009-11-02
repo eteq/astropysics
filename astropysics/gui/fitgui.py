@@ -273,6 +273,7 @@ class FitGui(HasTraits):
     weightsvary = Property(Bool)
     weights0rem = Bool(True)
     modelselector = NewModelSelector
+    ytype = Enum(('data and model','residuals'))
     
     #selbutton = Button('Selection...')    
     scattertool = Enum(None,'clicktoggle','clicksingle','clickimmediate','lassoadd','lassoremove','lassoinvert')
@@ -328,6 +329,13 @@ class FitGui(HasTraits):
                          ),title='Selection Options')
     
     traits_view = View(VGroup(
+                        HGroup(Item('object.plot.index_scale',label='x-scaling',
+                                    enabled_when='object.plot.index_mapper.range.low>0 or object.plot.index_scale=="log"'),
+                              spring,
+                              Item('ytype',label='y-data'),
+                              Item('object.plot.value_scale',label='y-scaling',     
+                                   enabled_when='object.plot.value_mapper.range.low>0 or object.plot.value_scale=="log"')
+                              ),
                        Item('plotcontainer', editor=ComponentEditor(),show_label=False),
                        HGroup(VGroup(HGroup(Item('weighttype',label='Weights:'),
                                             Item('savews',show_label=False),
@@ -502,20 +510,33 @@ class FitGui(HasTraits):
             return
 
         mod = self.tmodel.model
-        if mod:
-            #xd = self.data[0]
-            #xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
-            xl = self.plot.index_range.low
-            xh = self.plot.index_range.high
-            xmod = np.linspace(xl,xh,self.nmod)
-            ymod = self.tmodel.model(xmod)
-            
-            self.plot.data.set_data('xmod',xmod)
-            self.plot.data.set_data('ymod',ymod)
+        if self.ytype == 'data and model':
+            if mod:
+                #xd = self.data[0]
+                #xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
+                xl = self.plot.index_range.low
+                xh = self.plot.index_range.high
+                xmod = np.linspace(xl,xh,self.nmod)
+                ymod = self.tmodel.model(xmod)
+                
+                self.plot.data.set_data('xmod',xmod)
+                self.plot.data.set_data('ymod',ymod)
 
+            else:
+                self.plot.data.set_data('xmod',[])
+                self.plot.data.set_data('ymod',[])
+        elif self.ytype == 'residuals':
+            if mod:
+                self.plot.data.set_data('xmod',[])
+                self.plot.data.set_data('ymod',[])
+                #residuals set the ydata instead of setting the model
+                res = mod.residuals(*self.data)
+                self.plot.data.set_data('ydata',res)
+            else:
+                self.ytype = 'data and model'
         else:
-            self.plot.data.set_data('xmod',[])
-            self.plot.data.set_data('ymod',[])
+            assert True,'invalid Enum'
+            
     
     def _fitmodel_fired(self):
         from warnings import warn
@@ -705,14 +726,15 @@ class FitGui(HasTraits):
     def _get_selectedi(self):
         return self.scatter.index.metadata['selections']
     
-    @on_trait_change('data',post_init=True)
+    
+    @on_trait_change('data,ytype',post_init=True)
     def dataChanged(self):        
         pd = self.plot.data
         #TODO:make set_data apply to both simultaneously?
         pd.set_data('xdata',self.data[0])
         pd.set_data('ydata',self.data[1])
         
-        self.updatemodelplot = True
+        self.updatemodelplot = False
         
     @on_trait_change('weights',post_init=True)    
     def weightsChanged(self):
