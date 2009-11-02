@@ -214,7 +214,7 @@ class Spylot(HasTraits):
         pd.set_data('majory',[0,1])#reset by majorlines change
         pd.set_data('minorx',[1,1])#reset by minorlines change
         pd.set_data('minory',[0,1])#reset by minorlines change
-        pd.set_data('continuum',[0,0])#reset by minorlines change
+        pd.set_data('continuum',[0,0])#reset
         
         self.plot = plot = Plot(pd,resizeable='hv')
         plot.plot(('x','flux'),name='flux',type='line',line_style='solid',color='blue')
@@ -226,7 +226,8 @@ class Spylot(HasTraits):
         self.upperaxis = PlotAxis(plot,orientation='top',mapper=topmapper)
         plot.overlays.append(self.upperaxis)
         
-        self.errmapper = LinearMapper(range=DataRange1D(high=1.0,low=0))
+        self.errmapperfixed = plot.plots['err'][0].value_mapper
+        self.errmapperscaled = LinearMapper(range=DataRange1D(high=1.0,low=0))
         plot.x_mapper.on_trait_change(self._update_errmapper_screen,'updated')
         
         plot.padding_top = 30 #default is a bit much
@@ -288,7 +289,7 @@ class Spylot(HasTraits):
         self.upperaxis.mapper.screen_bounds = self.plot.x_mapper.screen_bounds
         
     def _update_errmapper_screen(self):
-        self.errmapper.screen_bounds = self.plot.y_mapper.screen_bounds
+        self.errmapperscaled.screen_bounds = self.plot.y_mapper.screen_bounds
         
     def _get_currspec(self):
         return self.specs[self.currspeci]
@@ -354,10 +355,10 @@ class Spylot(HasTraits):
     @on_trait_change('scaleerrfraclow,scaleerrfrachigh')
     def _scaleerrfrac_changed(self):
         if self.scaleerrfraclow==1:
-            self.errmapper.range.low = self.plot.data.get_data('err').min()
+            self.errmapperscaled.range.low = self.plot.data.get_data('err').min()
         else:
-            self.errmapper.range.low = self.scaleerrfraclow*self.plot.data.get_data('err').max()
-        self.errmapper.range.high = self.scaleerrfrachigh*self.plot.data.get_data('err').max()
+            self.errmapperscaled.range.low = self.scaleerrfraclow*self.plot.data.get_data('err').max()
+        self.errmapperscaled.range.high = self.scaleerrfrachigh*self.plot.data.get_data('err').max()
         if self.scaleerr:
             self._scaleerr_changed(False)
     
@@ -395,9 +396,9 @@ class Spylot(HasTraits):
             err = _hist_sample_y(err)
         
         if self.scaleerr:
-            p.plots['err'][0].value_mapper = self.errmapper
+            p.plots['err'][0].value_mapper = self.errmapperscaled
         else:
-            p.plots['err'][0].value_mapper = p.y_mapper
+            p.plots['err'][0].value_mapper = self.errmapperfixed
            
         flux[~np.isfinite(flux)] = 0
         err[~np.isfinite(err)] = 0
@@ -545,7 +546,7 @@ class Spylot(HasTraits):
         self.plot.request_redraw()
         
     def _contsub_fired(self):
-        self.currspec.fitContinuum(interactive=True)
+        self.currspec.fitContinuum(interactive='reuse')
         pd = self.plot.data
         cmodel = self.currspec.continuum
         x = pd.get_data('x')
