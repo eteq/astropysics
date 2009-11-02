@@ -757,8 +757,7 @@ class Spectrum(HasSpecUnits):
         model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
         
         if interactive:
-            from .gui import fit_data,FitGui
-            #model = fit_data(self.x,self.flux,model,weights=(self.ivar if weighted else None))
+            from .gui.fitgui import FitGui
             fg = FitGui(self.x,self.flux,model=model,weights=(self.ivar if weighted else None))
             fg.plot.plots['data'][0].marker = 'dot'
             fg.plot.plots['data'][0].marker_size = 2
@@ -1224,8 +1223,8 @@ def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
     * either 'galaxy' or 'stellar' to load built-in line lists
       of common optical features
     * a filename for a file with one spectral feature per line - either 
-      one column of the spectral location, two columns (name,location), or 
-      three columns (name,location,strength)
+      one column of the spectral location, two columns (location,name), or 
+      three columns (location,name,strength)
     * a sequence of KnownFeature objects.
     
     tol is the seperation between locations allowed until two features
@@ -1263,16 +1262,16 @@ def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
                 if llstrip != '' and llstrip[0]!='#':
                     ls = l.split()
                     if len(ls)==1:
-                        loc = float(ls[0])
+                        loc = float(ls[1])
                         name = ''
                         strength = None
                     elif len(ls)==2:
-                        loc = float(ls[1])
-                        name = ls[0]
+                        loc = float(ls[0])
+                        name = ls[1]
                         strength = None
                     elif len(ls) == 3:
-                        loc = float(ls[1])
-                        name = ls[0]
+                        loc = float(ls[0])
+                        name = ls[1]
                         strength = ls[2]
                     else:
                         raise ValueError('could not parse line #'+str(i))
