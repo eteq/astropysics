@@ -8,15 +8,18 @@ import numpy as np
 
 from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                  Float,Event,Bool,DelegatesTo,Dict,Str,List, \
-                                 Button,cached_property,on_trait_change,Enum
+                                 Button,cached_property,on_trait_change,Enum, \
+                                 Tuple
 from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
                                     VGroup,HFlow,SetEditor,spring,Handler, \
                                     TextEditor
 from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
-from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinearMapper, \
-                                DataRange1D,DataLabel,LinePlot,ArrayDataSource
-from enthought.chaco.tools.api import PanTool, ZoomTool,BroadcasterTool
-from enthought.enable.api import ComponentEditor
+from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinePlot, \
+                                DataRange1D,DataLabel,ArrayDataSource, \
+                                AbstractOverlay,LinearMapper
+from enthought.chaco.tools.api import PanTool, ZoomTool,BroadcasterTool, \
+                                      RangeSelection,RangeSelectionOverlay
+from enthought.enable.api import ComponentEditor,BaseTool,Interactor
 
 from .. import spec
 
@@ -92,7 +95,41 @@ class LineListEditor(HasTraits):
                     raise ValueError('line object '+str(v)+' not found')
                 names.append(cns[cs.index(v)])
         self.names = names
-        
+
+
+#overlays and tools
+class FeatureClickTool(BaseTool):
+    
+    event_state = Enum("normal", "mousedown")
+    plot = Instance(Plot)
+    mouse_clicked = Event
+
+    def normal_left_down(self, event):
+        self.event_state = 'mousedown'
+
+    def mousedown_left_up(self, event):
+        datax,datay = self.plot.map_data((event.x, event.y))
+        self.mouse_clicked = (datax,datay)
+
+class RangeSelectionBugfix(RangeSelection):
+    """
+    this subclasses RangeSelection to fix a bug where the selection_completed
+    event is not fired for the left mouse button
+    """
+    def selecting_left_up(self, event):
+        self.event_state = "selected"
+        self.selection_completed = self.selection
+        return        
+    def normal_left_down(self,event):
+        self.downwindow = event.window
+        return RangeSelection.normal_left_down(self,event)
+    
+    def normal_right_down(self,event):
+        self.downwindow = event.window
+        if self.left_button_selects and event.right_down:
+            return
+        else:
+            return RangeSelection.normal_right_down(self,event)
         
 class SpylotHandler(Handler):
     def nextSpec(self,info):
@@ -157,6 +194,7 @@ class Spylot(HasTraits):
     
     _titlestr = Str('Spectrum 0/0')
     _oldunit = Str('')
+    maintool = Tuple(Instance(Interactor),Instance(AbstractOverlay))
     
     featureselmode = Enum(['No Selection','Click Select','Range Select'])
     showfeatures = Button('Features...')
@@ -552,15 +590,51 @@ class Spylot(HasTraits):
         x = pd.get_data('x')
         pd.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
         
-    def _featureselmode_changed(self,new):
+    def _maintool_changed(self,old,new):
+        otool,oover = old
+        ntool,nover = new
+        
+        if otool is not None:
+            self.plot.tools.remove(otool)
+        if oover is not None:
+            self.plot.overlays.remove(oover)
+        if ntool is not None:
+            self.plot.tools.append(ntool)
+        if nover is not None:
+            self.plot.overlays.append(nover)
+        
+    def _featureselmode_changed(self,old,new):
+        pl = self.plot
+            
         if new == 'No Selection':
-            self.plot.tools[0].drag_button = 'left'
+            pl.tools[0].drag_button = 'left'
+            self.maintool = (None,None)
         elif new == 'Click Select':
-            self.plot.tools[0].drag_button = 'right'
+            pl.tools[0].drag_button = 'right'
+            fctool = FeatureClickTool(plot=self.plot)
+            self.maintool = (fctool,None)
+            fctool.on_trait_change(self._add_feature_point,'mouse_clicked')
+            
         elif new == 'Range Select':
-            self.plot.tools[0].drag_button = 'right'
+            pl.tools[0].drag_button = 'right'
+            fplot = pl.plots['flux'][0]
+            #pl.active_tool = RangeSelectionBugfix(fplot,left_button_selects=True)
+            rstool = RangeSelectionBugfix(fplot,left_button_selects=True,enable_resize=False)
+            rsoverlay = RangeSelectionOverlay(component=fplot)
+            self.maintool = (rstool,rsoverlay)
+            rstool.on_trait_change(self._add_feature_range,'selection_completed')
         else:
             assert True,'enum invalid!'
+            
+    def _add_feature_range(self,selection):
+        rstool = self.maintool[0]
+        x1,x2 = selection
+        rstool.deselect(Event(window=rstool.downwindow))
+        print 'adding range at',x1,x2
+        
+    def _add_feature_point(self,dataxy):
+        datax,datay = dataxy
+        print 'adding feature at',datax
         
     def _showfeatures_fired(self):
         raise NotImplementedError
