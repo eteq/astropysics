@@ -827,8 +827,26 @@ class Spectrum(HasSpecUnits):
         self.flux = self.flux/cont
         self._contop = 'normalize'
         
-    def rejectOutliersFromContinuum(self,sig=3):
-        raise NotImplementedError
+    def rejectOutliersFromContinuum(self,sig=3,iters=1,center='median'):
+        """
+        rejects outliers and returns the resulting continuum. see 
+        `utils.sigma_clip` for arguments
+        
+        returns a pair of maksed arrays xmasked,contmasked
+        """
+        from .utils import sigma_clip
+        
+        if self.continuum is None:
+            raise ValueError('no continuum defined')
+        elif callable(self.continuum):
+            cont = self.continuum(self.x)
+        else:
+            cont = self.continuum
+            
+        contma = sigma_clip(cont,sig=sig,iters=iters,center=center,maout='copy')
+        xma = np.ma.MaskedArray(self.x,contma.mask,copy=True)
+        
+        return xma,contma
             
     def revertContinuum(self):
         """
