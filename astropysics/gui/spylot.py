@@ -650,7 +650,7 @@ def _get_default_lines(linetypes):
     else:
         return candidates,[],[]
     
-def spylotSpecs(specs):
+def spylot_specs(specs):
     sp = Spylot(specs)
     sp.configure_traits()
     return sp

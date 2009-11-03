@@ -7,17 +7,29 @@ Note that this module makes heavy use of Enthought Traits and TraitsGUI
 (http://code.enthought.com/projects/traits/) -- if it is not installed, 
 nearly everything in this package will raise an exception.
 
-GUI tools:
-*SpecTarget: a tool for making slitmasks from fiducial CMDs and photometric
-catalogs.  Currently only has direct support for Keck/DEIMOS
-*FitGui/fit*d: tools for interactively fitting ``astropysics.models`` models 
-to data.
+GUI tools (each in their own modules:
+
+* spectarget: a tool for making slitmasks from fiducial CMDs and photometric
+ catalogs.  Currently only has direct support for Keck/DEIMOS
+* fitgui: tools for interactively fitting ``astropysics.models`` models 
+  to data.
+* spylot: spectrum plotter
+
+tools can aslo be invoked from functions:
+
+* spec_target : creates and shows a spectarget UI
+* fit_data : creates and shows a fitgui UI
+* fit_data_multi : creates and shows a fitgui UI for dimensions > 2 (requires 
+  mayavi to be installed)
+* spylot_specs : creates and shows a spylot UI
+ 
 """
 try:
-    from spectarget import SpecTarget
-    from fitgui import FitGui,fit_data
+    from spectarget import spec_target
+    from fitgui import fit_data
+    from spylot import spylot_specs
     try:
-        from fitgui import MultiFitGui,fit_data_multi
+        from fitgui import fit_data_multi
     except ImportError:
         pass #if mayavi is not present, a warning will have already been raised
 except ImportError,e:

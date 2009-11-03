@@ -753,4 +753,17 @@ class DEIMOSMaskMaker(MaskMaker):
         if not all(g):
             cmda.datagroups = g
                 
+def spec_target(*args):
+    """
+    generates and shows a SpecTarget gui interface - accepts two forms:
+    
+    * spec_target(cmdanalyzer) - provide a ready-made CMDAnalyzer
+    * spec_target(fiducialdict,data) - provide a dictionary of fiducial 
+        data and a set of data (array or dict)
+        
+    returns the SpecTarget instance
+    """
+    st = SpecTarget(*args)
+    st.configure_traits()
+    return st
     
