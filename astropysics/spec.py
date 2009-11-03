@@ -531,16 +531,25 @@ class Spectrum(HasSpecUnits):
         if replace is True, the flux in this object is replaced by the smoothed
         flux and the error is smoothed in the same fashion
         
-        width is in pixels
+        width is in pixels, either as sigma for gaussian or half-width 
+        for boxcar
         
         returns smoothedflux,smoothederr
         """
         import scipy.ndimage as ndi 
         
+        if filtertype is None:
+            if width > 0:
+                fitertype = 'gaussian'
+            else:
+                filtertype = 'boxcar'
+                width = -1*width
+        
         if filtertype == 'gaussian':
             filter = ndi.gaussian_filter1d
         elif filtertype == 'boxcar' or type == 'uniform':
             filter = ndi.uniform_filter1d
+            width = 2*width
         else:
             raise ValueError('unrecognized filter type %s'%filtertype)
         
@@ -827,12 +836,15 @@ class Spectrum(HasSpecUnits):
         self.flux = self.flux/cont
         self._contop = 'normalize'
         
-    def rejectOutliersFromContinuum(self,sig=3,iters=1,center='median'):
+    def rejectOutliersFromContinuum(self,sig=3,iters=1,center='median',savecont=False):
         """
         rejects outliers and returns the resulting continuum. see 
         `utils.sigma_clip` for arguments
         
         returns a pair of maksed arrays xmasked,contmasked
+        
+        if savecont is True, the outlier-rejected value will be saved as
+        the new continuum
         """
         from .utils import sigma_clip
         
@@ -845,6 +857,9 @@ class Spectrum(HasSpecUnits):
             
         contma = sigma_clip(cont,sig=sig,iters=iters,center=center,maout='copy')
         xma = np.ma.MaskedArray(self.x,contma.mask,copy=True)
+        
+        if savecont:
+            self.continuum = contma
         
         return xma,contma
             
@@ -869,6 +884,74 @@ class Spectrum(HasSpecUnits):
             del self._contop
         else:
             raise ValueError('no continuum action performed')
+        
+    def addFeatureRange(self,lower,upper,continuum=None,name=None):
+        print 'adding range',lower,upper
+        raise NotImplementedError
+    
+    def addFeatureLocation(self,loc,smooth=None,window=200,**kwargs):
+        """
+        add a spectral feature at the provided x-location.  Edges are inferred
+        from either the continuum zero-point (if continuum is present) or 
+        where the derivative changes sign
+        
+        If window is specified, it is the number of pixels to check for 
+        the edge.
+        
+        If smooth is not None, it specifies a smoothing size to apply - 
+        positive for gaussian sigma or negative for boxcar half-width.
+        
+        kwargs are passed into `addFeatureRange`
+        """
+        
+        xi = np.interp(loc,self.x,np.arange(self.x.size))
+        if window is not None:
+            wl,wu = np.floor(xi-window/2),np.ceil(xi+window/2)
+            print 'a',wl,wu
+            wl,wu = int(wl) if wl>=0 else 0,int(wu) if wu < self.x.size else (self.x.size-1)
+            print 'b',wl,wu
+            m = slice(wl,wu)
+            xwi = (wu-wl)/2.0
+        else:
+            m = slice(None)
+            xwi = (self.x.size-1)/2.0
+            
+        x,y = self.x[m],self.flux[m]
+        if smooth is not None:
+            if smooth > 0:
+                from scipy.ndimage import gaussian_filter1d as filter
+            else:
+                from scipy.ndimage import unifom_filter1d as filter
+                smooth = -2*smooth
+            y = filter(y,smooth)
+        
+        if self.continuum is None:
+            dysg = np.sign(np.convolve(y,[0,-1,1],mode='same'))
+            trans = np.convolve(dysg,[-1,1,0],mode='same')
+            
+            transi = np.where(trans!=0)[0]
+            transorti = np.argsort(np.abs(transi-xwi))
+            sgn = trans[transorti[0]]
+            loweri = transi[transorti][(transi[transorti] < xwi) & (trans[transorti]!=sgn)][0]
+            upperi = transi[transorti][(transi[transorti] > xwi) & (trans[transorti]!=sgn)][0]
+            
+            cont = None
+        else:
+            if callable(self.continuum):
+                cont = self.continuum(x)
+            else:
+                cont = self.continuum[m]
+            y = y - cont
+            
+            transi = np.where(np.sign(y)!=0)[0]
+            transorti = np.argsort(np.abs(transi-xwi))
+            loweri = transi[transorti][transi[transorti] < xwi][0]
+            upperi = transi[transorti][transi[transorti] > xwi][0]
+            
+        lower,upper = x[loweri],x[upperi]
+        kwargs['continuum'] = cont
+        
+        return self.addFeatureRange(lower,upper,**kwargs)
         
     def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
                   clf=True,colors=('b','g','r','k'),restframe=True,**kwargs):

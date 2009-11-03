@@ -630,11 +630,11 @@ class Spylot(HasTraits):
         rstool = self.maintool[0]
         x1,x2 = selection
         rstool.deselect(Event(window=rstool.downwindow))
-        print 'adding range at',x1,x2
+        self.currspec.addFeatureRange(x1,x2)
         
     def _add_feature_point(self,dataxy):
         datax,datay = dataxy
-        print 'adding feature at',datax
+        self.currspec.addFeatureLocation(datax)
         
     def _showfeatures_fired(self):
         raise NotImplementedError
