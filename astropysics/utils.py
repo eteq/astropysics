@@ -634,12 +634,12 @@ def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
     data = data.ravel()
     
     mask = np.ones(data.size,bool)
-    for i in iter:
+    for i in range(iters):
         do = data-estimate_background(data[mask],center)
         mask = do*do <= np.var(data[mask])*sig
         
     if maout:
-        return np.ma.MaskedArray(data,~mask,copy=False)
+        return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
     else:
         return data[mask],mask.reshape(oldshape)
     
