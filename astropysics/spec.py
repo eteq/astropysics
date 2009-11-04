@@ -887,6 +887,10 @@ class Spectrum(HasSpecUnits):
         
     def addFeatureRange(self,lower,upper,continuum=None,name=None):
         print 'adding range',lower,upper
+        sf = SpectralFeature(unit=self.units,extent=(lower,upper))
+        
+        sf.computeFeatureData(self,continuum=continuum)
+        
         raise NotImplementedError
     
     def addFeatureLocation(self,loc,smooth=None,window=200,**kwargs):
@@ -1264,16 +1268,18 @@ class SpectralFeature(HasSpecUnits):
     
     Note that equivalent width is always expected to be in angstroms
     """
-    def __init__(self,unit='wavelength'):
+    def __init__(self,unit='wavelength',extent,observed=None):
         HasSpecUnits.__init__(self,unit)
         
+        self.extent = extent
         self.rest = 1
-        self.observed = None
+        self.observed = observed
         self.observederr = None
         self.flux = 0
         self.fluxerr = 0
         self.ew = None
         self.ewerr = None
+        self._known = None
     
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         self.rest = xtrans(self.rest)
@@ -1286,10 +1292,23 @@ class SpectralFeature(HasSpecUnits):
                 om = oldobs-self.observederr
                 op,om = xtrans(op),xtrans(om)
                 self.observederr = (op+om)/2
-    
-    @property
-    def name(self):
+                
+    def computeFeatureData(self,spec,continuum=None):     
+        if observed is None:
+            self.observed
+            
         raise NotImplementedError
+    
+    def _getName(self):
+        if self._known is None:
+            return 'unknown'
+        else:
+            return self._known.name
+    def _setName(self,val):
+        #load from default line list somewhere
+        raise NotImplementedError
+    name = property(_getName,_setName,doc=None)
+    
     
 class KnownFeature(HasSpecUnits):
     """
