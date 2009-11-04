@@ -415,6 +415,36 @@ class FieldNode(CatalogNode,Sequence):
     def fieldnames(self):
         return tuple(self._fieldnames)
     
+    @property
+    def values(self):
+        vals = []
+        for f in self.fields():
+            try:
+                vals.append(f.currentobj.value)
+            except IndexError:
+                vals.append('')
+        return tuple(vals)
+    
+    @property
+    def sourcenames(self):
+        vals = []
+        for f in self.fields():
+            try:
+                vals.append(str(f.currentobj.source))
+            except IndexError:
+                vals.append('')
+        return tuple(vals)
+    
+    @property
+    def fielddict(self):
+        vals = {}
+        for f in self.fields():
+            try:
+                vals[f.name] = (str(f.currentobj.source),f.currentobj.value)
+            except IndexError:
+                vals[f.name] = None
+        return vals
+    
     def setToSource(self,src,missing='skip'):
         """
         Sets the given src string or Source object as the current source for
