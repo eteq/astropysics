@@ -16,7 +16,7 @@ from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
 from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
 from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinePlot, \
                                 DataRange1D,DataLabel,ArrayDataSource, \
-                                AbstractOverlay,LinearMapper
+                                AbstractOverlay,LinearMapper,TextBoxOverlay
 from enthought.chaco.tools.api import PanTool, ZoomTool,BroadcasterTool, \
                                       RangeSelection,RangeSelectionOverlay
 from enthought.enable.api import ComponentEditor,BaseTool,Interactor
@@ -110,6 +110,18 @@ class FeatureClickTool(BaseTool):
     def mousedown_left_up(self, event):
         datax,datay = self.plot.map_data((event.x, event.y))
         self.mouse_clicked = (datax,datay)
+        
+class MouseMoveReporter(BaseTool):
+    overlay = Instance(TextBoxOverlay)
+    plot = Instance(Plot)
+    def normal_mouse_move(self, event):
+        if self.plot is not None:
+            datax,datay = self.plot.map_data((event.x, event.y))
+        else:
+            x,y = event.x,event.y
+        if self.overlay is not None and self.overlay.visible:
+            self.plot.request_redraw()
+            self.overlay.text = '%.3f,%.3f'%(datax,datay)
 
 class RangeSelectionBugfix(RangeSelection):
     """
@@ -183,6 +195,7 @@ class Spylot(HasTraits):
     scaleerrfrachigh = Float(1.0)
     fluxformat = Button('Flux Line Format')
     errformat = Button('Error Line Format')
+    showcoords = Bool(False)
     showgrid = Bool(True)
     
     dosmoothing = Bool(False)
@@ -217,6 +230,7 @@ class Spylot(HasTraits):
                                      Item('scaleerrfraclow',label='Lower',enabled_when='scaleerr',editor=TextEditor(evaluate=float)),
                                      Item('scaleerrfrachigh',label='Upper',enabled_when='scaleerr'),
                                      Item('showgrid',label='Grid?'),
+                                     Item('showcoords',label='Coords?'),
                                      spring),
                               HGroup(spring,
                                      Item('showmajorlines',label='Show major?'),
@@ -275,6 +289,7 @@ class Spylot(HasTraits):
         plot.x_mapper.on_trait_change(self._update_errmapper_screen,'updated')
         
         plot.padding_top = 30 #default is a bit much
+        plot.padding_left = 70 #default is a bit too little
         
         majorlineplot = plot.plot(('majorx','majory'),name='majorlineplot',type='line',line_style='dash',color='red')[0]
         #majorlineplot.value_mapper = LinearMapper(range=DataRange1D(plot._get_or_create_datasource('majory')))
@@ -311,6 +326,11 @@ class Spylot(HasTraits):
         plot.tools.append(ZoomTool(plot))
         plot.overlays.append(plot.tools[-1])
         
+        self.coordtext = TextBoxOverlay(component=plot,align='ul')
+        plot.overlays.append(self.coordtext)
+        plot.tools.append(MouseMoveReporter(overlay=self.coordtext,plot=plot))
+        self.coordtext.visible = self.showcoords
+         
         if specs is None:
             specs = []
         elif isinstance(specs,spec.Spectrum):
@@ -584,6 +604,10 @@ class Spylot(HasTraits):
         p.x_grid.visible = new
         p.y_grid.visible = new
         p.request_redraw()
+    
+    def _showcoords_changed(self):    
+        self.coordtext.visible = self.showcoords
+        self.plot.request_redraw()
         
     def _showcont_changed(self,new):
         self.contline.visible = new
