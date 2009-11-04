@@ -659,7 +659,8 @@ class FieldNode(CatalogNode,Sequence):
                     return None 
             srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
             if sources == 'name' or sources == 'names':
-                srcs = [[str(s)[7:] for s in f]  for f in srcs]
+                #srcs = [[str(s)[7:] for s in f]  for f in srcs] #for when 'Source ' prefixed all source str
+                srcs = [[str(s) for s in f]  for f in srcs] 
             #srcs = np.array(srcs)[0]
             
         if errors:
