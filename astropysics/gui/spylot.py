@@ -198,6 +198,12 @@ class Spylot(HasTraits):
     
     featureselmode = Enum(['No Selection','Click Select','Range Select'])
     showfeatures = Button('Features...')
+    featurelocsmooth = Float(None)
+    featurelocsize = Int(200)
+
+    features_view = View(VGroup(HGroup(Item('featurelocsmooth'),
+                                       Item('featurelocsize'))),
+                   title='Spylot Features')
     
     traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
                                      spring,
@@ -634,10 +640,12 @@ class Spylot(HasTraits):
         
     def _add_feature_point(self,dataxy):
         datax,datay = dataxy
-        self.currspec.addFeatureLocation(datax)
+        smooth = self.featurelocsmooth if self.featurelocsmooth != 0 else None
+        window = self.featurelocsize
+        self.currspec.addFeatureLocation(datax,window=window,smooth=smooth)
         
     def _showfeatures_fired(self):
-        raise NotImplementedError
+        self.edit_traits(view='features_view')
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)
