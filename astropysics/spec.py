@@ -1268,7 +1268,7 @@ class SpectralFeature(HasSpecUnits):
     
     Note that equivalent width is always expected to be in angstroms
     """
-    def __init__(self,unit='wavelength',extent,observed=None):
+    def __init__(self,extent,unit='wavelength',observed=None):
         HasSpecUnits.__init__(self,unit)
         
         self.extent = extent
