@@ -1553,7 +1553,7 @@ class Source(object):
         return (Source,(self._str+('' if self._adscode is None else ('//'+self._adscode)),))
         
     def __str__(self):
-        return 'Source '+self._str + ((' @' + self.location) if self._adscode is not None else '')
+        return self._str + ((' @' + self.location) if self._adscode is not None else '')
     
     adsurl = 'adsabs.harvard.edu'
     
@@ -1940,9 +1940,9 @@ class DerivedValue(FieldValue):
         
     def __str__(self):
         try:
-            return 'Derived value: %s'%self.value
+            return 'Derived Value: %s'%self.value
         except:
-            return 'Derived value: Underivable'
+            return 'Derived Value: Underivable'
     
     @property
     def source(self):
