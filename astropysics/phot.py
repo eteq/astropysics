@@ -253,7 +253,7 @@ class Band(_HasSpecUnits):
     name = property(_getName,_setName)
     _name = None #default is nameless
     
-    zptflux = 0 #flux at mag=0
+    zptflux = 1 #flux at mag=0
     
     def alignBand(self,x,interpolation='linear'):
         """
@@ -679,14 +679,16 @@ def plot_band_group(bandgrp,**kwargs):
         names = bandgrp.keys()
         bs = bandgrp.values()
     else:
-        names,bs = [],[]
-        for b in bandgrp:
-            if type(b) is str:
-                names.append(b)
-                bs.append(bands[b])
-            else:
-                names.append(b.name)
-                bs.append(b)
+        names = bands.getGroupBandNames(bandgrp)
+        bs = str_to_bands(bandgrp)
+#        names,bs = [],[]
+#        for b in bandgrp:
+#            if type(b) is str:
+#                names.append(b)
+#                bs.append(bands[b])
+#            else:
+#                names.append(b.name)
+#                bs.append(b)
 
     d = dict([(n,b) for n,b in  zip(names,bs)])
     sortednames = sorted(d,key=d.get)
@@ -3242,13 +3244,13 @@ class _BandRegistry(dict):
                     self._groupdict[s] = bands.keys()
             else:
                 raise ValueError('unrecognized group name type')
-            
+    
+    @property        
     def groupnames(self):
         return self._groupdict.keys()
     
-    def groupiteritems(self):
-        for k in self.groupkeys():
-            yield (k,self[k])
+    def getGroupBandNames(self,groupname):
+        return self._groupdict[groupname][:]
             
 def str_to_bands(bnds,forceregistry=False):
     """
@@ -3271,9 +3273,10 @@ def str_to_bands(bnds,forceregistry=False):
                 bnds = bnds.values()
             else:
                 bnds = (bnds,)
+        elif bnds in bands.groupnames:
+            bnds = [bands[b] for b in bands.getGroupBandNames(bnds)]
         else: #assume each charater is a band name
             bnds = [bands[b] for b in bnds.strip()]
-            
     elif isSequenceType(bnds):
         bnds = [bands[b] if isinstance(b,basestring) else b for b in bnds] 
     elif isinstance(bnds,Band):
@@ -3372,6 +3375,31 @@ def __load_ugriz():
             dp[k]=d.pop(k)
     return d,dp
 
+def __load_washington():
+    from .io import _get_package_data
+    bandlines = _get_package_data('washingtonbands.dat').split('\n')
+    
+    src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
+    
+    d={}
+    for ln in bandlines:
+        if ln.strip() == '':
+            pass
+        elif 'Band' in ln:
+            k = ln.replace('Band','').strip()
+            xl = []
+            Rl = []
+            d[k]=(xl,Rl)
+        else:
+            t = ln.split()
+            xl.append(t[0])
+            Rl.append(t[1])
+            
+    d = dict([(k,ArrayBand(np.array(v[0],dtype='f8'),np.array(v[1],dtype='f8'),name=k,unit='nm')) for k,v in d.iteritems()])
+    for v in d.itervalues():
+        v.source = src
+    return d
+
 def __load_human_eye():
     from .io import _get_package_data
     bandlines = _get_package_data('eyeresponse.dat').split('\n')
@@ -3402,10 +3430,12 @@ bands = _BandRegistry()
 bands.register(__load_human_eye(),'eye')
 d,dp = __load_ugriz()
 bands.register(d,'ugriz')
+bands.register(d,'SDSS')
 bands.register(dp,'ugriz_prime')
 del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
 bands.register(__load_JHK(),'JHK')
+bands.register(__load_washington(),'washington')
 #default all to AB mags
 set_zeropoint_system('AB','all')
 
