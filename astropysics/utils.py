@@ -567,8 +567,9 @@ def moments(arr,ms,axes=None,bgmethod=None,norm=True,std=False):
     if std is True, the output will be standardized (mth moment divided 
     by standard deviation to the mth power)
     """
+    arr = np.array(arr,copy=False)
     if bgmethod:
-        val = val - estimate_background(val,bgmethod)
+        arr = arr - estimate_background(arr,bgmethod)
     shp = arr.shape
     
     #setup/check axes
@@ -613,7 +614,7 @@ def centroid(val,axes=None,offset=None):
     Convinience function calling `moments`  to get just the first
     normalized moment (e.g. the centroid)
     """
-    return moments(val,1,axes,offsets,True,False)
+    return moments(val,1,None if axes is None else (axes,),offset,True,False)
 
 def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
     """
