@@ -481,10 +481,33 @@ class ExponentialModel(FunctionModel1DAuto):
     
 class PowerLawModel(FunctionModel1DAuto):
     """
-    A single power law model Ax^p+B 
+    A single power law model Ax^p 
     """
-    def f(self,x,A=1,p=1,B=0):
-        return A*x**p+B
+    def f(self,x,A=1,p=1):
+        return A*x**p
+    
+    _fittypes=['linearized']
+    fittype = 'leastsq'
+    
+    def fitLinearized(self,x,y,fixedpars=(),**kwargs):
+        """
+        just fits the spline with the current s-value - if s is not changed,
+        it will execute very quickly after
+        """
+        lm = LinearModel(m=self.p,b=np.log10(self.A))
+        lm.fittype = 'basic'
+        logx = np.log10(x)
+        logy = np.log10(y)
+        
+        fixedps = []
+        if 'A' in fixedpars:
+            fixedps.append('b')
+        if 'p' in fixedpars:
+            fixedps.append('m')
+        
+        lm.fitData(logx,logy,tuple(fixedps),**kwargs)
+        
+        return np.array([10**lm.b,lm.m])
     
 class SinModel(FunctionModel1DAuto):
     """
