@@ -1729,8 +1729,7 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
             return x
         self.addFilter(bndfunc)
         
-    
-    
+        
 class ModelGrid1D(object):
     """
     A set of models that are matching types and represnt a grid of parameter
@@ -2693,50 +2692,54 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
         return arr,reses
     else:
         return arr
-    
-def offset_model(model,pname='C',**kwargs):
-    """
-    generator function that takes a Model type (class or name) and uses it
-    to construct a CompositeModel with an extra parameter that is a constant
-    offset (with a name given by the pname argument)
-    
-    kwargs are used to set the parameter values
-    """
-    from .modbuiltins import ConstantModel
-    
-    return CompositeModel1D((model,ConstantModel),('+'),{'C1':pname},**kwargs)
-    
-def scale_model(model,pname='A',**kwargs):
-    """
-    generator function that takes a Model type (class or name) and uses it
-    to construct a CompositeModel with an extra parameter that is a constant
-    offset (with a name given by the pname argument)
-    
-    kwargs are used to set the parameter values
-    """
-    from .modbuiltins import ConstantModel
-    
-    mod = CompositeModel1D((model,ConstantModel),('*'),{'C1':pname},**kwargs)
 
-    if pname not in kwargs:
-        setattr(mod,pname,1.0)
-    return mod
+def scale_model(model,scaleparname='A'):
+    """
+    A convinience function to generate a CompositeModel with a scaling 
+    factor multiplying the wrapped model.
+    """
+    model = get_model_instance(model)
+    print model.params,scaleparname in model.params
+    if scaleparname in model.params:
+        scaleparname += '1'
+    if isinstance(model,FunctionModel1D):
+        compclass = CompositeModel1D
+    else:
+        compclass = CompositeModel
+    return compclass((model,'constant'),operation='*',
+                     parnames={'C1':scaleparname})
 
-def scale_and_offset_model(model,scalepname='A',offsetpname='C',**kwargs):
+def offset_model(model,offsetparname='C'):
     """
-    generator function that takes a Model type (class or name) and uses it
-    to construct a CompositeModel that adds a 'C1' parameter that scales the
-    model, and a 'C2' parameter than is the offset
-    
-    kwargs are used to set the parameters
+    A convinience to generate a CompositeModel with an additive offset 
+    on the wrapped model.
     """
-    from .modbuiltins import ConstantModel
-    
-    mod = CompositeModel1D((model,ConstantModel,ConstantModel),('*','+'),{'C1':scalepname,'C2':offsetpname},**kwargs)
-    if scalepname not in kwargs:
-        setattr(mod,scalepname,1.0)
-    return mod
-    
+    model = get_model_instance(model)
+    if offsetparname in model.params:
+        offsetparname += '1'
+    if isinstance(model,FunctionModel1D):
+        compclass = CompositeModel1D
+    else:
+        compclass = CompositeModel
+    return compclass((model,'constant'),operation='+',
+                     parnames={'C1':offsetparname})
+                     
+def scale_and_offset_model(model,scaleparname='A',offsetparname='C'):
+    """
+    A convinience to generate a CompositeModel with a multiplicative scale
+    and an additive offset on the wrapped model. (e.g. scale*mod+off)
+    """
+    model = get_model_instance(model)
+    if scaleparname in model.params:
+        scaleparname += '1'
+    if offsetparname in model.params:
+        offsetparname += '2'
+    if isinstance(model,FunctionModel1D):
+        compclass = CompositeModel1D
+    else:
+        compclass = CompositeModel
+    return compclass((model,'constant','constant'),operation=['*','+'],
+                     parnames={'C1':scaleparname,'C2':offsetparname})
     
 def binned_weights(values,n,log=False):
     """
