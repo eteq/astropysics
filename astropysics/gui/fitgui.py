@@ -668,6 +668,10 @@ class FitGui(HasTraits):
             self.lassomode = new.replace('lasso','')
             lasso_selection.on_trait_change(self._lasso_handler,
                                             'selection_changed')
+            lasso_selection.on_trait_change(self._lasso_handler,
+                                            'selection_completed')
+            lasso_selection.on_trait_change(self._lasso_handler,
+                                            'updated')
         else:
             raise TraitsError('invalid scattertool value')
         
@@ -699,21 +703,28 @@ class FitGui(HasTraits):
         else:
             self.scatter.index.metadata['selections'] = list()
         
-    def _lasso_handler(self):
-        lassomask = self.scatter.index.metadata['selection'].astype(int)
-        clickmask = np.zeros_like(lassomask)
-        clickmask[self.scatter.index.metadata['selections']] = 1
-        
-        if self.lassomode == 'add':
-            mask = clickmask | lassomask
-        elif self.lassomode == 'remove':
-            mask = clickmask & ~lassomask
-        elif self.lassomode == 'invert':
-            mask = np.logical_xor(clickmask,lassomask)
+    def _lasso_handler(self,name,new):
+        if name == 'selection_changed':
+            lassomask = self.scatter.index.metadata['selection'].astype(int)
+            clickmask = np.zeros_like(lassomask)
+            clickmask[self.scatter.index.metadata['selections']] = 1
+            
+            if self.lassomode == 'add':
+                mask = clickmask | lassomask
+            elif self.lassomode == 'remove':
+                mask = clickmask & ~lassomask
+            elif self.lassomode == 'invert':
+                mask = np.logical_xor(clickmask,lassomask)
+            else:
+                raise TraitsError('lassomode is in invalid state')
+            
+            self.scatter.index.metadata['selections'] = list(np.where(mask)[0])
+        elif name == 'selection_completed':
+            self.scatter.overlays[-1].visible = False
+        elif name == 'updated':
+            self.scatter.overlays[-1].visible = True
         else:
-            raise TraitsError('lassomode is in invalid state')
-        
-        self.scatter.index.metadata['selections'] = list(np.where(mask)[0])
+            raise ValueError('traits event name %s invalid'%name)
         
     def _immediate_handler(self):
         sel = self.selectedi
@@ -884,7 +895,7 @@ try:
                                   Item('replot3d',show_label=False,visible_when='doplot3d'),
                                   ),
                                   Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
-                                  resizable=True,width=1280,height=800,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
+                                  resizable=True,width=1280,height=900,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
         
         def __init__(self,data,names=None,models=None,weights=None,**traits):
             super(MultiFitGui,self).__init__(**traits)
