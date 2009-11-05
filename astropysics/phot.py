@@ -672,23 +672,22 @@ def plot_band_group(bandgrp,**kwargs):
     *spec : (do not use)
     """
     from matplotlib import pyplot as plt
-    from operator import isMappingType,isSequenceType
+#    from operator import isMappingType,isSequenceType
     
     
-    if isMappingType(bandgrp):
-        names = bandgrp.keys()
-        bs = bandgrp.values()
-    else:
-        names = bands.getGroupBandNames(bandgrp)
-        bs = str_to_bands(bandgrp)
-#        names,bs = [],[]
-#        for b in bandgrp:
-#            if type(b) is str:
-#                names.append(b)
-#                bs.append(bands[b])
-#            else:
-#                names.append(b.name)
-#                bs.append(b)
+#    if isMappingType(bandgrp):
+#        names = bandgrp.keys()
+#        bs = bandgrp.values()
+#    elif isinstance(bandgrp,basestring):
+#        names = bands.getGroupBandNames(bandgrp)
+#        bs = str_to_bands(bandgrp)
+#    elif isSequenceType(bandgrp):
+#        names = bandgrp
+#        bs = str_to_bands(bandgrp)
+#    else:
+#        raise TypeError('invalid bandgrp input')
+    bs = str_to_bands(bandgrp)
+    names = [b.name for b in bs]
 
     d = dict([(n,b) for n,b in  zip(names,bs)])
     sortednames = sorted(d,key=d.get)
