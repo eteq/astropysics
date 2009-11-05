@@ -533,6 +533,28 @@ class TwoSlopeModel(FunctionModel1DAuto):
         z = x-xs
         return a*z+(b-a)*np.log(1+np.exp(z))+C
     
+    @property
+    def rangehint(self):
+        return(self.xs-3,self.xs+3)
+    
+class TwoSlopeDiscontinuousModel(FunctionModel1DAuto):
+    """
+    This model sharply transitions between two slopes
+    
+    a is the slope for small x and b for large x, with xs the transition
+    point.  The intercept C is for the a-slope
+    """
+    def f(self,x,a=1,b=2,C=0,xs=0):
+        xl = x.copy()
+        xl[x>xs]  = 0
+        xu = x.copy()
+        xu[x<=xs]  = 0
+        return a*xl+b*xu+(a*xs-b*xs)*(xu!=0)+C
+    
+    @property
+    def rangehint(self):
+        return(self.xs-3,self.xs+3)
+    
 class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     """
     a Planck blackbody radiation model.  
