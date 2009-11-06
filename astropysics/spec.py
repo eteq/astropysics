@@ -251,12 +251,14 @@ class Spectrum(HasSpecUnits):
     Note that operations are performed in-place, and properties retrieve the 
     same versions that are changed (except ivar)
     """
-    def __init__(self,x,flux,err=None,ivar=None,unit='wl',name='',copy=True):
+    def __init__(self,x,flux,err=None,ivar=None,unit='wl',name='',copy=True,sort=True):
         """
         sets the x-axis values and the flux.  Optionally, an error can be
         given by supplying an error or an inverse variance (bot not both)
         
         copy determines if the inputs will be copied if they are already arrays
+        
+        sort determines if the array values will be sorted by x
         """
         
         x = np.array(x,copy=copy)
@@ -288,6 +290,12 @@ class Spectrum(HasSpecUnits):
         
         HasSpecUnits.__init__(self,unit)
         
+        if sort:
+            sorti = np.argsort(x)
+            x = x[sorti]
+            flux = flux[sorti]
+            err = err[sorti]
+        
         self._x = x
         self._flux = flux
         self._err = err
@@ -297,6 +305,8 @@ class Spectrum(HasSpecUnits):
         self.name = name
         self.z = 0 #redshift
         self._zqual = -1 #redshift quality
+        
+        self._features = []
     
     _zqmap = {-1:'unknown',0:'none',1:'bad',2:'average',3:'good',4:'excellent'}
     _zqmapi = dict([(v,k) for k,v in _zqmap.iteritems()])
@@ -408,6 +418,18 @@ class Spectrum(HasSpecUnits):
         self.x = x
         self._x*=(self.z+1)
     x0 = property(_getX0,_setX0,doc='x-axis in rest frame')
+    
+    def _getFeatures(self):
+        return tuple(self._features)
+    def _setFeatures(self,val):
+        for v in val:
+            if not isinstance(v,SpectralFeature):
+                raise TypeError('features must all be SpectralFeature objects')
+        for i in range(len(self._features)):
+            del self.features[0]
+        self._features.extend(val)
+    features = property(_getFeatures,_setFeatures,doc='The spectral features in this spectrum')
+    
     
     
     #<----------------------Tests/Info--------------------------------->
@@ -885,13 +907,16 @@ class Spectrum(HasSpecUnits):
         else:
             raise ValueError('no continuum action performed')
         
-    def addFeatureRange(self,lower,upper,continuum=None,name=None):
-        print 'adding range',lower,upper
-        sf = SpectralFeature(unit=self.units,extent=(lower,upper))
+    def addFeatureRange(self,lower,upper,continuum='fromspec',identity=None):
+        if continuum == 'fromspec':
+            continuum = self.continuum
+        sf = SpectralFeature(unit=self.unit,extent=(lower,upper),continuum=continuum)
         
-        sf.computeFeatureData(self,continuum=continuum)
-        
-        raise NotImplementedError
+        sf.computeFeatureData(self,edges='interp')
+        if identity is not None:
+            sf.identify(identity)
+            
+        self._features.append(sf)
     
     def addFeatureLocation(self,loc,smooth=None,window=200,**kwargs):
         """
@@ -911,9 +936,9 @@ class Spectrum(HasSpecUnits):
         xi = np.interp(loc,self.x,np.arange(self.x.size))
         if window is not None:
             wl,wu = np.floor(xi-window/2),np.ceil(xi+window/2)
-            print 'a',wl,wu
+            
             wl,wu = int(wl) if wl>=0 else 0,int(wu) if wu < self.x.size else (self.x.size-1)
-            print 'b',wl,wu
+            
             m = slice(wl,wu)
             xwi = (wu-wl)/2.0
         else:
@@ -956,6 +981,19 @@ class Spectrum(HasSpecUnits):
         kwargs['continuum'] = cont
         
         return self.addFeatureRange(lower,upper,**kwargs)
+    
+    def removeSpectralFeature(self,iorname):
+        """
+        remove the requested spectral feature, either by index
+        or by line name
+        """
+        if isinstance(iorname,basestring):
+            i = iorname.index([sf.name for sf in self._features])
+        elif isinstance(iorname,int):
+            i = iorname
+        else:
+            raise TypeError()
+        del self._features[i]
         
     def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
                   clf=True,colors=('b','g','r','k'),restframe=True,**kwargs):
@@ -1268,46 +1306,180 @@ class SpectralFeature(HasSpecUnits):
     
     Note that equivalent width is always expected to be in angstroms
     """
-    def __init__(self,extent,unit='wavelength',observed=None):
+    def __init__(self,extent,unit='wavelength',continuum='fromspec'):
         HasSpecUnits.__init__(self,unit)
         
         self.extent = extent
+        self.continuum = continuum
         self.rest = 1
-        self.observed = observed
-        self.observederr = None
+        self.center = 1
+        self.centererr = None
         self.flux = 0
         self.fluxerr = 0
         self.ew = None
         self.ewerr = None
-        self._known = None
+        self.known = None
+        self.model = None
     
     def _applyUnits(self,xtrans,xitrans,xftrans,xfinplace):
         self.rest = xtrans(self.rest)
             
-        if observed is not None:
-            oldobs = self.observed
-            self.observed = newobs = xtrans(self.observed)
-            if self.observederr is not None:
-                op = oldobs+self.observederr
-                om = oldobs-self.observederr
+        if self.center is not None:
+            oldobs = self.center
+            self.center = newobs = xtrans(self.center)
+            if self.centererr is not None:
+                op = oldobs+self.centererr
+                om = oldobs-self.centererr
                 op,om = xtrans(op),xtrans(om)
-                self.observederr = (op+om)/2
+                self.centererr = (op+om)/2
+        if self.extent is not None:
+            self.extent = (xtrans(self.extent[0]),xtrans(self.extent[1]))
                 
-    def computeFeatureData(self,spec,continuum=None):     
-        if observed is None:
-            self.observed
+    def computeFeatureData(self,spec,fit=False,interactive=False,edges='interp'):  
+        """
+        computes the data (center,flux, equivalent width, etc.) for 
+        this feature
+        
+        if fit is true, it specifies a model that should be used
+        to fit the feature.  
+        
+        if interactive is True, a fitgui will be displayed to fit the
+        data.  if fit is False, interactive will be ignored
+        
+        edges determine the behavior between the last pixel and the extent 
+        edge:
+        
+        * 'tweak': adjust the extent to the nearest pixel and recompute
+        * 'interp': interpolate the flux where the edges 
+        * None/False/'': Do nothing
+        """
+        from .models import ParametricModel,LinearModel,get_model_instance
+        from .utils import centroid
+        
+        if edges and edges not in ('interp','tweak'):
+            raise ValueError('invalid value for edges parameter %s'%edges)
+        
+        if self.extent is None:
+            raise ValueError('no extent available for line')
+        x1,x2 = self.extent
+        if x1 > x2:
+            x1,x2 = x2,x1
             
-        raise NotImplementedError
+        if self.continuum == 'fromspec' and spec.continuum is not None:
+            cont = spec.continuum
+        else:
+            cont = self.continuum
+            
+        xi1 = spec.x.searchsorted(x1)
+        xi2 = spec.x.searchsorted(x2)
+        
+        if edges == 'tweak':
+            self.extent = (spec.x[xi1],spec.x[xi2])
+            return self.computeFeatureData(spec,fit,interactive,None)
+        
+        x = spec.x[xi1:xi2]
+        y = spec.flux[xi1:xi2]
+        err = spec.err[xi1:xi2]
+        
+        self.center = centroid(y,x)
+        self.centererr = None #TODO:figure out
+        
+        if isinstance(cont,tuple) and len(cont)==2:
+            linmod = LinearModel()
+            linmod.fitData((x1,x2),cont)
+            cont = linmod
+        
+        if cont is None:
+            cont = np.zeros(x.size)
+        elif isinstance(cont,ParametricModel):
+            cont = cont(x)
+        else:
+            cont = np.array(cont,copy=False)[xi1:xi2]
+        conterr = 0 #TODO:figure out
+        print 'postcont',cont
+        
+        if fit:
+            if fit is True:
+                if self.model is None:
+                    model = 'gaussian'
+                else:
+                    model = self.model
+            else:
+                model = get_model_instance(fit)
+                
+            if interactive:
+                from .gui import fitgui
+                fg = fitgui.FitGui(x,y-cont,weights=1/err,model=model)
+                fg.configure_traits(kind='modal')
+            else:
+                model.fitData(x,y-cont,weights=1/err)
+                
+            lineflux = model.integrate(x1,x2)
+            linefluxerr = 0 #TODO:figure out
+            self.model = model
+        else:
+            # direct computation
+            #TODO:fix for edges
+            if xi1 == 0:
+                dxi1 = 0
+            else:
+                dxi1 = xi1-1
+            if xi2 == 0:
+                dxi2 = 0
+            else:
+                dxi2 = xi2+1
+            
+            dx = np.convolve(spec.x[dxi1:dxi2],[0.5,0,-0.5],mode='valid') #TODO:figure out why sign is flipped
+            lineflux = np.sum((y-cont)*dx)
+            linefluxerr = 0 #TODO:figure out
+            
+            edges = False #TODO:remove when fixed
+            if edges == 'interp':
+                if xi1 == 0:
+                    dx1 = spec.x[0] - x1
+                    flux1 = spec.flux[0]*dxl
+                else:
+                    dx1 = x1 - spec.x[xi1]
+                    flux1 = spec.flux[xi1]*dx1
+                
+                if xi2 == spec.x.size:
+                    dx2 = x2 - spec.x[-1]
+                    flux2 = spec.flux[-1]*dx2
+                else:
+                    dx2 = spec.x[xi2] - x2
+                    flux2 = spec.flux[xi2]*dx2
+                
+                lineflux += flux1 + flux2
+                
+            self.model = None
+            
+        self.flux = lineflux
+        self.fluxerr = linefluxerr
+        
+        mcont,mconterr = np.mean(cont),np.mean(conterr) #continuum should be array by here
+        self.ew = lineflux/mcont 
+        self.ewerr = linefluxerr/mcont - lineflux*mconterr*mcont**-2
     
-    def _getName(self):
-        if self._known is None:
+    def identify(self,nameorknown):
+        if isinstance(nameorknown,basestring):
+            raise NotImplementedError('TODO:add stored line list')
+            self.known = nameorknown
+        elif isinstance(nameorknown,KnownFeature):
+            self.known = nameorknown
+        else:
+            raise ValueError('unrecognized identification')
+        
+    def _getIdname(self):
+        if self.known is None:
             return 'unknown'
         else:
-            return self._known.name
-    def _setName(self,val):
-        #load from default line list somewhere
-        raise NotImplementedError
-    name = property(_getName,_setName,doc=None)
+            return self.known.name
+    def _setIdname(self,val):
+        if isinstance(val,basestring):
+            self.identify(val)
+        else:
+            raise TypeError('feature identity name must be a string')
+    idname = property(_getIdname,_setIdname,doc='name string of the identity of this feature')
     
     
 class KnownFeature(HasSpecUnits):

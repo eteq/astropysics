@@ -9,17 +9,19 @@ import numpy as np
 from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                  Float,Event,Bool,DelegatesTo,Dict,Str,List, \
                                  Button,cached_property,on_trait_change,Enum, \
-                                 Tuple
+                                 Tuple,Array,Trait
 from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
                                     VGroup,HFlow,SetEditor,spring,Handler, \
-                                    TextEditor
+                                    TextEditor,ColorTrait
 from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
 from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinePlot, \
                                 DataRange1D,DataLabel,ArrayDataSource, \
                                 AbstractOverlay,LinearMapper,TextBoxOverlay
 from enthought.chaco.tools.api import PanTool, ZoomTool,BroadcasterTool, \
-                                      RangeSelection,RangeSelectionOverlay
-from enthought.enable.api import ComponentEditor,BaseTool,Interactor
+                                      RangeSelection,RangeSelectionOverlay, \
+                                      DragTool    
+from enthought.enable.api import ComponentEditor,BaseTool,Interactor,Line, \
+                                 Component 
 
 from .. import spec
 
@@ -142,13 +144,107 @@ class RangeSelectionBugfix(RangeSelection):
             return
         else:
             return RangeSelection.normal_right_down(self,event)
+
+class SingleLineTool(AbstractOverlay,DragTool):
+    component = Instance(Component)
+    line = Instance(Line, args=())
+    points = List #data space points
+    startpoint = Array
+    endpoint = Array
+    currpoint = Array
+    color = ColorTrait
+    
+    finished = Event
+    
+    event_state=Enum('normal','dragging')
+    
+    def __init__(self,component,**traits):
+        DragTool.__init__(self,component)
+        AbstractOverlay.__init__(self,component)
         
+    
+    def overlay(self, component, gc, view_bounds=None, mode="normal"):
+        drawfunc = getattr(self,self.event_state+'_draw')
+            
+        gc.save_state()
+        gc.clip_to_rect(component.x, component.y, component.width-1, component.height-1)
+        drawfunc(gc)
+        gc.restore_state()
+        
+    def drag_start(self, event):
+        self.startpoint = self.component.map_data(np.array((event.x,event.y)))
+        self.currpoint = self.startpoint 
+        self.event_state = 'dragging'
+        self.request_redraw()
+        
+    def drag_end(self, event):
+        self.endpoint = self.component.map_data(np.array((event.x,event.y)))
+        self.currpoint = tuple()
+        self.finished = np.array((self.startpoint,self.endpoint)) 
+        self.event_state = 'normal'
+        self.request_redraw()
+    
+    def drag_cancel(self, event):
+        self.endpoint = tuple() #empty
+        self.event_state = 'normal'
+        self.request_redraw()
+        
+    def dragging(self, event):
+        self.currpoint = self.component.map_data(np.array((event.x,event.y))) 
+        self.request_redraw()
+    
+    def normal_draw(self,gc):
+        return
+        
+    def dragging_draw(self,gc):
+        self.line.points = list(self.component.map_screen((self.startpoint,self.currpoint)))
+        self.line._draw(gc)
+        
+    def _color_changed(self):
+        self.line.line_color = self.color
+        self.line.vertex_color = self.color
+        
+class LineHighlighterOverlay(AbstractOverlay):
+    
+    extents = Array(shape=(None,2),dtype=float)
+    selected = Trait((None,Int))
+    
+    highlightcolor = ColorTrait((1.0,0,0,0.4))
+    edgecolor = ColorTrait('black')
+    selcolor = ColorTrait((1.0,0,0,0.7)))
+    
+    def overlay(self, component, gc, view_bounds=None, mode="normal"):
+        gc.save_state()
+        
+        gc.set_stroke_color(self.edgecolor_)
+        for ex1,ex2 in self.extents:
+            if self.selected is not None and i== self.selected:
+                gc.set_fill_color(self.selcolor_)
+            else:
+                gc.set_fill_color(self.highlightcolor_)
+            
+            x1 = self.component.x + self.component.map_screen(ex1)
+            x2 = self.component.x + self.component.map_screen(ex2)
+            y1 = self.component.y
+            y2 = self.component.y + component.height
+            
+            gc.rect(x1,y1,x2-x1,y2-y1)
+            gc.draw_path()
+            gc.fill_path()
+            
+        gc.restore_state()
+
+
 class SpylotHandler(Handler):
     def nextSpec(self,info):
         info.object.specright = True
     
     def prevSpec(self,info):
         info.object.specleft = True
+        
+    def close(self,info, is_ok):
+        info.object.lastspec = None
+        return True
     
 spylotkeybindings = KeyBindings(
                        KeyBinding(binding1='<',binding2='Ctrl-,',
@@ -167,6 +263,7 @@ class Spylot(HasTraits):
     
     majorlineeditor = LineListEditor
     minorlineeditor = LineListEditor
+    linenamelist = Property(Tuple)
     showmajorlines = Bool(True)
     showminorlines = Bool(False)
     
@@ -178,6 +275,7 @@ class Spylot(HasTraits):
     specs = List(Instance(spec.Spectrum))
     currspeci = Int
     currspec = Property
+    lastspec = Instance(spec.Spectrum)
     z = Float
     lowerz = Float(0.0)
     upperz = Float(1.0)
@@ -201,7 +299,8 @@ class Spylot(HasTraits):
     dosmoothing = Bool(False)
     smoothing = Float(3)
     
-    contsub = Button('Continuum...')
+    contsub = Button('Fit Continuum...')
+    contclear = Button('Clear Continuum')
     showcont = Bool(False)
     contformat = Button('Continuum Line Format')
     
@@ -209,13 +308,16 @@ class Spylot(HasTraits):
     _oldunit = Str('')
     maintool = Tuple(Instance(Interactor),Instance(AbstractOverlay))
     
-    featureselmode = Enum(['No Selection','Click Select','Range Select'])
-    showfeatures = Button('Features...')
+    featureselmode = Enum(['No Selection','Click Select','Range Select','Base Select'])
+    editfeatures = Button('Features...')
+    showfeatures = Bool(False)
     featurelocsmooth = Float(None)
     featurelocsize = Int(200)
+    featurelist = List(Instance(spec.SpectralFeature))
 
     features_view = View(VGroup(HGroup(Item('featurelocsmooth'),
-                                       Item('featurelocsize'))),
+                                       Item('featurelocsize'),
+                                       Item('showfeatures'))),
                    title='Spylot Features')
     
     traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
@@ -239,11 +341,12 @@ class Spylot(HasTraits):
                                      Item('showminorlines',label='Show minor?'),
                                      Item('editminor',show_label=False),
                                      spring,
-                                     Item('showfeatures',show_label=False),
+                                     Item('editfeatures',show_label=False),
                                      Item('featureselmode',show_label=False),
                                      spring),     
                               HGroup(spring,
                                      Item('contsub',show_label=False),
+                                     Item('contclear',show_label=False),
                                      Item('showcont',label='Continuum line?'),
                                      Item('contformat',show_label=False),
                                      Item('dosmoothing',label='Smooth?'),
@@ -330,6 +433,10 @@ class Spylot(HasTraits):
         plot.overlays.append(self.coordtext)
         plot.tools.append(MouseMoveReporter(overlay=self.coordtext,plot=plot))
         self.coordtext.visible = self.showcoords
+        
+        self.linehighlighter = lho = LineHighlighterOverlay(component=plot)
+        lho.visible = self.showfeatures
+        plot.overlays.append(lho)
          
         if specs is None:
             specs = []
@@ -433,6 +540,7 @@ class Spylot(HasTraits):
     def _spechanged_fired(self):
         p = self.plot
         s = self.currspec
+        self.lastspec = s #performs any necessary cleanup
         
         if s.unit != self._oldunit:
             self._minorlines_changed()
@@ -483,6 +591,10 @@ class Spylot(HasTraits):
             self.upperz = rng
         self.zqual = s.zqual
         
+        #must have the SAME feature list instance in the spylot gui and the Spectrum
+        self.featurelist = s._features
+        s._features = self.featurelist 
+        
         units = tuple(s.unit.split('-'))
         p.x_axis.title = '%s/%s'%units
         self.upperaxis.title = 'rest %s/%s'%units
@@ -490,6 +602,11 @@ class Spylot(HasTraits):
         p.request_redraw()
         
         self._titlestr = 'Spectrum %i/%i: %s'%(self.currspeci+1,len(self.specs),s.name)
+        
+    def _lastspec_changed(self,old,new):
+        if old is not None:
+            #necessary to not carry arround traited feature lists
+            old._features = list(old._features)
         
     def _specleft_fired(self):
         if self.currspeci > 0:
@@ -578,6 +695,20 @@ class Spylot(HasTraits):
     def _editminor_fired(self):
         self.minorlineeditor.edit_traits(view='minor_view')
         
+        
+    #TODO:possibly cache
+    def _get_linenamelist(self):
+        mjos = self.majorlineeditor.selectedobjs
+        mnos = self.minorlineeditor.selectedobjs
+        lst = []
+        for o in self.majorlineeditor.selectedobjs:
+            lst.append(o.name)
+        sepi = len(lst)
+        for o in self.minorlineeditor.selectedobjs:
+            lst.append(o.name)
+        lst.insert(sepi,'-'*max([len(n) for n in lst]))
+        return tuple(lst)
+        
     def _fluxformat_fired(self):
         from copy import copy
         plot = self.plot.plots['flux'][0]
@@ -619,6 +750,11 @@ class Spylot(HasTraits):
         cmodel = self.currspec.continuum
         x = pd.get_data('x')
         pd.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
+
+    def _contclear_fired(self):
+        self.currspec.continuum = None
+        x = self.plot.data.get_data('x')
+        self.plot.data.set_data('continuum',np.zeros_like(x))
         
     def _maintool_changed(self,old,new):
         otool,oover = old
@@ -639,6 +775,7 @@ class Spylot(HasTraits):
         if new == 'No Selection':
             pl.tools[0].drag_button = 'left'
             self.maintool = (None,None)
+
         elif new == 'Click Select':
             pl.tools[0].drag_button = 'right'
             fctool = FeatureClickTool(plot=self.plot)
@@ -649,10 +786,23 @@ class Spylot(HasTraits):
             pl.tools[0].drag_button = 'right'
             fplot = pl.plots['flux'][0]
             #pl.active_tool = RangeSelectionBugfix(fplot,left_button_selects=True)
-            rstool = RangeSelectionBugfix(fplot,left_button_selects=True,enable_resize=False)
-            rsoverlay = RangeSelectionOverlay(component=fplot)
+            rstool = RangeSelectionBugfix(component=fplot,
+                                          left_button_selects=True,
+                                          enable_resize=False,
+                                          mapper=self.plot.x_mapper)
+            #TODO:try to make this not have to specify the mapper
+            rsoverlay = RangeSelectionOverlay(component=fplot,
+                                              mapper=self.plot.x_mapper)
             self.maintool = (rstool,rsoverlay)
             rstool.on_trait_change(self._add_feature_range,'selection_completed')
+            
+        elif new == 'Base Select':
+            pl.tools[0].drag_button = 'right'
+            slt = SingleLineTool(component=self.plot)
+            slt.component = self.plot
+            self.maintool = (slt,slt)
+            slt.on_trait_change(self._add_feature_base,'finished')
+            
         else:
             assert True,'enum invalid!'
             
@@ -668,8 +818,20 @@ class Spylot(HasTraits):
         window = self.featurelocsize
         self.currspec.addFeatureLocation(datax,window=window,smooth=smooth)
         
-    def _showfeatures_fired(self):
+    def _add_feature_base(self,dataarr):
+        (x1,y1),(x2,y2) = dataarr
+        self.currspec.addFeatureRange(x1,x2,continuum=(y1,y2)) 
+        
+    def _editfeatures_fired(self):
         self.edit_traits(view='features_view')
+        
+    def _showfeatures_changed(self):
+        self.linehighlighter.visible = self.showfeatures
+        self.linehighlighter.request_redraw()
+    
+    @on_trait_changed('featurelist_items,featurelist')
+    def _update_featurelist(self):
+        self.linehighlighter.extents = [f.extent for f in self.featurelist]
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)
