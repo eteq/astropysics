@@ -1,0 +1,59 @@
+#!/usr/bin/env python
+
+import warnings
+warnings.filterwarnings('ignore','PyArray_FromDimsAndDataAndDescr: use PyArray_NewFromDescr.*'.lower())
+warnings.filterwarnings('ignore','the sets module is deprecated')
+
+from optparse import OptionParser
+from astropysics.gui import spylot
+from astropysics import spec
+import sys
+from glob import glob
+
+op = OptionParser()
+op.usage = '%prog [ops] [file]'
+op.add_option('-t','--type',dest='type',default='wcs',help='Type of spectrum')
+op.add_option('-e','--extension',dest='ext',default=None,help='Fits extension number')
+
+
+ops,args = op.parse_args()
+
+if len(args)==0:
+    fn = None
+elif len(args)==1:
+    fn = args[0]
+else:
+    op.print_usage()
+    sys.exit(1)
+    
+if fn is None:
+    fns = glob('*.fits')
+    fns.extend(glob('*.fits.gz'))
+else:
+    fns = glob(fn)
+    
+    
+ss = []
+if ops.type == 'wcs':
+    specs = []
+    if ops.ext is None:
+        ext = 1
+    else:
+        ext = ops.ext
+    for fn in fns:
+        print 'loading spectrum file',fn
+        ss.append(spec.load_wcs_spectrum(fn,ext))    
+elif ops.type == 'deimos':
+    for fn in fns:
+        if 'spec1d' in fn.lower():
+            print 'loading spectrum file',fn
+            ss.append(spec.load_deimos_spectrum(fn,False))
+else:
+    print 'Unrecognized spectrum type ',ops.type
+    sys.exit(1)
+    
+sp = spylot.Spylot(ss)
+sp.configure_traits()
+    
+
+    

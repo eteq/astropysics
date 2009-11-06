@@ -37,5 +37,6 @@ setup(name='Astropysics',
       ``Traits``, ``TraitsGUI``, ``PyEphem``, and ``pymc``
       """,
       packages=['astropysics','astropysics.gui'],
-      package_data={'astropysics':get_data_files()}
+      package_data={'astropysics':get_data_files()},
+      scripts=['scripts/spylot']
      )
