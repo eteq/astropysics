@@ -564,14 +564,29 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
     f=pyfits.open(fn)
     try:
         extd = dict([(f[i].header['EXTNAME'],i) for i in range(1,len(f))])
-        bi,ri = extd[extname+'-B'],extd[extname+'-R']
-        bd,rd=f[bi].data,f[ri].data
-        x=np.concatenate((bd.LAMBDA[0],rd.LAMBDA[0]))
-        flux=np.concatenate((bd.SPEC[0],rd.SPEC[0]))
-        ivar=np.concatenate((bd.IVAR[0],rd.IVAR[0]))
-        sky=np.concatenate((bd.SKYSPEC[0],rd.SKYSPEC[0]))
-        
-        changei = len(bd.LAMBDA[0])
+        if extname+'-B' in extd and extname+'-R' in extd:
+            bi,ri = extd[extname+'-B'],extd[extname+'-R']
+            bd,rd=f[bi].data,f[ri].data
+            x=np.concatenate((bd.LAMBDA[0],rd.LAMBDA[0]))
+            flux=np.concatenate((bd.SPEC[0],rd.SPEC[0]))
+            ivar=np.concatenate((bd.IVAR[0],rd.IVAR[0]))
+            sky=np.concatenate((bd.SKYSPEC[0],rd.SKYSPEC[0]))
+            
+            changei = len(bd.LAMBDA[0])
+        elif extname+'-B' in extd or extname+'-R' in extd:
+            if extname+'-B' in extd:
+                d = f[extname+'-B'].data
+            else:
+                d = f[extname+'-R'].data
+                
+            x = d.LAMBDA[0]
+            flux = d.SPEC[0]
+            ivar = d.IVAR[0]
+            sky = d.SKYSPEC[0]
+            
+            changei = len(d.LAMBDA[0])-1
+        else:
+            raise KeyError('neither side found for extraction type '+extname )
         
         fobj = Spectrum(x,flux,ivar=ivar)
         fobj.sky = sky
