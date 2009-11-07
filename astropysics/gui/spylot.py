@@ -211,7 +211,7 @@ class LineHighlighterOverlay(AbstractOverlay):
     
     highlightcolor = ColorTrait((1.0,0,0,0.4))
     edgecolor = ColorTrait('black')
-    selcolor = ColorTrait((1.0,0,0,0.7)))
+    selcolor = ColorTrait((1.0,0,0,0.7))
     
     def overlay(self, component, gc, view_bounds=None, mode="normal"):
         gc.save_state()
@@ -829,7 +829,7 @@ class Spylot(HasTraits):
         self.linehighlighter.visible = self.showfeatures
         self.linehighlighter.request_redraw()
     
-    @on_trait_changed('featurelist_items,featurelist')
+    @on_trait_change('featurelist_items,featurelist')
     def _update_featurelist(self):
         self.linehighlighter.extents = [f.extent for f in self.featurelist]
             
