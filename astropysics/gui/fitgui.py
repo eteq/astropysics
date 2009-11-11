@@ -350,7 +350,7 @@ class FitGui(HasTraits):
                               VGroup(HGroup(Item('autoupdate',label='Auto?'),
                               Item('updatemodelplot',show_label=False,enabled_when='not autoupdate')),
                               Item('nmod',label='Nmodel'),
-                              HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)),springy=False)),
+                              HGroup(Item('datasymb',show_label=False),Item('modline',show_label=False)),springy=False),springy=True),
                        '_',       
                        HGroup(Item('scattertool',label='Selection Mode',
                                  editor=EnumEditor(values={None:'1:No Selection',
