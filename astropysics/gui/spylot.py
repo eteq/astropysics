@@ -144,6 +144,39 @@ class RangeSelectionBugfix(RangeSelection):
             return
         else:
             return RangeSelection.normal_right_down(self,event)
+        
+    def selecting_mouse_move(self, event):
+        """ Handles the mouse being moved when the tool is in the 'selecting'
+        state.
+        
+        Expands the selection range at the appropriate end, based on the new
+        mouse position.
+        """
+        if self.selection is not None:
+            axis_index = self.axis_index
+            low = self.component.position[axis_index]
+            high = low + self.component.bounds[axis_index] - 1
+            tmp = self._get_axis_coord(event)
+            if tmp >= low and tmp <= high:
+                new_edge = self.mapper.map_data(self._get_axis_coord(event))
+                #new_edge = self._map_data(self._get_axis_coord(event))
+                if self._drag_edge == "high":
+                    low_val = self.selection[0]
+                    if new_edge >= low_val:
+                        self.selection = (low_val, new_edge)
+                    else:
+                        self.selection = (new_edge, low_val)
+                        self._drag_edge = "low"
+                else:
+                    high_val = self.selection[1]
+                    if new_edge <= high_val:
+                        self.selection = (new_edge, high_val)
+                    else:
+                        self.selection = (high_val, new_edge)
+                        self._drag_edge = "high"
+
+                self.component.request_redraw()
+        return
 
 class SingleLineTool(AbstractOverlay,DragTool):
     component = Instance(Component)
@@ -165,7 +198,7 @@ class SingleLineTool(AbstractOverlay,DragTool):
     
     def overlay(self, component, gc, view_bounds=None, mode="normal"):
         drawfunc = getattr(self,self.event_state+'_draw')
-            
+           
         gc.save_state()
         gc.clip_to_rect(component.x, component.y, component.width-1, component.height-1)
         drawfunc(gc)
@@ -207,30 +240,55 @@ class SingleLineTool(AbstractOverlay,DragTool):
 class LineHighlighterOverlay(AbstractOverlay):
     
     extents = Array(shape=(None,2),dtype=float)
+    continuua = List
     selected = Trait((None,Int))
     
     highlightcolor = ColorTrait((1.0,0,0,0.4))
     edgecolor = ColorTrait('black')
     selcolor = ColorTrait((1.0,0,0,0.7))
+    selectedline = Trait((None,Int))
     
     def overlay(self, component, gc, view_bounds=None, mode="normal"):
-        gc.save_state()
+        from operator import isSequenceType
         
-        gc.set_stroke_color(self.edgecolor_)
-        for ex1,ex2 in self.extents:
+        gc.save_state()
+        gc.clip_to_rect(component.x, component.y, component.width-1, component.height-1)
+        
+        for i,((ex1,ex2),cont) in enumerate(zip(self.extents,self.continuua)):
+            
             if self.selected is not None and i== self.selected:
                 gc.set_fill_color(self.selcolor_)
             else:
                 gc.set_fill_color(self.highlightcolor_)
             
-            x1 = self.component.x + self.component.map_screen(ex1)
-            x2 = self.component.x + self.component.map_screen(ex2)
+            x1 = self.component.index_mapper.map_screen(ex1) 
+            x2 = self.component.index_mapper.map_screen(ex2) 
             y1 = self.component.y
-            y2 = self.component.y + component.height
+            y2 = self.component.y + component.height - 1
             
             gc.rect(x1,y1,x2-x1,y2-y1)
-            gc.draw_path()
             gc.fill_path()
+            
+            
+            gc.begin_path()
+            gc.move_to(x1,y1)
+            gc.line_to(x1,y2)
+            gc.move_to(x2,y2)
+            gc.line_to(x2,y1)
+            gc.set_stroke_color(self.edgecolor_)
+            gc.set_line_width(2 if i == self.selectedline else 1)
+            gc.draw_path()
+            
+            if isSequenceType(cont) and len(cont)==2:
+                yc1 = self.component.value_mapper.map_screen(cont[0])
+                yc2 = self.component.value_mapper.map_screen(cont[1])
+                gc.begin_path()
+                gc.move_to(x1,yc1)
+                gc.line_to(x2,yc2)
+                r,g,b,a = self.selcolor_
+                gc.set_stroke_color((r,g,b,1.0))
+                gc.set_line_width(2)
+                gc.draw_path()
             
         gc.restore_state()
 
@@ -245,6 +303,10 @@ class SpylotHandler(Handler):
     def close(self,info, is_ok):
         info.object.lastspec = None
         return True
+    
+    def object_editfeatures_changed(self,info):
+        #event handler placed here to pass in the correct parent
+        info.object.edit_traits(view='features_view',parent=info.ui.control)
     
 spylotkeybindings = KeyBindings(
                        KeyBinding(binding1='<',binding2='Ctrl-,',
@@ -310,7 +372,7 @@ class Spylot(HasTraits):
     
     featureselmode = Enum(['No Selection','Click Select','Range Select','Base Select'])
     editfeatures = Button('Features...')
-    showfeatures = Bool(False)
+    showfeatures = Bool(True)
     featurelocsmooth = Float(None)
     featurelocsize = Int(200)
     featurelist = List(Instance(spec.SpectralFeature))
@@ -785,14 +847,19 @@ class Spylot(HasTraits):
         elif new == 'Range Select':
             pl.tools[0].drag_button = 'right'
             fplot = pl.plots['flux'][0]
-            #pl.active_tool = RangeSelectionBugfix(fplot,left_button_selects=True)
+            
+            #TODO:clean up these hacky bugfix techniques if possible
             rstool = RangeSelectionBugfix(component=fplot,
                                           left_button_selects=True,
                                           enable_resize=False,
                                           mapper=self.plot.x_mapper)
-            #TODO:try to make this not have to specify the mapper
+            rstool.plot = fplot
+            rstool.component = pl
+            
             rsoverlay = RangeSelectionOverlay(component=fplot,
                                               mapper=self.plot.x_mapper)
+            rsoverlay.plot = fplot
+            rsoverlay.component = pl
             self.maintool = (rstool,rsoverlay)
             rstool.on_trait_change(self._add_feature_range,'selection_completed')
             
@@ -805,25 +872,35 @@ class Spylot(HasTraits):
             
         else:
             assert True,'enum invalid!'
+        
+        
             
     def _add_feature_range(self,selection):
         rstool = self.maintool[0]
         x1,x2 = selection
         rstool.deselect(Event(window=rstool.downwindow))
         self.currspec.addFeatureRange(x1,x2)
+        if self.showfeatures:
+            self.plot.request_redraw()
         
     def _add_feature_point(self,dataxy):
         datax,datay = dataxy
         smooth = self.featurelocsmooth if self.featurelocsmooth != 0 else None
         window = self.featurelocsize
         self.currspec.addFeatureLocation(datax,window=window,smooth=smooth)
+        if self.showfeatures:
+            self.plot.request_redraw()
         
     def _add_feature_base(self,dataarr):
         (x1,y1),(x2,y2) = dataarr
         self.currspec.addFeatureRange(x1,x2,continuum=(y1,y2)) 
-        
-    def _editfeatures_fired(self):
-        self.edit_traits(view='features_view')
+        if self.showfeatures:
+            self.plot.request_redraw()
+            
+##    Moved to handler
+#    def _editfeatures_fired(self):
+#        self.edit_traits(view='features_view')
+
         
     def _showfeatures_changed(self):
         self.linehighlighter.visible = self.showfeatures
@@ -832,6 +909,7 @@ class Spylot(HasTraits):
     @on_trait_change('featurelist_items,featurelist')
     def _update_featurelist(self):
         self.linehighlighter.extents = [f.extent for f in self.featurelist]
+        self.linehighlighter.continuua = [f.continuum for f in self.featurelist]
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)

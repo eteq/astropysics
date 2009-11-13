@@ -1396,7 +1396,6 @@ class SpectralFeature(HasSpecUnits):
         else:
             cont = np.array(cont,copy=False)[xi1:xi2]
         conterr = 0 #TODO:figure out
-        print 'postcont',cont
         
         if fit:
             if fit is True:
