@@ -13,25 +13,22 @@ op.usage = '%prog [ops] [file]'
 op.add_option('-t','--type',dest='type',default='wcs',help='Type of spectrum')
 op.add_option('-e','--extension',dest='ext',default=None,help='Fits extension number')
 
-
 ops,args = op.parse_args()
 
 if len(args)==0:
-    fn = None
+    fnpats = ['*.fits','*.fits.gz']
 elif len(args)==1:
-    fn = args[0]
+    fnpats = [args[0]]
 else:
-    op.print_usage()
-    sys.exit(1)
+    fnpats = args
     
-if fn is None:
-    fns = glob('*.fits')
-    fns.extend(glob('*.fits.gz'))
-else:
-    fns = glob(fn)
+fns = []
+for pattern in fnpats:
+    fns.extend(glob(pattern))
     
 if len(fns) < 1:
-    print ''
+    print 'No files found!'
+    sys.exit(1)
     
 
 
