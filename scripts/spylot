@@ -4,10 +4,8 @@ import warnings
 warnings.filterwarnings('ignore','PyArray_FromDimsAndDataAndDescr: use PyArray_NewFromDescr.*'.lower())
 warnings.filterwarnings('ignore','the sets module is deprecated')
 
-from optparse import OptionParser
-from astropysics.gui import spylot
-from astropysics import spec
 import sys
+from optparse import OptionParser
 from glob import glob
 
 op = OptionParser()
@@ -31,6 +29,15 @@ if fn is None:
     fns.extend(glob('*.fits.gz'))
 else:
     fns = glob(fn)
+    
+if len(fns) < 1:
+    print ''
+    
+
+
+#if input is ok import the gui stuff
+from astropysics.gui import spylot
+from astropysics import spec
     
     
 ss = []
