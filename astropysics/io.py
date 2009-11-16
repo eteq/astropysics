@@ -535,12 +535,13 @@ def load_wcs_spectrum(fn,fluxext=1,errext=None,hdrext=None,errtype='err'):
         else:
             raise ValueError('Unrecognized errtype %s'%errtype)
         
+        fobj.name = fn
         return fobj  
     finally:
         f.close()
         
 
-def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing=None):
+def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothing=None):
     """
     extraction type can 'horne' or 'boxcar'
     
@@ -604,6 +605,7 @@ def load_deimos_spectrum(fn,plot=True,extraction='horne',retdata=False,smoothing
             plt.plot(fobj.x[:changei],fobj.flux[:changei],'-b')
             plt.plot(fobj.x[changei:],fobj.flux[changei:],'-r')
         
+        fobj.name = fn
         if retdata:
             return fobj,bd,rd
         else:
@@ -637,7 +639,6 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
             print 'Loading spectrum',fn
         try:
             s = load_deimos_spectrum(fn,False,extraction,False,smoothing)
-            s.name = fn
             specs.append(s)
         except Exception,e:
             if verbose:
