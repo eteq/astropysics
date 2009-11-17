@@ -1312,7 +1312,7 @@ class SpectralFeature(HasSpecUnits):
         self.extent = extent
         self.continuum = continuum
         self.rest = 1
-        self.center = 1
+        self._center = None
         self.centererr = None
         self.flux = 0
         self.fluxerr = 0
@@ -1334,6 +1334,19 @@ class SpectralFeature(HasSpecUnits):
                 self.centererr = (op+om)/2
         if self.extent is not None:
             self.extent = (xtrans(self.extent[0]),xtrans(self.extent[1]))
+            
+    def _getCenter(self):
+        if self._center is None:
+            if self.extent is None:
+                return None
+            else:
+                return np.sum(self.extent)/len(self.extent) 
+        else:
+            return self._center
+    def _setCenter(self,val):
+        self._center = val
+    center = property(_getCenter,_setCenter,doc='central wavelength/frrequency/energy of this feature')
+    
                 
     def computeFeatureData(self,spec,fit=False,interactive=False,edges='interp'):  
         """
