@@ -3,6 +3,11 @@
 This package contains the internals for spylot, the Python Spectrum
 Plotter.
 """
+#TOADD: goto-number
+#TOADD: "home" scaling button
+#TOADD: cleverer scaling/edge cleaning
+#TOADD: feature list/highlight selected
+
 from __future__ import division,with_statement
 import numpy as np
 
