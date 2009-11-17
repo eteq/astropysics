@@ -982,6 +982,17 @@ class Spectrum(HasSpecUnits):
         
         return self.addFeatureRange(lower,upper,**kwargs)
     
+    def removeFeatureLocation(self,loc):
+        """
+        removes the feature with a center nearest to the requested location
+        
+        raises IndexError if there are no features
+        """
+        cens = np.array([f.center for f in self._features],dtype=float)
+        seps = np.abs(cens-loc)
+        self.removeSpectralFeature(np.argsort(seps)[0])
+            
+    
     def removeSpectralFeature(self,iorname):
         """
         remove the requested spectral feature, either by index
@@ -1394,7 +1405,7 @@ class SpectralFeature(HasSpecUnits):
         y = spec.flux[xi1:xi2]
         err = spec.err[xi1:xi2]
         
-        self.center = centroid(y,x)
+        self.center = centroid(y,x)[0]
         self.centererr = None #TODO:figure out
         
         if isinstance(cont,tuple) and len(cont)==2:

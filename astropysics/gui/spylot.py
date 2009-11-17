@@ -375,7 +375,7 @@ class Spylot(HasTraits):
     _oldunit = Str('')
     maintool = Tuple(Instance(Interactor),Instance(AbstractOverlay))
     
-    featureselmode = Enum(['No Selection','Click Select','Range Select','Base Select'])
+    featureselmode = Enum(['No Selection','Click Select','Range Select','Base Select','Click Delete'])
     editfeatures = Button('Features...')
     showfeatures = Bool(True)
     featurelocsmooth = Float(None)
@@ -874,7 +874,11 @@ class Spylot(HasTraits):
             slt.component = self.plot
             self.maintool = (slt,slt)
             slt.on_trait_change(self._add_feature_base,'finished')
-            
+        elif new == 'Click Delete':
+            pl.tools[0].drag_button = 'right'
+            fctool = FeatureClickTool(plot=self.plot)
+            self.maintool = (fctool,None)
+            fctool.on_trait_change(self._del_feature_point,'mouse_clicked')    
         else:
             assert True,'enum invalid!'
         
@@ -895,6 +899,12 @@ class Spylot(HasTraits):
         self.currspec.addFeatureLocation(datax,window=window,smooth=smooth)
         if self.showfeatures:
             self.plot.request_redraw()
+            
+    def _del_feature_point(self,dataxy):
+        datax,datay = dataxy
+        self.currspec.removeFeatureLocation(datax)
+        if self.showfeatures:
+            self.plot.request_redraw()
         
     def _add_feature_base(self,dataarr):
         (x1,y1),(x2,y2) = dataarr
@@ -913,7 +923,7 @@ class Spylot(HasTraits):
     
     @on_trait_change('featurelist_items,featurelist')
     def _update_featurelist(self):
-        self.linehighlighter.extents = [f.extent for f in self.featurelist]
+        self.linehighlighter.extents = [f.extent for f in self.featurelist] if  len(self.featurelist)>0 else np.ndarray((0,2))
         self.linehighlighter.continuua = [f.continuum for f in self.featurelist]
             
 def _get_default_lines(linetypes):
