@@ -509,6 +509,8 @@ class CCDImage(object):
         scalebar can be False/None to show no scale bar, a 2-tuple 
         (color,unitstring) , or True (red with " scale)
         
+        axes can be 'image' or 'sky'
+        
         if clickinspect is True, will return the cid of the matplotlib event
         
         colormap is the name of a colormap (or None to not change the map)
