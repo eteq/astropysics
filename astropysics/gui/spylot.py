@@ -17,8 +17,9 @@ from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                  Tuple,Array,Trait
 from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
                                     VGroup,HFlow,SetEditor,spring,Handler, \
-                                    TextEditor,ColorTrait
+                                    TextEditor,ColorTrait,TabularEditor
 from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
+from enthought.traits.ui.tabular_adapter import TabularAdapter
 from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinePlot, \
                                 DataRange1D,DataLabel,ArrayDataSource, \
                                 AbstractOverlay,LinearMapper,TextBoxOverlay
@@ -297,6 +298,27 @@ class LineHighlighterOverlay(AbstractOverlay):
             
         gc.restore_state()
 
+class FeaturesAdapter(TabularAdapter):
+    columns = [('Extent','extent'),
+               ('Line Center','center'),
+               ('Flux','flux'),
+               ('EW','ew'),
+               ('IDed Name','idname')]
+               
+    can_edit = Bool(False) #TODO:why doesn't this work?
+               
+    extent_text = Property
+    extent_can_edit = Bool(True)
+    
+    def _get_extent_text(self):
+        return '%.6g,%.6g'%self.content
+    
+    def _set_extent_text(self,val):
+        vals = tuple([float(v) for v in val.split(',')])
+        setattr(self.item,self.column_id,vals if vals[0] <= vals[1] else vals[::-1])
+        self.object._update_featurelist()
+        
+
 
 class SpylotHandler(Handler):
     def nextSpec(self,info):
@@ -381,11 +403,26 @@ class Spylot(HasTraits):
     featurelocsmooth = Float(None)
     featurelocsize = Int(200)
     featurelist = List(Instance(spec.SpectralFeature))
+    
+    selectedfeatureindex = Int
+    deletefeature = Button('Delete')
+    idfeature = Button('Identify')
+    clearfeatures = Button('Clear')
 
-    features_view = View(VGroup(HGroup(Item('featurelocsmooth'),
-                                       Item('featurelocsize'),
-                                       Item('showfeatures'))),
-                   title='Spylot Features')
+    features_view = View(VGroup(HGroup(Item('showfeatures',label='Show'),
+                                       Item('featurelocsmooth',label='Locator Smoothing'),
+                                       Item('featurelocsize',label='Locator Window size')
+                                       ),
+                                Item('featurelist',
+                                     editor=TabularEditor(adapter=FeaturesAdapter(),
+                                     selected_row='selectedfeatureindex'),
+                                     show_label=False),
+                                HGroup(Item('deletefeature',show_label=False,enabled_when='len(featurelist)>0 and selectedfeatureindex>=0'),
+                                       Item('idfeature',show_label=False,enabled_when='len(featurelist)>0 and selectedfeatureindex>=0'),
+                                       Item('clearfeatures',show_label=False,enabled_when='len(featurelist)>0')
+                                )),
+                    resizable=True, 
+                    title='Spylot Features')
     
     traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
                                      spring,
@@ -889,33 +926,44 @@ class Spylot(HasTraits):
         x1,x2 = selection
         rstool.deselect(Event(window=rstool.downwindow))
         self.currspec.addFeatureRange(x1,x2)
-        if self.showfeatures:
-            self.plot.request_redraw()
         
     def _add_feature_point(self,dataxy):
         datax,datay = dataxy
         smooth = self.featurelocsmooth if self.featurelocsmooth != 0 else None
         window = self.featurelocsize
         self.currspec.addFeatureLocation(datax,window=window,smooth=smooth)
-        if self.showfeatures:
-            self.plot.request_redraw()
             
     def _del_feature_point(self,dataxy):
         datax,datay = dataxy
         self.currspec.removeFeatureLocation(datax)
-        if self.showfeatures:
-            self.plot.request_redraw()
         
     def _add_feature_base(self,dataarr):
         (x1,y1),(x2,y2) = dataarr
         self.currspec.addFeatureRange(x1,x2,continuum=(y1,y2)) 
-        if self.showfeatures:
-            self.plot.request_redraw()
+        
             
 ##    Moved to handler
 #    def _editfeatures_fired(self):
 #        self.edit_traits(view='features_view')
 
+    def _deletefeature_fired(self):
+        del self.featurelist[self.selectedfeatureindex]
+        
+    def _idfeature_fired(self):
+        raise NotImplementedError
+    
+    def _clearfeatures_fired(self):
+        for i in range(len(self.featurelist)):
+            del self.featurelist[0]
+        
+    def _selectedfeatureindex_changed(self):
+        i = self.selectedfeatureindex
+        if i >=0:
+            self.linehighlighter.selectedline = i
+        else:
+            self.linehighlighter.selectedline = None
+        if self.showfeatures:
+            self.plot.request_redraw()
         
     def _showfeatures_changed(self):
         self.linehighlighter.visible = self.showfeatures
@@ -925,6 +973,8 @@ class Spylot(HasTraits):
     def _update_featurelist(self):
         self.linehighlighter.extents = [f.extent for f in self.featurelist] if  len(self.featurelist)>0 else np.ndarray((0,2))
         self.linehighlighter.continuua = [f.continuum for f in self.featurelist]
+        if self.showfeatures:
+            self.plot.request_redraw()
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)
