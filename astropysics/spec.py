@@ -931,8 +931,6 @@ class Spectrum(HasSpecUnits):
             raise ValueError('no continuum action performed')
         
     def addFeatureRange(self,lower,upper,continuum='fromspec',identity=None):
-        if continuum == 'fromspec':
-            continuum = self.continuum
         sf = SpectralFeature(unit=self.unit,extent=(lower,upper),continuum=continuum)
         
         sf.computeFeatureData(self,edges='interp')
@@ -990,7 +988,7 @@ class Spectrum(HasSpecUnits):
             loweri = transi[transorti][(transi[transorti] < xwi) & (trans[transorti]!=sgn)][0]
             upperi = transi[transorti][(transi[transorti] > xwi) & (trans[transorti]!=sgn)][0]
             
-            cont = None
+            cont = 'fromspec'
         else:
             if callable(self.continuum):
                 cont = self.continuum(x)
@@ -1417,8 +1415,12 @@ class SpectralFeature(HasSpecUnits):
             
         if self.continuum == 'fromspec' and spec.continuum is not None:
             cont = spec.continuum
+        elif self.continuum == 'fromspec':
+            cont = None
         else:
             cont = self.continuum
+            
+        print 'cont',cont
             
         xi1 = spec.x.searchsorted(x1)
         xi2 = spec.x.searchsorted(x2)

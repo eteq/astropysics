@@ -409,6 +409,7 @@ class Spylot(HasTraits):
     selectedfeatureindex = Int
     deletefeature = Button('Delete')
     idfeature = Button('Identify')
+    recalcfeature = Button('Recalculate')
     clearfeatures = Button('Clear')
 
     features_view = View(VGroup(HGroup(Item('showfeatures',label='Show'),
@@ -421,6 +422,7 @@ class Spylot(HasTraits):
                                      show_label=False),
                                 HGroup(Item('deletefeature',show_label=False,enabled_when='len(featurelist)>0 and selectedfeatureindex>=0'),
                                        Item('idfeature',show_label=False,enabled_when='len(featurelist)>0 and selectedfeatureindex>=0'),
+                                       Item('recalcfeature',show_label=False,enabled_when='len(featurelist)>0 and selectedfeatureindex>=0'),
                                        Item('clearfeatures',show_label=False,enabled_when='len(featurelist)>0')
                                 )),
                     resizable=True, 
@@ -974,6 +976,11 @@ class Spylot(HasTraits):
         
     def _idfeature_fired(self):
         raise NotImplementedError
+    
+    def _recalcfeature_fired(self):
+        sf = self.featurelist[self.selectedfeatureindex]
+        sf.computeFeatureData(self.currspec,edges='interp')
+        #TODO:figure out how to make the tabulareditor update
     
     def _clearfeatures_fired(self):
         for i in range(len(self.featurelist)):
