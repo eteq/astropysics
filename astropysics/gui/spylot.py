@@ -3,10 +3,9 @@
 This package contains the internals for spylot, the Python Spectrum
 Plotter.
 """
-#TOADD: goto-number
 #TOADD: "home" scaling button
 #TOADD: cleverer scaling/edge cleaning
-#TOADD: feature list/highlight selected
+#TODO: seperate out interface pieces
 
 from __future__ import division,with_statement
 import numpy as np
@@ -363,6 +362,9 @@ class Spylot(HasTraits):
     
     specs = List(Instance(spec.Spectrum))
     currspeci = Int
+    currspecip1 = Property(depends_on='currspeci')
+    lowerspecip1 = Property
+    upperspecip1 = Property
     currspec = Property
     lastspec = Instance(spec.Spectrum)
     z = Float
@@ -423,9 +425,11 @@ class Spylot(HasTraits):
                                 )),
                     resizable=True, 
                     title='Spylot Features')
-    
+    arg='arg'
     traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
                                      spring,
+                                     Label('Spectrum #',height=0.5),
+                                     Item('currspecip1',show_label=False,editor=RangeEditor(low_name='lowerspecip1',high_name='upperspecip1',mode='spinner')),
                                      Item('_titlestr',style='readonly',show_label=False),
                                      spring,
                                      Item('specright',show_label=False,enabled_when='currspeci<(len(specs)-1)')),
@@ -555,6 +559,14 @@ class Spylot(HasTraits):
         
         super(Spylot,self).__init__(**traits)
         
+    def __del__(self):
+        try:
+            self.currspec._features = list(self.currspec._features)
+        except AttributeError:
+            pass
+        finally:
+            super(Spylot,self).__del__()
+        
     def _update_upperaxis_range(self):
         newlow = self.plot.x_mapper.range.low/(self.z+1)
         newhigh = self.plot.x_mapper.range.high/(self.z+1)
@@ -570,6 +582,16 @@ class Spylot(HasTraits):
         return self.specs[self.currspeci]
     def _set_currspec(self,val):
         self.currspeci = self.specs.index(val)
+        
+    def _get_lowerspecip1(self):
+        return 1
+    def _get_upperspecip1(self):
+        return len(self.specs)
+    
+    def _get_currspecip1(self):
+        return self.currspeci+1
+    def _set_currspecip1(self,val):
+        self.currspeci = val - 1
     
     def _currspeci_changed(self,new,old):
         nsp = len(self.specs)
@@ -705,7 +727,8 @@ class Spylot(HasTraits):
         p.y_axis.title ='Flux/(erg s^-1 cm^-2 %s^-1)'%units[1]
         p.request_redraw()
         
-        self._titlestr = 'Spectrum %i/%i: %s'%(self.currspeci+1,len(self.specs),s.name)
+        #self._titlestr = 'Spectrum %i/%i: %s'%(self.currspeci+1,len(self.specs),s.name)
+        self._titlestr = '/%i: %s'%(len(self.specs),s.name)
         
     def _lastspec_changed(self,old,new):
         if old is not None:
