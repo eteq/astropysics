@@ -308,6 +308,29 @@ class Spectrum(HasSpecUnits):
         
         self._features = []
     
+    def __getstate__(self):
+        #state = super(HasSpecUnits,self).__getstate__()
+        state = self.__dict__
+        #necessary because spylot sometimes replaces this with a feature
+        if not type(state['_features']) is list:
+            state = dict(state) #make a new dictionary so as not to override the current one
+            state['_features'] = list(state['_features'])
+        return state
+    
+    def save(self,fn):
+        from cPickle import dump
+        with open(fn,'w') as f:
+            dump(self,f)
+    
+    @staticmethod
+    def load(fn):
+        from cPickle import load
+        with open(fn) as f:
+            obj = load(f)
+        if obj.__class__.__name__ != 'Spectrum':
+            raise TypeError('file does not contain a Spectrum')
+        return obj
+    
     _zqmap = {-1:'unknown',0:'none',1:'bad',2:'average',3:'good',4:'excellent'}
     _zqmapi = dict([(v,k) for k,v in _zqmap.iteritems()])
     def _getZqual(self):
@@ -935,12 +958,15 @@ class Spectrum(HasSpecUnits):
         
         xi = np.interp(loc,self.x,np.arange(self.x.size))
         if window is not None:
-            wl,wu = np.floor(xi-window/2),np.ceil(xi+window/2)
+            wl,wu = int(np.floor(xi-window/2)),int(np.ceil(xi+window/2))
+            xwi = (wu-wl)/2.0
             
-            wl,wu = int(wl) if wl>=0 else 0,int(wu) if wu < self.x.size else (self.x.size-1)
+            if wl < 0:
+                xwi += wl
+                wl = 0
+                                
             
             m = slice(wl,wu)
-            xwi = (wu-wl)/2.0
         else:
             m = slice(None)
             xwi = (self.x.size-1)/2.0
