@@ -3,20 +3,21 @@
 This package contains the internals for spylot, the Python Spectrum
 Plotter.
 """
-#TOADD: "home" scaling button
+#TOADD: "home" scaling button?
 #TOADD: cleverer scaling/edge cleaning
-#TODO: seperate out interface pieces
 
 from __future__ import division,with_statement
 import numpy as np
+import os
 
 from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                  Float,Event,Bool,DelegatesTo,Dict,Str,List, \
                                  Button,cached_property,on_trait_change,Enum, \
-                                 Tuple,Array,Trait
+                                 Tuple,Array,Trait,File
 from enthought.traits.ui.api import View,Item,Label,RangeEditor,Group,HGroup, \
                                     VGroup,HFlow,SetEditor,spring,Handler, \
-                                    TextEditor,ColorTrait,TabularEditor
+                                    TextEditor,ColorTrait,TabularEditor, \
+                                    Include
 from enthought.traits.ui.key_bindings import KeyBinding,KeyBindings
 from enthought.traits.ui.tabular_adapter import TabularAdapter
 from enthought.chaco.api import Plot,ArrayPlotData,PlotAxis,LinePlot, \
@@ -363,8 +364,8 @@ class Spylot(HasTraits):
     specs = List(Instance(spec.Spectrum))
     currspeci = Int
     currspecip1 = Property(depends_on='currspeci')
-    lowerspecip1 = Property
-    upperspecip1 = Property
+    lowerspecip1 = Property(depends_on='currspeci')
+    upperspecip1 = Property(depends_on='currspeci')
     currspec = Property
     lastspec = Instance(spec.Spectrum)
     z = Float
@@ -411,7 +412,73 @@ class Spylot(HasTraits):
     idfeature = Button('Identify')
     recalcfeature = Button('Recalculate')
     clearfeatures = Button('Clear')
-
+    
+    delcurrspec = Button('Delete Current')
+    saveloadfile = File(filter=['*.specs'])
+    savespeclist = Button('Save Spectra')
+    loadspeclist = Button('Load Spectra')
+    loadaddfile = File(filter=['*.fits'])
+    loadaddspec = Button('Add Spectrum')
+    loadaddspectype = Enum('wcs','deimos','astropysics')
+    
+    titlegroup = HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
+                         spring,
+                         Label('Spectrum #',height=0.5),
+                         Item('currspecip1',show_label=False,editor=RangeEditor(low_name='lowerspecip1',high_name='upperspecip1',mode='spinner')),
+                         Item('_titlestr',style='readonly',show_label=False),
+                         spring,
+                         Item('specright',show_label=False,enabled_when='currspeci<(len(specs)-1)'))
+                         
+    speclistgroup = HGroup(Label('Spectrum List:'),spring,
+                           Item('delcurrspec',show_label=False,enabled_when='len(specs)>1'),
+                           Item('saveloadfile',show_label=False), 
+                           Item('savespeclist',show_label=False),
+                           Item('loadspeclist',show_label=False,enabled_when='os.path.exists(saveloadfile)'),
+                           Item('loadaddfile',show_label=False), 
+                           Item('loadaddspec',show_label=False,enabled_when='os.path.exists(saveloadfile)'),
+                           Item('loadaddspectype',show_label=False),
+                           spring)
+                    
+    plotformatgroup = HGroup(spring,
+                             Item('fluxformat',show_label=False),
+                             Item('errformat',show_label=False),
+                             Item('scaleerr',label='Scale Error?'),
+                             Item('scaleerrfraclow',label='Lower',enabled_when='scaleerr',editor=TextEditor(evaluate=float)),
+                             Item('scaleerrfrachigh',label='Upper',enabled_when='scaleerr'),
+                             Item('showgrid',label='Grid?'),
+                             Item('showcoords',label='Coords?'),
+                             spring)
+                    
+    featuregroup = HGroup(spring,
+                          Item('showmajorlines',label='Show major?'),
+                          Item('editmajor',show_label=False),
+                          Item('showlabels',label='Labels?'),
+                          Item('showminorlines',label='Show minor?'),
+                          Item('editminor',show_label=False),
+                          spring,
+                          Item('editfeatures',show_label=False),
+                          Item('featureselmode',show_label=False),
+                          spring)
+                          
+    continuumgroup = HGroup(spring,
+                            Item('contsub',show_label=False),
+                            Item('contclear',show_label=False),
+                            Item('showcont',label='Continuum line?'),
+                            Item('contformat',show_label=False),
+                            Item('dosmoothing',label='Smooth?'),
+                            Item('smoothing',show_label=False,enabled_when='dosmoothing'),
+                            spring)
+                    
+    zgroup = VGroup(Item('z',editor=RangeEditor(low_name='lowerz',high_name='upperz',format='%.4f')),
+                    HGroup(Item('lowerz',show_label=False),
+                           Item('coarserz',show_label=False),
+                           spring,
+                           Item('zqual',style='custom',label='Z quality',editor=RangeEditor(cols=_zqh-_zql+1,low=_zql,high=_zqh)),
+                           spring,
+                           Item('finerz',show_label=False),
+                           Item('upperz',show_label=False))
+                   )
+                   
     features_view = View(VGroup(HGroup(Item('showfeatures',label='Show'),
                                        Item('featurelocsmooth',label='Locator Smoothing'),
                                        Item('featurelocsize',label='Locator Window size')
@@ -427,55 +494,19 @@ class Spylot(HasTraits):
                                 )),
                     resizable=True, 
                     title='Spylot Features')
-    arg='arg'
-    traits_view = View(VGroup(HGroup(Item('specleft',show_label=False,enabled_when='currspeci>0'),
-                                     spring,
-                                     Label('Spectrum #',height=0.5),
-                                     Item('currspecip1',show_label=False,editor=RangeEditor(low_name='lowerspecip1',high_name='upperspecip1',mode='spinner')),
-                                     Item('_titlestr',style='readonly',show_label=False),
-                                     spring,
-                                     Item('specright',show_label=False,enabled_when='currspeci<(len(specs)-1)')),
-                              HGroup(spring,
-                                     Item('fluxformat',show_label=False),
-                                     Item('errformat',show_label=False),
-                                     Item('scaleerr',label='Scale Error?'),
-                                     Item('scaleerrfraclow',label='Lower',enabled_when='scaleerr',editor=TextEditor(evaluate=float)),
-                                     Item('scaleerrfrachigh',label='Upper',enabled_when='scaleerr'),
-                                     Item('showgrid',label='Grid?'),
-                                     Item('showcoords',label='Coords?'),
-                                     spring),
-                              HGroup(spring,
-                                     Item('showmajorlines',label='Show major?'),
-                                     Item('editmajor',show_label=False),
-                                     Item('showlabels',label='Labels?'),
-                                     Item('showminorlines',label='Show minor?'),
-                                     Item('editminor',show_label=False),
-                                     spring,
-                                     Item('editfeatures',show_label=False),
-                                     Item('featureselmode',show_label=False),
-                                     spring),     
-                              HGroup(spring,
-                                     Item('contsub',show_label=False),
-                                     Item('contclear',show_label=False),
-                                     Item('showcont',label='Continuum line?'),
-                                     Item('contformat',show_label=False),
-                                     Item('dosmoothing',label='Smooth?'),
-                                     Item('smoothing',show_label=False,enabled_when='dosmoothing'),
-                                     spring),  
+                   
+    traits_view = View(VGroup(Include('titlegroup'),
+                              Include('speclistgroup'),
+                              Include('plotformatgroup'),
+                              Include('featuregroup'),     
+                              Include('continuumgroup'),  
                               Item('plot',editor=ComponentEditor(),show_label=False,width=768),
-                              Item('z',editor=RangeEditor(low_name='lowerz',high_name='upperz',format='%.4f')),
-                              HGroup(Item('lowerz',show_label=False),
-                                     Item('coarserz',show_label=False),
-                                     spring,
-                                     Item('zqual',style='custom',label='Z quality',editor=RangeEditor(cols=_zqh-_zql+1,low=_zql,high=_zqh)),
-                                     spring,
-                                     Item('finerz',show_label=False),
-                                     Item('upperz',show_label=False))
-                      ),
-                       resizable=True, 
-                       title='Spectrum Plotter',
-                       handler = SpylotHandler(),
-                       key_bindings = spylotkeybindings
+                              Include('zgroup')
+                           ),
+                           resizable=True, 
+                           title='Spectrum Plotter',
+                           handler = SpylotHandler(),
+                           key_bindings = spylotkeybindings
                        )
                       
     def __init__(self,specs,**traits):
@@ -1005,6 +1036,52 @@ class Spylot(HasTraits):
         self.linehighlighter.continuua = [f.continuum for f in self.featurelist]
         if self.showfeatures:
             self.plot.request_redraw()
+            
+    def _saveloadfile_changed(self,new):
+        if not os.path.exists(new):
+            if not new.endswith('.specs'):
+                self.saveloadfile = new+'.specs'
+                
+    def _delcurrspec_fired(self):
+        del self.specs[self.currspeci]
+        
+        self.spechanged = True
+        
+        if self.currspeci == len(self.specs) and self.currspeci > 0:
+            self.currspeci -= 1
+    
+    def _savespeclist_fired(self):
+        from cPickle import dump
+        
+        fn = self.saveloadfile
+        with open(fn,'w') as f:
+            dump(list(self.specs),f)
+        
+    
+    def _loadspeclist_fired(self):
+        from cPickle import load
+        from operator import isSequenceType
+        
+        fn = self.saveloadfile
+        with open(fn) as f:
+            obj = load(f)
+            
+        if isSequenceType(obj):
+            self.specs = obj
+        else:
+            self.specs = [obj]
+        self.spechanged = True #doesn't always fire with the assignment above
+        
+    def _loadaddspec_fired(self):
+        if loadaddspec == 'wcs':
+            spec = spec.load_wcs_spectrum(self.loadaddfile)
+        elif loadaddspec == 'deimos':
+            spec = spec.load_deimos_spectrum(self.loadaddfile)
+        elif loadaddspec == 'astropysics':
+            spec = spec.Spectrum.load(self.loadaddfile)
+            
+        self.specs.append(spec)
+        self.loadaddfile = ''
             
 def _get_default_lines(linetypes):
     candidates = spec.load_line_list(linetypes)
