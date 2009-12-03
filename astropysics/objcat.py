@@ -2328,6 +2328,17 @@ class FieldCatalog(Catalog):
         kwargs['includeself']=False
         return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     
+    def getFieldNames(self):
+        """
+        Searches the Catalog and finds all field names present in the children
+        """
+        s = set()
+        def visfunc(node):
+            if hasattr(node,'fieldnames'):
+                s.update(node.fieldnames)
+        self.visit(visfunc)
+        return s
+    
     def getFieldValueNodes(self,fieldname,value):
         """
         Searches the Catalog and finds all objects with the requested name
