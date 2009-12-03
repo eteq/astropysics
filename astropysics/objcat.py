@@ -2790,18 +2790,28 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
     skipped
     
     namefield is the field to use to apply the name of the node from the 
-    index of the array row.  nameconv is a function called as nameconv(i)
-    that should return the value to apply to the field.  If nameconv is None,
-    this will default to 'sourcestr-i'.  If namefiled is None, no name
-    will be applied
+    index of the array row.  nameconv can be:
+    
+    * None: name field will be set to '<sourcestr>-i'
+    * a callable: name field will be set to nameconv(i)
+    * a sequence of mapping: name field will be set as nameconv[i]
+    
+    if namefiled is None, no name will be applied
+
     """
     if isinstance(parent,basestring):
         parent = Catalog(parent)
     
     source = Source(source) 
-    if namefield and nameconv is None:
-        srcstr = source._str.split('/')[0]
-        nameconv = lambda i:srcstr+'-'+str(i)
+    if namefield:
+        if nameconv is None:
+            srcstr = source._str.split('/')[0]
+            nameconv = lambda i:srcstr+'-'+str(i)
+        elif callable(nameconv):
+            pass
+        else:
+            nameseq = nameconv
+            nameconv = lambda i:nameseq[i]
         
     if filter:  
         def matcher(arrayrow,node):
