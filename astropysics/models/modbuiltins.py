@@ -274,7 +274,7 @@ class PolynomialModel(FunctionModel1DAuto):
     arbitrary-degree polynomial
     """
     
-    paramsname = 'c'
+    paramnames = 'c'
     
     #TODO: use polynomial objects that are only updated when necessary
     def f(self,x,*args): 
@@ -288,7 +288,7 @@ class PolynomialModel(FunctionModel1DAuto):
         return p(upper)-p(lower)
     
 class FourierModel(FunctionModel1DAuto):
-    paramsnames = ('A','B')
+    paramnames = ('A','B')
     #note that B0 has no effect
     
     def f(self,x,*args):
@@ -346,7 +346,7 @@ class GaussianModel(FunctionModel1DAuto):
         
     @property
     def rangehint(self):
-        return(self.mu-self.sig*4,self.mu+self.sig*4)
+        return (self.mu-self.sig*4,self.mu+self.sig*4)
     
 class DoubleGaussianModel(FunctionModel1DAuto):
     """
@@ -1018,7 +1018,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
             ks.append(getattr(self,pn))
         return np.array(ks)
     
-    paramsname = 'k'
+    paramnames = 'k'
     
     degree=3 #default cubic
     def f(self,x,degree,*args):
@@ -1331,9 +1331,40 @@ class MaxwellBoltzmannSpeedModel(MaxwellBoltzmannModel):
     def rangehint(self):
         from ..constants import kb,c
         return 0,min(3*(2*kb*self.T/self.m)**0.5,c)
+    
+class GaussHermiteModel(FunctionModel1DAuto):
+    """
+    Model notation adapted from van der Marel et al 94
+    
+    hj3 are h3,h4,h5,... (e.g. N=len(hj3)+2 )
+    """
+    
+    paramnames = 'h'
+    paramoffsets = 3
+    
+    def f(self,v,A=1,v0=0,sig=1,*hj3):
+        hj3arr = np.array(hj3,copy=False)
+        hj3arr = hj3arr.reshape((hj3arr.size,1))
+        w = (v-v0)/sig
+        alpha = np.exp(-w**2/2)*(2*pi)**-0.5
+        return A*alpha/sig*(1+np.sum(hj3arr*self._Hjs(w,len(hj3)),axis=0)) #sum start @ 3
+    
+    __Hpolys = None
+    def _Hjs(self,w,N):
+        warr = np.array(w,copy=False).ravel()
+        if self.__Hpolys is None or N != len(self.__Hpolys):
+            from scipy.special import hermite
+            self.__Hpolys = [hermite(i) for i in range(N)]
+        return np.array([H(warr) for H in self.__Hpolys])
+    
+    @property
+    def rangehint(self):
+        return self.v0-self.sig*4,self.v0+self.sig*4
+    
+    def gaussHermiteMoment(self,l):
+        raise NotImplementedError
 
-
-#builtin 2D models
+#<-------------------------------------- 2D models ---------------------------->
 class Gaussian2DModel(FunctionModel2DScalarAuto):
     _fcoordsys='cartesian'
     def f(self,inarr,A=1,sigx=1,sigy=1,mux=0,muy=0):

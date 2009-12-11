@@ -105,7 +105,7 @@ class AutoParamsMeta(ABCMeta):
     
     if f is of the form f(self,x,*args), the first argument of the 
     constructor is taken to be the number of arguments that particular 
-    instance should have, and the 'paramsname' class attribute can be used
+    instance should have, and the 'paramnames' class attribute can be used
     to specify the prefix for the name of the parameters (and can be 
     an iterator, in which case one of each name will be made for each var
     arg, in sequence order).  default values can be given by adding class 
@@ -157,14 +157,17 @@ class AutoParamsMeta(ABCMeta):
             if len(args)>1:
                 raise ValueError('must pass parameters with keywords at initializer if variable argument numbers are used')
             
-            if hasattr(cls,'paramsname'):
-                paramsnames = getattr(cls,'paramsname') 
-            elif hasattr(cls,'paramsnames'):
-                paramsnames = getattr(cls,'paramsnames')
+            if hasattr(cls,'paramnames'):
+                paramsnames = getattr(cls,'paramnames')
             else:
                 paramsnames =  ('p',)
             if isinstance(paramsnames,basestring):
                 paramsnames = (paramsnames,)
+                
+            if hasattr(cls,'paramoffsets'):
+                paramsoffsets = getattr(cls,'paramoffsets')
+            else:
+                paramsoffsets = 0
             
             try:
                 nparams=args[0] if 'nparams' not in kwargs else kwargs.pop('nparams')
@@ -178,7 +181,7 @@ class AutoParamsMeta(ABCMeta):
             
             for i in range(nparams):
                 for paramsname in paramsnames:
-                    p = paramsname+str(i)
+                    p = paramsname+str(i+paramsoffsets)
                     pars.append(p)
                     if hasattr(cls,'_'+p+'_default'): #let class variables of the form "_param_default" specify defaults for varargs
                         setattr(obj,p,getattr(cls,'_'+p+'_default'))
