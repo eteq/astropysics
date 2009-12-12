@@ -170,7 +170,11 @@ class AutoParamsMeta(ABCMeta):
                 paramsoffsets = 0
             
             try:
-                nparams=args[0] if 'nparams' not in kwargs else kwargs.pop('nparams')
+                if 'nparams' in kwargs:
+                    nparams = kwargs.pop('nparams')
+                else:
+                    args = list(args)
+                    nparams = args.pop(0)
             except IndexError:
                 raise IndexError('No # of parameters found for variable-size function')
             objkwargs = dict([(k,kwargs.pop(k)) for k in kwargs.keys() if k not in cls._statargs if not any([k.startswith(paramsname) for paramsname in paramsnames])])
