@@ -1349,20 +1349,43 @@ class GaussHermiteModel(FunctionModel1DAuto):
         alpha = np.exp(-w**2/2)*(2*pi)**-0.5
         return A*alpha/sig*(1+np.sum(hj3arr*self._Hjs(w,len(hj3)),axis=0)) #sum start @ 3
     
-    __Hpolys = None
+    _Hpolys = None
     def _Hjs(self,w,N):
-        warr = np.array(w,copy=False).ravel()
-        if self.__Hpolys is None or N != len(self.__Hpolys):
+        """
+        generates hermite polynomial arrays and evaluates them if w is not None
+        """
+        
+        if self._Hpolys is None or N != len(self._Hpolys):
             from scipy.special import hermite
-            self.__Hpolys = [hermite(i) for i in range(N)]
-        return np.array([H(warr) for H in self.__Hpolys])
+            self._Hpolys = [hermite(i+3) for i in range(N)]
+            
+        if w is not None:
+            warr = np.array(w,copy=False).ravel()
+            return np.array([H(warr) for H in self._Hpolys])
     
     @property
     def rangehint(self):
         return self.v0-self.sig*4,self.v0+self.sig*4
     
-    def gaussHermiteMoment(self,l):
-        raise NotImplementedError
+    def gaussHermiteMoment(self,l,lower=-np.inf,upper=np.inf):
+        if int(l)!=l:
+            raise ValueError('moment specifier must be an integer')
+        l = int(l)
+        
+        if l == 0:
+            return self.A
+        elif l == 1:
+            return self.v0
+        elif l == 2:
+            return self.sig
+        else:
+            self._Hjs(None,len(self.params)-3) 
+            def gHJac(v,A,v0,sig,*hj3):
+                w = (v-v0)/sig
+                alpha = np.exp(-w**2/2)*(2*pi)**-0.5
+                return alpha*self._Hpolys[l-3](w)
+            
+            return (4*pi)**0.5*self.A*self.integrate(lower,upper,jac=gHJac)
 
 #<-------------------------------------- 2D models ---------------------------->
 class Gaussian2DModel(FunctionModel2DScalarAuto):
