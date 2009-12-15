@@ -1347,45 +1347,52 @@ class GaussHermiteModel(FunctionModel1DAuto):
         hj3arr = hj3arr.reshape((hj3arr.size,1))
         w = (v-v0)/sig
         alpha = np.exp(-w**2/2)*(2*pi)**-0.5
-        return A*alpha/sig*(1+np.sum(hj3arr*self._Hjs(w,len(hj3)),axis=0)) #sum start @ 3
+        return A*alpha/sig*(1+np.sum(hj3arr*self._Hjs(w,len(hj3)+3,exclude=(0,1,2)),axis=0)) #sum start @ 3
     
     _Hpolys = None
-    def _Hjs(self,w,N):
+    def _Hjs(self,w,N,exclude=None):
         """
         generates hermite polynomial arrays and evaluates them if w is not None
         """
         
         if self._Hpolys is None or N != len(self._Hpolys):
             from scipy.special import hermite
-            self._Hpolys = [hermite(i+3) for i in range(N)]
+            self._Hpolys = [hermite(i) for i in range(N)]
             
         if w is not None:
             warr = np.array(w,copy=False).ravel()
-            return np.array([H(warr) for H in self._Hpolys])
+            if exclude is None:
+                return np.array([H(warr) for H in self._Hpolys ])
+            else:
+                return np.array([H(warr) for i,H in enumerate(self._Hpolys) if i not in exclude])
     
     @property
     def rangehint(self):
         return self.v0-self.sig*4,self.v0+self.sig*4
     
-    def gaussHermiteMoment(self,l,lower=-np.inf,upper=np.inf):
+    def gaussHermiteMoment(self,l,f=None,lower=-np.inf,upper=np.inf):
+        """
+        compute the requested moment on the supplied function, or this
+        object if f is None
+        """
+        from scipy.integrate import quad
+        
         if int(l)!=l:
             raise ValueError('moment specifier must be an integer')
         l = int(l)
         
-        if l == 0:
-            return self.A
-        elif l == 1:
-            return self.v0
-        elif l == 2:
-            return self.sig
-        else:
-            self._Hjs(None,len(self.params)-3) 
-            def gHJac(v,A,v0,sig,*hj3):
-                w = (v-v0)/sig
-                alpha = np.exp(-w**2/2)*(2*pi)**-0.5
-                return alpha*self._Hpolys[l-3](w)
-            
-            return (4*pi)**0.5*self.A*self.integrate(lower,upper,jac=gHJac)
+        self._Hjs(None,len(self.params)) 
+        def gHJac(v,A,v0,sig,*hj3):
+            w = (v-v0)/sig
+            alpha = np.exp(-w**2/2)*(2*pi)**-0.5
+            return alpha*self._Hpolys[l](w)
+        
+        if f is None:
+            f = self
+        
+        intnorm = quad(lambda x:self._Hpolys[l](x)*self._Hpolys[l](x)*np.exp(-x*x),lower,upper)[0]/(2*pi)
+        #return self.integrate(lower,upper,jac=gHJac)/self.A/intnorm
+        return quad(lambda x:f(x)*gHJac(x,*self.parvals),lower,upper)[0]/self.A/intnorm
 
 #<-------------------------------------- 2D models ---------------------------->
 class Gaussian2DModel(FunctionModel2DScalarAuto):
