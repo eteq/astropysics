@@ -480,6 +480,8 @@ class FitGui(HasTraits):
         
         super(FitGui,self).__init__(**traits)
         
+        self.on_trait_change(self._scale_change,'plot.value_scale,plot.index_scale')
+        
         if weights is not None and len(weights)==2:
             self.weightsChanged() #update error bars
         
@@ -504,8 +506,8 @@ class FitGui(HasTraits):
     def _rangeChanged(self):
         self.updatemodelplot = True
         
-    @on_trait_change('plot.value_scale,plot.index_scale',post_init=True)
-    def _scale_changes(self):
+    #@on_trait_change('object.plot.value_scale,object.plot.index_scale',post_init=True)
+    def _scale_change(self):
         self.plot.request_redraw()
     
     def _updatemodelplot_fired(self,new):
