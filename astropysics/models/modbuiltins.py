@@ -1166,8 +1166,10 @@ class King3DrModel(FunctionModel1DAuto):
     
     def f(self,r,rc=1,rt=2,A=1):
         rcsq=rc*rc
-        z=((r*r+rcsq)**0.5) * ((rt*rt+rcsq)**-0.5)
-        return (A/z/z/pi/rc)*((1+rt*rt/rcsq)**-1.5)*(np.arccos(z)/z-(1-z*z)**0.5)
+        z = ((r*r+rcsq)**0.5) * ((rt*rt+rcsq)**-0.5)
+        res = (A/z/z/pi/rc)*((1+rt*rt/rcsq)**-1.5)*(np.arccos(z)/z-(1-z*z)**0.5)
+        res[r>=rt] = 0
+        return res
     
     @property
     def rangehint(self):
@@ -1666,5 +1668,6 @@ class Plane(FunctionModel):
 from inspect import isclass
 for o in locals().values():
     if isclass(o) and not o.__name__.startswith('_') and issubclass(o,ParametricModel):
-        register_model(o)
+        if 'FunctionModel' not in o.__name__ and 'CompositeModel' not in o.__name__:
+            register_model(o)
 del isclass
