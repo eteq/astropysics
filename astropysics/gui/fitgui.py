@@ -847,8 +847,8 @@ def fit_data(xdata,ydata,model=None,**kwargs):
     fit a 2d data set using the FitGui interface.  Returns the model or None
     if fitting is cancelled.
     """
-    
-    fg = FitGui(xdata,ydata,model,**kwargs)
+    kwargs['model'] = model
+    fg = FitGui(xdata,ydata,**kwargs)
     if model is not None and not isinstance(model,FunctionModel1D):
         fg.fitmodel = True
     res = fg.configure_traits(kind='livemodal')
