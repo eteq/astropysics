@@ -172,6 +172,99 @@ class FixedColumnParser:
                     
 
 
+def load_tipsy_format(fn):
+    """
+    This function loads a file in the Tipsy ASCII format 
+    (http://www-hpcc.astro.washington.edu/tipsy/man/readascii.html)
+    and outputs a dictionary with entries for grouped data
+    """
+    dout = {}
+    with open(fn) as f:
+        ntotal,ngas,nstar = [int(e) for e in f.readline().split()]
+        ndark = ntotal-nstar-ngas
+        dims = int(f.readline().strip())
+        time = float(f.readline().strip())
+    dout['ntotal'] = ntotal
+    dout['ndark'] = ndark
+    dout['nstar'] = nstar
+    dout['ngas'] = ngas
+    dout['dims'] = dims
+    dout['time'] = time
+        
+    A = np.loadtxt(fn,skiprows=3)
+    i = 0
+    j = ntotal
+    dout['mass'] = A[i:j]
+    dout['mass_gas'] = dout['mass'][:ngas]
+    dout['mass_dark'] = dout['mass'][ngas:ndark]
+    dout['mass_star'] = dout['mass'][(ngas+ndark):]
+    
+    pos = []
+    for d in range(dims):
+        i = j
+        j += ntotal
+        pos.append(A[i:j])
+    
+    dout['pos'] = np.array(pos,copy=False)
+    dout['pos_gas'] = dout['pos'][:,:ngas]
+    dout['pos_dark'] = dout['pos'][:,ngas:ndark]
+    dout['pos_star'] = dout['pos'][:,(ngas+ndark):]
+    
+    vel = []
+    for d in range(dims):
+        i = j
+        j += ntotal
+        vel.append(A[i:j])
+    dout['vel'] = np.array(vel,copy=False)
+    dout['vel_gas'] = dout['vel'][:,:ngas]
+    dout['vel_dark'] = dout['vel'][:,ngas:ndark]
+    dout['vel_star'] = dout['vel'][:,(ngas+ndark):]
+    
+    if ndark>0:
+        i = j
+        j += ndark
+        dout['softening_dark'] = A[i:j]
+        
+    if nstar>0:
+        i = j
+        j += nstar
+        dout['softening_star'] = A[i:j]
+        
+    if ngas>0:
+        i = j
+        j += ngas
+        dout['density'] = A[i:j]
+        i = j
+        j += ngas
+        dout['temperature'] = A[i:j]
+        i = j
+        j += ngas
+        dout['sph_smoothing'] = A[i:j]
+        i = j
+        j += ngas
+        dout['metals_gas'] = A[i:j]
+        
+    if nstar>0:
+        i = j
+        j += nstar
+        dout['metals_star'] = A[i:j]
+        i = j
+        j += nstar
+        dout['formation_time'] = A[i:j]
+    
+    i=j
+    j+= ntotal
+    dout['potential_en'] = A[i:j]
+    dout['potential_en_gas'] = dout['potential_en'][:ngas]
+    dout['potential_en_dark'] = dout['potential_en'][ngas:ndark]
+    dout['potential_en_star'] = dout['potential_en'][(ngas+ndark):]
+    
+    if j!=A.size:
+        from warnings import warn
+        warn('Tipsy file expected to have %i entries, but found %i!'%(j,A.size))
+    
+    return dout
+
 #<------------------------VOTable classes-------------------------------------->
 class VOTable(object):
     """
