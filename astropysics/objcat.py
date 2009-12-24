@@ -845,7 +845,7 @@ class Field(MutableSequence):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
     
     @property
-    def error(self):
+    def currenterror(self):
         o = self.currentobj
         if hasattr(o,'errors'):
             return o.errors
@@ -2236,7 +2236,7 @@ class DependentSource(Source):
             fvs = []
             for fi in fieldvals:
                 if hasattr(fi,'error'):
-                    es = fi.error
+                    es = fi.currenterror
                     fvs.append((fi(),es[0],es[1]))
                 else:
                     fvs.append((fi(),0,0))
