@@ -2846,8 +2846,8 @@ def ML_ratio_from_color_SDSS(c,color='g-r'):
         -0.153,  0.283, -0.186,  0.179, -0.211,  0.137],
        [-0.367,  0.698, -0.215,  0.508, -0.153,  0.402, -0.171,  0.322,
         -0.097,  0.175, -0.117,  0.083, -0.138,  0.047],
-       [-0.106,  1.431, -0.022,  0.006, -0.052,  1.114, -0.079,  0.923,
-        -0.148,  0.65 , -0.186,  0.437,  1.982,  0.349],
+       [-0.106,  1.982, -0.022,  1.431,  0.006,  1.114, -0.052,  0.923,
+        -0.079,  0.650, -0.148,  0.437, -0.186,  0.349],
        [-0.124,  1.067, -0.041,  0.78 , -0.018,  0.623, -0.041,  0.463,
         -0.011,  0.224, -0.059,  0.076, -0.092,  0.019]])
     colorrowmap=dict([(ci,i) for i,ci in enumerate(['u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z'])])
@@ -2865,7 +2865,7 @@ def M_star_from_mags_SDSS(u,g,r,i,z,J=None,H=None,K=None,color='mean'):
         for c in ['u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z']:
             mstars.append(M_star_from_mags_SDSS(u,g,r,i,z,J,H,K,c)[1])
         mstars = np.array(mstars)
-        return mstars.mean(),mstars
+        return mstars.mean(axis=0).mean(axis=0),mstars
     elif '-' in color:
         c1,c2 = color.split('-')
         mlrs = ML_ratio_from_color_SDSS(mags[c1]-mags[c2],color)
