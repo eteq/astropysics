@@ -408,10 +408,20 @@ class DoubleGaussianModel(FunctionModel1DAuto):
             dgm.fitData(x,y,fixedpars=('mu2','B','sig2'),**kwargs)
         else:
             raise ValueError('unrecognized main component')
-        print dgm.pardict
+        
         dgm.fitData(x,y,fixedpars=(),**kwargs)
-        print dgm.pardict
         return dgm
+    
+class LognormalModel(FunctionModel1DAuto):
+    """
+    A Lognormal model, e.g. f = A e^(-(log10(x)-mulog)^2/2 siglog^2)
+    """
+    def f(self,x,A=1,mulog=0,siglog=1):
+        return A*np.exp(-0.5*((np.log(x)-mulog)/siglog)**2)
+    
+    @property
+    def rangehint(self):
+        return (np.exp(self.mulog-self.siglog*4),np.exp(self.mulog+self.siglog*4))
     
 class LorentzianModel(FunctionModel1DAuto):
     def f(self,x,A=1,gamma=1,mu=0):
