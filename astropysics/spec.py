@@ -1825,7 +1825,7 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
     None, no interpolation is used, so lags must be integers (but this method is
     much faster)
     
-    returns besti,lags,coeffs,xs,fitfluxes,rchi2s
+    returns besti,lags,zs,coeffs,xs,fitfluxes,rchi2s
     """
     if interpolation is not None:
         raise NotImplementedError('interpolation not implemented yet')
