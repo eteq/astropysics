@@ -96,6 +96,8 @@ class AngularCoordinate(object):
                 newrng = tuple(newrng)
                 if len(newrng) != 2:
                     raise ValueError('range is not a 2-sequence')
+                elif newrng[0] > newrng[1]:
+                    raise ValueError('lower edge of range is not <= upper')
                 newrng = (radians(newrng[0]),radians(newrng[1]))
             self.__range = newrng
             self.__checkRange(self.__decval)
