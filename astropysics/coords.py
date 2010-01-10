@@ -86,6 +86,22 @@ class AngularCoordinate(object):
             low,up = self.__range
             if not low <= rads <= up:
                 raise ValueError('Attempted to set angular coordinate outside range')
+    def __setrange(self,newrng):
+        oldrange = self.__range        
+        try:
+            if newrng is None:
+                self.__range = None
+            else:
+                from math import radians
+                newrng = tuple(newrng)
+                if len(newrng) != 2:
+                    raise ValueError('range is not a 2-sequence')
+                newrng = (radians(newrng[0]),radians(newrng[1]))
+            self.__range = newrng
+            self.__checkRange(self.__decval)
+        except ValueError:
+            self.__range = oldrange
+            raise ValueError('Attempted to set range when value is out of range')
     def __getrange(self):
         if self.__range is None:
             return None
@@ -106,7 +122,7 @@ class AngularCoordinate(object):
     r=radians
     hours=property(fget=__gethrdec,fset=__sethrdec)
     h=hours
-    range=property(fget=__getrange)
+    range=property(fget=__getrange,fset=__setrange)
     
     ############################################################################
     #                                                                          #
@@ -136,14 +152,7 @@ class AngularCoordinate(object):
         `range` sets the valid range of coordinates either any value (if None)
         or a 2-sequence (lowerdegrees,upperdegrees)
         """
-        if range is None:
-            self.__range = None
-        else:
-            from math import radians
-            range = tuple(range)
-            if len(range) != 2:
-                raise ValueError('range is not a 2-sequence')
-            self.__range = (radians(range[0]),radians(range[1]))
+        self.__range = None
         
         if inpt.__class__.__name__=='AngularCoordinate':
             self.__decval=inpt.__decval
@@ -190,7 +199,8 @@ class AngularCoordinate(object):
             self.__decval=0
         else:
             self.__decval=float(inpt)*pi/180.
-            
+        
+        self.range = range
             
     def __eq__(self,other):
         if type(other) == AngularCoordinate:
