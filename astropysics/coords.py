@@ -30,7 +30,7 @@ except ImportError:
 
 class AngularCoordinate(object):
     import re as _re
-    __slots__=('__decval')
+    __slots__=('__decval','__range')
     
     def __setdegminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
@@ -59,19 +59,39 @@ class AngularCoordinate(object):
         return hrs,min,sec
     
     def __setdegdec(self,deg):
-        self.__decval=deg*pi/180.
+        rads = deg*pi/180.
+        if self.range is not None:
+            self.__checkRange(rads)
+        self.__decval = rads
     def __getdegdec(self):
         return self.__decval*180/pi
     
-    def __setrad(self,deg):
-        self.__decval=deg
+    def __setrad(self,rads):
+        if self.range is not None:
+            self.__checkRange(rads)
+        self.__decval = rads
     def __getrad(self):
         return self.__decval
     
     def __sethrdec(self,hr):
-        self.__decval=hr*pi/12
+        rads = hr*pi/12
+        if self.range is not None:
+            self.__checkRange(rads)
+        self.__decval = rads
     def __gethrdec(self):
         return self.__decval*12/pi
+    
+    def __checkRange(self,rads):
+        if self.__range is not None:
+            low,up = self.__range
+            if not low <= rads <= up:
+                raise ValueError('Attempted to set angular coordinate outside range')
+    def __getrange(self):
+        if self.__range is None:
+            return None
+        else:
+            from math import degrees
+            return degrees(self.__range[0]),degrees(self.__range[1])
     
     def __str__(self):
         return self.getDmsStr()
@@ -86,6 +106,7 @@ class AngularCoordinate(object):
     r=radians
     hours=property(fget=__gethrdec,fset=__sethrdec)
     h=hours
+    range=property(fget=__getrange)
     
     ############################################################################
     #                                                                          #
@@ -103,15 +124,27 @@ class AngularCoordinate(object):
     #__dmsre=_re.compile(r'.*?([+-]?\s*\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d+))(?:s|sec).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3}):(\d{1,2}):(\d+(?:.\d+)?).*')
-    def __init__(self,inpt=None,sghms=None):
+    def __init__(self,inpt=None,sghms=None,range=None):
         """
-        If an undecorated 3-element iterator, inpt is taken to be deg,min,sec, 
+        If an undecorated 3-element iterator, `inpt` is taken to be deg,min,sec, 
         othewise, input is cast to a float and treated as decimal degrees
         
-        if sexigesimal, input will be interpreted as h:m:s if sghms
-        is True, or d:m:s if sghms is False.  If None, a +/- will indicate
+        if sexigesimal, input will be interpreted as h:m:s if `sghms`
+        is True, or d:m:s if `sghms` is False.  If None, a +/- will indicate
         d:m:s and nothing indicates r:m:s
+        
+        `range` sets the valid range of coordinates either any value (if None)
+        or a 2-sequence (lowerdegrees,upperdegrees)
         """
+        if range is None:
+            self.__range = None
+        else:
+            from math import radians
+            range = tuple(range)
+            if len(range) != 2:
+                raise ValueError('range is not a 2-sequence')
+            self.__range = (radians(range[0]),radians(range[1]))
+        
         if inpt.__class__.__name__=='AngularCoordinate':
             self.__decval=inpt.__decval
         elif isinstance(inpt,basestring):
