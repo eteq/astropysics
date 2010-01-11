@@ -15,7 +15,164 @@ import numpy as np
 
 from .utils import PipelineElement
 
-#<----------------------Extinction and dust-related---------------------------->
+def jd_to_gregorian(jd):
+    raise NotImplementedError
+
+def gregorian_to_jd(yr,month,day,hr):
+    """
+    Convert gregorian to julian date
+    
+    Adapted from xidl  jdcnv.pro
+    """
+    yr = np.array(yr,dtype='int64',copy=False)
+    month = np.array(month,dtype='int64',copy=False)
+    day = np.array(day,dtype='int64',copy=False)
+    hr = np.array(hr,dtype=float,copy=False)
+    
+    ly = int((month-14)/12)		#In leap years, -1 for Jan, Feb, else 0
+    julian = day - 32075l + 1461l*(yr+4800l+ly)//4
+    julian += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
+    return julian + (hr/24.0) - 0.5
+
+class Site(object):
+    """
+    This class represents a location on Earth from which skies are observable.
+    
+    lat/long are coords.AngularCoordinate objects, altitude in meters
+    """
+    tznames = {'EST':-5,'CST':-6,'MST':-7,'PST':-8,
+               'EDT':-4,'CDT':-5,'MDT':-6,'PDT':-7}
+    def __init__(self,lat,long,alt=0,tz=None,name=None):
+        """
+        generate a site by specifying latitude and longitude (as 
+        coords.AngularCoordinate objects or initializers for one), optionally
+        providing altitude (in meters), time zone (either as a name from 
+        Site.tznames or as an offset from UTC), and/or a site name.
+        """
+        self.latitude = lat
+        self.latitude.range = (-90,90)
+        self.longitude = long
+        self.longitude.range = (-180,180)
+        self.altitude = alt
+        if tz is None:
+            self.tz = self._tzFromLong(self._long)
+        elif tz in self.tznames:
+            self.tz = self.tznames[tz]
+        else:
+            self.tz = tz
+        if name is None:
+            name = 'Default Site'
+        self.name = name
+    
+    @staticmethod
+    def _tzFromLong(long):
+        return int(np.floor((long.degrees+15)/15))
+    
+    def _getLatitude(self):
+        return self._lat
+    def _setLatitude(self,val):
+        from .coords import AngularCoordinate
+        from operator import isSequenceType
+        if isinstance(val,AngularCoordinate):
+            self._lat = val
+        elif isSequenceType(val) and not isinstance(val,basestring):
+            self._lat = AngularCoordinate(*val)
+        else:
+            self._lat = AngularCoordinate(val)
+    latitude = property(_getLatitude,_setLatitude,doc='Latitude of the site in degrees')
+    
+    def _getLongitude(self):
+        return self._long
+    def _setLongitude(self,val):
+        from .coords import AngularCoordinate
+        from operator import isSequenceType
+        if isinstance(val,AngularCoordinate):
+            self._long = val
+        elif isSequenceType(val) and not isinstance(val,basestring):
+            self._long = AngularCoordinate(*val)
+        else:
+            self._long = AngularCoordinate(val)
+    longitude = property(_getLongitude,_setLongitude,doc='Longitude of the site in degrees')
+    
+    def _getAltitude(self):
+        return self._alt
+    def _setAltitude(self,val):
+        self._alt = float(val)
+    altitude = property(_getAltitude,_setAltitude,doc='Altitude of the site in meters')
+    
+    def localSiderialTime(self,*args,**kwargs):
+        """
+        compute the local siderial time given an input civil time.
+        
+        input forms:
+        
+        * localSiderialTime(JD): input argument is julian date
+        * localSiderialTime(time,day,month,year): input arguments determine 
+          local time - time is in hours
+        * localSiderialTime(time,day,month,year,dst): same as above, but the
+          final argument determines if daylight savings time should be accounted 
+          for in time calculations 
+        
+        returns the local siderial time in hours, or if kwarg `retstring is
+        True, returns as a string
+        
+        guts of calculation adapted from xidl ct2lst.pro
+        """
+        retstring = kwargs.pop('retstring',False)
+        if len(kwargs)>0:
+            raise TypeError('got unexpected argument '+kwargs.keys()[0])
+        if len(args)==1:
+            jd = args[0]
+        elif 4 <= len(args) <= 5:
+            if len(args)==5:
+                dst = args[4]
+            else:
+                dst = False
+            time,day,month,year = args[:4]
+            if dst:
+                raise NotImplementedError
+                time -= 1 #TODO:check this and set dst only if at the right dates
+            jd = gregorian_to_jd(year,month,day,np.array(time,copy=False)-self.tz) #TODO:check sign here
+        else:
+            raise TypeError('invalid number of input arguments')
+        
+        jd2000 = 2451545.0
+        t0 = jd - jd2000
+        t = t0//36525 #TODO:check if true-div
+        
+        #Compute GST in seconds.
+        c1,c2,c3,c4 = 280.46061837,360.98564736629,0.000387933,38710000.0
+        theta = c1 + (c2 * t0) + t**2*(c3 - t/ c4 )
+        
+        #Compute LST in hours.
+        lst = np.array((theta + self._long.d)/15.0) % 24.0
+        
+        if lst.shape == tuple():
+            lst = lst.ravel()[0]
+        
+        if retstring:
+            hr = int(lst)
+            min = 60*(lst - hr)
+            sec = min - int(min)
+            min = int(min)
+            return '%i:%i:%f'%(hr,min,sec)
+        else:
+            return lst
+        
+class Observatory(Site):
+    """
+    Represents an observatory/Telescope with associated information such as
+    platform limits or extinction measurements
+    """
+    
+def get_site(name):
+    """
+    retrieves the stored observatory/site information for an observatory in the
+    registry
+    """
+    raise NotImplementedError
+
+#<-----------------Attenuation/Reddening and dust-related---------------------->
 
 class Extinction(PipelineElement):
     """
@@ -500,7 +657,7 @@ def get_dust_radec(ra,dec,dustmap,interpolate=True):
 
 
   
-#<---------------Deprecated---------------------------------------------------->
+#DEPRECATED!
 def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     """
     
@@ -602,7 +759,7 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
     else:
         return finalval
         
-
+#DEPRECATED!
 def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
     """
     frobs is the observed flux ratio f1/f2
