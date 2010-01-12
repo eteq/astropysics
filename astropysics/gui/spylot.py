@@ -1095,6 +1095,9 @@ def _get_default_lines(linetypes):
         return candidates,[],[]
     
 def spylot_specs(specs):
+    """
+    Generates a Spylot instance containing the supplied sequence of spectra and displays it.
+    """
     sp = Spylot(specs)
     sp.configure_traits()
     return sp
