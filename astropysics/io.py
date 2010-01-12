@@ -265,11 +265,18 @@ def load_tipsy_format(fn):
     
     return dout
 
-#<------------------------VOTable classes-------------------------------------->
-class VOTable(object):
+#<------------------------VOTable related-------------------------------------->
+try:
+    import vo.table
+except ImportError:
+    from warnings import warn
+    warn('vo.table not found - VOTable processing limited to VOTableReader class')
+
+class VOTableReader(object):
     """
-    This class represents a VOTable.  Currently, it is read-only, although 
-    later re-designs may change this
+    This class represents a VOTable.  Currently, it is read-only, and will 
+    probably not be enhanced due to the existence of Michael Droettboom's vo
+    package
     """
     
     dtypemap = {"boolean":'b',
@@ -579,7 +586,11 @@ class VOTable(object):
                 
         return arr,mask
             
-        
+class VOTable(VOTableReader): #name for backwards-compatibility
+    def __init__(*args,**kwargs):
+        from warnings import warn
+        warn('VOTable class name deprecated - use VOTableReader',DeprecationWarning)
+        return VOTableReader.__init__(*args,**kwargs)
 
 
 #<--------------------------Spectrum loaders----------------------------------->
