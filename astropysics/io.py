@@ -728,7 +728,7 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
     
     verbose indicates if information should be printed
     
-    returns filenamelist,speclist
+    returns dictionary mapping file names to Spectrum objects
     """
     from glob import glob
     from os.path import join
