@@ -84,7 +84,9 @@ class _AutoParameter(object):
              return self.defaultvalue
     
     def __set__(self,obj,value):
-        if not np.isscalar(value):
+        if isinstance(value,np.ndarray) and value.shape == ():
+            pass
+        elif not np.isscalar(value):
             raise ValueError('Parameters must be scalar values - type '+str(type(value))+' provided')
         setattr(obj,'_AutoParameter__'+self.name,value)
     
