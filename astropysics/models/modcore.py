@@ -1482,13 +1482,22 @@ class FunctionModel1D(FunctionModel):
             kwargs['jac'] = lambda x,*params:x*x*4.0*pi
         return self.integrate(lower,upper,*args,**kwargs)
         
-    def derivative(self,x,dx=1):
+    def derivative(self,x,dx=None):
         """
         the derivative at x
         
         if overridden in a subclass, the signature should be
-        derivative(self,x,dx=1) , but dx may be ignored
+        derivative(self,x,dx=1) , but dx may be ignored.  if dx is None, it
+        will either be assumed to be 1 or if the input is an array, it will be 
+        inferred from the spacing of the array
         """
+        if dx is None:
+            x = np.array(x,copy=False)
+            if len(x.shape)>0:
+                dx = np.convolve(x,[1,-1],mode='valid')
+                dx = np.insert(dx,0,np.mean(dx))/2
+            else:
+                dx = 1
         return (self(x+dx)-self(x))/dx
     
     def pixelize(self,xorxl,xu=None,n=None,edge=False,sampling=None):
