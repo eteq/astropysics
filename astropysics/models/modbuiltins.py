@@ -587,6 +587,44 @@ class TwoSlopeDiscontinuousModel(FunctionModel1DAuto):
     @property
     def rangehint(self):
         return(self.xs-3,self.xs+3)
+        
+class TwoSlopeWidthModel(FunctionModel1DAuto):
+    """
+    This model transitions between two asymptotic slopes with
+    an additional parameter that allows for a variable transition region 
+    size.  The functional form is:
+    
+    y = ax arctan(-(x-x0)/w) + bx arctan((x-x0)/w) + c
+    
+    a is the slope for small x, b for large x, c is the value at x=x0, 
+    x0 is the location of the transition, and w is the width of the transition
+    
+    """
+    def f(self,x,a=1,b=2,c=0,x0=0,w=1):
+        xoff = x-x0
+        tana = np.arctan(-xoff/w)/pi+0.5
+        tanb = np.arctan(xoff/w)/pi+0.5
+        return a*xoff*tana+b*xoff*tanb+c
+    
+    def criticalPoint(self):
+        """
+        computes the critical point where this model inflects or has a max/min
+        
+        if a = b, returns 0 (undefined critical point)
+        """
+        if self.a == self.b:
+            return 0
+        else:
+            from scipy.optimize import newton
+            bma = self.b - self.a
+            bpa = self.a + self.b
+            toroot = lambda u: bma*(np.arctan(u)+u/(1+u**2))+bpa*pi/2
+            ur = newton(toroot,0)
+            return ur*self.w+self.x0
+    
+    @property
+    def rangehint(self):
+        return self.x0-3*self.w,self.x0+3*self.w
     
 class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     """
@@ -1212,6 +1250,10 @@ class SchecterLumModel(FunctionModel1DAuto):
     
     @property
     def rangehint(self):
+        return self.Lstar/10,self.Lstar*10
+    
+    @property
+    def rangehint(self):
         return self.Lstar/3,self.Lstar*3
         
 class EinastoModel(FunctionModel1DAuto):
@@ -1317,6 +1359,35 @@ class SersicModel(FunctionModel1DAuto):
 class DeVaucouleursModel(SersicModel):
     def f(self,r,Ae=1,re=1):
         return SersicModel.f(self,r,Ae,re,4)
+    
+class JaffeModel(FunctionModel1DAuto):
+    """
+    Jaffe (1983) profile as defined in Binney & Tremain as
+    (A/4pirj^3)(rj^4/(r^2(r+rj)^2))
+    where A is the total mass enclosed 
+    
+    """
+    def f(self,r,A=1,rj=1):
+        return (A/4/pi*rj**-3)*rj**4*r**-2*(r+rj)**-2
+    
+    @property
+    def rangehint(self):
+        return 0,self.rj*3
+    
+class HernquistModel(FunctionModel1DAuto):
+    """
+    Hernquist (1990) profile described as
+    (A/2pi)(r0/r)(1/((r+r0)^3))
+    where A is the total mass enclosed
+    """
+    def f(self,r,A=1,r0=1):
+        return (A/2/pi)*(r0/r)*(r+r0)**-3
+    
+    @property
+    def rangehint(self):
+        return 0,self.r0*3
+
+
 
 class MaxwellBoltzmannModel(FunctionModel1DAuto):
     xaxisname = 'v'
