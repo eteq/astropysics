@@ -19,7 +19,7 @@ from __future__ import division,with_statement
 
 from modcore import *
 from ..spec import HasSpecUnits as _HasSpecUnits
-
+from math import e
 
 
 class ConstantModel(FunctionModel1DAuto):
@@ -560,11 +560,11 @@ class TwoSlopeModel(FunctionModel1DAuto):
     This model smoothly transitions from linear with one slope to linear with
     a different slope. It is the linearized equivalent of TwoPowerModel.
     
-    specifically, a*(x-xs)+(b-a)*log(1+exp(x-xs))+C
+    specifically, a*(x-xs)+(b-a)*log_base(1+base^(x-xs))+C
     """
-    def f(self,x,a=1,b=2,C=0,xs=0):
+    def f(self,x,a=1,b=2,C=0,xs=0,base=e):
         z = x-xs
-        return a*z+(b-a)*np.log(1+np.exp(z))+C
+        return a*z+(b-a)*np.log(1+base**z)/np.log(base)+C
     
     @property
     def rangehint(self):
@@ -588,7 +588,7 @@ class TwoSlopeDiscontinuousModel(FunctionModel1DAuto):
     def rangehint(self):
         return(self.xs-3,self.xs+3)
         
-class TwoSlopeWidthModel(FunctionModel1DAuto):
+class TwoSlopeATanModel(FunctionModel1DAuto):
     """
     This model transitions between two asymptotic slopes with
     an additional parameter that allows for a variable transition region 
