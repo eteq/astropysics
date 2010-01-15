@@ -560,7 +560,7 @@ class TwoSlopeModel(FunctionModel1DAuto):
     This model smoothly transitions from linear with one slope to linear with
     a different slope. It is the linearized equivalent of TwoPowerModel.
     
-    specifically, a*x+(b-a)*log(1+exp(x))+c
+    specifically, a*(x-xs)+(b-a)*log(1+exp(x-xs))+C
     """
     def f(self,x,a=1,b=2,C=0,xs=0):
         z = x-xs
