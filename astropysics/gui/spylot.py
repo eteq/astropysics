@@ -1096,8 +1096,12 @@ def _get_default_lines(linetypes):
     
 def spylot_specs(specs):
     """
-    Generates a Spylot instance containing the supplied sequence of spectra and displays it.
+    Generates a Spylot instance containing the supplied sequence of spectra and 
+    displays it.  A GUI application instance must already exist (e.g. 
+    interactive mode of ipython)
+    
+    returns the Spylot instance
     """
     sp = Spylot(specs)
-    sp.configure_traits()
+    sp.edit_traits()
     return sp

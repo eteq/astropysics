@@ -846,14 +846,16 @@ class FitGui(HasTraits):
             
 def fit_data(xdata,ydata,model=None,**kwargs):
     """
-    fit a 2d data set using the FitGui interface.  Returns the model or None
-    if fitting is cancelled.
+    fit a 2d data set using the FitGui interface. A GUI application instance 
+    must already exist (e.g. interactive mode of ipython)      
+    
+    Returns the model or None if fitting is cancelled.
     """
     kwargs['model'] = model
     fg = FitGui(xdata,ydata,**kwargs)
     if model is not None and not isinstance(model,FunctionModel1D):
         fg.fitmodel = True
-    res = fg.configure_traits(kind='livemodal')
+    res = fg.edit_traits(kind='livemodal')
     
     if res:
         return fg.getModelObject()
@@ -1060,7 +1062,9 @@ try:
         
     def fit_data_multi(data,names=None,weights=None,models=None):
         """
-        fit a data set consisting of a variety of curves simultaneously
+        fit a data set consisting of a variety of curves simultaneously. A GUI 
+        application instance must already exist (e.g. interactive mode of 
+        ipython)    
         
         returns a tuple of models e.g. [xvsy,xvsz]
         """
@@ -1073,7 +1077,7 @@ try:
         
         mfg = MultiFitGui(data,names,models,weights=weights)
 
-        res = mfg.configure_traits(kind='livemodal')
+        res = mfg.edit_traits(kind='livemodal')
 
         if res:
             return tuple([fg.tmodel.model for fg in mfg.fgs])

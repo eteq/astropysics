@@ -761,9 +761,12 @@ def spec_target(*args):
     * spec_target(fiducialdict,data) - provide a dictionary of fiducial 
         data and a set of data (array or dict)
         
-    returns the SpecTarget instance
+    A GUI application instance must already exist (e.g. interactive mode of 
+    ipython)    
+        
+    returns the SpecTarget instance 
     """
     st = SpecTarget(*args)
-    st.configure_traits()
+    st.edit_traits()
     return st
     
