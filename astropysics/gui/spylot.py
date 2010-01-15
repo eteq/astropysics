@@ -32,7 +32,7 @@ from enthought.enable.api import ComponentEditor,BaseTool,Interactor,Line, \
 from .. import spec
 
 def _hist_sample_x(x):
-    if len(x)==1:
+    if len(x)<3:
         return x
     x = np.convolve(x,[.5,.5],mode='valid')
     l = (2*x[0]-x[1],)
@@ -40,7 +40,7 @@ def _hist_sample_x(x):
     return np.concatenate((l,np.repeat(x,2),r))
 
 def _hist_sample_y(y):
-    if len(y)==1:
+    if len(y)<3:
         return y
     else:
         return np.repeat(y,2)
