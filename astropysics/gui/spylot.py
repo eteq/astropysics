@@ -595,10 +595,11 @@ class Spylot(HasTraits):
     def __del__(self):
         try:
             self.currspec._features = list(self.currspec._features)
-        except AttributeError:
+        except (AttributeError,IndexError),e:
             pass
-        finally:
-            super(Spylot,self).__del__()
+        #no __del__ present in parents?
+        #finally:
+        #    super(Spylot,self).__del__()
         
     def _update_upperaxis_range(self):
         newlow = self.plot.x_mapper.range.low/(self.z+1)
