@@ -4,38 +4,35 @@ import warnings
 warnings.filterwarnings('ignore','PyArray_FromDimsAndDataAndDescr: use PyArray_NewFromDescr.*'.lower())
 warnings.filterwarnings('ignore','the sets module is deprecated')
 
-import sys
+import sys,os
 from optparse import OptionParser
 from glob import glob
 
 op = OptionParser()
-op.usage = '%prog [ops] [file]'
-op.add_option('-t','--type',dest='type',default='wcs',help='Type of spectrum')
+op.usage = '%prog [ops] [file(s)]'
+op.add_option('-t','--type',dest='type',default='wcs',help='Type of spectrum: "wcs" or "deimos"')
 op.add_option('-e','--extension',dest='ext',default=None,help='Fits extension number')
+op.add_option('-c','--config',dest='configfile',default=None,help='File to save Spylot configuration')
 
 ops,args = op.parse_args()
 
-if len(args)==0:
-    fnpats = ['*.fits','*.fits.gz']
-elif len(args)==1:
-    fnpats = [args[0]]
-else:
-    fnpats = args
-    
-fns = []
-for pattern in fnpats:
-    fns.extend(glob(pattern))
-    
-if len(fns) < 1:
-    print 'No files found!'
-    sys.exit(1)
-    
-
-
+#if ops.configfile is None or not os.path.exists(ops.configfile):
 #if input is ok import the gui stuff
 from astropysics.gui import spylot
 from astropysics import spec
-    
+
+if len(args) == 0:
+    fns = []
+    fns.extend(glob('*.fits'))
+    fns.extend(glob('*.fits.gz'))
+else:
+    fns = []
+    for pattern in args:
+        fns.extend(glob(pattern))       
+        
+if len(fns) == 0:
+    print 'No files found!'
+    sys.exit(1)
     
 ss = []
 if ops.type == 'wcs':
@@ -57,7 +54,8 @@ else:
     sys.exit(1)
     
 sp = spylot.Spylot(ss)
-sp.configure_traits()
+    
+sp.configure_traits(ops.configfile)
     
 
     
