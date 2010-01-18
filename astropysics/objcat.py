@@ -2259,8 +2259,8 @@ class Catalog(CatalogNode):
     Attributes can also be accessed as catobj[attrname] (this allows 
     access to Catalog attributes in the same way as FieldNodes)
     """    
-    def __init__(self,name='default Catalog'):
-        super(Catalog,self).__init__(parent=None)
+    def __init__(self,name='default Catalog',parent=None):
+        super(Catalog,self).__init__(parent)
         self.name = name
         
     def __str__(self):
@@ -2880,22 +2880,27 @@ class Test1(AstronomicalObject):
         return num+1
     
 class Test2(AstronomicalObject):
-    num = Field('num',float,4.2)
+    val = Field('val',float,4.2)
     
     @StructuredFieldNode.derivedFieldFunc(num='num')
-    def f(num):
-        return num+1
+    def d1(val='val',d2='d2'):
+        return val+np.exp(d2)
+    
+    @StructuredFieldNode.derivedFieldFunc(num='num')
+    def d2(d1='d1'):
+        if d1 is not None:
+            return np.log(d1)
     
 def test_cat():
     c=FieldCatalog()
-    ao=AstronomicalObject(c,'group')
-    t1=Test1(ao)
-    t12=Test1(ao)
-    t13=Test1(ao)
-    t13.sed['src'] = ('BVRI',[12,11.5,11.3,11.2])
+    t1=Test1(c)
+    t2=Test2(c)
+    subc=FieldCatalog('sub-cat',c)
+    i1=Test1(subc)
+    i2=Test1(subc)
+    i3=Test1(subc)
     
-    
-    return c,locals()
+    return c
 
 def test_sed():
     from numpy.random import randn,rand
