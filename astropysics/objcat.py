@@ -35,6 +35,13 @@ class CycleError(Exception):
     def __init__(self,message):
         super(CycleError,self).__init__(message)
         
+class CycleWarning(Warning):
+    """
+    This warning indicates a cycle was detected in some graph-like structure
+    """
+    def __init__(self,message):
+        super(CycleWarning,self).__init__(message)
+        
 class SourceDataError(Exception):
     """
     This exception indicates a problem occured while trying to retrieve 
@@ -150,7 +157,7 @@ class CatalogNode(object):
         a string uniquely identifying the object in its catalog heirarchy
         """
         if self.parent is None:
-            return 'Root at '+hex(id(self))
+            return 'Root@'+hex(id(self))
         else:
             obj = self
             i = j = 0
@@ -1105,6 +1112,7 @@ class Field(MutableSequence):
             valobj = self._vals.pop(i)
         except (KeyError,IndexError,TypeError):
             valobj = self._checkConvInVal(val)
+        
         self.notifyValueChange(oldcurr,valobj)
         self._vals.insert(0,valobj)
     currentobj = property(_getCurr,_setCurr)
@@ -2026,15 +2034,15 @@ class DerivedValue(FieldValue):
             elif DerivedValue.__invcycleinitiator is self:
                 from warnings import warn
                 if self.sourcenode is None:
-                    cycleloc = 'DerivedValue@' + hex(id(self))
+                    cycleloc = self.idstr
                 else:
                     if 'name' in self.sourcenode:
                         cycleloc = 'Node '+ self.sourcenode['name']
                     else:
-                        cycleloc = 'Node '+ hex(id(self.sourcenode))
-                warn('Setting a DerivedValue that results in a cycle at '+cycleloc)
+                        cycleloc = 'Node '+ self.sourcenode.idstr
+                warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
                 return
-                #raise CycleError('attempting to set a DerivedValue that results in a cycle')
+                
             self._valid = False
             if self.field is not None:
                 self.field.notifyValueChange(self,self)
@@ -2057,7 +2065,19 @@ class DerivedValue(FieldValue):
                     lerr = val - self._f(*[d[0]-d[2] for d in deps])
                     self._errs = (uerr,lerr)
                 self._valid = True
-            except (ValueError,IndexError),e:
+            except (ValueError,IndexError,CycleError),e:
+                if isinstance(e,CycleError) and ' at ' not in e.args[0]:
+                    #TODO: remove this node locating if it is burdensome in some cases?
+                    if self.sourcenode is None:
+                        cycleloc = ' at '+self.idstr
+                    else:
+                        if 'name' in self.sourcenode:
+                            cycleloc = ' at Node '+ self.sourcenode['name']
+                        else:
+                            cycleloc = ' at Node '+ self.sourcenode.idstr
+                    e.args = (e.args[0]+cycleloc,)
+                    e.message = e.args[0]
+                
                 if self.failedvalueaction == 'raise':
                     if len(e.args) == 2 and isinstance(e.args[1],list):
                         fields = [self._f.func_code.co_varnames[i] for i in e.args[1]]
@@ -2261,6 +2281,7 @@ class DependentSource(Source):
         
         return refs
         
+    __depcycleinitiator = None
     def getDeps(self,geterrs=False):
         """
         gets the values of the dependent field.
@@ -2268,20 +2289,28 @@ class DependentSource(Source):
         the return value is a list of the values in the fields if geterrs is
         False, or (value,upperr,lowerr) if it is True
         """
-        fieldvals = [wr() for wr in self.depfieldrefs]    
-        if None in fieldvals:
-            fieldvals = self.populateFieldRefs()
-        if geterrs:
-            fvs = []
-            for fi in fieldvals:
-                if hasattr(fi,'error'):
-                    es = fi.currenterror
-                    fvs.append((fi(),es[0],es[1]))
-                else:
-                    fvs.append((fi(),0,0))
-            return fvs
-        else:
-            return [fi() for fi in fieldvals]
+        if DependentSource.__depcycleinitiator is None:
+            DependentSource.__depcycleinitiator = self
+        elif DependentSource.__depcycleinitiator is self:
+            raise CycleError('Attempting to compute a DerivedValue that results in a cycle')
+        try:
+            fieldvals = [wr() for wr in self.depfieldrefs]    
+            if None in fieldvals:
+                fieldvals = self.populateFieldRefs()
+            if geterrs:
+                fvs = []
+                for fi in fieldvals:
+                    if hasattr(fi,'error'):
+                        es = fi.currenterror
+                        fvs.append((fi(),es[0],es[1]))
+                    else:
+                        fvs.append((fi(),0,0))
+                return fvs
+            else:
+                return [fi() for fi in fieldvals]
+        finally:
+            if DependentSource.__depcycleinitiator is self:
+                DependentSource.__depcycleinitiator = None
     
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
