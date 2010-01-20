@@ -143,6 +143,26 @@ class CatalogNode(object):
         (including self - e.g. a leaf in the tree returns 1)
         """
         return sum([c.nnodes for c in self._children],1)
+    
+    @property
+    def idstr(self):
+        """
+        a string uniquely identifying the object in its catalog heirarchy
+        """
+        if self.parent is None:
+            return 'Root at '+hex(id(self))
+        else:
+            obj = self
+            i = j = 0
+            while obj.parent is not None:
+                i+=1
+                obj = obj.parent
+            assert obj.parent is None,'Catalog has no root!'
+            for c in self.parent.children:
+                if self is c:
+                    break
+                j+=1
+            return '{0}/{1}/{2}'.format(i,j,obj.idstr) 
         
     
     def visit(self,func,traversal='postorder',filter=False,includeself=True):
@@ -907,14 +927,13 @@ class Field(MutableSequence):
             val.field = self
         return val
     
-    def notifyValueChange(self,oldval=None,newval=None):
+    def notifyValueChange(self,oldvalobject=None,newvalobject=None):
         """
         notifies all registered functions that the value in this 
         field has changed
         
         (see registerNotifier)
         """
-        #TODO: optimize better
         if self._notifywrs is not None:
             deadrefs=[]
             for i,wr in enumerate(self._notifywrs):
@@ -922,7 +941,7 @@ class Field(MutableSequence):
                 if callobj is None:
                     deadrefs.append(i)
                 else:
-                    callobj(oldval,newval)
+                    callobj(oldvalobject,newvalobject)
                     
             
             if len(deadrefs) == len(self._notifywrs):
@@ -1870,12 +1889,12 @@ class ObservedErroredValue(ObservedValue):
         
 class DerivedValue(FieldValue):
     """
-    A FieldValue that derives its value from a function of other FieldValues
+    A FieldValue that derives its value from a function of other FieldValues.
     
-    the values to use as arguments to the function are initially set through 
+    The values to use as arguments to the function are initially set through 
     the default values of the function, and can be either references to 
     fields or strings used to locate the dependencies in the catalog tree, 
-    using the sourcenode argument as the current source (see DependentSource 
+    using the ``sourcenode`` argument as the current source (see DependentSource 
     for details of how dependent values are derefernced)
     
     Alternatively, the initializer argument ``flinkdict`` may 
@@ -1884,7 +1903,7 @@ class DerivedValue(FieldValue):
     
     
     The class attribute ``failedvalueaction`` determines the action to take if a
-    problem is encountered in deriving the value and can be:
+    an exception is encountered while deriving the value and can be:
     *'raise':raise an exception (or pass one along)
     *'warn': issue a warning when it occurs, but continue execution with the 
     value returned as None
@@ -1897,6 +1916,16 @@ class DerivedValue(FieldValue):
     failedvalueaction = 'raise' 
     
     def __init__(self,f,sourcenode=None,flinkdict=None):
+        """
+        ``f`` is the function to use for deriving the value - must have default
+        field links for every argument if ``flinkdict`` is None. 
+        
+        ``sourcenode`` specifies the current node to allow for links to be 
+        stings instead of explicit references to Fields.
+        
+        ``flinkdict`` maps argument names to links, overriding the default
+        values of the arguments of ``f``
+        """
         import inspect
         
         if callable(f):
@@ -1982,7 +2011,7 @@ class DerivedValue(FieldValue):
             DerivedValue.failedvalueaction = oldaction
     checkType.__doc__ = FieldValue.checkType.__doc__
     
-    def _invalidateNotifier(self,oldval,newval):
+    def _invalidateNotifier(self,oldvalobj,newvalobj):
         return self.invalidate()
     
     
@@ -1995,7 +2024,17 @@ class DerivedValue(FieldValue):
             if DerivedValue.__invcycleinitiator is None:
                 DerivedValue.__invcycleinitiator = self
             elif DerivedValue.__invcycleinitiator is self:
-                raise CycleError('attempting to set a DerivedValue that results in a cycle')
+                from warnings import warn
+                if self.sourcenode is None:
+                    cycleloc = 'DerivedValue@' + hex(id(self))
+                else:
+                    if 'name' in self.sourcenode:
+                        cycleloc = 'Node '+ self.sourcenode['name']
+                    else:
+                        cycleloc = 'Node '+ hex(id(self.sourcenode))
+                warn('Setting a DerivedValue that results in a cycle at '+cycleloc)
+                return
+                #raise CycleError('attempting to set a DerivedValue that results in a cycle')
             self._valid = False
             if self.field is not None:
                 self.field.notifyValueChange(self,self)
@@ -2872,14 +2911,14 @@ class AstronomicalObject(StructuredFieldNode):
     loc = Field('loc',AngularPosition)
     sed = SEDField('sed')
 
-class Test1(AstronomicalObject):
+class Test1(StructuredFieldNode):
     num = Field('num',(float,int),4.2)
     
     @StructuredFieldNode.derivedFieldFunc(defaultval='f')
     def f(num='num'):
         return num+1
     
-class Test2(AstronomicalObject):
+class Test2(StructuredFieldNode):
     val = Field('val',float,4.2)
     
     @StructuredFieldNode.derivedFieldFunc(num='num')
