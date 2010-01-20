@@ -891,24 +891,30 @@ class Field(MutableSequence):
     
     def _checkConvInVal(self,val,dosrccheck=True):
         """
+        "check and convert input value
+        
         auto-converts tuples to ObservedValues or ObservedErroredValues
         taking the first element to be the source, and if the second
         is a tuple, it will be passed into ObservedErroredValue init
         #TODO: auto-convert callables with necessary information to derivedvalues
         
-        dosrccheck = True -> check if source is present
-        dosrccheck = string/Source -> ensure that value matches specified 
-        string/Source
-        dosrccheck = False -> do nothing but convert
+        * dosrccheck = True -> check if source is present and raise a  
+          ValueError if so
+        * dosrccheck = string/Source -> ensure that value matches specified 
+          string/Source and if not raise a ValueError
+        * dosrccheck = False -> do no checking - just convert
         """
+        from operator import isSequenceType
         
         if not isinstance(val,FieldValue):
-            if isinstance(val,tuple) and len(val)==2:
+            if hasattr(val,'source') and hasattr(val,'value'):
+                pass
+            elif isSequenceType(val) and len(val)==2:
                 if isinstance(val[1],tuple) and self.type is not tuple:
                     val = ObservedErroredValue(val[0],*val[1])
                 else:
                     val = ObservedValue(val[0],val[1])
-            elif not (hasattr(val,'source') and hasattr(val,'value')):
+            else:
                 raise TypeError('Input %s not FieldValue-compatible'%str(val))
         
         if dosrccheck:
@@ -1007,7 +1013,7 @@ class Field(MutableSequence):
             i = key if type(key) is int else self._vals.index(self[key])
             if not isinstance(val,FieldValue) and key in self:
                 val = (key,val)
-            val = self._checkConvInVal(val,self._vals[i].source)
+            val = self._checkConvInVal(val,dosrccheck=self._vals[i].source)
             if i == 0:
                 self.notifyValueChange(self._vals[0],val)
             self._vals[i] = val
@@ -1016,15 +1022,11 @@ class Field(MutableSequence):
                 s = key
             elif isinstance(key,basestring) or key is None:
                 s = Source(key)
-#            elif key is None:
-#                print 'an'
-#                s = Source(None)
             else:
                 raise TypeError('specified key not a recognized Source')
-            #val = self._checkConvInVal(val if s is None else ObservedValue(s,val))
             if not isinstance(val,FieldValue):
                 val = (s,val)
-            val = self._checkConvInVal(val)
+            val = self._checkConvInVal(val,dosrccheck=True)
             self._vals.append(val)
         
     def __delitem__(self,key):
@@ -1038,7 +1040,7 @@ class Field(MutableSequence):
         del self._vals[i]
             
     def insert(self,key,val):
-        val = self._checkConvInVal(val)
+        val = self._checkConvInVal(val,dosrccheck=True)
         
         if type(key) is int:
             i = key
@@ -1108,10 +1110,15 @@ class Field(MutableSequence):
     def _setCurr(self,val):
         oldcurr = self._vals[0] if len(self._vals)>0 else None
         try:
+            #TODO: actually check for cases instead of handling exceptions -> speed
             i = self._vals.index(self[val])
             valobj = self._vals.pop(i)
         except (KeyError,IndexError,TypeError):
-            valobj = self._checkConvInVal(val)
+            #convert input
+            valobj = self._checkConvInVal(val,dosrccheck=False)
+            #if it's already present, remove already existing value
+            if valobj.source in self:
+                del self[valobj.source]
         
         self.notifyValueChange(oldcurr,valobj)
         self._vals.insert(0,valobj)
@@ -1146,100 +1153,6 @@ class Field(MutableSequence):
     @property
     def errors(self):
         return [v.errors if hasattr(v,'errors') else (0,0) for v in self._vals]
-            
-#class ErrorField(Field):
-#    """
-#    This is a field that stores its values as either (value,error) or
-#    (value,uppererr,lowererr) - calling will retrieve the current value 
-#    without error bars if noerroncall is True, otherwise a 3-tuple
-#    (value,uperr,lowerr)
-    
-#    TODO: store internally consistently? - support passing through errors?
-#    TODO: derived value error bars through getdeps
-#    """
-    
-            
-#    def _checkConvInVal(self,val,dosrccheck=True):  
-#        realtype = self._type
-#        try:
-#            self._type = None
-#            val = super(ErrorField,self)._checkConvInVal(val,dosrccheck)
-            
-#            if isinstance(val,ObservedValue):
-#                v = val._value 
-#                if not isinstance(v,Sequence):
-#                    val._value = (v,0,0)
-#                elif len(v) == 3:
-#                    pass
-#                elif len(v) == 2:
-#                    val._value = (v[0],v[1],v[1])
-#                elif len(v) == 1:
-#                    val._value = (v[0],0,0)
-#                else:
-#                    raise TypeError('provided value has invalid sequence size')
-                    
-                    
-            
-#            if realtype is not None:
-#                if callable(realtype):
-#                    for v in val():
-#                        if not realtype(c):
-#                            raise TypeError('invalid type in ErrorField')
-#                else:
-#                    for v in val():
-#                        if not isinstance(v,realtype):
-#                            raise TypeError('invalid type in ErrorField')
-                        
-#            return val
-#        finally:
-#            self._type = realtype
-    
-#    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None,noerroncall=True):
-#        self._realtype = type
-#        super(ErrorField,self).__init__(name,None,defaultval,usedef,units)
-#        self._noerroncall = noerroncall
-        
-    
-    
-#    def __call__(self):
-#        v = self.currentobj.value
-#        if self._noerroncall:
-#            return v[0]
-#        else:
-#            return v
-    
-#    @property
-#    def error(self):
-#        """
-#        the error for the current object as (uppererr,lowererr)
-#        """
-#        v = self.currentobj.value
-#        if len(v) == 2:
-#            return v[1],v[1]
-#        else:
-#            return v[1:]
-        
-#    @property
-#    def errors(self):
-#        """
-#        returns the errors as (uppererr,lowererr) for all the objects in this 
-#        field
-#        """
-#        vs = []
-#        for v in self._vals:
-#            v = v()
-#            if len(v) == 2:
-#                vs.append((v[1],v[1]))
-#            else:
-#                vs.append(v[1:])
-#        return vs
-        
-#    @property
-#    def values(self):
-#        """
-#        returns all the values (withour errors) in this field
-#        """
-#        return [v()[0] for v in self._vals]
     
 class SEDField(Field):
     """
@@ -2067,14 +1980,16 @@ class DerivedValue(FieldValue):
                 self._valid = True
             except (ValueError,IndexError,CycleError),e:
                 if isinstance(e,CycleError) and ' at ' not in e.args[0]:
-                    #TODO: remove this node locating if it is burdensome in some cases?
+                    #TODO: remove this node locating if it is too burdensome?
                     if self.sourcenode is None:
                         cycleloc = ' at '+self.idstr
                     else:
                         if 'name' in self.sourcenode:
-                            cycleloc = ' at Node '+ self.sourcenode['name']
+                            cycleloc = ' at Node '+ self.sourcenode['name'] 
                         else:
                             cycleloc = ' at Node '+ self.sourcenode.idstr
+                        if self.field is not None:
+                            cycleloc += ' Field ' + self.field.name
                     e.args = (e.args[0]+cycleloc,)
                     e.message = e.args[0]
                 
