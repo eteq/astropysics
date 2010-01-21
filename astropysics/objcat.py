@@ -194,7 +194,7 @@ class CatalogNode(object):
         node will not be processed nor put in the list (also ignores anything 
         that returns None)
         *any other: if the node returns this value on processing, it will
-                    not be returned
+                    not be included in the returned list
                     
         if includeself is not True, the function will not visit the node 
         itself (only the sub-trees)
@@ -578,8 +578,8 @@ class FieldNode(CatalogNode,Sequence):
     
     @staticmethod
     def extractFieldAtNode(node,fieldnames,traversal='postorder',filter=False,
-                           missing='0',converter=None,sources=False,
-                           errors=False,asrec=False,includeself=True):
+                           missing=0,converter=None,sources=False,errors=False,
+                           asrec=False,includeself=True):
         """
         this will walk through the tree starting from the Node in the first
         argument and generate an array of the values for the 
@@ -594,86 +594,121 @@ class FieldNode(CatalogNode,Sequence):
         present (or a non FieldNode is encountered) it can be:
         *'exception': raise an exception if the field is missing
         *'skip': do not include this object in the final array
-        *'0': put 0 in the array location - this also replaces Nones with 0
         *'mask': put 0 in the array location and return a mask of missing 
                  values as the second return value
+        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
+                   the missing values masked
+        *any other: fill any missing entries with this value
         
         converter is a function that is applied to the data before being 
         added to the array (or None to perform no conversion)
         
         sources determines if a sequence of sources should be returned - if
-        False, only the array is returned, if it evaluates to True, the function 
-        returns atuple with the array in the first element and the sources in 
-        the second.  If it is 'names', the names are returned instead of the 
-        source objects themselves
+        False, only the array is returned, if it evaluates to True, the sources
+        will be returned as described below.  By default, string representations
+        of the sources are returned - if sources=='object', the actual Source
+        objects will be returned instead
+        
+        dtypes determines the numpy data type of the output arrays - if None, 
+        they will be inferred from the data. Otherwise, it must be either a 
+        sequence of size matching the number of fields requested, an equivalent 
+        comma-seperated string, or a dictionary mapping fieldnames to dtypes
         
         errors determines if the errors should be returned
         
-        asrec generates a record array instead of a regular array - for
-        multiple fields, if this is False, the output will be f x N
+        asrec generates a record array instead of a regular array.  It can
+        optionally specify the numpy data type of the values.  It must be True,
+        in which case the dtype is inferred from the values, a sequence of size 
+        matching the number of fields requested, an equivalent comma-seperated 
+        string, or a dictionary mapping fieldnames to dtypes
+        
         
         includeself determines if the node itself should be included
         
         return value:
         
         * a record array if asrec is True
-        * an array of values if sources and errors are False
+        * an f x N array of values if sources and errors are False
         * (values,errors,sources) if sources and errors are True
         * (values,sources) if sources are True and errors are False
         * (values,errors) if errors are True and sources are False
         
-        if missing='mask', values will be (values,mask)
+        if missing=='mask', return will be (values,mask)
         """
         from functools import partial
         
-        if missing not in ('exception','raise','skip','mask','0'):
-            raise ValueError('invalid missing action %s'%missing)
+        if missing in ('exception','raise','skip','mask','masked'):
+            missingval = 0
+        else:
+            missingval = missing
+            
         
         if isinstance(fieldnames,basestring):
             if ',' in fieldnames:
                 fieldnames = fieldnames.split(',')
             else:
                 fieldnames = [fieldnames]
+                
         
         if converter is None:
             if missing == 'exception' or missing == 'raise':
                 def visitfunc(node,fieldname):
-                    return node[fieldname]
+                    try:
+                        return node[fieldname]
+                    except AttributeError,e:
+                        args = list(e.args)
+                        args[0] = "Node %s has no field '%s'"%(node.idstr,fieldname)
+                        e.args = tuple(args)
+                        e.message = args[0]
+                        raise
             else:
                 def visitfunc(node,fieldname):
                     try:
-                        res = node[fieldname]
-                        return res if res is not None else 0
+                        return node[fieldname]
                     except (KeyError,IndexError,TypeError,AttributeError):
-                        return 0
+                        return missingval
         else:
             if missing == 'exception' or missing == 'raise':
                 def visitfunc(node,fieldname):
-                    return converter(node[fieldname])
+                    try:
+                        return converter(node[fieldname])
+                    except AttributeError,e:
+                        args = list(e.args)
+                        args[0] = "Node %s has no field '%s'"%(node.idstr,fieldname)
+                        e.args = tuple(args)
+                        e.message = args[0]
+                        raise
             else:
                 def visitfunc(node,fieldname):
                     try:
-                        res = converter(node[fieldname])
-                        return res if res is not None else 0
+                        return converter(node[fieldname])
                     except (KeyError,IndexError,TypeError,AttributeError):
-                        return 0
+                        return missingval
                     
         def maskfunc(node,fieldname):
             try:
+                node[fieldname]
                 return True
             except (KeyError,IndexError,TypeError,AttributeError):
                 return False 
             
-        
-        
+        if filter is not False and not callable(filter):
+            def maskfilter(node,fieldname):
+                return visitfunc(node,fieldname)!=filter
+        else:
+            maskfilter = filter
+            
         lsts = []
         masks = []
+        maskfilterp = maskfilter
         for fn in fieldnames:
             lsts.append(node.visit(partial(visitfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
-            masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
-            
+            if filter is not False and not callable(filter):
+                maskfilterp = partial(maskfilter,fieldname=fn)                
+            masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=maskfilterp,includeself=includeself))
+        
         if missing=='skip':
-            lsts = [np.array(l)[m] for l,m in zip(lsts,masks)]
+            lsts = [np.array(l)[np.array(m)] for l,m in zip(lsts,masks)]
         else:
             lsts = [np.array(l) for l in lsts]
         
@@ -684,11 +719,13 @@ class FieldNode(CatalogNode,Sequence):
                     return getattr(node,fieldname).currentobj.source
                 except (KeyError,IndexError,TypeError,AttributeError):
                     return None 
-            srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
-            if sources == 'name' or sources == 'names':
-                #srcs = [[str(s)[7:] for s in f]  for f in srcs] #for when 'Source ' prefixed all source str
+            if filter is not False and not callable(filter):   
+                srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=partial(maskfilter,fieldname=fn),includeself=includeself) for fn in fieldnames]
+            else:
+                srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
+            
+            if sources != 'object':
                 srcs = [[str(s) for s in f]  for f in srcs] 
-            #srcs = np.array(srcs)[0]
             
         if errors:
             def errfunc(node,fieldname):
@@ -696,31 +733,55 @@ class FieldNode(CatalogNode,Sequence):
                     return getattr(node,fieldname).currentobj.errors
                 except (KeyError,IndexError,TypeError,AttributeError),e:
                     return (0,0)
-                
-            errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
-            #errs = np.array(errs)[0]
+            if filter is not False and not callable(filter):      
+                errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=partial(maskfilter,fieldname=fn),includeself=includeself) for fn in fieldnames]
+            else:
+                errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=maskfilter,includeself=includeself) for fn in fieldnames]
 
         if asrec:
-            errarrs = [np.array(err) for err in errs]
+            from operator import isMappingType,isSequenceType
+            
+            if asrec is True:
+                asrec = {}
+            elif isinstance(asrec,basestring):
+                asrec = asrec.split(',')
+            
+            if isMappingType(asrec):
+                for fn in fieldnames:
+                    if fn not in asrec:
+                        asrec[fn] = None
+            elif isSequenceType(asrec):
+                if len(asrec) != len(fieldnames):
+                    raise ValueError('asrec sequence does not match fieldnames')
+                asrec = dict(zip(fieldnames,asrec))
+                    
+            else:
+                raise ValueError('invalid asrec entry')
+            
             
             ralists = []
             newfnms = []
             for i,(fnm,lst,msk) in enumerate(zip(fieldnames,lsts,masks)):
                 newfnms.append(fnm)
-                ralists.append(lst)
+                ralists.append(np.array(lst,dtype=asrec[fnm]))
                 if errors:
+                    errarr = np.array(errs[i],dtype=asrec[fnm])
                     newfnms.append(fnm+'_lerr')
-                    ralists.append(errarrs[i][:,0])
+                    ralists.append(errarr[:,0])
                     newfnms.append(fnm+'_uerr')
-                    ralists.append(errarrs[i][:,1])
+                    ralists.append(errarr[:,1])
                 if sources:
                     newfnms.append(fnm+'_src')
                     ralists.append(srcs[i])
                 if missing == 'mask':
                     newfnms.append(fnm+'_mask')
                     ralists.append(msk)
-                
-            return np.rec.fromarrays(ralists,names=newfnms)
+                    
+            res = np.rec.fromarrays(ralists,names=newfnms)
+            if missing == 'masked':
+                return np.ma.MaskedArray(res,~np.array(msk))
+            else:
+                return res
             
         else:
             arr = np.array(lsts)
@@ -735,6 +796,8 @@ class FieldNode(CatalogNode,Sequence):
                     
             if missing == 'mask':
                 res = arr,np.array(masks)
+            elif missing == 'masked':
+                res = np.ma.MaskedArray(arr,~np.array(masks))
             else:
                 res = arr
             
@@ -2857,10 +2920,12 @@ class AstronomicalObject(StructuredFieldNode):
 
 class Test1(StructuredFieldNode):
     num = Field('num',(float,int),4.2)
+    num2 = Field('num2',(float,int),83.1)
     
     @StructuredFieldNode.derivedFieldFunc(defaultval='f')
     def f(num='num'):
-        return num+1
+        from random import random
+        return (num+1)*(1+.03*random())
     
 class Test2(StructuredFieldNode):
     val = Field('val',float,4.2)
@@ -2875,13 +2940,19 @@ class Test2(StructuredFieldNode):
             return np.log(d1)
     
 def test_cat():
-    c=FieldCatalog()
-    t1=Test1(c)
-    t2=Test2(c)
-    subc=FieldCatalog('sub-cat',c)
-    i1=Test1(subc)
-    i2=Test1(subc)
-    i3=Test1(subc)
+    c = FieldCatalog()
+    t1 = Test1(c)
+    t1['num'] = ('testsrc1',6.75)
+    t2 = Test1(c)
+    t2['num'] = ('testsrc1',7)
+    
+    subc = FieldCatalog('sub-cat',c)
+    ts1 = Test1(subc)
+    ts1['num'] = ('testsrc2',8.5)
+    ts2 = Test1(subc)
+    ts2['num'] = ('testsrc2',12.7)
+    ts3 = Test1(subc)
+    ts3['num'] = ('testsrc2',10.3)
     
     return c
 
