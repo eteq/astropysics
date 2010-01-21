@@ -91,9 +91,8 @@ class CatalogNode(object):
             return self.parent._cycleCheck(source)
             
     def _getParent(self):
-        return self._parent
+        return self._parent 
     def _setParent(self,val):
-        
         if val is not None:
             val._cycleCheck(self) #TODO:test performance effect/make disablable
             val._children.append(self)
@@ -151,7 +150,6 @@ class CatalogNode(object):
         """
         return sum([c.nnodes for c in self._children],1)
     
-    @property
     def idstr(self):
         """
         a string uniquely identifying the object in its catalog heirarchy
@@ -169,7 +167,7 @@ class CatalogNode(object):
                 if self is c:
                     break
                 j+=1
-            return '{0}/{1}/{2}'.format(i,j,obj.idstr) 
+            return '{0}/{1}/{2}'.format(i,j,obj.idstr()) 
         
     
     def visit(self,func,traversal='postorder',filter=False,includeself=True):
@@ -336,6 +334,7 @@ class FieldNode(CatalogNode,Sequence):
     
     @abstractmethod
     def __init__(self,parent):
+        #TODO: consider using CatalogNode.__init__?
         super(FieldNode,self).__init__(parent)
         self._fieldnames = []
         
@@ -657,7 +656,7 @@ class FieldNode(CatalogNode,Sequence):
                         return node[fieldname]
                     except AttributeError,e:
                         args = list(e.args)
-                        args[0] = "Node %s has no field '%s'"%(node.idstr,fieldname)
+                        args[0] = "Node %s has no field '%s'"%(node.idstr(),fieldname)
                         e.args = tuple(args)
                         e.message = args[0]
                         raise
@@ -674,7 +673,7 @@ class FieldNode(CatalogNode,Sequence):
                         return converter(node[fieldname])
                     except AttributeError,e:
                         args = list(e.args)
-                        args[0] = "Node %s has no field '%s'"%(node.idstr,fieldname)
+                        args[0] = "Node %s has no field '%s'"%(node.idstr(),fieldname)
                         e.args = tuple(args)
                         e.message = args[0]
                         raise
@@ -2010,12 +2009,12 @@ class DerivedValue(FieldValue):
             elif DerivedValue.__invcycleinitiator is self:
                 from warnings import warn
                 if self.sourcenode is None:
-                    cycleloc = self.idstr
+                    cycleloc = self.idstr()
                 else:
                     if 'name' in self.sourcenode:
                         cycleloc = 'Node '+ self.sourcenode['name']
                     else:
-                        cycleloc = 'Node '+ self.sourcenode.idstr
+                        cycleloc = 'Node '+ self.sourcenode.idstr()
                 warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
                 return
                 
@@ -2045,12 +2044,12 @@ class DerivedValue(FieldValue):
                 if isinstance(e,CycleError) and ' at ' not in e.args[0]:
                     #TODO: remove this node locating if it is too burdensome?
                     if self.sourcenode is None:
-                        cycleloc = ' at '+self.idstr
+                        cycleloc = ' at '+self.idstr()
                     else:
                         if 'name' in self.sourcenode:
                             cycleloc = ' at Node '+ self.sourcenode['name'] 
                         else:
-                            cycleloc = ' at Node '+ self.sourcenode.idstr
+                            cycleloc = ' at Node '+ self.sourcenode.idstr()
                         if self.field is not None:
                             cycleloc += ' Field ' + self.field.name
                     e.args = (e.args[0]+cycleloc,)
