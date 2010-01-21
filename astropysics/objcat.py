@@ -12,6 +12,7 @@ TODO: modules to also dynamically update via a web server.
 from __future__ import division,with_statement
 from .constants import pi
 import numpy as np
+from collections import deque
 
 try:
     #requires Python 2.6
@@ -237,9 +238,7 @@ class CatalogNode(object):
                 retvals.append(func(self))    
         elif traversal == 'preorder':
             retvals = self.visit(func,0,filter,includeself)
-        elif traversal == 'level' or traversal == 'breadthfirst':
-            from collections import deque
-            
+        elif traversal == 'level' or traversal == 'breadthfirst':            
             retvals=[]
             q = deque()
             if includeself:
@@ -1998,15 +1997,13 @@ class DerivedValue(FieldValue):
         return self.invalidate()
     
     
-    __invcycleinitiator = None
+    __invcyclestack = deque()
     def invalidate(self):
         """
         This marks this derivedValue as incorrect
         """
         try:
-            if DerivedValue.__invcycleinitiator is None:
-                DerivedValue.__invcycleinitiator = self
-            elif DerivedValue.__invcycleinitiator is self:
+            if self in DerivedValue.__invcyclestack:
                 from warnings import warn
                 if self.sourcenode is None:
                     cycleloc = self.idstr()
@@ -2016,13 +2013,16 @@ class DerivedValue(FieldValue):
                     else:
                         cycleloc = 'Node '+ self.sourcenode.idstr()
                 warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
+                DerivedValue.__invcyclestack.append(self)
                 return
+            else:
+                DerivedValue.__invcyclestack.append(self)
                 
             self._valid = False
             if self.field is not None:
                 self.field.notifyValueChange(self,self)
         finally:
-            DerivedValue.__invcycleinitiator = None
+            DerivedValue.__invcyclestack.pop()
     
     @property
     def value(self):
@@ -2258,7 +2258,7 @@ class DependentSource(Source):
         
         return refs
         
-    __depcycleinitiator = None
+    __depcyclestack = deque()
     def getDeps(self,geterrs=False):
         """
         gets the values of the dependent field.
@@ -2266,10 +2266,11 @@ class DependentSource(Source):
         the return value is a list of the values in the fields if geterrs is
         False, or (value,upperr,lowerr) if it is True
         """
-        if DependentSource.__depcycleinitiator is None:
-            DependentSource.__depcycleinitiator = self
-        elif DependentSource.__depcycleinitiator is self:
+        if self in DependentSource.__depcyclestack:
+            DependentSource.__depcyclestack.append(self)
             raise CycleError('Attempting to compute a DerivedValue that results in a cycle')
+        else:
+            DependentSource.__depcyclestack.append(self)
         try:
             fieldvals = [wr() for wr in self.depfieldrefs]    
             if None in fieldvals:
@@ -2286,8 +2287,7 @@ class DependentSource(Source):
             else:
                 return [fi() for fi in fieldvals]
         finally:
-            if DependentSource.__depcycleinitiator is self:
-                DependentSource.__depcycleinitiator = None
+            DependentSource.__depcyclestack.pop()
     
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
