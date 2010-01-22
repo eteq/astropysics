@@ -532,7 +532,10 @@ class FitGui(HasTraits):
                 #xmod = np.linspace(np.min(xd),np.max(xd),self.nmod)
                 xl = self.plot.index_range.low
                 xh = self.plot.index_range.high
-                xmod = np.linspace(xl,xh,self.nmod)
+                if self.plot.index_scale=="log":
+                    xmod = np.logspace(np.log10(xl),np.log10(xh),self.nmod)
+                else:
+                    xmod = np.linspace(xl,xh,self.nmod)
                 ymod = self.tmodel.model(xmod)
                 
                 self.plot.data.set_data('xmod',xmod)
