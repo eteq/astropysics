@@ -3039,7 +3039,7 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     """
     from operator import isMappingType,isSequenceType
     
-    dictin = isMappingType(M)    
+    dictin = isMappingType(M) and not np.isscalar(M) #numpy scalars are mapping types
     if dictin:
         dkeys = Mzpt = M.keys()
         M = M.values()
@@ -3072,7 +3072,7 @@ def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     """
     from operator import isMappingType,isSequenceType
         
-    dictin = isMappingType(L)    
+    dictin = isMappingType(L) and not np.isscalar(M) #numpy scalars are mapping types    
     if dictin:
         dkeys = Mzpt = L.keys()
         L = L.values()
