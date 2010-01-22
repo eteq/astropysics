@@ -378,12 +378,13 @@ class FitGui(HasTraits):
                     
     
     
-    def __init__(self,xdata,ydata,weights=None,model=None,
+    def __init__(self,xdata=None,ydata=None,weights=None,model=None,
                  include_models=None,exclude_models=None,fittype=None,**traits):
         """
         Intializes the FitGui object:
         
-        xdaya and ydata are the data to be fit
+        xdaya and ydata are the data to be fit - if not provided, a model
+        must be provided that has saved data
         
         model is a `models.FunctionModel`, a string specifying the name of a
         model, or None.  
@@ -398,12 +399,21 @@ class FitGui(HasTraits):
         fittype, if given, will allow explicitly setting the fittype 
         for the initial model.
         """
-        
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
         self.tmodel = _TraitedModel(model)
         if model is not None and fittype is not None:
             self.tmodel.model.fittype = fittype
+            
+        if xdata is None or ydata is None:
+            if not hasattr(self.tmodel.model,'fitteddata') or self.tmodel.model.fitteddata is None:
+                raise ValueError('data not provided and no data in model')
+            if xdata is None:
+                xdata = self.tmodel.model.fitteddata[0]
+            if ydata is None:
+                ydata = self.tmodel.model.fitteddata[1]
+            if weights is None:
+                weights = self.tmodel.model.fitteddata[2]
 
         self.on_trait_change(self._paramsChanged,'tmodel.paramchange')
         
