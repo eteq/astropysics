@@ -1108,20 +1108,12 @@ class NFWModel(FunctionModel1DAuto):
             x=upper/self.rc
             return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
-    def setC(self,c,Rvir=None,Mvir=None):
+    def setC(self,c,Rvir,Mvir):
         """
-        sets the model parameters to match a given concentration 
-        
-        if Rvir or Mvir are None, the Rvir/Mvir relation in this model 
-        (Maller&Bullock 2004) will be used to infer the relation
+        sets the model parameters to match a given concentration given
+        virial radius and mass
         """
-        if Rvir is None and Mvir is None:
-            raise ValueError('Must specify Rvir,Mvir, or both')
-        elif Rvir is None:
-            Rvir = self.Mvir_to_Rvir(Mvir)
-        elif Mvir is None:
-            Mvir = self.Rvir_to_Mvir(Rvir)
-        
+        self._c = c
         self.rc = Rvir/c
         
         self.rho0 = 1
@@ -1130,9 +1122,14 @@ class NFWModel(FunctionModel1DAuto):
         
     def getC(self,z=0):
         """
-        returns the concentration (rc/rvir)
+        returns the concentration (rvir/rc) if set, otherwise, calculates
+        it from the virial radius assuming present cosmology at the specified 
+        redshift
         """
-        return self.getRv(z)/self.rc
+        if hasattr(self,'_c'):
+            return self._c
+        else:
+            return self.getRv(z)/self.rc
             
     def getRv(self,z=0):
         """
@@ -1144,13 +1141,20 @@ class NFWModel(FunctionModel1DAuto):
         
         try:
             from ..constants import get_cosmology,Ms
-            cosmo =get_cosmology()
-            rhoC = cosmo.rhoC('cosmological')*1e-9 #Mpc^-3->kpc^-3
+            cosmo = get_cosmology()
+            rhoC = cosmo.rhoC(z,'cosmological')*1e-9 #Mpc^-3->kpc^-3
             rhov = cosmo.deltavir(z)*rhoC
         except:
             raise ValueError('current cosmology does not support critical density')
         
         return self.inv(rhov,1)
+    
+    def getMv(self,z=0):
+        """
+        gets the mass within the virial radius assuming a redshift
+        """
+        rv = self.getRv(z)
+        return self.integrateSpherical(0,rv)
     
     @staticmethod
     def Rvir_to_Mvir(Rvir,z=0,h=.72,Omega0=1):
