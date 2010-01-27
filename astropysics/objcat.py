@@ -328,6 +328,19 @@ class FieldNode(CatalogNode,Sequence):
     of the field (or None if there is no value).  This means that 
     iterating over the object will also give values.  To iterate over
     the Field objects, use the fields() method.
+    
+    Further, setting an attribute (e.g. node['fieldname'] = value) has different 
+    behavior depending on the type of the input value:
+    
+    * an integer i: sets the current value for that field to the ith entry in 
+      the field
+    * a string: sets the current value to the entry that has the provided source
+      name
+    * a tuple (string,value): sets the field entry for the source named by the
+      string to the value, and sets that source as the current value
+    * a tuple (string,(value,lerr[,uerr]): sets the field entry for the source 
+      named by the string to the value and sets the errors for that entry, and 
+      sets that source as the current value
     """
     __slots__=('_fieldnames',)
     
@@ -871,7 +884,7 @@ class Field(MutableSequence):
     The values, sources, and default properties will return the actual values 
     contained in the FieldValues, while currentobj and iterating 
     over the Field will return FieldValue objects.  Calling the 
-    Field (no arguments) will return the current value
+    Field (no arguments) will return the current value itself
     
     usedef specified if the default should be set -- if True, defaultval will 
     be used, if None, a None defaultval will be ignored but any other
@@ -1159,8 +1172,8 @@ class Field(MutableSequence):
     def _delDefault(self):
         del self[None]
     default = property(_getDefault,_setDefault,_delDefault,"""
-    The default value is the FieldValue that has a
-    the None Source
+    The default value is the FieldValue that has a the None Source -
+    this property is the default value itself, not the fieldValue object
     """)
     
     def _getCurr(self):
@@ -2031,7 +2044,7 @@ class DerivedValue(FieldValue):
         else:
             try: 
                 deps = self._source.getDeps(geterrs = True)
-                if np.all([d[1] == d[2] == 0 for d in deps]):
+                if np.all([(d[1]==0 and d[2]==0) for d in deps]):
                     self._value = self._f(*[d[0] for d in deps])
                     self._errs = (0,0)
                 else:
@@ -2278,9 +2291,12 @@ class DependentSource(Source):
             if geterrs:
                 fvs = []
                 for fi in fieldvals:
-                    if hasattr(fi,'error'):
+                    if hasattr(fi,'errors'):
                         es = fi.currenterror
-                        fvs.append((fi(),es[0],es[1]))
+                        if es is None:
+                            fvs.append((fi(),0,0))
+                        else:
+                            fvs.append((fi(),es[0],es[1]))
                     else:
                         fvs.append((fi(),0,0))
                 return fvs
@@ -2453,7 +2469,7 @@ class StructuredFieldNode(FieldNode):
                 dv = None
 
             if None in fi:
-                fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi.default, usedef=True)
+                fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi[None], usedef=True)
             else:
                 fobj = fi.__class__(fi.name,type=fi.type)
             setattr(self,k,fobj)
@@ -2918,13 +2934,11 @@ class AstronomicalObject(StructuredFieldNode):
     sed = SEDField('sed')
 
 class Test1(StructuredFieldNode):
-    num = Field('num',(float,int),4.2)
-    num2 = Field('num2',(float,int),83.1)
+    num = Field('num',(float,int),(4.2,1,2))
     
     @StructuredFieldNode.derivedFieldFunc(defaultval='f')
     def f(num='num'):
-        from random import random
-        return (num+1)*(1+.03*random())
+        return num+1
     
 class Test2(StructuredFieldNode):
     val = Field('val',float,4.2)
@@ -2941,7 +2955,6 @@ class Test2(StructuredFieldNode):
 def test_cat():
     c = FieldCatalog()
     t1 = Test1(c)
-    t1['num'] = ('testsrc1',6.75)
     t2 = Test1(c)
     t2['num'] = ('testsrc1',7)
     
