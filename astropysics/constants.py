@@ -198,6 +198,32 @@ class FRWCosmology(Cosmology):
         om = self.computeOmegaMz(z)
         x= om - 1
         return (18*pi**2+82*x-39*x**2)/om
+
+class WMAP7Cosmology(FRWCosmology):
+    """
+    WMAP7-only (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7.cfm)
+    """
+    _params_ = ('t0','sigma8')
+    t0 = 13.75#Gyr
+    sigma8 = .801
+    H0 = 71.0
+    omegaB = 0.044
+    omegaC = 0.222
+    omegaL = 0.734
+    omegaM = property(lambda self:self.omegaB+self.omegaC)
+    
+class WMAP7BAOH0Cosmology(FRWCosmology):
+    """
+    WMAP7+BAO+H0 (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7_bao_h0.cfm)
+    """
+    _params_ = ('t0','sigma8')
+    t0 = 13.75#Gyr
+    sigma8 = 0.809
+    H0 = 70.4
+    omegaB = 0.045
+    omegaC = 0.227
+    omegaL = 0.728
+    omegaM = property(lambda self:self.omegaB+self.omegaC)
     
 class WMAP5Cosmology(FRWCosmology):
     """
@@ -254,7 +280,7 @@ class WMAP3AllCosmology(FRWCosmology):
     omegaM=property(lambda self:self.omegaB+self.omegaC)
 
 
-__current_cosmology=WMAP5BAOSNCosmology() #default value
+__current_cosmology=WMAP7BAOH0Cosmology() #default value
 __current_cosmology._exportParams()
 __cosmo_registry={}
 
