@@ -133,9 +133,8 @@ class AngularCoordinate(object):
     __purehre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:h|hr).*')
     __hmsre=_re.compile(r'.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+))(?:d|deg).*')
-    #__dmsre=_re.compile(r'.*?([+-]?\s*\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d+))(?:s|sec).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
-    __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3}):(\d{1,2}):(\d+(?:.\d+)?).*')
+    __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3})[: ](\d{1,2})[: ](\d+(?:.\d+)?).*')
     def __init__(self,inpt=None,sghms=None,range=None):
         """
         If an undecorated 3-element iterator, `inpt` is taken to be deg,min,sec, 
