@@ -261,6 +261,31 @@ class LinearModel(FunctionModel1DAuto):
         """
         self.pointSlope((y0-y1)/(x0-x1),x0,y0)
         
+    @staticmethod
+    def fromPowerLaw(plmod,base=10):
+        """
+        Takes a PowerLawModel and converts it to a linear model assuming 
+        ylinear = log_base(ypowerlaw) and xlinear = log_base(xpowerlaw) 
+        
+        returns the new LinearModel instance
+        """
+        if base == 'e' or base == 'ln':
+            base = np.exp(1)
+        
+        logfactor=1/np.log(base)
+        
+        m = plmod.p
+        b = logfactor*np.log(plmod.A)
+        
+        if plmod.fitteddata is not None:
+            data = list(plmod.fitteddata)
+            data[0] = logfactor*np.log(data[0])
+            data[1] = logfactor*np.log(data[1])
+            
+        lmod = LinearModel(m=m,b=b)
+        lmod.fitteddata = tuple(data)
+        return lmod
+        
     
 class QuadraticModel(FunctionModel1DAuto):
     """
@@ -518,6 +543,32 @@ class PowerLawModel(FunctionModel1DAuto):
         lm.fitData(logx,logy,tuple(fixedps),**kwargs)
         
         return np.array([10**lm.b,lm.m])
+    
+    @staticmethod
+    def fromLinear(lmod,base=10):
+        """
+        Takes a LinearModel and converts it to a power law model assuming 
+        ylinear = log_base(ypowerlaw) and xlinear = log_base(xpowerlaw) 
+        
+        returns the new PowerLawModel instance
+        """
+        if base == 'e' or base == 'ln':
+            base = np.exp(1)
+        
+        p = lmod.m
+        A = base**lmod.b
+        
+        if lmod.fitteddata is not None:
+            data = list(lmod.fitteddata)
+            data[0] = base**data[0]
+            data[1] = base**data[1]
+        else:
+            data = None
+            
+        plmod = PowerLawModel(p=p,A=A)
+        if data is not None:
+            plmod.fitteddata = tuple(data)
+        return plmod
     
 class SinModel(FunctionModel1DAuto):
     """
