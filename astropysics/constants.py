@@ -203,7 +203,7 @@ class WMAP7Cosmology(FRWCosmology):
     """
     WMAP7-only (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7.cfm)
     """
-    _params_ = ('t0','sigma8')
+    _params_ = ('t0','sigma8','omegaB','omegaC')
     t0 = 13.71#Gyr
     sigma8 = .801
     H0 = 71.0
@@ -216,7 +216,7 @@ class WMAP7BAOH0Cosmology(FRWCosmology):
     """
     WMAP7+BAO+H0 (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7_bao_h0.cfm)
     """
-    _params_ = ('t0','sigma8')
+    _params_ = ('t0','sigma8','omegaB','omegaC')
     t0 = 13.78#Gyr
     sigma8 = 0.809
     H0 = 70.4
@@ -229,7 +229,7 @@ class WMAP5Cosmology(FRWCosmology):
     """
     WMAP5-only (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8')
+    _params_=('t0','sigma8','omegaB','omegaC')
     t0=13.69 #Gyr
     sigma8=.796
     H0=71.9
@@ -242,7 +242,7 @@ class WMAP5BAOSNCosmology(FRWCosmology):
     """
     WMAP5+BAO+SN (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8')
+    _params_=('t0','sigma8','omegaB','omegaC')
     t0=13.73 #Gyr
     sigma8=.817
     H0=70.1
@@ -256,7 +256,7 @@ class WMAP3Cosmology(FRWCosmology):
     WMAP3 only (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_wmap.cfm)
     """
     #_params_=('t0','sigma8')
-    _params_=('sigma8')
+    _params_=('sigma8','omegaB','omegaC')
     #t0=13.69 #Gyr
     sigma8=.761
     H0=73.2
@@ -270,7 +270,7 @@ class WMAP3AllCosmology(FRWCosmology):
     WMAP3+all (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_all.cfm)
     """
     #_params_=('t0','sigma8')
-    _params_=('sigma8')
+    _params_=('sigma8','omegaB','omegaC')
     #t0=13.69 #Gyr
     sigma8=.776
     H0=70.4
