@@ -204,7 +204,7 @@ class WMAP7Cosmology(FRWCosmology):
     WMAP7-only (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7.cfm)
     """
     _params_ = ('t0','sigma8')
-    t0 = 13.75#Gyr
+    t0 = 13.71#Gyr
     sigma8 = .801
     H0 = 71.0
     omegaB = 0.044
@@ -217,7 +217,7 @@ class WMAP7BAOH0Cosmology(FRWCosmology):
     WMAP7+BAO+H0 (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7_bao_h0.cfm)
     """
     _params_ = ('t0','sigma8')
-    t0 = 13.75#Gyr
+    t0 = 13.78#Gyr
     sigma8 = 0.809
     H0 = 70.4
     omegaB = 0.045
