@@ -1159,11 +1159,22 @@ class NFWModel(FunctionModel1DAuto):
             x=upper/self.rc
             return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
-    def setC(self,c,Rvir,Mvir):
+    def setC(self,c,Rvir=None,Mvir=None):
         """
         sets the model parameters to match a given concentration given
-        virial radius and mass
+        virial radius and mass.
+        
+        If Rvir or Mvir is None, the other will be set using the z=0  
+        Mvir_to_Rvir or Rvir_to_Mvir functions.  If both are None, a ValueError
+        will be raised
         """
+        if Rvir is None and Mvir is None:
+            raise ValueError('need to specify Rvir or Mvir')
+        elif Rvir is None:
+            Rvir = self.Mvir_to_Rvir(Mvir,z=0)
+        elif Mvir is None:
+            Mvir = self.Rvir_to_Mvir(Rvir,z=0)
+        
         self._c = c
         self.rc = Rvir/c
         
@@ -1171,77 +1182,187 @@ class NFWModel(FunctionModel1DAuto):
         a0 = self.integrateSpherical(0,Rvir)
         self.rho0 = Mvir/a0
         
-    def getC(self,z=0):
+    def getC(self,z=0,rvir='delta',usesavedc=True):
         """
         returns the concentration (rvir/rc) if set, otherwise, calculates
         it from the virial radius assuming present cosmology at the specified 
         redshift
+        
+        `rvir` is the format that goes into  `getRv`
+        
+        `usesavedc` determines if a previously set c should override the 
+        cosmologically-derived value
         """
-        if hasattr(self,'_c'):
+        if hasattr(self,'_c') and usesavedc:
             return self._c
         else:
-            return self.getRv(z)/self.rc
-            
-    def getRv(self,z=0):
-        """
-        get the virial radius at a given redshift
+            return self.getRv(z,rvir)/self.rc
         
-        WARNING: may not be working right unit-wise
+    def getRhoMean(self,r):
+        """
+        computes the mean density within the requested radius, i.e.
+        M(<r)/(4/3 pi r^3)
+        """
+        vol = 4*pi*r**3/3
+        return self.integrateSpherical(0,r)/vol
+            
+    def getRv(self,z=0,rvir='delta'):
+        """
+        get the virial radius at a given redshift, with rvir choosing the 
+        type of virial radius - if 'delta' it will be computed from the 
+        cosmology, otherwise, it should be a multiple of the critical 
+        density
+        
+        units in kpc for mass in Msun
         """
         from scipy.optimize import newton
+        from ..constants import get_cosmology,Ms
+        cosmo = get_cosmology()
+        
+        if rvir == 'delta':
+            overden = cosmo.deltavir(z)
+        else:
+            overden = float(rvir)
         
         try:
-            from ..constants import get_cosmology,Ms
-            cosmo = get_cosmology()
             rhoC = cosmo.rhoC(z,'cosmological')*1e-9 #Mpc^-3->kpc^-3
-            rhov = cosmo.deltavir(z)*rhoC
+            rhov = overden*rhoC
         except:
             raise ValueError('current cosmology does not support critical density')
-        
-        return self.inv(rhov,1)
+        oldcall = self.getCall()
+        try:
+            self.setCall('getRhoMean')
+            return self.inv(rhov,self.rc)
+        finally:
+            self.setCall(oldcall)
     
     def getMv(self,z=0):
         """
-        gets the mass within the virial radius assuming a redshift
+        gets the mass within the virial radius (for a particular redshift)
         """
         rv = self.getRv(z)
         return self.integrateSpherical(0,rv)
     
     @staticmethod
-    def Rvir_to_Mvir(Rvir,z=0,h=.72,Omega0=1):
+    def Rvir_to_Mvir(Rvir,z=0):
         """
+        from Bullock '01
         M_sun,kpc
         """
         from ..constants import get_cosmology
+        c = get_cosmology()
         
-        return 1e12/h*(Omega0*get_cosmology().deltavir(z)/97.2)*(Rvir*(1+z)/203.4/h)**3
+        return 1e12/c.h*(c.omega*c.deltavir(z)/97.2)*(Rvir*(1+z)/203.4/c.h)**3
     
     @staticmethod
-    def Mvir_to_Rvir(Mvir,z=0,h=.72,Omega0=1):
+    def Mvir_to_Rvir(Mvir,z=0):
         """
+        from Bullock '01
         M_sun,kpc
         """
         from ..constants import get_cosmology
+        c = get_cosmology()
         
-        return 203.4/h*(Omega0*get_cosmology().deltavir(z)/97.2)**(-1/3)*(Mvir/1e12/h)**(1/3)/(1+z)
+        return 203.4/c.h*(c.omega*c.deltavir(z)/97.2)**(-1/3)*(Mvir/1e12/c.h)**(1/3)/(1+z)
     
     @staticmethod
-    def Mvir_to_Vvir(Mvir,z=0,h=.72,Omega0=1):
+    def Mvir_to_Vvir(Mvir,z=0):
         """
+        from Bullock '01
         km/s,M_sun
         """
         from ..constants import get_cosmology
+        c = get_cosmology()
         
-        return 143.8*(Omega0*get_cosmology().deltavir(z)/97.2)**(1/6)*(Mvir/1e12/h)**(1/3)*(1+z)**0.5
+        return 143.8*(c.omega*c.deltavir(z)/97.2)**(1/6)*(Mvir/1e12/c.h)**(1/3)*(1+z)**0.5
     
     @staticmethod
-    def Vvir_to_Mvir(Vvir,z=0,h=.72,Omega0=1):
+    def Vvir_to_Mvir(Vvir,z=0):
         """
+        from Bullock '01
         km/s,M_sun
         """
         from ..constants import get_cosmology
+        c = get_cosmology()
         
-        return (Omega0*get_cosmology().deltavir(z)/97.2)**-0.5*(1+z)**-1.5*h*1e12*(Vvir/143.8)**3
+        return (c.omega*c.deltavir(z)/97.2)**-0.5*(1+z)**-1.5*c.h*1e12*(Vvir/143.8)**3
+    
+    @staticmethod
+    def Vvir_to_Vmax(Vvir):
+        """
+        from Bullock '01
+        good from 80-1200 km/s in vvir
+        """
+        return (Vvir/0.468)**(1/1.1)
+    
+    @staticmethod
+    def Vmax_to_Vvir(Vmax):
+        """
+        from Maller & Bullock '04
+        good from 80-1200 km/s in vvir
+        """
+        return (0.468)*Vmax**1.1
+    
+    @staticmethod
+    def Mvir_to_Cvir(Mvir,z=0):
+        """
+        from Maller & Bullock '04
+        M_sun
+        """
+        cvir = 9.6*(Mvir/1e13)**-.13*(1+z)**-1
+        return cvir if cvir>4 else 4.0
+    
+    @staticmethod
+    def Cvir_to_Mvir(Cvir,z=0):
+        """
+        from Maller & Bullock '04
+        M_sun
+        """
+        return 1e13*((Cvir/9.6)*(1+z))**(-1.0/.13)
+    
+    @staticmethod
+    def Mvir_to_Vmax(Mvir,z=0):
+        return NFWModel.Vvir_to_Vmax(NFWModel.Mvir_to_Vvir(Mvir,z))
+    
+    @staticmethod
+    def Vmax_to_Mvir(Vmax,z=0):
+        return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Mvir),z)
+    
+    @staticmethod
+    def create_Mvir(Mvir,z=0):
+        """
+        generate a new NFWModel with the given Mvir using the Mvir_to_Cvir
+        function to get the scaling
+        """
+        m = NFWModel()
+        Cvir = m.Mvir_to_Cvir(Mvir,z)
+        Rvir = m.Mvir_to_Rvir(Mvir,z)
+        m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
+        return m
+    
+    @staticmethod
+    def create_Rvir(Rvir,z=0):
+        """
+        generate a new NFWModel with the given Mvir using the Mvir_to_Cvir and
+        Rvir_to_Mvir functions to get the scaling
+        """
+        m = NFWModel()
+        Mvir = m.Rvir_to_Mvir(Rvir,z)
+        Cvir = m.Mvir_to_Cvir(Mvir,z)
+        m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
+        return m
+    
+    @staticmethod
+    def create_Cvir(Cvir,z=0):
+        """
+        generate a new NFWModel with the given Mvir using the Cvir_to_Mvir
+        function to get the scaling
+        """
+        m = NFWModel()
+        Mvir = m.Cvir_to_Mvir(Cvir,z)
+        Rvir = m.Mvir_to_Rvir(Mvir,z)
+        m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
+        return m
 
 class PlummerModel(FunctionModel1DAuto):
     xaxisname = 'r'
