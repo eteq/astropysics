@@ -1896,6 +1896,9 @@ class DerivedValue(FieldValue):
     be a dictionary of link values that overrides the defaults 
     from the function
     
+    if ``ferr`` is True, the return value of ``f`` should be a 3-sequence
+    of the form (value,uppererror,lowererror), and the arguments of ``f`` will
+    be passed as (depvalue,uerr,lerr) from the source Values
     
     The class attribute ``failedvalueaction`` determines the action to take if a
     an exception is encountered while deriving the value and can be:
@@ -1906,11 +1909,11 @@ class DerivedValue(FieldValue):
     will be left invalid
     *'ignore':the value will be returned as None and will be marked valid
     """
-    __slots__=('_f','_value','_errs','_valid','_fieldwr')
+    __slots__=('_f','_ferr','_value','_errs','_valid','_fieldwr')
     #TODO: auto-reassign nodepath from source if Field moves
     failedvalueaction = 'raise' 
     
-    def __init__(self,f,sourcenode=None,flinkdict=None):
+    def __init__(self,f,sourcenode=None,flinkdict=None,ferr=False):
         """
         ``f`` is the function to use for deriving the value - must have default
         field links for every argument if ``flinkdict`` is None. 
@@ -1925,6 +1928,8 @@ class DerivedValue(FieldValue):
         
         if callable(f):
             self._f = f
+            self._ferr = ferr
+            
             args, varargs, varkw, defaults = inspect.getargspec(f)
             
             if varargs or varkw:
@@ -2044,14 +2049,30 @@ class DerivedValue(FieldValue):
         else:
             try: 
                 deps = self._source.getDeps(geterrs = True)
-                if np.all([(d[1]==0 and d[2]==0) for d in deps]):
-                    self._value = self._f(*[d[0] for d in deps])
-                    self._errs = (0,0)
+                if self._ferr:
+                    valres = self._f(*deps)
+                    self._value = valres[0]
+                    self._errs = (valres[1],valres[2])
                 else:
-                    self._value = val = self._f(*[d[0] for d in deps])
-                    uerr = self._f(*[d[0]+d[1] for d in deps]) - val
-                    lerr = val - self._f(*[d[0]-d[2] for d in deps])
-                    self._errs = (uerr,lerr)
+                    depvals = [d[0] for d in deps]
+                    self._value = val = self._f(*depvals)
+                    if np.all([(d[1]==0 and d[2]==0) for d in deps]):
+                        
+                        #if errors are all zero in dependencies, set to zero straight
+                        self._errs = (0,0)
+                    else:
+                        #compute (df/dx)dx for all variables and add in quadrature
+                        uerrs = []
+                        lerrs = []
+                        for i,d in enumerate(deps):
+                            depvals[i] += d[1]
+                            uerrs.append(self._f(*depvals) - val)
+                            depvals[i] -= d[1]+d[2]
+                            lerrs.append(val - self._f(*depvals))
+                            depvals[i] += d[2]
+                        uerr = np.sum(np.power(uerrs,2))**0.5
+                        lerr = np.sum(np.power(lerrs,2))**0.5
+                        self._errs = (uerr,lerr)
                 self._valid = True
             except (ValueError,IndexError,CycleError),e:
                 if isinstance(e,CycleError) and ' at ' not in e.args[0]:
@@ -2481,7 +2502,7 @@ class StructuredFieldNode(FieldNode):
             self._fieldnames.append(k)
             
         for dv,fobj in dvs:
-            fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict))
+            fobj.insert(0,DerivedValue(dv._f,sourcenode=self,flinkdict=dv.flinkdict,ferr=dv._ferr))
             
     def __getstate__(self):
         import inspect
@@ -2625,7 +2646,7 @@ class StructuredFieldNode(FieldNode):
     
     @staticmethod
     def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
-                         usedef=None,units=None,**kwargs):
+                         usedef=None,units=None,ferr=False,**kwargs):
         """
         this method is to be used as a function decorator to generate a 
         field with a name matching that of the function.  Note that the
@@ -2636,13 +2657,13 @@ class StructuredFieldNode(FieldNode):
         defaults of the function
         """
         if f is None: #allow for decorator arguments
-            return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,**kwargs)
+            return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,units,ferr,**kwargs)
         else: #do actual operation
             if name is None:
                 name = f.__name__
             fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,units=units)
             
-            dv = DerivedValue(f,None,kwargs)
+            dv = DerivedValue(f,sourcenode=None,flinkdict=kwargs,ferr=ferr)
             return dv,fi
         
         
@@ -2935,10 +2956,23 @@ class AstronomicalObject(StructuredFieldNode):
 
 class Test1(StructuredFieldNode):
     num = Field('num',(float,int),(4.2,1,2))
+    num2 = Field('num2',(float,int),(5.6,1.5,0.3))
     
-    @StructuredFieldNode.derivedFieldFunc(defaultval='f')
-    def f(num='num'):
-        return num+1
+    @StructuredFieldNode.derivedFieldFunc
+    def f(num='num',num2='num2'):
+        return 2*num+1+num2
+    
+    @StructuredFieldNode.derivedFieldFunc(ferr=True)
+    def f2(num='num',num2='num2'):
+        num,unum,lnum = num
+        val = 2/num
+        uerr = unum*2*num**-2
+        lerr = lnum*2*num**-2
+        return val,uerr,lerr
+    
+    @StructuredFieldNode.derivedFieldFunc
+    def f3(num='num',num2='num2'):
+        return num2*num
     
 class Test2(StructuredFieldNode):
     val = Field('val',float,4.2)
