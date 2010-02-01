@@ -1547,18 +1547,19 @@ class FunctionModel1D(FunctionModel):
                 
     
     #TODO:move this up into FunctionModel
-    def setCall(self,type=None,xtrans=None,ytrans=None,**kwargs):
+    def setCall(self,calltype=None,xtrans=None,ytrans=None,**kwargs):
         """
         sets the type of function evaluation to occur when the model is called
         
-        type can be:
+        `calltype` can be:
         *None: basic function evaluation
-        *derivative: derivative at the location
-        *integrate: integral - specify 'upper' or 'lower' kwarg and
+        *'derivative': derivative at the location
+        *'integrate': integral - specify 'upper' or 'lower' kwarg and
                     the evaluation location will be treated as the
                     other bound.  If neither is given, lower=0 is assumed
-        *integrateCircular: same as integrate, but using polar jacobian
-        *integrateSpherical: same as integrate, but using spherical jacobian
+        *'integrateCircular': same as integrate, but using polar jacobian
+        *'integrateSpherical': same as integrate, but using spherical jacobian
+        *any other string that is the name of a method on this object
         
         xtrans and ytrans are functions applied to either the input call (for x)
         or the output (for y) - they can also be strings:
@@ -1567,10 +1568,11 @@ class FunctionModel1D(FunctionModel):
         *'pow':10**
         *'exp':e**
         
-        kwargs are passed into the type requested, and the call will occur on 
+        kwargs are passed into the function requested
         
-        note that if the model object is called directly in an overridden 
-        method that is used in the new call, it probably won't work
+        note that there may be unintended consequences of this method due to 
+        methods using the call value instead of the default function evaluation
+        result
         """
         from types import MethodType
         import inspect
@@ -1583,7 +1585,7 @@ class FunctionModel1D(FunctionModel):
         if isinstance(ytrans,basestring):
             ytrans = transmap[ytrans]
             
-        if type is None:
+        if calltype is None:
             if xtrans and ytrans: 
                 self._filterfunc = MethodType(lambda self,x,*pars:ytrans(self.f(xtrans(x),*pars)),self,self.__class__)
             elif xtrans:
@@ -1594,14 +1596,14 @@ class FunctionModel1D(FunctionModel):
                 self._filterfunc = self.f
         else:
             try:
-                newf = getattr(self,type)
+                newf = getattr(self,calltype)
                 
                 if not callable(newf):
                     raise AttributeError
             except AttributeError:
-                raise AttributeError('function %s not found in %s'%(type,self))
+                raise AttributeError('function %s not found in %s'%(calltype,self))
                 
-            if 'integrate' in type:
+            if 'integrate' in calltype:
                 if 'upper' in kwargs and 'lower' in kwargs:
                     raise ValueError("can't do integral with lower and upper both specified")
                 elif 'upper' in kwargs:
@@ -1639,7 +1641,6 @@ class FunctionModel1D(FunctionModel):
                         return vecf(x)
                 
             else:    
-                
                 fargs, fvarargs, fvarkws, fdefaults = inspect.getargspec(newf)
                     
                 for arg in fargs:
@@ -1675,7 +1676,7 @@ class FunctionModel1D(FunctionModel):
                 
             self._filterfunc = MethodType(callfunc,self,self.__class__)
             
-        self._filterfunctype = (type,xts,yts)
+        self._filterfunctype = (calltype,xts,yts)
         
     def getCall(self):
         """
