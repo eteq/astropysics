@@ -3191,8 +3191,45 @@ def kcorrect(mags,zs,magerr=None,filterlist=['U','B','V','R','I']):
     finally:
         idl.close()
         
+def color_to_Teff(c,colorbands='g-r'):
+    """
+    estimate color to effective temperature - currently only g-r is available
+    from McGurk 10 or B-V from Sekiguchi & Fukugita 00
+    """    
+    if colorbands == 'g-r':
+        if not (-.2 <= c <= .9):
+            raise ValueError('g-r can only be between -.2 and .9')
+        logteff = np.polyval([.0283,.0488,-.316,3.882],c)
+        return 10**logteff
+    elif colorbands == 'B-V':
+        teffsf = [7078,6621,6214,5852,5532,5248,4996,4770,4567,4382,4209,4044,3882]
+        BmVsf = [.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5]
+        return np.interp(c,BmVsf,teffsf)
+    else:
+        raise ValueError('unrecognized color')
     
-        
+def teff_to_color(teff,colorbands='g-r'):
+    """
+    estimate color to effective temperature - currently only g-r is available
+    from McGurk 10 or B-V from Flower 96
+    """    
+    if colorbands == 'g-r':
+        .9, -.2
+        ps = np.poly1d([.0283,.0488,-.316,3.882-np.log10(teff)])
+        roots = ps.r
+        goodroot = None
+        for r in roots:
+            if r.imag==0 and -.2 <= r.real <= .9:
+                if goodroot is not None:
+                    raise ValueError('multiple matches found - invalid teff')
+                goodroot = r.real
+        return goodroot
+    elif colorbands == 'B-V':
+        teffsf = [7078,6621,6214,5852,5532,5248,4996,4770,4567,4382,4209,4044,3882]
+        BmVsf = [.3,.4,.5,.6,.7,.8,.9,1,1.1,1.2,1.3,1.4,1.5]
+        return np.interp(teff,teffsf[::-1],BmVsf[::-1])
+    else:
+        raise ValueError('unrecognized color')
     
 #<---------------------Load built-in data-------------------------------------->
 class _BandRegistry(dict):
