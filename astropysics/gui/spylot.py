@@ -519,8 +519,10 @@ class Spylot(HasTraits):
         pd.set_data('continuum',[0,0])#reset
         
         self.plot = plot = Plot(pd,resizeable='hv')
-        plot.plot(('x','flux'),name='flux',type='line',line_style='solid',color='blue')
-        plot.plot(('x','err'),name='err',type='line',line_style='dash',color='green')
+        ploi = plot.draw_order.index('plot')
+        plot.draw_order[ploi:ploi] = ['continuum','err','flux','annotations']
+        plot.plot(('x','flux'),name='flux',type='line',line_style='solid',color='blue',draw_layer='flux',unified_draw=True)
+        plot.plot(('x','err'),name='err',type='line',line_style='dash',color='green',draw_layer='err',unified_draw=True)
         
         topmapper = LinearMapper(range=DataRange1D())
         plot.x_mapper.range.on_trait_change(self._update_upperaxis_range,'updated')
@@ -536,20 +538,21 @@ class Spylot(HasTraits):
         plot.padding_left = 70 #default is a bit too little
         
         majorlineplot = plot.plot(('majorx','majory'),name='majorlineplot',type='line',line_style='dash',color='red')[0]
-        #majorlineplot.value_mapper = LinearMapper(range=DataRange1D(plot._get_or_create_datasource('majory')))
+        majorlineplot.set(draw_layer='annotations',unified_draw=True)
         majorlineplot.value_mapper = LinearMapper(range=DataRange1D(high=0.9,low=0.1))
         majorlineplot.visible = self.showmajorlines
         del plot.x_mapper.range.sources[-1]  #remove the line plot from the x_mapper sources so scaling is only on the spectrum
         self.majorlineeditor = LineListEditor(lineplot=majorlineplot)
         
         minorlineplot = plot.plot(('minorx','minory'),name='minorlineplot',type='line',line_style='dot',color='red')[0]
-        #minorlineplot.value_mapper = LinearMapper(range=DataRange1D(plot._get_or_create_datasource('minory')))
+        minorlineplot.set(draw_layer='annotations',unified_draw=True)
         minorlineplot.value_mapper = LinearMapper(range=DataRange1D(high=0.9,low=0.1))
         minorlineplot.visible = self.showminorlines
         del plot.x_mapper.range.sources[-1]  #remove the line plot from the x_mapper sources so scaling is only on the spectrum
         self.minorlineeditor = LineListEditor(lineplot=minorlineplot)
         
         self.contline = plot.plot(('x','continuum'),name='continuum',type='line',line_style='solid',color='black')[0]
+        self.contline.set(draw_layer='continuum',unified_draw=True)
         self.contline.visible = self.showcont
 #        idat = ArrayDataSource((0.0,1.0))
 #        vdat = ArrayDataSource((0.0,0.0))
