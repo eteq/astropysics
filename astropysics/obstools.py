@@ -7,6 +7,9 @@ a better place to live.
 
 The focus is currently on optical astronomy, as that is what the primary author 
 does.
+
+Note that some of these functions require the dateutil package 
+( http://pypi.python.org/pypi/python-dateutil , also included with matplotlib)
 """
 
 from __future__ import division,with_statement
@@ -15,24 +18,174 @@ import numpy as np
 
 from .utils import PipelineElement
 
-def jd_to_gregorian(jd):
-    raise NotImplementedError
+def jd_to_gregorian(jd,bceaction=None,msecrounding = 1e-5):
+    """
+    convert julian date number to a gregorian date and time
+    
+    output is in a dateutil UTC
+    
+    bceaction indicates what to do if the result is a BCE year.   datetime 
+    generally only supports positive years, so the following options apply:
+    * 'raise' or None: raise an exception
+    * 'neg': for any BCE years, convert to positive years (delta operations will 
+      in datetime will not be correct)
+    * a scalar: add this number to the year
+    
+    msecrounding does a fix for floating-point errors - if the seconds are 
+    within the request number of seconds of an exact second, it will be set to
+    that second 
+    """
+    import datetime
+    
+    jdn = np.array(jd,copy=False)
+    scalar = jdn.shape == ()
+    jdn = jdn.ravel()
+    
+    #implementation from http://www.astro.uu.nl/~strous/AA/en/reken/juliaansedag.html
+    x2 = np.floor(jdn - 1721119.5)
+    c2 = (4*x2 + 3)//146097
+    x1 = x2 - (146097*c2)//4
+    c1 = (100*x1 + 99)//36525
+    x0 = x1 - (36525*c1)//100
+    
+    yr = 100*c2 + c1
+    mon = (5*x0 + 461)//153
+    day = x0 - (153*mon-457)//5 + 1
+    
+    mmask = mon>12
+    mon[mmask] -= 12
+    yr[mmask] += 1
+    
+    
+    time = (jdn - np.floor(jdn) - 0.5) % 1
+    if time == 0:
+        hr = min = sec = msec = np.zeros_like(yr)
+    elif time == 0.5:
+        min = sec = msec = np.zeros_like(yr)
+        hr = 12*np.ones_like(yr)
+    else:
+        hr = np.floor(time*24).astype(int)
+        time = time*24 - hr
+        min = np.floor(time*60).astype(int)
+        time = time*60 - min
+        sec = np.floor(time*60).astype(int)
+        time = time*60 - sec
+        msec = np.floor(time*1e6).astype(int)
+        
+        #rounding fix for floating point errors
+        if msecrounding:
+            msecundermask = (1-time) < msecrounding
+            msecovermask = time < msecrounding
+            msec[msecundermask|msecovermask] = 0
+            sec[msecundermask] += 1
+            min[sec==60] += 1
+            sec[sec==60] = 0
+            hr[min==60] += 1
+            min[min==60] = 0
+            hr[hr==24] = 0
+            #date is always right
+        
+    
+    try:
+        from dateutil import tz
+        tzi = tz.tzutc()
+    except ImportError:
+        tzi = None
+    
+    if bceaction is not None:
+        if bceaction == 'raise':
+            pass
+        elif bceaction == 'neg':
+            yr[yr<datetime.MINYEAR]*= -1
+        else:
+            yr += bceaction
+    
+    if scalar:
+        return datetime.datetime(yr[0],mon[0],day[0],hr[0],min[0],sec[0],msec[0],tzi)
+    else:
+        return [datetime.datetime(*t,tzinfo=tzi) for t in zip(yr,mon,day,hr,min,sec,msec)]
+    
 
-def gregorian_to_jd(yr,month,day,hr):
+def gregorian_to_jd(gtime,utcconv=True):
     """
     Convert gregorian to julian date
     
+    the input `gtime` can either be a sequence (yr,month,day,[hr,min,sec]), 
+    where each element may be  or a 
+    datetime.datetime object
+    
+    if utcconv is True and datetime objects are given, the time will be 
+    converted to UTC based on the datetime.tzinfo objects (if present).  If it
+    is a string, it is taken to be a timezone name that will be used to convert
+    all the gregorian dates to UTC (requires dateutil package).  If it is a 
+    scalar, it is taken to be the hour offset of the timezone to convert to UTC. 
+    
     Adapted from xidl  jdcnv.pro
     """
+    from datetime import datetime
+    
+    if isinstance(gtime,datetime):
+        datetimes = [gtime]
+        scalarout = True
+    elif all([isinstance(gt,datetime) for gt in gtime]):
+        datetimes = gtime
+        scalarout = False
+    else:
+        datetimes = None
+        gtime = list(gtime)
+        if not (3 < len(gtime) < 7):
+            raise ValueError('gtime input sequence is invalid size')
+        while len(gtime) < 6:
+            gtime.append(np.zeros_like(gtime[-1]))
+        yr,month,day,hr,min,sec = gtime
+        scalarout = np.isscalar(yr)
+        
+    if datetimes is not None:
+        yr,month,day,hr,min,sec = [],[],[],[],[],[]
+        for dt in datetimes:
+            if utcconv is True:
+                dt = dt - dt.utcoffset()
+            yr.append(dt.year)
+            month.append(dt.month)
+            day.append(dt.day)
+            hr.append(dt.hour)
+            min.append(dt.minute)
+            sec.append(dt.second+dt.microsecond/1e6)
+                
+        if utcconv is True:
+            utcconv = False
+                
+    
     yr = np.array(yr,dtype='int64',copy=False)
     month = np.array(month,dtype='int64',copy=False)
     day = np.array(day,dtype='int64',copy=False)
     hr = np.array(hr,dtype=float,copy=False)
+    min = np.array(min,dtype=float,copy=False)
+    sec = np.array(sec,dtype=float,copy=False)
     
+    if isinstance(utcconv,basestring):
+        from dateutil import tz
+        tzi = tz.gettz(utcconv)
+        
+        utcconv = []
+        for t in zip(yr,month,day,hr,min,sec):
+            #microsecond from float component of seconds
+            dt = datetime(*t,microseconds=int((t[-1]-np.floor(t[-1]))*1e6),tzinfo=tzi)
+            utcdt = dt.utcoffset()
+            utcconv.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
+        
+    if np.any(utcconv):
+        hr -= np.array(utcconv)
+        
     ly = int((month-14)/12)		#In leap years, -1 for Jan, Feb, else 0
-    julian = day - 32075l + 1461l*(yr+4800l+ly)//4
-    julian += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
-    return julian + (hr/24.0) - 0.5
+    jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
+    jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
+    
+    res = jdn + (hr/24.0) + min/1440 + sec/86400 - 0.5
+    if scalarout:
+        return res[0]
+    else:
+        return res
 
 class Site(object):
     """
@@ -40,14 +193,14 @@ class Site(object):
     
     lat/long are coords.AngularCoordinate objects, altitude in meters
     """
-    tznames = {'EST':-5,'CST':-6,'MST':-7,'PST':-8,
-               'EDT':-4,'CDT':-5,'MDT':-6,'PDT':-7}
+#    tznames = {'EST':-5,'CST':-6,'MST':-7,'PST':-8,
+#               'EDT':-4,'CDT':-5,'MDT':-6,'PDT':-7}
     def __init__(self,lat,long,alt=0,tz=None,name=None):
         """
         generate a site by specifying latitude and longitude (as 
         coords.AngularCoordinate objects or initializers for one), optionally
-        providing altitude (in meters), time zone (either as a name from 
-        Site.tznames or as an offset from UTC), and/or a site name.
+        providing altitude (in meters), time zone (either as a timezone name
+        provided by the system or as an offset from UTC), and/or a site name.
         """
         self.latitude = lat
         self.latitude.range = (-90,90)
@@ -56,17 +209,21 @@ class Site(object):
         self.altitude = alt
         if tz is None:
             self.tz = self._tzFromLong(self._long)
-        elif tz in self.tznames:
-            self.tz = self.tznames[tz]
+        elif isinstance(tz,basestring):
+            from dateutil import tz
+            self.tz = tz.gettz(tz)
         else:
-            self.tz = tz
+            from dateutil import tz
+            self.tz = tz.tzoffset(tz)
         if name is None:
             name = 'Default Site'
         self.name = name
     
     @staticmethod
     def _tzFromLong(long):
-        return int(np.floor((long.degrees+15)/15))
+        from dateutil import tz
+        offset =  int(np.floor((long.degrees+15)/15))
+        return tz.tzoffset(offset)
     
     def _getLatitude(self):
         return self._lat
@@ -118,6 +275,8 @@ class Site(object):
         
         guts of calculation adapted from xidl ct2lst.pro
         """
+        import datetime
+        
         retstring = kwargs.pop('retstring',False)
         if len(kwargs)>0:
             raise TypeError('got unexpected argument '+kwargs.keys()[0])
@@ -129,10 +288,9 @@ class Site(object):
             else:
                 dst = False
             time,day,month,year = args[:4]
-            if dst:
-                raise NotImplementedError
-                time -= 1 #TODO:check this and set dst only if at the right dates
-            jd = gregorian_to_jd(year,month,day,np.array(time,copy=False)-self.tz) #TODO:check sign here
+            
+            
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcconv=True)
         else:
             raise TypeError('invalid number of input arguments')
         
