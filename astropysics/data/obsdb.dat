@@ -1,0 +1,196 @@
+# this file originally came from IRAF (iraf.noao.edu)
+#
+# Observatory Parameters.  Taken from the Almanac.
+#
+# Observatories wishing to be added or make changes in the default
+# distributed database should send information to iraf@noao.edu.
+
+observatory = "kpno"
+	name = "Kitt Peak National Observatory"
+	longitude = 111:36.0
+	latitude = 31:58.8
+	altitude = 2120.
+	timezone = 7
+
+observatory = "ctio"
+	name = "Cerro Tololo Interamerican Observatory"
+	longitude = 70.815
+	latitude = -30.16527778
+	altitude = 2215.
+	timezone = 4
+
+observatory = "eso"
+	name = "European Southern Observatory"
+	longitude = 70:43.8
+	latitude = -29:15.4
+	altitude = 2347
+	timezone = 4
+
+observatory = "lick"
+	name = "Lick Observatory"
+	longitude = 121:38.2
+	latitude = 37:20.6
+	altitude = 1290
+	timezone = 8
+
+observatory = "mmto"
+	name = "Multiple Mirror Telescope Observatory"
+	longitude = 110:53.1
+	latitude = 31:41.3
+	altitude = 2600
+	timezone = 7
+
+observatory = "mmt"
+	name = "Whipple Observatory"
+	longitude = 110:53.1
+	latitude = 31:41.3
+	altitude = 2608
+	timezone = 7
+
+observatory = "cfht"
+	name = "Canada-France-Hawaii Telescope"
+	longitude = 155:28.3
+	latitude = 19:49.6
+	altitude = 4215
+	timezone = 10
+
+observatory = "lapalma"
+	name = "Roque de los Mucachos, La Palma"
+	longitude = 17:52.8
+	latitude = 28:45.5
+	altitude = 2327
+
+observatory = "mso"
+	name = "Mt. Stromlo Observatory"
+	longitude = 210:58:32.4
+	latitude = -35:19:14.34
+	altitude = 767
+	timezone = -10
+
+observatory = "sso"
+	name = "Siding Spring Observatory"
+	longitude = 210:56:19.70
+	latitude = -31:16:24.10
+	altitude = 1149
+	timezone = -10
+
+observatory = "aat"
+	name = "Anglo-Australian Observatory"
+	longitude = 210:56:2.09
+	latitude = -31:16:37.34
+	altitude = 1164
+	timezone = -10
+
+############################################################################
+#  Added at Lick upon request of Greg Wirth.
+
+#  This position comes from the 1993 Astronomical Almanac and agrees
+#  to the specified accuracy with the numbers hardcoded into the Keck
+#  I user interface code.  According to Hilton Lewis, this position
+#  should be good to 3 arcseconds, which is 10x the separation of the
+#  2 telescopes.  So this position should be useable for either Keck I
+#  or Keck II unless your astrometric requirements are extremely
+#  precise.
+
+observatory = "keck"
+	name = "Keck 10-meter Telescope on Mauna Kea"
+	longitude = 155:28.7
+	latitude = 19:49.7
+	altitude = 4160
+	timezone = 0
+
+############################################################################
+#   Added at Lick and not yet sent to NOAO for permanent inclusion.
+#
+#   We need the precise coords for lick1m, lick3m and lickcat.  All of
+#   these were taken from the 1984 Astronomical Almanac.  The
+#   coordinates there are all listed as being given in the North
+#   American Datum (presumably the 1927 NAD), except for the meridian
+#   circle, whose position is given as astrometric.  (I have omitted
+#   the position of the 12-inch Clark refractor which was in the dome
+#   currently occupied by the 40-inch Nickel.)
+#
+#   See http://www.ucolick/org/~sla/mtham/info.html for more details.
+
+observatory = "lick1m"
+	name = "Nickel 1-m Reflector at Lick Observatory"
+	longitude = 121:38:30.2
+	latitude = 37:20:30.6
+	altitude = 1285
+	timezone = 0
+#       long -121.64172
+#       lat    37.34183
+
+observatory = "lick3m"
+	name = "Shane 3-m Reflector at Lick Observatory"
+	longitude = 121:38:09.9
+	latitude = 37:20:35.2
+	altitude = 1290
+	timezone = 0
+#       121.63608
+#       37.34311
+
+observatory = "lick36"
+	name = "36-inch Clark Refractor at Lick Observatory"
+	longitude = 121:38:31.1
+	latitude = 37:20:28.3
+	altitude = 1290
+	timezone = 0
+#       121.64197
+#       34.34119
+
+observatory = "lickmc"
+	name = "6.5-inch Clark-Reps. Meridian Circle at Lick Observatory"
+	longitude = 121:38:43.95
+	latitude = 37:20:25.3
+	altitude = 1283
+	timezone = 0
+#       Note:  As described in the URL above, this instrument was
+#       removed in the 1950s..
+
+observatory = "lick24"
+	name = "24-inch Cass. Reflector at Lick Observatory"
+	longitude = 121:38:00.7
+	latitude = 37:20:37.3
+	altitude = 1295
+	timezone = 0
+#       121.63353
+#       37.34369
+
+observatory = "lick2ast"
+	name = "Carnegie Double Astrograph at Lick Observatory"
+	longitude = 121:38:13.1
+	latitude = 37:20:33.6
+	altitude = 1285
+	timezone = 0
+#       121.63697
+#       37.34267
+
+observatory = "lickcros"
+	name = "36-inch Crossley Reflector at Lick Observatory"
+	longitude = 121:38:35.1
+	latitude = 37:20:18.0
+	altitude = 1235
+	timezone = 0
+#       121.64308
+#       37.33833
+
+observatory = "licktauch"
+	name = "22-inch Tauchmann Cass. Reflector at Lick Observatory"
+	longitude = 121:38:20.6
+	latitude = 37:20:31.1
+	altitude = 1270
+	timezone = 0
+#       121.63906
+#       37.34197
+
+observatory = "lick6"
+	name = "6-inch reflector at Lick Observatory"
+	longitude = 121:38:28.95
+	latitude = 37:20:29.7
+	altitude = 1280
+	timezone = 0
+#       Note: As seen in the URL above the identity and disposition of
+#       the optics of this telescope are unknown.  However, the position
+#       given here appears to place it very nearly in the known location
+#       of the Meridian Circle.
