@@ -144,7 +144,9 @@ def gregorian_to_jd(gtime,utcconv=True):
         yr,month,day,hr,min,sec = [],[],[],[],[],[]
         for dt in datetimes:
             if utcconv is True:
-                dt = dt - dt.utcoffset()
+                off = dt.utcoffset()
+                if off is not None:
+                    dt = dt - off
             yr.append(dt.year)
             month.append(dt.month)
             day.append(dt.day)
@@ -172,7 +174,10 @@ def gregorian_to_jd(gtime,utcconv=True):
             #microsecond from float component of seconds
             dt = datetime(*t,microseconds=int((t[-1]-np.floor(t[-1]))*1e6),tzinfo=tzi)
             utcdt = dt.utcoffset()
-            utcconv.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
+            if utcdt is None:
+                utcconv.append(0)
+            else:
+                utcconv.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
         
     if np.any(utcconv):
         hr -= np.array(utcconv)
@@ -214,7 +219,7 @@ class Site(object):
             self.tz = tz.gettz(tz)
         else:
             from dateutil import tz
-            self.tz = tz.tzoffset(tz)
+            self.tz = tz.tzoffset(str(tz),int(tz*60*60))
         if name is None:
             name = 'Default Site'
         self.name = name
@@ -222,8 +227,8 @@ class Site(object):
     @staticmethod
     def _tzFromLong(long):
         from dateutil import tz
-        offset =  int(np.floor((long.degrees+15)/15))
-        return tz.tzoffset(offset)
+        offset =  int(np.round(long.degrees/15))
+        return tz.tzoffset(str(offset),offset*60*60)
     
     def _getLatitude(self):
         return self._lat
@@ -263,33 +268,52 @@ class Site(object):
         
         input forms:
         
-        * localSiderialTime(JD): input argument is julian date
+        * localSiderialTime(JD): input argument is julian date UTC
+        * localSiderialTime(datetime): input argument is a datetime object - if
+                                       it has tzinfo, the datetime object's time
+                                       zone will be used, otherwise the Site's
         * localSiderialTime(time,day,month,year): input arguments determine 
           local time - time is in hours
-        * localSiderialTime(time,day,month,year,dst): same as above, but the
-          final argument determines if daylight savings time should be accounted 
-          for in time calculations 
+        * localSiderialTime(day,month,year,hr,min,sec): local time - hours and
+          minutes will be interpreted as integers
         
-        returns the local siderial time in hours, or if kwarg `retstring is
-        True, returns as a string
+        
+        returns the local siderial time in a format that depends on the 
+        `returntype` keyword which can be (default None):
+        
+        *None/'hours': return LST in decimal hours
+        *'string': return LST as a hh:mm:ss.s 
+        *'datetime': return a datetime.time object 
         
         guts of calculation adapted from xidl ct2lst.pro
         """
         import datetime
         
-        retstring = kwargs.pop('retstring',False)
+        rettype = kwargs.pop('returntype',None)
         if len(kwargs)>0:
             raise TypeError('got unexpected argument '+kwargs.keys()[0])
         if len(args)==1:
-            jd = args[0]
-        elif 4 <= len(args) <= 5:
-            if len(args)==5:
-                dst = args[4]
+            if isinstance(args[0],datetime.datetime):
+                if args[0].tzinfo is None:
+                    dtobj = datetime.datetime(args[0].year,args[0].month,
+                                    args[0].day,args[0].hour,args[0].minute,
+                                    args[0].second,args[0].microsecond,self.tz)
+                else:
+                    dtobj = args[0]
+                jd = gregorian_to_jd(dtobj,utcconv=True)
             else:
-                dst = False
-            time,day,month,year = args[:4]
-            
-            
+                jd = args[0]
+        elif len(args) == 4:
+            time,day,month,year = args
+            hr = np.floor(time)
+            min = np.floor(60*(time - hr))
+            sec = np.floor(60*(60*(time-hr) - min))
+            msec = np.floor(1e6*(60*(60*(time-hr) - min) - sec))
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcconv=True)
+        elif len(args) == 6:
+            day,month,year,hr,min,sec = args
+            msec = 1e6*(sec - np.floor(sec))
+            sec = np.floor(sec)
             jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcconv=True)
         else:
             raise TypeError('invalid number of input arguments')
@@ -308,14 +332,34 @@ class Site(object):
         if lst.shape == tuple():
             lst = lst.ravel()[0]
         
-        if retstring:
+        if rettype is None or rettype == 'hours':
+            return lst
+        elif rettype == 'string':
             hr = int(lst)
             min = 60*(lst - hr)
-            sec = min - int(min)
+            sec = 60*(min - int(min))
             min = int(min)
             return '%i:%i:%f'%(hr,min,sec)
+        elif rettype == 'datetime':
+            hr = int(lst)
+            min = 60*(lst - hr)
+            sec = 60*(min - int(min))
+            min = int(min)
+            msec = int(1e6*(sec-int(sec)))
+            sec = int(sec)
+            return datetime.time(hr,min,sec,msec)
         else:
-            return lst
+            raise ValueError('invallid returntype argument')
+        
+    def currentLocalSiderialTime(self,**kwargs):
+        """
+        computes the current LST for this site
+        
+        kwargs are passed into localSiderialTime
+        """
+        import datetime
+        from dateutil import tz
+        return self.localSiderialTime(datetime.datetime.now(tz.tzlocal()),**kwargs)
         
 class Observatory(Site):
     """
