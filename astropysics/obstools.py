@@ -415,7 +415,7 @@ def __loadobsdb(sitereg):
 
 sites = DataObjectRegistry('sites',Site)
 #TODO: fix this to be better next time I visit
-sites['uciobs'] = Observatory(33.6443,117.8555,0,'PST','UC Irvine Observatory')
+sites['uciobs'] = Observatory(33.636198,117.83466,80,'PST','UC Irvine Observatory')
 __loadobsdb(sites)
 
 #<-----------------Attenuation/Reddening and dust-related---------------------->
