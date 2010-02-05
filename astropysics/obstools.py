@@ -16,7 +16,7 @@ from __future__ import division,with_statement
 from .constants import pi
 import numpy as np
 
-from .utils import PipelineElement
+from .utils import PipelineElement,DataObjectRegistry
 
 def jd_to_gregorian(jd,bceaction=None,msecrounding = 1e-5):
     """
@@ -215,11 +215,11 @@ class Site(object):
         if tz is None:
             self.tz = self._tzFromLong(self._long)
         elif isinstance(tz,basestring):
-            from dateutil import tz
-            self.tz = tz.gettz(tz)
+            from dateutil import tz  as tzmod
+            self.tz = tzmod.gettz(tz)
         else:
-            from dateutil import tz
-            self.tz = tz.tzoffset(str(tz),int(tz*60*60))
+            from dateutil import tz as tzmod
+            self.tz = tzmod.tzoffset(str(tz),int(tz*60*60))
         if name is None:
             name = 'Default Site'
         self.name = name
@@ -367,12 +367,56 @@ class Observatory(Site):
     platform limits or extinction measurements
     """
     
-def get_site(name):
-    """
-    retrieves the stored observatory/site information for an observatory in the
-    registry
-    """
-    raise NotImplementedError
+
+
+def __loadobsdb(sitereg):
+    from .io import _get_package_data
+    obsdb = _get_package_data('obsdb.dat')
+    from .coords import AngularCoordinate
+    
+    obs = None
+    for l in obsdb.split('\n'):
+        ls = l.strip()
+        if len(ls)==0 or ls[0]=='#':
+            continue
+        k,v = [ss.strip() for ss in l.split('=')]
+        if k == 'observatory':
+            if obs is not None:
+                o = Observatory(lat,long,alt,tz,name)
+                sitereg[obs] = o
+            obs = v.replace('"','')
+            name = long = lat = alt = tz = None
+        elif k == 'name':
+            name = v.replace('"','')
+        elif k == 'longitude':
+            vs = v.split(':')
+            dec = float(vs[0])
+            if len(vs)>1:
+                dec += float(vs[1])/60
+            #longitudes here are deg W instead of (-180, 180)
+            dec*=-1
+            if dec <=-180:
+                dec += 360
+            long = AngularCoordinate(dec)
+        elif k == 'latitude':
+            vs = v.split(':')
+            dec = float(vs[0])
+            if len(vs)>1:
+                dec += float(vs[1])/60
+            lat = AngularCoordinate(dec)
+        elif k == 'altitude':
+            alt = float(v)
+        elif k == 'timezone':
+            tz = int(v)
+    if obs is not None:
+        o = Observatory(lat,long,alt,tz,name)
+        sitereg[obs] = o
+
+
+sites = DataObjectRegistry('sites',Site)
+#TODO: fix this to be better next time I visit
+sites['uciobs'] = Observatory(33.6443,117.8555,0,'PST','UC Irvine Observatory')
+__loadobsdb(sites)
 
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 
