@@ -11,6 +11,7 @@ from math import pi
 import numpy as np
 
 from .spec import HasSpecUnits as _HasSpecUnits
+from .utils import DataObjectRegistry
 try:
     #requires Python 2.6
     from abc import ABCMeta
@@ -679,7 +680,7 @@ def plot_band_group(bandgrp,**kwargs):
 #        names = bandgrp.keys()
 #        bs = bandgrp.values()
 #    elif isinstance(bandgrp,basestring):
-#        names = bands.getGroupBandNames(bandgrp)
+#        names = bands.getGroupDataNames(bandgrp)
 #        bs = str_to_bands(bandgrp)
 #    elif isSequenceType(bandgrp):
 #        names = bandgrp
@@ -3232,97 +3233,6 @@ def teff_to_color(teff,colorbands='g-r'):
         raise ValueError('unrecognized color')
     
 #<---------------------Load built-in data-------------------------------------->
-class _BandRegistry(dict):
-    def __init__(self):
-        dict.__init__(self)
-        self._groupdict = {}
-        
-    def __getitem__(self,val):
-        if val in self._groupdict:
-            bands = self._groupdict[val]
-            return dict([(b,self[b]) for b in bands])
-        else:
-            return dict.__getitem__(self,val)
-    def __delitem__(self,key):
-        dict.__delitem__(key)
-        for k,v in self._groupdict.items():
-            if key in v:
-                del self.groupdict[k]
-                
-    def __getattr__(self,name):
-        if name in self.keys():
-            return self[name]
-        else:
-            raise AttributeError('No band or attribute '+name+' in '+self.__class__.__name__)
-    
-    def register(self,bands,groupname=None):
-        """
-        register a set of bands in a group
-        
-        bands is a dictionary mapping the band name to a Band object
-        
-        setname is the name of the group to apply to the dictionary
-        """
-        from operator import isMappingType,isSequenceType
-        
-        if not isMappingType(bands):
-            raise ValueError('input must be a map of bands')
-        for k,v in bands.iteritems():
-            if not isinstance(v,Band):
-                raise ValueError('an object in the band set is not a Band')
-            self[str(k)]=v
-            
-        if groupname:
-            if type(groupname) is str:
-                self._groupdict[groupname] = bands.keys()
-            elif isSequenceType(groupname):
-                for s in groupname:
-                    self._groupdict[s] = bands.keys()
-            else:
-                raise ValueError('unrecognized group name type')
-    
-    @property        
-    def groupnames(self):
-        return self._groupdict.keys()
-    
-    def getGroupBandNames(self,groupname):
-        return self._groupdict[groupname][:]
-            
-def str_to_bands(bnds,forceregistry=False):
-    """
-    this translates a string or sequence of strings into a sequence of Band
-    objects using the phot.bands band registry
-    
-    if forceregistry is True, new bands will not be accepted if they are not in the registry
-    """
-    from operator import isMappingType,isSequenceType
-    global bands
-    
-    if isinstance(bnds,basestring):
-        if bnds.lower() == 'all':
-            bnds = bands.values()
-        elif ',' in bnds:
-            bnds = [bands[b.strip()] for b in bnds.split(',')]
-        elif bnds in bands:
-            bnds = bands[bnds]
-            if isMappingType(bnds):
-                bnds = bnds.values()
-            else:
-                bnds = (bnds,)
-        elif bnds in bands.groupnames:
-            bnds = [bands[b] for b in bands.getGroupBandNames(bnds)]
-        else: #assume each charater is a band name
-            bnds = [bands[b] for b in bnds.strip()]
-    elif isSequenceType(bnds):
-        bnds = [bands[b] if isinstance(b,basestring) else b for b in bnds] 
-    elif isinstance(bnds,Band):
-        if forceregistry and bnds.name not in bands:
-            raise KeyError('requested band not in registry') 
-        bnds = (Band,)
-    else:
-        raise KeyError('unrecognized band(s)')
-    
-    return bnds
 #TODO: check UBVRI/ugriz S function - energy or quantal?
 
 def __load_UBVRI():
@@ -3462,7 +3372,9 @@ def __load_human_eye():
 
 
 #register all the built-in bands
-bands = _BandRegistry()
+bands = DataObjectRegistry('bands',Band)
+str_to_bands = bands.getObjects
+
 bands.register(__load_human_eye(),'eye')
 d,dp = __load_ugriz()
 bands.register(d,'ugriz')
@@ -3472,6 +3384,7 @@ del d,dp
 bands.register(__load_UBVRI(),['UBVRI','UBVRcIc'])
 bands.register(__load_JHK(),'JHK')
 bands.register(__load_washington(),'washington')
+
 #default all to AB mags
 set_zeropoint_system('AB','all')
 

@@ -185,6 +185,126 @@ class _LinkedDict(dict):
             
         else:
             return default
+        
+        
+class DataObjectRegistry(dict):
+    """
+    A class to register data sets used throughout a module  (e.g. photometric 
+    bands)
+    """
+    def __init__(self,dataname='data',datatype=None):
+        dict.__init__(self)
+        self._groupdict = {}
+        self.dataname = dataname
+        self.datatype = datatype
+        
+    def __getitem__(self,val):
+        if val in self._groupdict:
+            data = self._groupdict[val]
+            return dict([(d,self[d]) for d in data])
+        else:
+            
+            return dict.__getitem__(self,val)
+    def __delitem__(self,key):
+        dict.__delitem__(key)
+        for k,v in self._groupdict.items():
+            if key in v:
+                del self.groupdict[k]
+                
+    def __getattr__(self,name):
+        if name in self.keys():
+            return self[name]
+        else:
+            raise AttributeError('No %s or attribute %s in %s'%(self.dataname,name,self.__class__.__name__))
+    
+    def register(self,objects,groupname=None):
+        """
+        register a set of objects, possibly in a group
+        
+        `objects` is a dictionary mapping the datum name to the object
+        
+        `groupname` is the name of the group to apply to the dictionary
+        """
+        from operator import isMappingType,isSequenceType
+        
+        if not isMappingType(objects):
+            raise ValueError('input must be a map of bands')
+        for k,v in objects.iteritems():
+            if self.datatype is not None and not isinstance(v,self.datatype):
+                raise ValueError('an object in the %s set is not a %s'%(self.dataname,self.datatype.__name__))
+            self[str(k)]=v
+            
+        if groupname:
+            if type(groupname) is str:
+                self._groupdict[groupname] = objects.keys()
+            elif isSequenceType(groupname):
+                for s in groupname:
+                    self._groupdict[s] = objects.keys()
+            else:
+                raise ValueError('unrecognized group name type')
+    
+    @property        
+    def groupnames(self):
+        return self._groupdict.keys()
+    
+    def getGroupDataNames(self,groupname):
+        return self._groupdict[groupname][:]
+    
+    def getObjects(self,objectstrs,addmissing=False):
+        """
+        this translates a string, sequence of strings, or mixed sequence of data 
+        objects and strings into a sequence of data objects 
+        
+        if addmissing is True, new objects will be added to the registry -- if the
+        object has a `name` attribute, it will be used as the name, otherwise a name
+        will be generated of the form "dataname##".  if addmissing is False, the 
+        object will be returned but not added to the registry
+        """
+        from operator import isMappingType,isSequenceType
+        
+        if self.datatype is not None and isinstance(objectstrs,self.datatype):
+            #forces a lone object to be treated as a sequence by itself
+            objectstrs = [objectstrs] 
+        
+        if isinstance(objectstrs,basestring):
+            if objectstrs.lower() == 'all':
+                objs = self.values()
+            elif ',' in objectstrs:
+                objs = [self[s.strip()] for s in objectstrs.split(',')]
+            elif objectstrs in self:
+                obj = self[objectstrs]
+                if isMappingType(obj):
+                    objs = obj.values()
+                else:
+                    objs = (obj,)
+            elif objectstrs in self.groupnames:
+                objs = [self[s] for s in self.getGroupDataNames(objectstrs)]
+            else: #assume each character is a data object name
+                objs = [self[s] for s in objectstrs.strip()]
+        elif isSequenceType(objectstrs):
+            notstrs = [not isinstance(s,basestring)for s in objectstrs]
+            objs = [self[s] if isinstance(s,basestring) else s for s in objectstrs]
+            if self.datatype is not None:
+                for i,o in enumerate(objs):
+                    if notstrs[i]:
+                        if  not isinstance(o,self.datatype):
+                            raise ValueError('input object %s is not valid %s'%(o,self.dataname))
+                        if addmissing and o not in self.itervalues():
+                            if hasattr(o,'name'):
+                                if o.name in self:
+                                    raise KeyError('%s with name %s already present in this registry'%(self.dataname,o.name))
+                                name = o.name
+                            else:
+                                j = 1
+                                while self.dataname+str(j) not in self:
+                                    j+=1
+                                name = self.dataname+str(j)
+                            self[name] = o
+                                
+        else:
+            raise KeyError('unrecognized band(s)')
+        
+        return objs
 
 
 #<---------------------------data pipelining----------------------------------->
