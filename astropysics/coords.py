@@ -8,9 +8,9 @@ Some of the calculations involved make use of the currently selected cosmology
 (see astropysics.constants) and hence may not function properly if a 
 particularly strange cosmology is in use.
 """
-#Note that some of the functions use the PyEphem (http://rhodesmill.org/pyephem/)
-#project for conversions and calculations - some functions will work poorly or 
-#not at all without this package installed
+
+#TODO:  unified transformation framework possibly based on Kapteyn or other outside packages
+#TODO: WCSlib support
 
 
 from __future__ import division,with_statement

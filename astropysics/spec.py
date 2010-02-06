@@ -7,6 +7,11 @@ Methods/functions tend to be oriented towards optical, but will work in other
 bands.
 """
 
+#TODO: RV corrections for heliocentric and LSR 
+#TODO: better line-list storage techniques
+#TODO: more vetting of zfind
+#TODO: reduction framework that accounts for errors with ccd noise models
+
 from __future__ import division,with_statement
 from .constants import pi
 import numpy as np

@@ -6,6 +6,11 @@ related operations.
 Tends to be oriented towards optical techniques.
 """
 
+#TODO: c-based kcorrect
+#TODO: reduction framework that outputs objcat catalogs and properly uses CCD noise models
+#TODO: atmospheric extinction corrections
+#TODO: flux calibration
+
 from __future__ import division,with_statement
 from math import pi
 import numpy as np

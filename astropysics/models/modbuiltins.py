@@ -4,18 +4,8 @@
 This module contains builtin function models following the framework 
 of the modcore module
 """
+
 from __future__ import division,with_statement
-#from ..constants import pi
-#import numpy as np
-#try:
-#    #requires Python 2.6
-#    from abc import ABCMeta
-#    from abc import abstractmethod
-#    from abc import abstractproperty
-#except ImportError: #support for earlier versions
-#    abstractmethod = lambda x:x
-#    abstractproperty = property
-#    ABCMeta = type
 
 from modcore import *
 from ..spec import HasSpecUnits as _HasSpecUnits

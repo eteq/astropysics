@@ -8,6 +8,9 @@ This package deals mostly with the raw CCD images themselves - for science tools
 see the phot and spec packages.
 """
 
+#TODO: ccd image viewing gui
+#TODO: generalize CCD to imaging of other sorts?
+
 from __future__ import division,with_statement
 import numpy as np
 

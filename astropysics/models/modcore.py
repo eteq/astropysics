@@ -1,5 +1,14 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
+"""
+This module holds the core (mostly abstract) classes for the data model 
+framework used in astropysics, seperated from the specific models found in the 
+modbuiltins module.  
+"""
+
+#TODO: refactor so that FunctionModels that interpolate over data have a common superclass, then add linear interpolator, polynomial interpolator
+#TODO: refine ModelGrid, tying into util grid inverter
+
 from __future__ import division,with_statement
 from ..constants import pi
 import numpy as np

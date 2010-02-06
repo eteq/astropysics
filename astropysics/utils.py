@@ -7,6 +7,8 @@ as a variety of general-purpose algorithms that are not particular
 to a module.
 """
 
+#TODO: implement generalized grid-inverter, possibly tied to modcore.modelgrid1d
+
 from __future__ import division,with_statement
 import numpy as np
 

@@ -4,10 +4,15 @@
 This module contains objects and functions for generating catalogs of objects
 where derived quantities are dynamically updated as they are changed.
 
-The basic idea is a tree/DAG with the root typically a Catalog object
-
-TODO: modules to also dynamically update via a web server.
+Fundamentally, this structure is a tree/DAG of FieldNode objects, normally with 
+a Catalog object as the root.
 """
+
+#TODO: seperate CatalogNode into a class hat has children and one that doesnt
+#TODO: methods to automatically plot parts of the data sets and save visualizations
+#TODO: more stable persistence options (with atomic edits and histories?)
+#TODO: a gui catalog viewer w/ plotting options as impleemnted above
+#TODO: modules to also dynamically update via a web server
 
 from __future__ import division,with_statement
 from .constants import pi

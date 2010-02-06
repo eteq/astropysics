@@ -11,6 +11,9 @@ does.
 Note that some of these functions require the dateutil package 
 ( http://pypi.python.org/pypi/python-dateutil , also included with matplotlib)
 """
+#TODO: implement ability for Sites to translate ra/dec into alt/az given time/date
+#TODO: add options for Observatory class to include more useful information
+#TODO: exposure time calculator (maybe in phot instead?)
 
 from __future__ import division,with_statement
 from .constants import pi
