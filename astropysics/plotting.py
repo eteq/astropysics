@@ -1,7 +1,8 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains functions and classes for specialized plotting functions
+This module contains functions and classes of various specialized plot types 
+used in astropysics
 
 2D plots depend on matplotlib, 3D plots depend on MayaVI
 """
@@ -596,27 +597,30 @@ def square_axes(axes=None):
             
     
     
-def branchedplot(xs,upperzs,lowerzs,fmt='-o',zerrs=None,xerrs=None,xl='',yl=r'$\log(O/H) +12$',logx=False,c='b',**kwargs):
-    if len(xs) != len(upperzs) != len(lowerzs):
+def branchedplot(xs,uppery,lowery,fmt='-o',yerrs=None,xerrs=None,xlabel='',ylabel='',logx=False,c='b',**kwargs):
+    """
+    generates a plot with vertical lines ranging from lowery to uppery at the
+    x-axis locations xs optionally with error bars
+    """
+    if len(xs) != len(uppery) != len(lowery):
         raise ValueError('All arrays not same length')
-    if zerrs is None:
-        zerrs=[None for x in xs]
+    if yerrs is None:
+        yerrs=[None for x in xs]
     if xerrs is None:
         xerrs=[None for x in xs]
     if logx:
-        semilogx()
-    ioff()
-    for x,uz,lz,ze,xe in zip(xs,upperzs,lowerzs,zerrs,xerrs):
-        errorbar((x,x),(uz,lz),ze,xe,'o-',c=c,**kwargs)
-    xlabel(xl)
-    ylabel(yl)
-    ion()
-    show()
+        plt.semilogx()
+    for x,uz,lz,ze,xe in zip(xs,uppery,lowery,yerrs,xerrs):
+        plt.errorbar((x,x),(uz,lz),ze,xe,'o-',c=c,**kwargs)
+    plt.xlabel(xlabel)
+    plt.ylabel(ylabel)
+    if plt.isinteractive():
+        plt.draw()
     
-    
-def scatterSelect(*args,**kwargs):
+def scatter_select(*args,**kwargs):
     """
-    quick scatter plot to lasso objects
+    quick scatter plot to lasso objects and return an object that will be
+    updated with the selections
     
     args and kwargs go into matplotlib scatter except for 'close' which 
     is used to close the current figure on function call(default True)
@@ -957,6 +961,9 @@ def scatter_1to1(x,y,**kwargs):
 #<------------------------------------Maya VI---------------------------------->
 
 def mlab_anaglyph(val=None,anasat=0,anamask=[4,3]):
+    """
+    switch mayavi.mlab to use "anaglyph" style stereo
+    """
     from enthought.mayavi import mlab as M
     w=M.gcf().scene.renderer.render_window
     if val is None:
@@ -968,6 +975,9 @@ def mlab_anaglyph(val=None,anasat=0,anamask=[4,3]):
     return w
 
 def mlab_checkerboard(dostereo=True):
+    """
+    switch mayavi.mlab to use "checkerboard" style stereo
+    """
     from enthought.mayavi import mlab as M
     w=M.gcf().scene.render_window
     w.stereo_render = bool(dostereo)
@@ -976,6 +986,9 @@ def mlab_checkerboard(dostereo=True):
     
 
 def mlab_camera(fp=None,pos=None,angle=None):
+    """
+    adjust mayavi.mlab camera
+    """
     from enthought.mayavi import mlab as M
     c=M.gcf().scene._renderer.active_camera
     if fp is not None:
@@ -996,6 +1009,10 @@ def mlab_camera(fp=None,pos=None,angle=None):
     return c
 
 def mlab_walk(distance):
+    """
+    move mayavi.mlab the requested distance along the view direction (can be 
+    negative)
+    """
     f = get_engine().current_scene
     if f is None:
         return
@@ -1017,7 +1034,7 @@ def mlab_walk(distance):
 def mvi_texture_src(fn):
     from enthought.mayavi.sources.api import ImageReader
     from enthought.persistence.file_path import FilePath
-    fp=FilePath(fn)
+    fp = FilePath(fn)
     return ImageReader(file_path=fp)
 
 def mvi_apply_texture(s,texture,genmode='plane'):
