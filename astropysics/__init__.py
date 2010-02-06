@@ -16,3 +16,6 @@ and related objects
 *spec: Spectrum objects and related functions
 *ccd: Functions and tools for processing CCD images.
 """
+
+#TODO: auto-generated documentation
+#TODO: examples!

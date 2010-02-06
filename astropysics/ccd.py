@@ -10,6 +10,7 @@ see the phot and spec packages.
 
 #TODO: ccd image viewing gui
 #TODO: generalize CCD to imaging of other sorts?
+#TODO: ccd registry (possibly with registry actually in Site/Observatory?)
 
 from __future__ import division,with_statement
 import numpy as np
