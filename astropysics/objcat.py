@@ -573,7 +573,61 @@ class FieldNode(CatalogNode,Sequence):
         also extract the siblings (e.g. the parent subtree,
         except for the parent itself) , and overwrites includeself
         
-        see FieldNode.extractFieldAtNode for arguments
+        the other arguments are identical to FieldNode.extractFieldAtNode:
+        
+        extractField(fieldnames,traversal='postorder',filter=False,
+                     missing=0,converter=None,sources=False,errors=False,
+                     asrec=False,includeself=True)
+        
+        fieldnames can be a single field name, a sequence of fieldnames,
+        or a comma-seperated string of field names
+        
+        traversal and filter accept arguments like CatalogNode.visit
+        
+        missing determines the behavior in the event that a field is not 
+        present (or a non FieldNode is encountered) it can be:
+        *'exception': raise an exception if the field is missing
+        *'skip': do not include this object in the final array
+        *'mask': put 0 in the array location and return a mask of missing 
+                 values as the second return value
+        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
+                   the missing values masked
+        *any other: fill any missing entries with this value
+        
+        converter is a function that is applied to the data before being 
+        added to the array (or None to perform no conversion)
+        
+        sources determines if a sequence of sources should be returned - if
+        False, only the array is returned, if it evaluates to True, the sources
+        will be returned as described below.  By default, string representations
+        of the sources are returned - if sources=='object', the actual Source
+        objects will be returned instead
+        
+        dtypes determines the numpy data type of the output arrays - if None, 
+        they will be inferred from the data. Otherwise, it must be either a 
+        sequence of size matching the number of fields requested, an equivalent 
+        comma-seperated string, or a dictionary mapping fieldnames to dtypes
+        
+        errors determines if the errors should be returned
+        
+        asrec generates a record array instead of a regular array.  It can
+        optionally specify the numpy data type of the values.  It must be True,
+        in which case the dtype is inferred from the values, a sequence of size 
+        matching the number of fields requested, an equivalent comma-seperated 
+        string, or a dictionary mapping fieldnames to dtypes
+        
+        
+        includeself determines if the node itself should be included
+        
+        return value:
+        
+        * a record array if asrec is True
+        * an f x N array of values if sources and errors are False
+        * (values,errors,sources) if sources and errors are True
+        * (values,sources) if sources are True and errors are False
+        * (values,errors) if errors are True and sources are False
+        
+        if missing=='mask', return will be (values,mask)
         """
         sib = kwargs.pop('siblings',False)
         if sib and self.parent is not None:
@@ -801,6 +855,7 @@ class FieldNode(CatalogNode,Sequence):
             
         else:
             arr = np.array(lsts)
+            errs = np.array(errs)
             
             if len(arr)==1:
                 arr = arr[0]
@@ -2408,9 +2463,63 @@ class FieldCatalog(Catalog):
     """
     def extractField(self,*args,**kwargs):
         """
-        walk through the tree starting from this object
+        walk through the tree starting from this object and generate an array 
+        of the values for the requested fieldname
         
-        see FieldNode.extractFieldAtNode for arguments
+        the arguments are identical to those for FieldNode.extractFieldAtNode:
+              extractField(node,fieldnames,traversal='postorder',filter=False,
+                           missing=0,converter=None,sources=False,errors=False,
+                           asrec=False,includeself=True)
+        
+        fieldnames can be a single field name, a sequence of fieldnames,
+        or a comma-seperated string of field names
+        
+        traversal and filter accept arguments like CatalogNode.visit
+        
+        missing determines the behavior in the event that a field is not 
+        present (or a non FieldNode is encountered) it can be:
+        *'exception': raise an exception if the field is missing
+        *'skip': do not include this object in the final array
+        *'mask': put 0 in the array location and return a mask of missing 
+                 values as the second return value
+        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
+                   the missing values masked
+        *any other: fill any missing entries with this value
+        
+        converter is a function that is applied to the data before being 
+        added to the array (or None to perform no conversion)
+        
+        sources determines if a sequence of sources should be returned - if
+        False, only the array is returned, if it evaluates to True, the sources
+        will be returned as described below.  By default, string representations
+        of the sources are returned - if sources=='object', the actual Source
+        objects will be returned instead
+        
+        dtypes determines the numpy data type of the output arrays - if None, 
+        they will be inferred from the data. Otherwise, it must be either a 
+        sequence of size matching the number of fields requested, an equivalent 
+        comma-seperated string, or a dictionary mapping fieldnames to dtypes
+        
+        errors determines if the errors should be returned
+        
+        asrec generates a record array instead of a regular array.  It can
+        optionally specify the numpy data type of the values.  It must be True,
+        in which case the dtype is inferred from the values, a sequence of size 
+        matching the number of fields requested, an equivalent comma-seperated 
+        string, or a dictionary mapping fieldnames to dtypes
+        
+        
+        includeself determines if the node itself should be included
+        
+        return value:
+        
+        * a record array if asrec is True
+        * an f x N array of values if sources and errors are False
+        * (values,errors,sources) if sources and errors are True
+        * (values,sources) if sources are True and errors are False
+        * (values,errors) if errors are True and sources are False
+        
+        if missing=='mask', return will be (values,mask)
         """
         kwargs['includeself']=False
         return FieldNode.extractFieldAtNode(self,*args,**kwargs)
