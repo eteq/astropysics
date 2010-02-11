@@ -855,7 +855,8 @@ class FieldNode(CatalogNode,Sequence):
             
         else:
             arr = np.array(lsts)
-            errs = np.array(errs)
+            if errors:
+                errs = np.array(errs)
             
             if len(arr)==1:
                 arr = arr[0]
