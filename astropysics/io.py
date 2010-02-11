@@ -41,11 +41,13 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
     
     the format for the field line is:
     
-    #field1:typecode1 field2:typecode2 (... )
+    #field1:typecode1[:unit1] field2:typecode2[:unit2] (... )
     
     with the character in place of the : optionally selected with the 
     typedelim keyword.  Any comments in the line will be removed. 
-    type codes are the same as those used in numpy.dtype
+    type codes are the same as those used in numpy.dtype.  if units are provided
+    they are a numerical factor to multiply the column by - if ommitted, it is
+    assumed to be 1
     
     fieldline tells which line of the file to use to find the line with
     field information
@@ -67,9 +69,29 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
                 l = l.replace(comments,'')
                 fields = l.split(delimiter)
                 break
-            
-    dtype = np.dtype([tuple(fi.split(typedelim)) for fi in fields])
+    try:     
+        dtype = []   
+        factors = {}
+        for fi in fields:
+            t = tuple(fi.split(typedelim))
+            dtype.append(t[:2])
+            if len(t)>2:
+                factors[t[0]] = np.array(t[2],dtype=t[1])
+        dtype = np.dtype(dtype)
+    except TypeError: #figure out where the problem was
+        for fi in fields:
+            t = tuple(fi.split(typedelim))
+            try:
+                dtype(t[1])
+            except TypeError:
+                raise TypeError('dtype code {1} invalid for field {0}'.format(t))
+            #if something else went wrong, re-raise
+            raise
     arr = np.loadtxt(fn,dtype=dtype,**kwargs)
+    for n,f in factors.iteritems():
+        arr[n]*=f
+    
+    
     
     if asrecarray:
         return arr.view(np.recarray)
