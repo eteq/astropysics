@@ -1147,6 +1147,45 @@ class Spectrum(HasSpecUnits):
         plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
             
         return res
+    
+    def plotSpylot(self,spylotinstance=None,show=True):
+        """
+        Displays the spectrum using the astropysics.gui.spylot spectrum plotter.
+        
+        if `spylotinstance` is None, a new instance of Spylot will be generated
+        with this Spectrum as the only Spectrum.  If it is a Spylot instance,
+        this Spectrum will be added to the end of the list on that instance.
+        
+        If `show` is true and `spylotinstance` is None, the GUI will be shown
+        using edit_traits (kwargs can be passed in if show is a dictionary),
+        and if `spylotinstance` is an instance, the current Spectrum in that 
+        instance will be switched to this Spectrum.  Otherwise, no GUI changes
+        will occur.
+        
+        returns the Spylot instance
+        """
+        from operator import isMappingType
+        from .gui.spylot import Spylot
+        
+        if spylotinstance is None:
+            spylotinstance = Spylot([self])
+            if show:
+                if not isMappingType(show):
+                    show = {}
+                spylotinstance.edit_traits(**show)
+            
+        elif isinstance(spylotinstance,Spylot):
+            spylotinstance.specs.append(self)
+            
+            if show:
+                spylotinstance.currspeci = len(spylotinstance.specs)-1
+            else:
+                spylotinstance._specs_changed() #TODO: remove this when spylot properly responds
+            
+        else:
+            raise TypeError('spylotinstance is not a Spylot object or None')
+        
+        return spylotinstance
 
 
 class FunctionSpectrum(Spectrum):
@@ -2060,5 +2099,7 @@ def build_model_spectrum(n=1024,T=5800,range=None,peak=1,z=0,noise=None,lines=No
         err = None
                 
     return Spectrum(x,flux,err,name=name)
+
+
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
