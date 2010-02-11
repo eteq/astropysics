@@ -866,6 +866,62 @@ def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
     else:
         return np.log(val)/np.log(base)
     
+def interquartile_range(values,scaletonormal=False):
+    """
+    Computes the interquartile range for the provided sequence of values, a
+    more robust estimator than the variance.
+    """
+    from scipy.stats import scoreatpercentile
+    from scipy.special import erfinv
     
+    x = np.array(values,copy=False).ravel()
+    res = scoreatpercentile(x,75) - scoreatpercentile(x,25)
+    if scaletonormal:
+        nrm = 8**0.5*erfinv(.5)
+        return res/nrm
+    else:
+        return res
+    
+def median_absolute_deviation(values,scaletonormal=False):
+    """
+    computes the median_absolute_deviation for the provided sequence of values, 
+    a more robust estimator than the variance.
+    """
+    from scipy.special import erfinv
+    
+    x = np.array(values,copy=False).ravel()
+    res = np.median(np.abs(x-np.median(x)))
+    
+    if scaletonormal:
+        nrm = (2**0.5*erfinv(.5))
+        return res/nrm
+    else:
+        return res
+    
+def biweight_midvariance(values,influencescale=9):
+    """
+    Computes the biweight midvariance of a sequence of data points, a robust 
+    statistic of scale.
+    
+    `influence` sets the number of MAD units away at which a data point has no
+    weight
+    
+    returns bmv,median
+    """    
+    x = np.array(values,copy=False).ravel()
+    
+    Q = np.median(x)
+    MAD = median_absolute_deviation(x)
+       
+    ui = (x-Q)/(influencescale*MAD)
+    uisq=ui**2
+    
+    I = uisq <= 1
+    
+    numer = np.sum(I*(x-Q)**2*(1-uisq)**4)
+    denom = np.sum(I*(1-uisq)*(1-5*uisq))**2
+    
+    
+    return x.size*numer/denom,Q
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
