@@ -758,6 +758,7 @@ class FitGui(HasTraits):
     
     def _loadws_fired(self):
         self.weights = self._savedws
+        self._savews_fired()
             
     def _get_selectedi(self):
         return self.scatter.index.metadata['selections']
