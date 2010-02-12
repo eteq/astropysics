@@ -350,10 +350,18 @@ class FieldNode(CatalogNode,Sequence):
     __slots__=('_fieldnames',)
     
     @abstractmethod
-    def __init__(self,parent):
+    def __init__(self,parent,**kwargs):
+        """
+        Create a new fieldNode with the provided parent.
+        
+        kwargs are assigned as node values as self[kwargkey] = kwargvalue
+        """
         #TODO: consider using CatalogNode.__init__?
         super(FieldNode,self).__init__(parent)
         self._fieldnames = []
+        
+        for k,v in kwargs.iteritems():
+            self[k] = v
         
     def __getstate__(self):
         d = super(FieldNode,self).__getstate__()
@@ -2589,10 +2597,10 @@ class StructuredFieldNode(FieldNode):
     def __fieldInstanceCheck(x):
         return isinstance(x,Field) or (isinstance(x,tuple) and len(x) == 2 and isinstance(x[0],DerivedValue))
     
-    def __init__(self,parent):
+    def __init__(self,parent,**kwargs):
         import inspect
         
-        super(StructuredFieldNode,self).__init__(parent)
+        super(StructuredFieldNode,self).__init__(parent) #kwargs processed below
         self._altered = False
        
         dvs=[]  #derived values to apply to fields as (derivedvalue,field)
@@ -2618,6 +2626,9 @@ class StructuredFieldNode(FieldNode):
             
         for dv,fobj in dvs:
             fobj.insert(0,DerivedValue(dv._f,sourcenode=self,flinkdict=dv.flinkdict,ferr=dv._ferr))
+            
+        for k,v in kwargs.iteritems():
+            self[k] = v
             
     def __getstate__(self):
         import inspect
@@ -3110,8 +3121,7 @@ def test_cat():
     subc = FieldCatalog('sub-cat',c)
     ts1 = Test1(subc)
     ts1['num'] = ('testsrc2',8.5)
-    ts2 = Test1(subc)
-    ts2['num'] = ('testsrc2',12.7)
+    ts2 = Test1(subc,num=('testsrc2',12.7),f=('testows',123.45))
     ts3 = Test1(subc)
     ts3['num'] = ('testsrc2',10.3)
     
