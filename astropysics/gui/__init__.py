@@ -1,6 +1,6 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 """
-This package contains GUI applications, elements, and adapters for various 
+This module contains GUI applications, elements, and adapters for various 
 parts of astropysics.
 
 Note that this module makes heavy use of Enthought Traits and TraitsGUI 

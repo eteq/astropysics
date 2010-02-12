@@ -1,6 +1,6 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 """
-This package contains the internals for the SpecTarget gui.
+This module contains the internals for the SpecTarget gui.
 """
 from __future__ import division,with_statement
 import numpy as np

@@ -1,6 +1,6 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 """
-This package contains the internals for spylot, the Python Spectrum
+This module contains the internals for spylot, the Python Spectrum
 Plotter.
 """
 #TODO: clean up upper interface
