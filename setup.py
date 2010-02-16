@@ -19,7 +19,7 @@ setup(name='Astropysics',
                       'guis':['traits','traitsGUI','chaco'],
                       'gui3d':'mayavi',
                       'fits':'pyfits',
-                      'extras':'pyephem'},
+                      'all':['matplotlib','traits','traitsGUI','chaco','pyfits','mayavi']},
       
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
