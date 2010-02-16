@@ -7,7 +7,7 @@ use_setuptools()
 from setuptools import setup,find_packages
 
 setup(name='Astropysics',
-      version='0.1a0',
+      version='0.1.dev',
       description='Astrophysics libraries for Python',
       
       packages=find_packages(),
