@@ -1,39 +1,33 @@
 #!/usr/bin/env python
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
-from  sys import argv
-try:
-    argv.pop(argv.index('ez_setup'))
-    from ez_setup import use_setuptools
-    use_setuptools()
-except ValueError:
-    pass
+from distribute_setup import use_setuptools
+use_setuptools()
 
-try:
-    from setuptools import setup
-    stls=True
-except ImportError:
-    from distutils.core import setup
-    stls=False
+from setuptools import setup,find_packages
 
 setup(name='Astropysics',
-      version='0.1',
+      version='0.1a0',
       description='Astrophysics libraries for Python',
+      
+      packages=find_packages(),
+      package_data={'astropysics':'data/*'},
+      scripts=['scripts/spylot'],
+      requires=['numpy','scipy'],
+      provides=['astropysics'],
+      
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
       licence = 'Apache License 2.0',
       url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
-      requires=['numpy','scipy'],
-      provides=['astropysics'],
+      
+      
       long_description="""
       ``astropysics`` contains a variety of utilities and algorithms for 
       reducing, analyzing, and visualizing astronomical data.
       
       while ``astropysics`` requres only ``numpy`` and ``scipy``, other 
       packages are necessary for some of the functionality.  These include: 
-      ``Traits``, ``TraitsGUI``, ``PyEphem``, and ``pymc``
+      ``matplotlib``,``Traits``, ``TraitsGUI``, ``chaco``.
       """,
-      packages=['astropysics','astropysics.gui'],
-      package_data={'astropysics':'data/*'},
-      scripts=['scripts/spylot']
      )
