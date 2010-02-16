@@ -912,7 +912,8 @@ def generate_pydot_graph(node,graphfields=True):
     node and its children.  Note that the pydot package must be installed
     installed for this to work
     
-    graphfields includes the fields as a record style graphviz graph
+    if `graphfields` is True, this includes the fields as a record style 
+    graphviz graph
     """
     import pydot
     
