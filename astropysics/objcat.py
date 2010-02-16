@@ -8,7 +8,7 @@ Fundamentally, this structure is a tree/DAG of FieldNode objects, normally with
 a Catalog object as the root.
 """
 
-#TODO: seperate CatalogNode into a class hat has children and one that doesnt
+#TODO: seperate CatalogNode into a class that has children and one that doesnt
 #TODO: methods to automatically plot parts of the data sets and save visualizations
 #TODO: more stable persistence options (with atomic edits and histories?)
 #TODO: a gui catalog viewer w/ plotting options as impleemnted above
@@ -61,7 +61,9 @@ class SourceDataError(Exception):
 #<-------------------------Node/Graph objects and functions-------------------->
 class CatalogNode(object):
     """
-    This Object is the superclass for all elements/nodes of a catalog.  
+    This object is the superclass for all elements/nodes of a catalog with both
+    parents and children.  
+    
     This is an abstract class that must have its initializer overriden.
     
     Subclasses must call super(Subclass,self).__init__(parent) in their __init__
@@ -147,6 +149,18 @@ class CatalogNode(object):
         if not isinstance(node,FieldNode):
             raise ValueError('children must be FieldNodes')
         node.parent = self
+        
+    def removeChild(self,node):
+        """
+        Removes the requested child from this node, leaving it an orphan (i.e. 
+        it's parent is None)  
+        
+        If child is not present, a ValueError will be raised
+        """
+        if node not in self:
+            raise ValueError('requested child not present in this node')
+        node.parent = None
+        
     
     @property
     def nnodes(self):
@@ -321,6 +335,36 @@ def save(node,file,savechildren=True):
     return node.save(file,savechildren)
 load = CatalogNode.load
 
+class BarrenNode(object):
+    """
+    This object is the superclass for all elements/nodes of a catalog that have
+    a parent but no children.  Typically reserved for nodes that are associated
+    with a particular type of node but do not have to be present (e.g. 
+    visualization or factory for constructing pipelines)
+    
+    Subclasses must call super(Subclass,self).__init__(parent,[name]) in their __init__
+    """
+    
+    __metaclass__ = ABCMeta
+    
+    def __init__(self,parent,name='default barren node'):
+        self._parent = None
+        
+        if parent is not None:
+            self.parent = parent
+            
+        self.name = name
+    
+    def _getParent(self):
+        return self._parent 
+    def _setParent(self,val):            
+        if self._parent is not None:
+            self._parent._barrenchildren.remove(self)
+        if not hasattr(val,'barrenchildren'):
+            raise AttributeError('Attempted to assign to parent that does not support info children')
+        val._barrenchildren.append(self)
+        self._parent = val
+    parent=property(_getParent,_setParent)
     
 class FieldNode(CatalogNode,Sequence):
     """
@@ -2414,6 +2458,7 @@ class Catalog(CatalogNode):
     def __init__(self,name='default Catalog',parent=None):
         super(Catalog,self).__init__(parent)
         self.name = name
+        self._barrenchildren = []
         
     def __str__(self):
         return 'Catalog %s'%self.name  
@@ -2434,6 +2479,10 @@ class Catalog(CatalogNode):
     
     def isRoot(self):
         return self._parent is None
+    
+    @property
+    def barrenchildren(self):
+        return tuple(self._barrenchildren)
     
     def mergeNode(self,node,skipdup=False,testfunc=None):
         """
@@ -2465,16 +2514,12 @@ class Catalog(CatalogNode):
             
         return i+countoffset
     
-class FieldCatalog(Catalog):
-    """
-    This class is a Catalog (e.g. the root of a tree of nodes) that is assumed
-    to contain FieldNodes and hence includes some convinience methods to 
-    simplify access to FieldNode searching functions
-    """
+    #<----------------------FieldNode children-specific ----------------------->
     def extractField(self,*args,**kwargs):
         """
         walk through the tree starting from this object and generate an array 
-        of the values for the requested fieldname
+        of the values for the requested fieldname if any FieldNodes are in this
+        Catalog
         
         the arguments are identical to those for FieldNode.extractFieldAtNode:
               extractField(node,fieldnames,traversal='postorder',filter=False,
@@ -2557,6 +2602,11 @@ class FieldCatalog(Catalog):
         """
         return FieldNode.getFieldValueNodesAtNode(self,'name',name,{'includeself':False})
     
+class PlotInfoNode(BarrenNode):
+    """
+    A node conveying information about how a catalog should plot its contents.
+    """
+    
     
 class _StructuredFieldNodeMeta(ABCMeta):
     #Metaclass is used to check at class creation-time that fields all match names
@@ -2572,6 +2622,7 @@ class _StructuredFieldNodeMeta(ABCMeta):
                 raise ValueError('StructuredFieldNode class %s has conficting \
                       derived field names - Node attribute:%s, Field.name:%s'%(name,k,v[1].name))
         return cls
+
 
 class StructuredFieldNode(FieldNode):
     """
