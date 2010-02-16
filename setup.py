@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 from  sys import argv
 try:
@@ -14,17 +15,13 @@ try:
 except ImportError:
     from distutils.core import setup
     stls=False
-    
-def get_data_files():
-    from glob import glob
-    return [e.replace('astropysics/','') for e in  glob('astropysics/data/*')]
 
 setup(name='Astropysics',
       version='0.1',
       description='Astrophysics libraries for Python',
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
-      licence = 'Academic Free License',
+      licence = 'Apache License 2.0',
       url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
       requires=['numpy','scipy'],
       provides=['astropysics'],
@@ -37,6 +34,6 @@ setup(name='Astropysics',
       ``Traits``, ``TraitsGUI``, ``PyEphem``, and ``pymc``
       """,
       packages=['astropysics','astropysics.gui'],
-      package_data={'astropysics':get_data_files()},
+      package_data={'astropysics':'data/*'},
       scripts=['scripts/spylot']
      )
