@@ -203,9 +203,10 @@ class WMAP7Cosmology(FRWCosmology):
     """
     WMAP7-only (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7.cfm)
     """
-    _params_ = ('t0','sigma8','omegaB','omegaC')
+    _params_ = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.71#Gyr
     sigma8 = .801
+    ns = .963
     H0 = 71.0
     omegaB = 0.044
     omegaC = 0.222
@@ -216,9 +217,10 @@ class WMAP7BAOH0Cosmology(FRWCosmology):
     """
     WMAP7+BAO+H0 (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7_bao_h0.cfm)
     """
-    _params_ = ('t0','sigma8','omegaB','omegaC')
+    _params_ = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.78#Gyr
     sigma8 = 0.809
+    ns = .963
     H0 = 70.4
     omegaB = 0.045
     omegaC = 0.227
@@ -229,9 +231,10 @@ class WMAP5Cosmology(FRWCosmology):
     """
     WMAP5-only (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8','omegaB','omegaC')
+    _params_=('t0','sigma8','omegaB','omegaC','ns')
     t0=13.69 #Gyr
     sigma8=.796
+    ns = 0.963
     H0=71.9
     omegaB=0.044
     omegaC=0.214
@@ -242,9 +245,10 @@ class WMAP5BAOSNCosmology(FRWCosmology):
     """
     WMAP5+BAO+SN (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8','omegaB','omegaC')
+    _params_=('t0','sigma8','omegaB','omegaC','ns')
     t0=13.73 #Gyr
     sigma8=.817
+    ns = 0.960
     H0=70.1
     omegaB=0.046
     omegaC=0.233
@@ -256,28 +260,30 @@ class WMAP3Cosmology(FRWCosmology):
     WMAP3 only (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_wmap.cfm)
     """
     #_params_=('t0','sigma8')
-    _params_=('sigma8','omegaB','omegaC')
+    _params_=('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
-    sigma8=.761
-    H0=73.2
-    omegaB=0.044
-    omegaC=0.224
-    omegaL=0.732
-    omegaM=property(lambda self:self.omegaB+self.omegaC)
+    sigma8 = .761
+    ns = 0.958
+    H0 = 73.2
+    omegaB = 0.044
+    omegaC = 0.224
+    omegaL = 0.732
+    omegaM = property(lambda self:self.omegaB+self.omegaC)
     
 class WMAP3AllCosmology(FRWCosmology):
     """
     WMAP3+all (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_all.cfm)
     """
     #_params_=('t0','sigma8')
-    _params_=('sigma8','omegaB','omegaC')
+    _params_=('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
-    sigma8=.776
-    H0=70.4
-    omegaB=0.042+.002/3 #omega=1
-    omegaC=0.197+.002/3 #omega=1
-    omegaL=0.759+.002/3 #omega=1
-    omegaM=property(lambda self:self.omegaB+self.omegaC)
+    sigma8 = .776
+    ns = 0.947
+    H0 = 70.4
+    omegaB = 0.042+.002/3 #omega=1
+    omegaC = 0.197+.002/3 #omega=1
+    omegaL = 0.759+.002/3 #omega=1
+    omegaM = property(lambda self:self.omegaB+self.omegaC)
 
 
 __current_cosmology=WMAP7BAOH0Cosmology() #default value
