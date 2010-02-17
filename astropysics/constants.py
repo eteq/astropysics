@@ -67,11 +67,12 @@ class Cosmology(object):
     
     all cosmologies should have a hubble constant (H0) in km/s/Mpc
     
-    while not required
-    
     Cosmologies should also include a sequence called "_params_" with a list of
     strings that specify the names of the cosmological parameters associated to
-    be exported to the constants module
+    be exported to the constants module.
+    
+    Error bars for parameters can be specified as "<paramname>_err" as a tuple
+    (lowererr,uppererr)
     """
     #TODO:use ABCs in py 2.6
     _params_=('H0',)
@@ -94,6 +95,29 @@ class Cosmology(object):
             self.__params_cache = tuple(s)
         return self.__params_cache
     params=property(_getParams)
+    
+    def getParamWithError(self,parname):
+        """
+        this retreives the requested parameter and returns it as a tuple of the
+        form
+        
+        (param,lowererr,uppererr)
+        """
+        from operator import isSequenceType
+        
+        if parname not in self.params:
+            raise ValueError('invalid parameter name %s'%parname)
+        
+        val = getattr(self,parname)
+        if hasattr(self,parname+'_err'):
+            err = getattr(self,parname+'_err')
+        else:
+            err = (0,0)
+        
+        if isSequenceType(err):
+            return (val,err[0],err[1])
+        else:
+            return (val,err,err)
     
     def _exportParams(self):
         pd=dict([(p,getattr(self,p)) for p in self.params])
@@ -205,13 +229,21 @@ class WMAP7Cosmology(FRWCosmology):
     """
     _params_ = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.71#Gyr
+    t0_err = .13
     sigma8 = .801
+    sigma8_err = .030
     ns = .963
+    ns_err = .014
     H0 = 71.0
+    H0_err = 2.5
     omegaB = 0.044
+    omegaB_err = .0028
     omegaC = 0.222
+    omegaC_err = 0.026
     omegaL = 0.734
+    omegaL_err = .029
     omegaM = property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
     
 class WMAP7BAOH0Cosmology(FRWCosmology):
     """
@@ -219,41 +251,65 @@ class WMAP7BAOH0Cosmology(FRWCosmology):
     """
     _params_ = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.78#Gyr
+    t0_err = .11
     sigma8 = 0.809
+    sigma8_err = .024 
     ns = .963
+    ns_err = .012
     H0 = 70.4
+    H0_err = (1.4,1.3)
     omegaB = 0.045
+    omegaB_err = .0016
     omegaC = 0.227
+    omegaC_err = .014
     omegaL = 0.728
+    omegaL_err = (.016,.015)
     omegaM = property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
     
 class WMAP5Cosmology(FRWCosmology):
     """
     WMAP5-only (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
     _params_=('t0','sigma8','omegaB','omegaC','ns')
-    t0=13.69 #Gyr
-    sigma8=.796
+    t0 = 13.69 #Gyr
+    t0_err = .13
+    sigma8 = .796
+    sigma8_err = .036
     ns = 0.963
-    H0=71.9
-    omegaB=0.044
-    omegaC=0.214
-    omegaL=0.742
-    omegaM=property(lambda self:self.omegaB+self.omegaC)
+    ns_err = (.015,.014)
+    H0 = 71.9
+    H0_err = (2.7,2.6)
+    omegaB = 0.044
+    omegaB_err = .003
+    omegaC = 0.214
+    omegaC_err = .027
+    omegaL = 0.742
+    omegaL_err = .030
+    omegaM = property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
     
 class WMAP5BAOSNCosmology(FRWCosmology):
     """
     WMAP5+BAO+SN (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
     _params_=('t0','sigma8','omegaB','omegaC','ns')
-    t0=13.73 #Gyr
-    sigma8=.817
+    t0 = 13.73 #Gyr
+    t0_err = .12
+    sigma8 = .817
+    sigma8_err = .026
     ns = 0.960
-    H0=70.1
-    omegaB=0.046
-    omegaC=0.233
-    omegaL=0.721
+    ns_err = (.013,.014)
+    H0 = 70.1
+    H0_err = 1.3
+    omegaB = 0.046
+    omegaB_err = .0015
+    omegaC = 0.233
+    omegaC_err = .013
+    omegaL = 0.721
+    omegaL_err = .015
     omegaM=property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
     
 class WMAP3Cosmology(FRWCosmology):
     """
@@ -263,12 +319,19 @@ class WMAP3Cosmology(FRWCosmology):
     _params_=('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
     sigma8 = .761
+    sigma8_err = (.048,.049)
     ns = 0.958
+    ns_err = .016
     H0 = 73.2
+    H0_err = (3.2,3.1)
     omegaB = 0.044
+    omegaB_err = .0014
     omegaC = 0.224
+    omegaC_err = .014
     omegaL = 0.732
+    omegaL_err = .034
     omegaM = property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
     
 class WMAP3AllCosmology(FRWCosmology):
     """
@@ -278,12 +341,19 @@ class WMAP3AllCosmology(FRWCosmology):
     _params_=('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
     sigma8 = .776
+    sigma8_err = (.032,.031)
     ns = 0.947
+    ns_err = .015
     H0 = 70.4
+    H0_err = (1.6,1.5)
     omegaB = 0.042+.002/3 #omega=1
+    omegaB_err = .0013 
     omegaC = 0.197+.002/3 #omega=1
+    omegaC_err = (.0079,.0077)
     omegaL = 0.759+.002/3 #omega=1
+    omegaL_err = .018
     omegaM = property(lambda self:self.omegaB+self.omegaC)
+    omegaM_err = property(lambda self:self.omegaB_err+self.omegaC_err)
 
 
 __current_cosmology=WMAP7BAOH0Cosmology() #default value
