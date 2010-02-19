@@ -250,7 +250,7 @@ class FunctionModel(ParametricModel):
     """
     
     defaultparval = 1
-    data = None
+    data = None #data should be either None, or (datain,dataout,weights)
     
     @abstractmethod
     def f(self,x,*params):
@@ -280,7 +280,7 @@ class FunctionModel(ParametricModel):
         call the function on the input x with the current parameters and return
         the result.
         
-        if subclassing to do type-checking, the function should return the
+        if subclassing is to do type-checking, the function should return the
         result of self._filterfunc(input,*self.parvals) or raise a 
         ModelTypeError
         """
@@ -470,7 +470,7 @@ class FunctionModel(ParametricModel):
             
             #ensure that res is at least a tuple with parameters in elem 0
             from operator import isSequenceType
-            if not isSequenceType(res[0]):
+            if len(res)==0 or not isSequenceType(res[0]):
                 res = (res,)
                 
             if fixedpars:
@@ -1756,6 +1756,26 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
             x[x<bound] = bound
             return x
         self.addFilter(bndfunc)
+        
+class DatacentricModel1D(FunctionModel1D):
+    """
+    A FunctionModel1D that *requires* data to compute its value
+    """
+    def __call__(self,x):
+        if self.data is None:
+            raise ValueError('DataModel1D must have data to execute')
+        arr = np.array(x,copy=False,dtype=float)
+        res = self._filterfunc(arr.ravel(),*self.parvals)
+        return res.reshape(arr.shape)
+    
+
+class DatacentricModel1DAuto(DatacentricModel1D):
+    """
+    A DatacentricModel1D that infers the parameters from the f-function
+    
+    equivalent to simply setting the metaclass to AutoParamsMeta
+    """
+    __metaclass__ = AutoParamsMeta
         
         
 class ModelGrid1D(object):

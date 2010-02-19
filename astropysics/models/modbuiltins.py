@@ -841,9 +841,55 @@ class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
         h,c,kb=BlackbodyModel.h,BlackbodyModel.c,BlackbodyModel.kb
         sigma = 2*pi**5*kb**4*h**-3*c**-2/15
         return area*sigma*T**4
+
+
     
+class _InterpolatedModel(DatacentricModel1DAuto):
+    
+    _fittypes=['interp']
+    fittype = 'interp'
+    
+    def __init__(self):
+        super(_InterpolatedModel,self).__init__()
+        self.i1d = lambda x:x #default should never be externally seen
+    
+    def f(self,x):
+        if self.data is not None:
+            res = self.i1d(x)
+            xd,yd = self.data[0],self.data[1]
+            mi,mx = np.min(xd),np.max(xd)
+            res[x<mi] = yd[mi==xd][0]
+            res[x>mx] = yd[mx==xd][0]
+            return res
+        else:
+            return x
+    
+    def fitData(self,x,y,**kwargs):
+        kwargs['savedata'] = True
+        return super(_InterpolatedModel,self).fitData(x,y,**kwargs)
+    
+    def fitInterp(self,x,y,fixedpars=(),**kwargs):
+        from scipy.interpolate import interp1d
+        xi = np.argsort(x)
+        self.i1d = interp1d(x[xi],y[xi],kind=self.kind,bounds_error=False)
+        
+        return []
+        
+class LinearInterpolatedModel(_InterpolatedModel):
+    """
+    A model that is the linear interpolation of the data, or if out of bounds, 
+    fixed to the edge value.
+    """
+    kind = 'linear'
+    
+class NearestInterpolatedModel(_InterpolatedModel):
+    """
+    A model that is the interpolation of the data by taking the value of the 
+    nearest point
+    """
+    kind = 'nearest'
    
-class SmoothSplineModel(FunctionModel1DAuto):
+class SmoothSplineModel(DatacentricModel1DAuto):
     """
     this uses a B-spline as a model for the function.  Note that by
     default the parameters are not tuned - the input smoothing and 
@@ -904,7 +950,7 @@ class SmoothSplineModel(FunctionModel1DAuto):
         return np.min(xd),np.max(xd)
     
     
-class InterpolatedSplineModel(FunctionModel1DAuto):
+class InterpolatedSplineModel(DatacentricModel1DAuto):
     """
     this uses a B-spline as a model for the function.  Note that by
     default the degree is left alone when fitting, as this model
@@ -964,7 +1010,7 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
         xd = self.data[0]
         return np.min(xd),np.max(xd)
     
-class _KnotSplineModel(FunctionModel1DAuto):
+class _KnotSplineModel(DatacentricModel1DAuto):
     """
     this uses a B-spline as a model for the function.  The knots
     parameter specifies the number of INTERIOR knots to use for the
