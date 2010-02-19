@@ -250,7 +250,7 @@ class FunctionModel(ParametricModel):
     """
     
     defaultparval = 1
-    fitteddata = None
+    data = None
     
     @abstractmethod
     def f(self,x,*params):
@@ -404,7 +404,7 @@ class FunctionModel(ParametricModel):
         the full output is available is self.lastfit
         
         if savedata is true, the input fit data will be available in 
-        self.fitteddata as an (x,y) tuple
+        self.data as an (x,y) tuple
         
         see also:getMCMC
         """
@@ -415,16 +415,16 @@ class FunctionModel(ParametricModel):
         self._fitchi2 = None #clear saved chi-squared if it exists
         
         if x is None:
-            if hasattr(self,'fitteddata') and self.fitteddata is not None:
-                x = self.fitteddata[0]
+            if hasattr(self,'data') and self.data is not None:
+                x = self.data[0]
             else: 
                 raise ValueError('No x data provided and no fitted data already present')
         else:
             x = np.array(x,copy=False)
         
         if y is None:
-            if hasattr(self,'fitteddata') and self.fitteddata is not None:
-                y = self.fitteddata[1]
+            if hasattr(self,'data') and self.data is not None:
+                y = self.data[1]
             else: 
                 raise ValueError('No y data provided and no fitted data already present')
         else:
@@ -592,7 +592,7 @@ class FunctionModel(ParametricModel):
                 setattr(self,par,newv)
                 
         if savedata: 
-            self.fitteddata = (x,y,weights)
+            self.data = (x,y,weights)
         
         return v
     
@@ -603,9 +603,9 @@ class FunctionModel(ParametricModel):
         if x or y are None, they are determined from the pre-fitted data
         """
         if x is None or y is None:
-            if self.fitteddata is None:
+            if self.data is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y,weights = self.fitteddata
+            x,y,weights = self.data
         
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
@@ -622,9 +622,9 @@ class FunctionModel(ParametricModel):
         returns x,y,residuals if retdata is True, otherwise just residuals
         """
         if x is None or y is None:
-            if self.fitteddata is None:
+            if self.data is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y,weights = self.fitteddata
+            x,y,weights = self.data
         
         if self(x).shape != y.shape:
             raise ModelTypeError('y array does not match output of model for input x')
@@ -650,9 +650,9 @@ class FunctionModel(ParametricModel):
         
         chi2 = None
         if x is None or y is None:
-            if self.fitteddata is None:
+            if self.data is None:
                 raise ValueError('must either specify data or save fitted data')
-            x,y,weights = self.fitteddata
+            x,y,weights = self.data
             if self._fitchi2 is not None:
                 chi2 = self._fitchi2
         
@@ -710,25 +710,25 @@ class FunctionModel(ParametricModel):
         
         kwargs are passed into fitData
         
-        sets `fitteddata` to (x,y,(xerr,yerr))
+        sets `data` to (x,y,(xerr,yerr))
         
         returns a dictionary mapping parameters to their histograms and the 
         covariance matrix of the parameters in parameter order
         """
         if x is None:
-            if self.fitteddata is None:
+            if self.data is None:
                 raise ValueError('must either specify data or save fitted data')
-            x = self.fitteddata[0]
+            x = self.data[0]
         if y is None:
-            if self.fitteddata is None:
+            if self.data is None:
                 raise ValueError('must either specify data or save fitted data')
-            y = self.fitteddata[1]
+            y = self.data[1]
         if xerr is None:
-            if self.fitteddata is not None and len(self.fitteddata)>2:
-                xerr = self.fitteddata[3]
+            if self.data is not None and len(self.data)>2:
+                xerr = self.data[3]
         if yerr is None:
-            if self.fitteddata is not None and len(self.fitteddata)>3:
-                yerr = self.fitteddata[4]
+            if self.data is not None and len(self.data)>3:
+                yerr = self.data[4]
         
         kwargs.setdefault('updatepars',False)
         
@@ -800,7 +800,7 @@ class FunctionModel(ParametricModel):
                 plt.ylabel('N')
                 plt.title('Median$=%3.3f$ $\\sigma=%3.3f$ Fit$=%3.3f$'%(med,std,self.pardict[p]))
                 
-        self.fitteddata = (x,y,(xerr,yerr))
+        self.data = (x,y,(xerr,yerr))
         if medianpars:
             for p,v in d.iteritems():
                 setattr(self,p,np.median(v))
@@ -1115,8 +1115,8 @@ class CompositeModel(FunctionModel):
 class FunctionModel1D(FunctionModel):
     
     """
-    This class is the base for 1-dimensional models with parameters that are 
-    implemented as python functions.
+    This class is the base for 1-dimensional models that are implemented
+    as python functions.
     
     Subclassing:
     The following method MUST be overridden in a subclass:
@@ -1297,8 +1297,8 @@ class FunctionModel1D(FunctionModel):
         try:
             plt.ioff()
             if data is 'auto':
-                if self.fitteddata:
-                    data = self.fitteddata
+                if self.data:
+                    data = self.data
                 else:
                     data = None
                     
@@ -2157,7 +2157,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         try:
             plt.ioff()
             if data == 'auto':
-                data = self.fitteddata or None
+                data = self.data or None
                 
             maxmind = None
             if data: #TODO:correct coord conv
@@ -2238,8 +2238,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         from operator import isMappingType
         
         if data == 'auto':
-            if self.fitteddata:
-                data = self.fitteddata[:2]
+            if self.data:
+                data = self.data[:2]
             else:
                 data = None
         
@@ -2365,7 +2365,7 @@ class CompositeModel2DScalar(FunctionModel2DScalar,CompositeModel):
 class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
     """
     A `FunctionModel2DScalar` that is seperable and follows a radial and 
-    polar function that are just multiples
+    polar function that are seperable - e.g. F(r,theta) = R(r)*T(theta)
     """
     def __init__(self,rmodel,thetamodel=None):
         """
@@ -2682,8 +2682,8 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     from scipy.optimize import brentq
     
     if bounds is None:
-        data1 = m1.fitteddata[:2] if hasattr(m1,'fitteddata') else None
-        data2 = m2.fitteddata[:2] if hasattr(m2,'fitteddata') else None
+        data1 = m1.data[:2] if hasattr(m1,'data') else None
+        data2 = m2.data[:2] if hasattr(m2,'data') else None
         
         if data1 is None and data2 is None:
             raise ValueError('must supply bounds if neither model has data')

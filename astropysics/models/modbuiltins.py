@@ -231,7 +231,7 @@ class LinearModel(FunctionModel1DAuto):
         
         kwargs.setdefault('full_output',1)
         self.lastfit = leastsq(chi,(self.m,self.b),args=(x,y,xerr,yerr),**kwargs)
-        self.fitteddata = (x,y,(xerr,yerr))
+        self.data = (x,y,(xerr,yerr))
         
         self._fitchi2 = np.sum(chi(self.lastfit[0],x,y,xerr,yerr)**2)
         
@@ -267,13 +267,13 @@ class LinearModel(FunctionModel1DAuto):
         m = plmod.p
         b = logfactor*np.log(plmod.A)
         
-        if plmod.fitteddata is not None:
-            data = list(plmod.fitteddata)
+        if plmod.data is not None:
+            data = list(plmod.data)
             data[0] = logfactor*np.log(data[0])
             data[1] = logfactor*np.log(data[1])
             
         lmod = LinearModel(m=m,b=b)
-        lmod.fitteddata = tuple(data)
+        lmod.data = tuple(data)
         return lmod
         
     
@@ -548,8 +548,8 @@ class PowerLawModel(FunctionModel1DAuto):
         p = lmod.m
         A = base**lmod.b
         
-        if lmod.fitteddata is not None:
-            data = list(lmod.fitteddata)
+        if lmod.data is not None:
+            data = list(lmod.data)
             data[0] = base**data[0]
             data[1] = base**data[1]
         else:
@@ -557,7 +557,7 @@ class PowerLawModel(FunctionModel1DAuto):
             
         plmod = PowerLawModel(p=p,A=A)
         if data is not None:
-            plmod.fitteddata = tuple(data)
+            plmod.data = tuple(data)
         return plmod
     
 class SinModel(FunctionModel1DAuto):
@@ -856,8 +856,8 @@ class SmoothSplineModel(FunctionModel1DAuto):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
-        self.fitData(self.fitteddata[0],self.fitteddata[1])
+        self.data = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
+        self.fitData(self.data[0],self.data[1])
     
     _fittypes=['spline']
     fittype = 'spline'
@@ -893,14 +893,14 @@ class SmoothSplineModel(FunctionModel1DAuto):
     
     def f(self,x,s=2,degree=3):        
         if self._olds != s or self._oldd != degree:
-            xd,yd,weights = self.fitteddata
+            xd,yd,weights = self.data
             self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     
     @property
     def rangehint(self):
-        xd = self.fitteddata[0]
+        xd = self.data[0]
         return np.min(xd),np.max(xd)
     
     
@@ -917,8 +917,8 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
         super(InterpolatedSplineModel,self).__init__()
         
         self._oldd=self._olds=self._ws=None
-        self.fitteddata = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
-        self.fitData(self.fitteddata[0],self.fitteddata[1])
+        self.data = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
+        self.fitData(self.data[0],self.data[1])
             
             
     _fittypes = ['spline']
@@ -954,14 +954,14 @@ class InterpolatedSplineModel(FunctionModel1DAuto):
     
     def f(self,x,degree=3):        
         if self._oldd != degree:
-            xd,yd,weights = self.fitteddata
+            xd,yd,weights = self.data
             self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
     
     @property
     def rangehint(self):
-        xd = self.fitteddata[0]
+        xd = self.data[0]
         return np.min(xd),np.max(xd)
     
 class _KnotSplineModel(FunctionModel1DAuto):
@@ -983,7 +983,7 @@ class _KnotSplineModel(FunctionModel1DAuto):
         
         self._ws = None
         
-        self.fitteddata = (np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1),self._ws)
+        self.data = (np.arange(self.degree+self.nknots+1),np.arange(self.degree+self.nknots+1),self._ws)
     
     @abstractmethod        
     def f(self,x):
@@ -1015,14 +1015,14 @@ class _KnotSplineModel(FunctionModel1DAuto):
     
     @property
     def rangehint(self):
-        xd = self.fitteddata[0]
+        xd = self.data[0]
         return np.min(xd),np.max(xd)
 
 class UniformKnotSplineModel(_KnotSplineModel):
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformKnotSplineModel,self).__init__()
-        self.fitData(self.fitteddata[0],self.fitteddata[1])
+        self.fitData(self.data[0],self.data[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
@@ -1036,7 +1036,7 @@ class UniformKnotSplineModel(_KnotSplineModel):
     
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
-            xd,yd,weights = self.fitteddata
+            xd,yd,weights = self.data
             self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
@@ -1047,7 +1047,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformCDFKnotSplineModel,self).__init__()
-        self.fitData(self.fitteddata[0],self.fitteddata[1])
+        self.fitData(self.data[0],self.data[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
@@ -1065,7 +1065,7 @@ class UniformCDFKnotSplineModel(_KnotSplineModel):
     
     def f(self,x,nknots=3,degree=3):
         if self._oldk != nknots or self._oldd != degree:
-            xd,yd,weights = self.fitteddata
+            xd,yd,weights = self.data
             self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
@@ -1113,7 +1113,7 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
     def f(self,x,degree,*args):
         #TODO:faster way to do the arg check?
         if self._oldd != degree or np.any(self.iknots != np.array(args)):
-            xd,yd,weights = self.fitteddata
+            xd,yd,weights = self.data
             self.fitSpline(xd,yd,weights=weights)
         
         return self.spline(x)
