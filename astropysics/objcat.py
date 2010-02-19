@@ -3118,7 +3118,7 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
 #<--------------------builtin catalog types------------------------------------>
 
 class AstronomicalObject(StructuredFieldNode):
-    from .coords import AngularPosition
+    from .coords import EquatorialPosition
     
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
@@ -3129,7 +3129,7 @@ class AstronomicalObject(StructuredFieldNode):
         
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
-    loc = Field('loc',AngularPosition)
+    loc = Field('loc',EquatorialPosition)
     sed = SEDField('sed')
 
 class Test1(StructuredFieldNode):

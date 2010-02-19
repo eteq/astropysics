@@ -23,15 +23,23 @@ import numpy as np
 
 
 class AngularCoordinate(object):
+    """
+    An angular coordinate that can be initialized in various formats.
+    
+    Arithmetic operators can be applied to the coordinate, and will be applied 
+    directly to the numerical value in radians.  For + and -, two angular 
+    coordinates may be used, although for -, an AngularSeperation object will
+    be returned
+    """
     import re as _re
-    __slots__=('__decval','__range')
+    __slots__=('_decval','_range')
     
     def __setdegminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
             raise ValueError('Must set as a length-3 iterator')
         self.degrees=abs(dms[0])+abs(dms[1])/60.+abs(dms[2])/3600.
         if dms[0]<0:
-            self.__decval*=-1
+            self._decval*=-1
     def __getdegminsec(self):
         fulldeg=abs(self.degrees)
         deg=int(fulldeg)
@@ -56,35 +64,35 @@ class AngularCoordinate(object):
         rads = deg*pi/180.
         if self.range is not None:
             self.__checkRange(rads)
-        self.__decval = rads
+        self._decval = rads
     def __getdegdec(self):
-        return self.__decval*180/pi
+        return self._decval*180/pi
     
     def __setrad(self,rads):
         if self.range is not None:
             self.__checkRange(rads)
-        self.__decval = rads
+        self._decval = rads
     def __getrad(self):
-        return self.__decval
+        return self._decval
     
     def __sethrdec(self,hr):
         rads = hr*pi/12
         if self.range is not None:
             self.__checkRange(rads)
-        self.__decval = rads
+        self._decval = rads
     def __gethrdec(self):
-        return self.__decval*12/pi
+        return self._decval*12/pi
     
     def __checkRange(self,rads):
-        if self.__range is not None:
-            low,up = self.__range
+        if self._range is not None:
+            low,up = self._range
             if not low <= rads <= up:
                 raise ValueError('Attempted to set angular coordinate outside range')
     def __setrange(self,newrng):
-        oldrange = self.__range        
+        oldrange = self._range        
         try:
             if newrng is None:
-                self.__range = None
+                self._range = None
             else:
                 from math import radians
                 newrng = tuple(newrng)
@@ -93,17 +101,17 @@ class AngularCoordinate(object):
                 elif newrng[0] > newrng[1]:
                     raise ValueError('lower edge of range is not <= upper')
                 newrng = (radians(newrng[0]),radians(newrng[1]))
-            self.__range = newrng
-            self.__checkRange(self.__decval)
+            self._range = newrng
+            self.__checkRange(self._decval)
         except ValueError:
-            self.__range = oldrange
+            self._range = oldrange
             raise ValueError('Attempted to set range when value is out of range')
     def __getrange(self):
-        if self.__range is None:
+        if self._range is None:
             return None
         else:
             from math import degrees
-            return degrees(self.__range[0]),degrees(self.__range[1])
+            return degrees(self._range[0]),degrees(self._range[1])
     
     def __str__(self):
         return self.getDmsStr()
@@ -147,10 +155,10 @@ class AngularCoordinate(object):
         `range` sets the valid range of coordinates either any value (if None)
         or a 2-sequence (lowerdegrees,upperdegrees)
         """
-        self.__range = None
+        self._range = None
         
         if inpt.__class__.__name__=='AngularCoordinate':
-            self.__decval=inpt.__decval
+            self._decval=inpt._decval
         elif isinstance(inpt,basestring):
             sexig=self.__sexre.match(inpt)
             hm=self.__purehre.match(inpt)
@@ -165,14 +173,14 @@ class AngularCoordinate(object):
                     else:
                         sgn = 1 if sexig.group(1) == '+' else -1
                         self.degminsec=int(t[0]),int(t[1]),float(t[2])
-                        self.__decval *= sgn
+                        self._decval *= sgn
                 else:
                     sgn = -1 if sexig.group(1) == '-' else 1
                     if sghms:
                         self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
                     else:
                         self.degminsec=int(t[0]),int(t[1]),float(t[2]) 
-                    self.__decval *= sgn
+                    self._decval *= sgn
             elif hmsm:
                 t=hmsm.group(1,2,3)
                 self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
@@ -182,7 +190,7 @@ class AngularCoordinate(object):
                 sgn = -1 if dmsm.group(1) =='-' else 1
                 t=dmsm.group(2,3,4)
                 self.degminsec=int(t[0]),int(t[1]),float(t[2])
-                self.__decval *= sgn
+                self._decval *= sgn
             elif dm:
                 self.degrees=float(hm.group(1))
             else:
@@ -191,54 +199,59 @@ class AngularCoordinate(object):
         elif hasattr(inpt,'__iter__') and len(inpt)==3:
             self.degminsec=inpt
         elif inpt is None:
-            self.__decval=0
+            self._decval=0
         else:
-            self.__decval=float(inpt)*pi/180.
+            self._decval=float(inpt)*pi/180.
         
         self.range = range
             
     def __eq__(self,other):
-        if type(other) == AngularCoordinate:
-            return self.__decval==other.__decval
+        if hasattr(other,'_decval'):
+            return self._decval==other._decval
         else:
-            return self.__decval==other
+            return self._decval==other
+        
     def __ne__(self,other):
         return not self.__eq__(other)
         
     def __add__(self,other):
-        if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval+other.__decval)
+        if hasattr(other,'_decval'):
+            res = self.__class__()
+            res._decval = self._decval + other._decval
         else:
-            return AngularCoordinate(self.__decval+other)
+            res = self.__class__()
+            res._decval = self._decval + other
+        return res
+        
     def __sub__(self,other):
         if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval-other.__decval)
+            from math import degrees
+            res = AngularSeperation()
+            return AngularSeperation(degrees(other._decval),degrees(self._decval))
         else:
-            return AngularCoordinate(self.__decval-other)
+            res = AngularCoordinate()
+            res._decval = self._decval - other
+        return res
         
     def __mul__(self,other):
-        if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval*other.__decval)
-        else:
-            return AngularCoordinate(self.__decval*other)
+        res = self.__class__()
+        res._decval = self._decval*other
+        return res
         
     def __div__(self,other):
-        if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval/other.__decval)
-        else:
-            return AngularCoordinate(self.__decval/other)
+        res = self.__class__()
+        res._decval = self._decval/other
+        return res
         
     def __truediv__(self,other):
-        if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval/other.__decval)
-        else:
-            return AngularCoordinate(self.__decval/other)
+        res = self.__class__()
+        res._decval = self._decval//other
+        return res
         
     def __pow__(self,other):
-        if type(other) == AngularCoordinate:
-            return AngularCoordinate(self.__decval**other.__decval)
-        else:
-            return AngularCoordinate(self.__decval**other)
+        res = self.__class__()
+        res._decval = self._decval**other
+        return res
         
     def __float__(self):
         return self.degrees
@@ -261,7 +274,7 @@ class AngularCoordinate(object):
         d,m,s = self.degminsec
         
         if canonical:
-            sgn = '-' if self.__decval < 0 else '+'
+            sgn = '-' if self._decval < 0 else '+'
             return '%s%02.i:%02.i:%05.2f'%(sgn,d,m,s)
         
         d,m=str(d),str(m)
@@ -353,33 +366,105 @@ def angular_string_to_dec(instr,hms=True):
     """
     ac = AngularCoordinate(instr)
     return ac.degrees
+
+class AngularSeperation(AngularCoordinate):
+    __slots__ = ('start',)
+    def __init__(self,*args,**kwargs):
+        """
+        inputs can be either AngularSeperation(sep) or 
+        AngularSeperation(start,end).  kwargs can be any of the kwargs to
+        the initializer of AngularCoordinate.
+        """
+        if len(args) == 1:
+            a = args[0]
+            if a.__class__ == self.__class__:
+                self._decval = args[0]._decval
+                self._range = args[0]._range
+                self.start = args[0].start
+                return
+            
+            sep = a._decval if hasattr(a,'_decval') else a
+            start = None
+        elif len(args) == 2:
+            a0,a1 = args
+            a0 = a0._decval if hasattr(a0,'_decval') else a0
+            a1 = a1._decval if hasattr(a1,'_decval') else a1
+            sep = a1 - a0
+            start = a0
+        else:
+            raise ValueError('inproper number of inputs to AngularSeperation')
+        
+        super(AngularSeperation,self).__init__(sep,**kwargs)
+        self.start = start
+        
+    def __add__(self,other):
+        if isinstance(other,AngularCoordinate) and not self.__class__ == other.__class__:
+            res = AngularCoordinate()
+            res._decval = self._decval+other._decval
+            return res
+        else:
+            return super(AngularSeperation,self).__add__(other)
+        
+    def _getArcsec(self):
+        return self.degrees*3600
+    def _setArcsec(self,val):
+        self.degrees = val/3600
+    arcsec = property(_getArcsec,_setArcsec,doc=None)
     
-class AngularPosition(object):
+    
+    def _getArcmin(self):
+        return self.degrees*60
+    def _setArcmin(self,val):
+        self.degrees = val/60
+    arcmin = property(_getArcmin,_setArcmin,doc=None)
+    
+        
+    def projectedSeperation(self,zord,usez=False,**kwargs):
+        """
+        computes the physical projected seperation assuming a given distance.
+        This implicitly assumes small-angle approximation.
+        
+        if `zord` is True, the input will be interpreted as a redshift, and
+        kwargs will be passed into the distance calculation.
+        """
+        return angular_to_physical_size(self.arcsec,zord,usez=True,**kwargs)
+        
+class EquatorialPosition(object):
+    """
+    This object represents an angular location on the unit sphere, specified in
+    ra and dec.
+    """
     __slots__=('__ra','__dec','__raerr','__decerr','__epoch')
     
     def __init__(self,*args,**kwargs):
         """
-        can either specify kwargs ra,dec,raerr,decerr,epoch or follow form:
-        AngularPosition() (default)
-        AngularPosition(AngularPosition | 'ra dec')
-        AngularPosition(ra,dec)
-        AngularPosition(ra,dec,epoch)
-        AngularPosition(ra,dec,raerr,decerr)
-        AngularPosition(ra,dec,raerr,decerr,epoch)
+        Coordinates can be specified by assigning the kwargs 
+        ra,dec,raerr,decerr,epoch or rarad,decrad,raerr,decerr,epoch, or follow
+        one of the following forms:
+        
+        * EquatorialPosition() (default)
+        * EquatorialPosition(EquatorialPosition | 'ra dec')
+        * EquatorialPosition(ra,dec)
+        * EquatorialPosition(ra,dec,epoch)
+        * EquatorialPosition(ra,dec,raerr,decerr)
+        * EquatorialPosition(ra,dec,raerr,decerr,epoch)
+        
         """
+        from math import degrees,radians
+        
         if len(args)  == 0:
             pass
         elif len(args) == 1:
-            if isinstance(args[0],AngularPosition):
+            if isinstance(args[0],EquatorialPosition):
                 kwargs['ra'] = AngularCoordinate(args[0].__ra)
                 kwargs['dec'] = AngularCoordinate(args[0].__dec)
-                kwargs['raerr'] = AngularCoordinate(args[0].__raerr)
-                kwargs['decerr'] = AngularCoordinate(args[0].__decerr)
+                kwargs['raerr'] = AngularSeperation(args[0].__raerr)
+                kwargs['decerr'] = AngularSeperation(args[0].__decerr)
                 kwargs['epoch'] = args[0].__epoch
             aspl = args[0].split()
-            #TODO: make smarter
-            kwargs['ra'] = AngularCoordinate(aspl[0])
-            kwargs['dec'] = AngularCoordinate(aspl[1],sghms=False)
+            
+            kwargs['ra'] = aspl[0]
+            kwargs['dec'] = aspl[1],sghms=False
         elif len(args) == 2:
             kwargs['ra'] = AngularCoordinate(args[0])
             kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
@@ -390,22 +475,34 @@ class AngularPosition(object):
         elif len(args) == 4:
             kwargs['ra'] = AngularCoordinate(args[0])
             kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-            kwargs['raerr'] = AngularCoordinate(args[2])
-            kwargs['decerr'] = AngularCoordinate(args[3])
+            kwargs['raerr'] = AngularSeperation(args[2])
+            kwargs['decerr'] = AngularSeperation(args[3])
         elif len(args) == 5:
             kwargs['ra'] = AngularCoordinate(args[0])
             kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-            kwargs['raerr'] = AngularCoordinate(args[2])
-            kwargs['decerr'] = AngularCoordinate(args[3])
+            kwargs['raerr'] = AngularSeperation(args[2])
+            kwargs['decerr'] = AngularSeperation(args[3])
             kwargs['epoch'] = args[4]
         else:
             raise ValueError('Unrecognized format for coordiantes')
         
-        self.__ra=kwargs.pop('ra',AngularCoordinate(0))
-        self.__dec=kwargs.pop('dec',AngularCoordinate(0))
-        self.__raerr=kwargs.pop('raerr',AngularCoordinate(0))
-        self.__decerr=kwargs.pop('decerr',AngularCoordinate(0))
-        self.__epoch=kwargs.pop('epoch','J2000')
+        if 'rarad' in kwargs:
+            if 'ra' in kwargs:
+                raise ValueError("can't specify RA in both radians and degrees")
+            kwargs['ra'] = degrees(kwargs.pop('rarad'))
+            kwargs['raerr'] = degrees(kwargs.pop('raerr',0))
+            
+        if 'decrad' in kwargs:
+            if 'dec' in kwargs:
+                raise ValueError("can't specify Dec in both radians and degrees")
+            kwargs['dec'] = degrees(kwargs.pop('decrad'))
+            kwargs['decerr'] = degrees(kwargs.pop('decerr',0))
+            
+        self.__ra = AngularCoordinate(kwargs.pop('ra'))
+        self.__dec = AngularCoordinate(kwargs.pop('dec'))
+        self.__raerr = AngularSeperation(kwargs.pop('raerr',0))
+        self.__decerr = AngularSeperation(kwargs.pop('decerr',0))
+        self.__epoch = kwargs.pop('epoch','J2000')
         if len(kwargs) > 0:
             raise ValeError('unrecognized keyword'+'s ' if len(kwargs)> 1 else ' '+','.join(kwargs.keys()))
         
@@ -474,37 +571,25 @@ class AngularPosition(object):
     
     def __eq__(self,other):
         from operator import isSequenceType
-        if type(other) == AngularPosition:
-            return self.__ra==other.__ra and  self.__dec==other.__dec
-        elif isSequenceType(other):
-            return self.__ra==other[0] and  self.__dec==other[1]
+        if isinstance(other,self.__class__):
+            return self.__ra==other.__ra and self.__dec==other.__dec
         else:
             return False
     def __ne__(self,other):
         return not self.__eq__(other)
     
-    #TODO:add sequence operations
-    def __add__(self,other):
-        return AngularPosition(self.__ra+other,self.__dec+other)
     def __sub__(self,other):
-        from math import degrees
-        print type(other)
-        if type(other) == AngularPosition:
-            dcra=self.__correctedra()-other.__correctedra()
-            ddec=self.__dec.radians-other.__dec.radians
-            res=AngularCoordinate(degrees((dcra*dcra+ddec*ddec)**0.5))
-            if res.degrees > 1:
-                print 'WARNING: small-angle approximation incorrect'
-            return res
-        return AngularPosition(self.__ra-other,self.__dec-other)
-    def __mul__(self,other):
-        return AngularPosition(self.__ra*other,self.__dec*other)
-    def __div__(self,other):
-        return AngularPosition(self.__ra/other,self.__dec/other)
-    def __truediv__(self,other):
-        return AngularPosition(self.__ra/other,self.__dec/other)
-    def __pow__(self,other):
-        return AngularPosition(self.__ra**other,self.__dec**other)    
+        if isinstance(other,self.__class__):
+            dcra = self.__correctedra()-other.__correctedra()
+            ddec = self.__dec.radians-other.__dec.radians
+            sep = AngularSeperation(degrees((dcra*dcra+ddec*ddec)**0.5))
+            sep.start = other
+            return sep
+        
+        else:
+            raise "unsupported operand type(s) for -: 'EquatorialPosition' and '%s'"%other.__class__
+
+      
     
     
 #<-------------basic transforms-------------------->
@@ -625,8 +710,8 @@ def proj_sep(rx,ty,pz,offset,spherical=False):
 
 
 #galactic coordate reference positions from IAU 1959 and wikipedia
-_galngpJ2000=AngularPosition('12h51m26.282s','+27d07m42.01s')
-_galngpB1950=AngularPosition('12h49m0s','27d24m0s')
+_galngpJ2000=EquatorialPosition('12h51m26.282s','+27d07m42.01s')
+_galngpB1950=EquatorialPosition('12h49m0s','27d24m0s')
 _gall0J2000=122.932
 _gall0B1950=123
 
@@ -819,10 +904,10 @@ def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
 
 def seperation3d(d1,d2,ap1,ap2):
     from numpy import sin,cos
-    if type(ap1) != AngularPosition:
-        ap1=AngularPosition(ap1)
-    if type(ap2) != AngularPosition:
-        ap2=AngularPosition(ap2)
+    if type(ap1) != EquatorialPosition:
+        ap1=EquatorialPosition(ap1)
+    if type(ap2) != EquatorialPosition:
+        ap2=EquatorialPosition(ap2)
     
     theta1,phi1=(pi/2-ap1.dec.radians,ap1.ra.radians)
     theta2,phi2=(pi/2-ap2.dec.radians,ap2.ra.radians)
