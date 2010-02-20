@@ -1777,6 +1777,101 @@ class DatacentricModel1DAuto(DatacentricModel1D):
     """
     __metaclass__ = AutoParamsMeta
         
+
+class ModelSequence(object):
+    """
+    A group of models with attached parameters that can be used to infer the
+    parameter values at an arbitrary point in the space defined by the models.  
+    """
+    def __init__(self,models,outputcontraction=None,interpolation='linear'):
+        """
+        `models` must be a sequence of models.  They must all have the same 
+        parameter names and have compatible inputs.
+        
+        `output contraction` can be either a function to call on the output of 
+        the models returning a scalar, None to do nothing to the output, 'dist' 
+        to use the euclidian distance (e.g. sqrt(sum(output**2)), or 'sqdist' to 
+        use the square of the distance.
+        
+        `interpolation` may be either 'linear' for simple linear interpolation, 
+        or a Model that will be fit with fitData on the contracted outputs.
+        """        
+        params = None
+        for m in models:
+            if params is None:
+                params = m.params
+            else:
+                if m.params != params:
+                    raise ValueError('model %s does not match parameters for other models'%m)
+        self._params = params
+        
+        if outputcontraction is None:
+            outputcontraction = lambda x:x
+        elif isinstance(outputcontraction,basestring):
+            if outputcontraction == 'dist':
+                outputcontraction = lambda x:np.sum(x**2)**0.5
+            elif outputcontraction == 'sqdist':
+                outputcontraction = lambda x:np.sum(x**2)
+            else:
+                raise ValueError('invalid string for outputcontraction')
+        elif not callable(outputcontraction):
+            raise TypeError('invalid type for outputcontraction')
+        self.outputcontraction = outputcontraction
+        
+        self.interpolation = interpolation
+        
+    
+    def _getOutputcontraction(self):
+        raise NotImplementedError
+    def _setOutputcontraction(self,val):
+        raise NotImplementedError
+    outputcontraction = property(_getOutputcontraction,_setOutputcontraction,doc=None)
+    
+    def _getInterpolation(self):
+        raise NotImplementedError
+    def _setInterpolation(self,val):
+        raise NotImplementedError
+    interpolation = property(_getInterpolation,_setInterpolation,doc=None)
+        
+        
+    def getParam(self,x,y,parnames=None,contracty=True,interpolation='linear'):
+        """
+        `parnames` can be a single parameter name (output is then a scalar), a
+        sequence of parameter names, or None to get a dictionary mapping 
+        parameter names to their value at the provided point
+        
+        if `contracty` is True, the output contraction will be applied to the 
+        provided y-value.  Otherwise, it should be a scalar.
+        
+        Currently only 'linear' interpolation is supported
+        """
+        scalarout = dictout = False
+        if parnames is None:
+            parnames = self._models[0].params
+            dictout = True
+        elif isinstance(parnames,basestring):
+            parnames = [parnames]
+            scalarout = True
+        
+        raise NotImplementedError
+            
+        if scalarout:
+            return res[0]
+        elif dictout:
+            return dict([(p,val) for p in zip(parnames,res)])
+        else:
+            return res
+        
+        self.interpolation = interpolation
+        
+    def plot2D(self,axis=None,legend=False):
+        """
+        Plots the models in this ModelSequence in 2 dimensions
+        
+        `axis` determines which dimension of the input to use for the plot 
+        x-axis - if None, it is assumed to be a 1D array.  The output 
+        contraction function will be used to compute the y-axis.
+        """
         
 class ModelGrid1D(object):
     """
@@ -1870,12 +1965,12 @@ class ModelGrid1D(object):
         kwargs['clf'] = False
         for m in self.models:
             m.plot(*args,**kwargs)
-Grid1DModel = ModelGrid1D #for old modules
 
 class InputCoordinateTransformer(object):
     """
-    This mixin (i.e. intnded to be subclassed) class converts 
-    FunctionModel input values from one coordinate system to another.
+    This mixin (i.e. a class intended to be subclassed to provide extra
+    functionality) class converts  FunctionModel input values from one 
+    coordinate system to another.
     
     In subclasses, the following should be defined at class level:
     
