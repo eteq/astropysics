@@ -1783,18 +1783,32 @@ class ModelSequence(object):
     A group of models with attached parameters that can be used to infer the
     parameter values at an arbitrary point in the space defined by the models.  
     """
-    def __init__(self,models,outputcontraction=None,interpolation='linear'):
+    def __init__(self,models,outputcontraction=None,interpolation='linear',
+                      interpolationdirection='y'):
         """
         `models` must be a sequence of models.  They must all have the same 
-        parameter names and have compatible inputs.
+        parameter names and have compatible inputs.  They are expected to be 
+        a "sequence" in the sense that they can be interpolated across to get a
+        meaningful parameter value between two models (e.g. double-valued model
+        grids are not meaningful)
         
         `output contraction` can be either a function to call on the output of 
         the models returning a scalar, None to do nothing to the output, 'dist' 
         to use the euclidian distance (e.g. sqrt(sum(output**2)), or 'sqdist' to 
         use the square of the distance.
         
-        `interpolation` may be either 'linear' for simple linear interpolation, 
-        or a Model that will be fit with fitData on the contracted outputs.
+        `interpolation` may be either 'linear' for simple linear interpolation 
+        along the y-axis, or a 1D Model that will be fit with fitData on the 
+        contracted outputs.
+        
+        `interpolationdirection` can be:
+        
+        * 'y': interpolate along the output axis (by far the fastest method)
+        * 'x': interpolate along the input axis - requires that inv be defined
+               for the models
+        * 'perp': interpolate along the perpendicular of the tangent line for 
+                  the closest model to the data point.  Only meaningful for 
+                  FunctionModel1D Models.
         """        
         params = None
         for m in models:
@@ -1804,46 +1818,72 @@ class ModelSequence(object):
                 if m.params != params:
                     raise ValueError('model %s does not match parameters for other models'%m)
         self._params = params
+        self._models = tuple(models)
         
-        if outputcontraction is None:
-            outputcontraction = lambda x:x
-        elif isinstance(outputcontraction,basestring):
-            if outputcontraction == 'dist':
-                outputcontraction = lambda x:np.sum(x**2)**0.5
-            elif outputcontraction == 'sqdist':
-                outputcontraction = lambda x:np.sum(x**2)
-            else:
-                raise ValueError('invalid string for outputcontraction')
-        elif not callable(outputcontraction):
-            raise TypeError('invalid type for outputcontraction')
         self.outputcontraction = outputcontraction
-        
         self.interpolation = interpolation
+        self.interpolationdirection = interpolationdirection
         
     
     def _getOutputcontraction(self):
-        raise NotImplementedError
+        return self._outcont
     def _setOutputcontraction(self,val):
-        raise NotImplementedError
+        if val is None:
+            val = lambda x:x
+        elif isinstance(val,basestring):
+            if val == 'dist':
+                val = lambda x:np.sum(x**2)**0.5
+            elif val == 'sqdist':
+                val = lambda x:np.sum(x**2)
+            else:
+                raise ValueError('invalid string for outputcontraction')
+        elif not callable(val):
+            raise TypeError('invalid type for outputcontraction')
+        self._outcont = val
     outputcontraction = property(_getOutputcontraction,_setOutputcontraction,doc=None)
     
     def _getInterpolation(self):
-        raise NotImplementedError
+        return self._interp
     def _setInterpolation(self,val):
-        raise NotImplementedError
+        if isinstance(val,basestring):
+            if val == 'linear' or val == 'linearinterp':
+                self._interp = 'linearinterp'
+            else:
+                raise ValueError('invalid interpolation string value %s'%val)
+        elif isinstance(val,ParametricModel):
+            self._interp = val
+        else:
+            raise TypeError('invalid type for interpolation')
     interpolation = property(_getInterpolation,_setInterpolation,doc=None)
+    
+    def _getInterpolationdirection(self):
+        return self._interpdir
+    def _setInterpolationdirection(self,val):
+        if val not in ('x','y','perp'):
+            raise ValueError('invalid interpolation direction %s requested'%val)
+        self._interpdir = val
+    interpolationdirection = property(_getInterpolationdirection,_setInterpolationdirection,doc=None)
+    
+    
+    @property
+    def params(self):
+        """
+        a tuple of the possible parameter names for this ModelSequence
+        """
+        return tuple(self._params)
         
         
-    def getParam(self,x,y,parnames=None,contracty=True,interpolation='linear'):
+    def getParam(self,x,y,parnames=None,contracty=True):
         """
         `parnames` can be a single parameter name (output is then a scalar), a
         sequence of parameter names, or None to get a dictionary mapping 
         parameter names to their value at the provided point
         
+        `x` and `y` should be inputs and outputs, respectively, of the Model
+        objects that define this sequence.
+        
         if `contracty` is True, the output contraction will be applied to the 
         provided y-value.  Otherwise, it should be a scalar.
-        
-        Currently only 'linear' interpolation is supported
         """
         scalarout = dictout = False
         if parnames is None:
@@ -1852,8 +1892,35 @@ class ModelSequence(object):
         elif isinstance(parnames,basestring):
             parnames = [parnames]
             scalarout = True
+            
+        if contracty:
+            y = self._outcont(y)
         
-        raise NotImplementedError
+        if self._interpdir == 'y':
+            interpin = np.array([self._outcont(m(x)) for m in self._models])
+            interpat = y
+        elif self._interpdir == 'x':
+            interpin = np.array([m.inv(y) for m in self._models])
+            interpat = x
+        elif self._interpdir == 'perp':
+            ys = np.array([m(x)-y for m in self._models])
+            closestmodel = self._models[where(ys==np.min(ys))[0][0]]
+            dmod = closestmodel.derivative(x)
+            linmod = LinearModel(m=-1/dmod,b=0)
+            linmod.b = y - linmod(x)
+            interpin = (1 + linmod.m)**0.5*np.array([intersect_models(m,linmod) for m in self._models])
+            interpat = x
+        else:
+            raise RuntimeError('This point should never be reachable in getParam!')
+        #take parnames sequence and for each one add the result to the res list
+        res = []
+        for p in parnames:
+            interpout = np.array([getattr(m,p) for m in self._models])
+            if self._interp == 'linear':
+                res.append(np.interp(interpat,interpin,interpout))
+            else:
+                self._interp.fitData(interpin,interpout)
+                res.append(self._interp(interpat))
             
         if scalarout:
             return res[0]
@@ -1862,16 +1929,37 @@ class ModelSequence(object):
         else:
             return res
         
-        self.interpolation = interpolation
-        
-    def plot2D(self,axis=None,legend=False):
+    def plot1D(self,x1=None,x2=None,legend=False,clf=True,n=100,**kwargs):
         """
-        Plots the models in this ModelSequence in 2 dimensions
+        Plots the models in this ModelSequence assuming the models are 1D
         
-        `axis` determines which dimension of the input to use for the plot 
-        x-axis - if None, it is assumed to be a 1D array.  The output 
-        contraction function will be used to compute the y-axis.
+        `x1` and `x2` are the upper and lower limits to the plot.  If not 
+        specified, the rangehints for the models will be used
+        
+        The output contraction function will be used to compute the y-axis.
+        
+        `legend` determines if the legend with parameter value should be shown
+        on the plot
+        
+        kwargs are passed into the models' plot method (except for n)
         """
+        from matplotlib import pyplot as plt
+        
+        if clf:
+            plt.clf()
+          
+        if x1 is None:
+            x1 = np.min([m.rangehint[0] for m in self._models if m.rangehint is not None])
+        if x2 is None:    
+            x2 = np.max([m.rangehint[1] for m in self._models if m.rangehint is not None])
+        for m in self._models:
+            label = ','.join(['%s=%s'%t for t in m.pardict.iteritems()])
+            m.plot(x1,x2,n=n,label=label)
+        if legend is not False and legend is not None:
+            if legend is True:
+                plt.legend()
+            else:
+                plt.lengend(int(legend))
         
 class ModelGrid1D(object):
     """
