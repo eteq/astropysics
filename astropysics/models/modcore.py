@@ -1783,14 +1783,23 @@ class ModelSequence(object):
     A group of models with attached parameters that can be used to infer the
     parameter values at an arbitrary point in the space defined by the models.  
     """
-    def __init__(self,models,outputcontraction=None,interpolation='linear',
-                      interpolationdirection='y',offgrid=None):
+    def __init__(self,models,extraparams=None,outputcontraction=None,
+                      interpolation='linear',interpolationdirection='y',
+                      offgrid=None):
         """
-        `models` must be a sequence of models.  They must all have the same 
-        parameter names and have compatible inputs.  They are expected to be 
-        a "sequence" in the sense that they can be interpolated across to get a
-        meaningful parameter value between two models (e.g. double-valued model
-        grids are not meaningful)
+        `models` must be a sequence of models or a 2-tuple with the second 
+        element a dictionary.  If a model sequnce, they must all have the same 
+        parameter names and have compatible inputs.  Otherwise, the first 
+        element specifies the type of model to use, and the second is a 
+        dictionary mapping parameter names to a sequence of parameter values.
+
+        The resultant models are expected to be a "sequence" in the sense that 
+        they can be interpolated across to get a meaningful parameter value 
+        between two models (e.g. double-valued model grids are not meaningful)
+        
+        `extraparams` are parameters not a part of the model that are still 
+        available to be interpolated over.  It must be None or a dictionary with 
+        values that are the same length as the model sequence.
         
         `output contraction` can be either a function to call on the output of 
         the models returning a scalar, None to do nothing to the output, 'dist' 
@@ -1820,15 +1829,36 @@ class ModelSequence(object):
           linear interpolation, this takes the closest value.
           
         """        
+        from operator import isMappingType
+        
+        if len(models)==2 and isMappingType(models[1]):
+            modtype = get_model(models[0])
+            params = np.array(models[1].values())
+            params = [dict([(models[1].keys()[i],v)] for v in t) for i,t in enumerate(params.T)]
+            models = [modtype(**params[i]) for m in range(len(params))]
+        
         params = None
+        
         for m in models:
             if params is None:
                 params = m.params
             else:
                 if m.params != params:
                     raise ValueError('model %s does not match parameters for other models'%m)
+        
+        if extraparams is not None:
+            self._extraparams = {}
+            for n,ps in extraparams.iteritems():
+                arr = np.array(ps)
+                if extraparams[n].size != len(models):
+                    raise ValueError('too many/few extra parameters for parameter %s'%n)
+                self._extraparams[n] = arr
+        else:
+            self._extraparams = None
+        
         self._params = params
         self._models = tuple(models)
+        self._extraparams = extraparams
         
         self.outputcontraction = outputcontraction
         self.interpolation = interpolation
@@ -1890,6 +1920,14 @@ class ModelSequence(object):
         a tuple of the possible parameter names for this ModelSequence
         """
         return tuple(self._params)
+    
+    @property
+    def extraparams(self):
+        """
+        a tuple of the possible extra parameter names for this ModelSequence or
+        None if there are none
+        """
+        return None if self._extraparams is None else tuple(self._extraparams) 
         
         
     def getParam(self,x,y,parnames=None,contracty=True):
@@ -1911,6 +1949,10 @@ class ModelSequence(object):
         elif isinstance(parnames,basestring):
             parnames = [parnames]
             scalarout = True
+            
+        for p in parnames:
+            if p not in self._params and p not in self._extraparams:
+                raise ValueError('invalid parameter %s'%p)
             
         if contracty:
             y = self._outcont(y)
@@ -1948,7 +1990,11 @@ class ModelSequence(object):
                 else:
                     raise RuntimeError('This point should never be reachable in getParam!')
         for p in parnames:
-            interpout = np.array([getattr(m,p) for m in self._models])[sorti]
+            if p in self._params:
+                interpout = np.array([getattr(m,p) for m in self._models])[sorti]
+            else: #instead in _extraparams
+                interpout = self._extraparams[p][sorti]
+                
             if self._interp == 'linear':
                 res.append(np.interp(interpat,interpin,interpout))
             else:
@@ -1961,6 +2007,15 @@ class ModelSequence(object):
             return dict([(p,val) for p in zip(parnames,res)])
         else:
             return res
+        
+    def getParams(self,xs,ys,parnames=None,contracty=True):
+        """
+        Get parameters for an array of  inputs - `xs` and `ys` should be 
+        matching sequences.  For more info, see ModelSequence.getParam
+        """
+        if len(xs) != len(ys):
+            raise ValueError("xs and ys don't match") 
+        return np.array([self.getParam(x,y,parnames,contracty) for x,y in zip(xs,ys)])
         
     def plot1D(self,x1=None,x2=None,legend=False,clf=True,n=100,**kwargs):
         """
@@ -2005,98 +2060,7 @@ class ModelSequence(object):
             else:
                 plt.lengend(int(legend))
         
-class ModelGrid1D(object):
-    """
-    A set of models that are matching types and represnt a grid of parameter
-    values.  The main purpose is to allow the grid to be inverted to extract
-    parameter values from the grid
-    """
-    
-    def __init__(self,models,nmodels=None,extraparams={},**params):
-        """
-        models can be a sequence of models (must be the same type) or a model
-        type.  If a type, the number of models to generate will be inferred
-        from the parameters (or nmodels if the parameters are all scalar)
-        """
-        from operator import isSequenceType
-        
-        n = nmodels
-        if isSequenceType(models) and not isinstance(models,basestring):
-            for i,m in enumerate(models):
-                if not isinstance(m,ParametricModel):
-                    raise TypeError('Invalid model given as sequence index %i'%i)
-            if n is not None and n != len(models):
-                raise ValueError('n does not match the number of models')
-            n = len(models)
-            modcls= None
-        else:
-            modcls = get_model(models)
-            d = params.copy()
-            d.update(extraparams)
-            for p,pv in d.iteritems():
-                if isSequenceType(pv):
-                    nn = len(pv)
-                    if n is not None:
-                        if n != nn:
-                            raise ValueError('param %s does not match previous value'%p)
-                    else:
-                        n = len(pv)
-        if n is None:
-            raise ValueError('must specify n if nothing else is a sequence')
-                
-        if modcls is not None:
-            models = [modcls() for i in range(n)]
-            
-        extraparams = dict([(p,pv) if isSequenceType(pv) else (p,pv*np.ones(n))for p,pv in extraparams.iteritems()])    
-        params = dict([(p,pv) if isSequenceType(pv) else (p,pv*np.ones(n))for p,pv in params.iteritems()]) 
-        
-        for i,m in enumerate(models):
-            for p,pv in params.iteritems():
-                setattr(m,p,pv[i])
-            
-        self.models = models
-        self.extraparams = extraparams
-        
-        self.interpmethod = 'lineary'
-        
-    def getParam(self,x,y,parname):
-        """
-        computes the value of the requested parameter that interpolates onto
-        the provided point
-        """        
-        isscalar = np.isscalar(x)
-        
-        x = np.atleast_1d(x)
-        y = np.atleast_1d(y)
-        if x.shape != y.shape:
-            raise ValueError("x and y do not match")
-        
-        if self.interpmethod == 'lineary':
-            modys = np.array([m(x) for m in self.models])
-            if parname in self.extraparams:
-                ps = self.extraparams[parname]
-            else:
-                ps = [getattr(m,parname) for m in self.models]
-            
-            res = np.array([np.interp(y[i],modys[:,i],ps) for i,xi in enumerate(x)])
-        elif self.interpmethod == 'linearx':
-            raise NotImplementedError('linearx not ready')
-        else:
-            raise NotImplementedError('invalid interpmethod')
-        
-        if isscalar:
-            return res[0]
-        else:
-            return res
-        
-    def plot(self,*args,**kwargs):
-        from matplotlib import pyplot as plt
-        
-        if kwargs.pop('clf',True):
-            plt.clf()
-        kwargs['clf'] = False
-        for m in self.models:
-            m.plot(*args,**kwargs)
+
 
 class InputCoordinateTransformer(object):
     """
