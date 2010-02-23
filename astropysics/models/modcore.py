@@ -1784,7 +1784,7 @@ class ModelSequence(object):
     parameter values at an arbitrary point in the space defined by the models.  
     """
     def __init__(self,models,outputcontraction=None,interpolation='linear',
-                      interpolationdirection='y'):
+                      interpolationdirection='y',offgrid=None):
         """
         `models` must be a sequence of models.  They must all have the same 
         parameter names and have compatible inputs.  They are expected to be 
@@ -1801,7 +1801,8 @@ class ModelSequence(object):
         along the y-axis, or a 1D Model that will be fit with fitData on the 
         contracted outputs.
         
-        `interpolationdirection` can be:
+        `interpolationdirection` determines the direction along which 
+        interpolation is to be performed, and can be:
         
         * 'y': interpolate along the output axis (by far the fastest method)
         * 'x': interpolate along the input axis - requires that inv be defined
@@ -1809,6 +1810,15 @@ class ModelSequence(object):
         * 'perp': interpolate along the perpendicular of the tangent line for 
                   the closest model to the data point.  Only meaningful for 
                   FunctionModel1D Models.
+                  
+        `offgrid` determines the behavior if a location is requested that is 
+        beyond the limits of the model sequence.  It can be:
+        
+        * 'raise': raises a ValueError
+        * 'warn': issue a warning
+        * None: just output whatever the interpolating function provides - for 
+          linear interpolation, this takes the closest value.
+          
         """        
         params = None
         for m in models:
@@ -1823,6 +1833,7 @@ class ModelSequence(object):
         self.outputcontraction = outputcontraction
         self.interpolation = interpolation
         self.interpolationdirection = interpolationdirection
+        self.offgrid = offgrid
         
     
     def _getOutputcontraction(self):
@@ -1847,7 +1858,7 @@ class ModelSequence(object):
     def _setInterpolation(self,val):
         if isinstance(val,basestring):
             if val == 'linear' or val == 'linearinterp':
-                self._interp = 'linearinterp'
+                self._interp = 'linear'
             else:
                 raise ValueError('invalid interpolation string value %s'%val)
         elif isinstance(val,ParametricModel):
@@ -1863,6 +1874,14 @@ class ModelSequence(object):
             raise ValueError('invalid interpolation direction %s requested'%val)
         self._interpdir = val
     interpolationdirection = property(_getInterpolationdirection,_setInterpolationdirection,doc=None)
+    
+    def _getOffgrid(self):
+        return self._offgrid
+    def _setOffgrid(self,val):
+        if val not in ('raise','warn',None):
+            raise ValueError("invalid value for offgrid - must be 'raise', 'warn', or None")
+        self._offgrid = val
+    offgrid = property(_getOffgrid,_setOffgrid,doc=None)
     
     
     @property
@@ -1903,19 +1922,33 @@ class ModelSequence(object):
             interpin = np.array([m.inv(y) for m in self._models])
             interpat = x
         elif self._interpdir == 'perp':
+            raise NotImplementedError('perp interp direction not working yet')
+            from .modbuiltins import LinearModel
             ys = np.array([m(x)-y for m in self._models])
-            closestmodel = self._models[where(ys==np.min(ys))[0][0]]
+            closestmodel = self._models[np.where(ys==np.min(ys))[0][0]]
             dmod = closestmodel.derivative(x)
             linmod = LinearModel(m=-1/dmod,b=0)
             linmod.b = y - linmod(x)
-            interpin = (1 + linmod.m)**0.5*np.array([intersect_models(m,linmod) for m in self._models])
+            interpin = (1 + linmod.m)**0.5*np.array([intersect_models(m,linmod,bounds=bnds(x-dmod,x+dmod)) for m in self._models]).ravel()
             interpat = x
         else:
             raise RuntimeError('This point should never be reachable in getParam!')
+        
         #take parnames sequence and for each one add the result to the res list
         res = []
+        sorti = np.argsort(interpin)
+        interpin = interpin[sorti]
+        if self._offgrid is not None:
+            if interpat <  interpin[0] or interpat > interpin[-1]:
+                if self._offgrid == 'warn':
+                    from warnings import warn
+                    warn('off grid in getParam input %s'%interpat)
+                elif self._offgrid == 'raise':
+                    raise ValueError('off grid in getParam input %s'%interpat)
+                else:
+                    raise RuntimeError('This point should never be reachable in getParam!')
         for p in parnames:
-            interpout = np.array([getattr(m,p) for m in self._models])
+            interpout = np.array([getattr(m,p) for m in self._models])[sorti]
             if self._interp == 'linear':
                 res.append(np.interp(interpat,interpin,interpout))
             else:
@@ -1949,12 +1982,23 @@ class ModelSequence(object):
             plt.clf()
           
         if x1 is None:
-            x1 = np.min([m.rangehint[0] for m in self._models if m.rangehint is not None])
-        if x2 is None:    
-            x2 = np.max([m.rangehint[1] for m in self._models if m.rangehint is not None])
+            x1 = [m.rangehint[0] for m in self._models if m.rangehint is not None]
+            if len(x1)>0:
+                x1 = np.min(x1)
+            else:
+                raise ValueError('could not infer range from models - must provide x1')
+        if x2 is None:  
+            x2 = [m.rangehint[0] for m in self._models if m.rangehint is not None]
+            if len(x2)>0:
+                x2 = np.max(x2)
+            else:
+                raise ValueError('could not infer range from models - must provide x2')  
+        kwargs['n'] = n
+        kwargs['clf'] = False
         for m in self._models:
             label = ','.join(['%s=%s'%t for t in m.pardict.iteritems()])
-            m.plot(x1,x2,n=n,label=label)
+            kwargs['label']=label
+            m.plot(x1,x2,**kwargs)
         if legend is not False and legend is not None:
             if legend is True:
                 plt.legend()
@@ -2885,8 +2929,8 @@ def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     from scipy.optimize import brentq
     
     if bounds is None:
-        data1 = m1.data[:2] if hasattr(m1,'data') else None
-        data2 = m2.data[:2] if hasattr(m2,'data') else None
+        data1 = m1.data[:2] if hasattr(m1,'data') and m1.data is not None else None
+        data2 = m2.data[:2] if hasattr(m2,'data') and m2.data is not None else None
         
         if data1 is None and data2 is None:
             raise ValueError('must supply bounds if neither model has data')

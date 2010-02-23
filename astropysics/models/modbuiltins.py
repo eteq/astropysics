@@ -95,7 +95,7 @@ class LinearModel(FunctionModel1DAuto):
     fittype = 'basic'
     
     def derivative(self,x,dx=1):
-        return np.ones_like(x)*m
+        return np.ones_like(x)*self.m
     
     def integrate(self,lower,upper):
         m,b = self.m,self.b
