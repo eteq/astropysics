@@ -1264,7 +1264,30 @@ class FunctionModel1D(FunctionModel):
         self.lastOpt = res
         return res[0]
     
-    
+    def _getInvertedRangehint(self):
+        """
+        computes the range hint taking into account input filters
+        """
+        rh = self.rangehint
+        
+        if rh is None:
+            return None
+        else:
+            #invert the rangehint if the input call type is a recognized string
+            callin = self.getCall()[1] if self.getCall() is not None else None
+            if callable(callin):
+                from warnings import warn
+                warn('Could not infer inverse of input filter, so assumed range may be incorrect')
+            elif callin == 'log':
+                rh = 10**np.array(rh)
+            elif callin == 'ln':
+                rh = np.exp(rh)
+            elif callin == 'pow':
+                rh = np.log10(rh)
+            elif callin == 'exp':
+                rh = np.log(rh)
+            
+            return rh
         
     def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
               powerx=False,powery=False,deriv=None,data='auto',*args,**kwargs):
@@ -1287,7 +1310,7 @@ class FunctionModel1D(FunctionModel):
         be of the form (x,y) or (x,y,xerr,yerr)
         
         logplot determines whether or not to plot on a log scale, and powerx and
-        poweru determine if the model points should be used as powers (base 10)
+        powery determine if the model points should be used as powers (base 10)
         before plotting
         """
         from matplotlib import pyplot as plt
@@ -1309,14 +1332,16 @@ class FunctionModel1D(FunctionModel):
                     upper=np.max(data[0])
             
             if lower is None or upper is None:
-                rh = self.rangehint
+                rh = self._getInvertedRangehint()
                 if rh is None:
                     raise ValueError("Can't choose limits for plotting without data or a range hint")
-                else:
-                    if lower is None:
-                        lower = rh[0]
-                    if upper is None:
-                        upper = rh[1]
+                
+                
+                    
+                if lower is None:
+                    lower = rh[0]
+                if upper is None:
+                    upper = rh[1]
             
             if 'x' in logplot:
                 x = np.logspace(np.log10(lower),np.log10(upper),n)
@@ -2033,33 +2058,52 @@ class ModelSequence(object):
         """
         from matplotlib import pyplot as plt
         
-        if clf:
-            plt.clf()
-          
-        if x1 is None:
-            x1 = [m.rangehint[0] for m in self._models if m.rangehint is not None]
-            if len(x1)>0:
-                x1 = np.min(x1)
+        isinter = plt.isinteractive()
+        try:
+            plt.ioff()
+            if clf:
+                plt.clf()
+                
+              
+            if x1 is None:
+                x1 = [m._getInvertedRangehint()[0] for m in self._models if m._getInvertedRangehint() is not None]
+                if len(x1)>0:
+                    x1 = np.min(x1)
+                else:
+                    raise ValueError('could not infer range from models - must provide x1')
+            if x2 is None:  
+                x2 = [m._getInvertedRangehint()[1] for m in self._models if m._getInvertedRangehint() is not None]
+                if len(x2)>0:
+                    x2 = np.max(x2)
+                else:
+                    raise ValueError('could not infer range from models - must provide x2')  
+            kwargs['n'] = n
+            kwargs['clf'] = False
+            
+            #allow legend to be a string 'par1,par2' specifying which parameters to show
+            if legend and isinstance(legend,basestring):
+                labelpars = legend.split(',')
             else:
-                raise ValueError('could not infer range from models - must provide x1')
-        if x2 is None:  
-            x2 = [m.rangehint[0] for m in self._models if m.rangehint is not None]
-            if len(x2)>0:
-                x2 = np.max(x2)
-            else:
-                raise ValueError('could not infer range from models - must provide x2')  
-        kwargs['n'] = n
-        kwargs['clf'] = False
-        for m in self._models:
-            label = ','.join(['%s=%s'%t for t in m.pardict.iteritems()])
-            kwargs['label']=label
-            m.plot(x1,x2,**kwargs)
-        if legend is not False and legend is not None:
-            if legend is True:
+                labelpars = list(m.pardict)
+                if self._extraparams is not None:
+                    labelpars.extend(self._extraparams)
+                    
+            for i,m in enumerate(self._models):
+                label = ['%s=%.2g'%t for t in m.pardict.iteritems() if t[0] in labelpars]
+                for ep,pv in self._extraparams.iteritems():
+                    if ep in labelpars:
+                        label.append('%s=%.2g'%(ep,pv[i]))
+                label = ','.join(label)
+                kwargs['label']=label
+                m.plot(x1,x2,**kwargs)
+            
+            if legend:
                 plt.legend()
-            else:
-                plt.lengend(int(legend))
-        
+                    
+            plt.show()
+            plt.draw()
+        finally:
+            plt.interactive(isinter)
 
 
 class InputCoordinateTransformer(object):
