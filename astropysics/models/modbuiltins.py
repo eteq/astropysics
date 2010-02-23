@@ -1181,7 +1181,7 @@ class NFWModel(FunctionModel1DAuto):
     
     @property
     def rangehint(self):
-        return 0,self.getRv()
+        return self.rc/1000,1000*self.rc
     
     def integrateSpherical(self,lower,upper,*args,**kwargs):
         """
