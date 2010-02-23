@@ -14,12 +14,14 @@ Note that some of these functions require the dateutil package
 #TODO: implement ability for Sites to translate ra/dec into alt/az given time/date
 #TODO: add options for Observatory class to include more useful information
 #TODO: exposure time calculator (maybe in phot instead?)
+#TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
 
 from __future__ import division,with_statement
 from .constants import pi
 import numpy as np
 
 from .utils import PipelineElement,DataObjectRegistry
+#from .models import FunctionModel1DAuto as _FunctionModel1DAuto
 
 def jd_to_gregorian(jd,bceaction=None,msecrounding = 1e-5):
     """
@@ -417,10 +419,8 @@ def __loadobsdb(sitereg):
 
 
 sites = DataObjectRegistry('sites',Site)
-#TODO: fix this to be better next time I visit
-sites['uciobs'] = Observatory(33.636198,117.83466,80,'PST','UC Irvine Observatory')
+sites['uciobs'] = Observatory(33.63614044191056,-117.83079922199249,80,'PST','UC Irvine Observatory')
 __loadobsdb(sites)
-
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 
 class Extinction(PipelineElement):
