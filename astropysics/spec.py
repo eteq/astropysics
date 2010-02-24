@@ -1256,18 +1256,18 @@ ABSpec = FunctionSpectrum(np.linspace(5e13,3e15,1024),lambda x:np.ones_like(x)*1
         
 class ModelSpectrum(FunctionSpectrum):
     """
-    A Spectrum that follows the provided astropysics.models.FunctionModel1D .
+    A Spectrum that follows the provided `astropysics.models.FunctionModel1D`
     
     noisefunc should be of the form nf(x,flux)
     
-    Attributes
-    ------------
     `noisetype` determines the noise model - can be:
+    
     *None: no noise
     *'poisson': poisson noise where the noisefunc determines the poissonian
     scale factor
     *'normal' or 'gauss': normally-distributed noise where the noisefunc 
     determines sigma
+    
     """
     def __init__(self,xi,model,noisetype=None,noisefunc=None,unit='wl'):     
         super(ModelSpectrum,self).__init__(xi,model,errf=None,ivarf=None,unit=unit)
