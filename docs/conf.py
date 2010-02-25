@@ -25,7 +25,7 @@ sys.path.insert(1,os.path.abspath('..')) #make sure it's on top except maybe loc
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinx.ext.todo', 'sphinx.ext.pngmath',
-              'sphinx.ext.inheritance_diagram']
+              'sphinx.ext.inheritance_diagram','sphinx.ext.coverage']
               #'matplotlib.sphinxext.plot_directive','matplotlib.sphinxext.ipython_console_highlighting']
 
 # Add any paths that contain templates here, relative to this directory.
@@ -200,3 +200,48 @@ latex_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {'http://docs.python.org/': None}
+
+todo_include_todos = 'dev' in release
+
+#<-------------Custom extension functionality-------------->
+from sphinx.ext.todo import Todo,todo_node,nodes
+from sphinx.pycode import ModuleAnalyzer,PycodeError
+
+class TodoModule(Todo):
+    required_arguments = 1
+    has_content = True
+    
+    def run(self):        
+        try:
+            modfn = ModuleAnalyzer.for_module(self.arguments[0]).srcname
+        except PycodeError,e:
+            warnstr = "can't find module %s for todomodule: %s"%(self.arguments[0],e)
+            return [self.state.document.reporter.warning(warnstr,lineno=self.lineno)]
+        
+        todolines = []
+        with open(modfn) as f:
+            for l in f:
+                if l.startswith('#TODO'):
+                    todolines.append(l)
+                    
+        todoreses = []
+        for tl in todolines:
+            text = tl.replace('#TODO:','').replace('#TODO','').strip()
+            env = self.state.document.settings.env
+
+            targetid = "todo-%s" % env.index_num
+            env.index_num += 1
+            targetnode = nodes.target('', '', ids=[targetid])
+            
+            admonition_node = todo_node(text)
+            self.state.nested_parse(self.content, self.content_offset, admonition_node)
+            admonition_node.line = self.lineno
+            
+            todoreses.append(targetnode)
+            todoreses.append(admonition_node)
+            
+        return todoreses[:2]
+
+def setup(app):
+
+    app.add_directive('todomodule', TodoModule) #add this directive to document TODO comments in the root of the module
