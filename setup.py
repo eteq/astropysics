@@ -12,7 +12,7 @@ setup(name='Astropysics',
       
       packages=find_packages(),
       package_data={'astropysics':['data/*']},
-      scripts=['scripts/spylot'],
+      scripts=['scripts/spylot','scripts/fitsinfo'],
       install_requires=['numpy','scipy'],
       provides=['astropysics'],
       extras_require={'plots':'matplotlib',
