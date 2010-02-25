@@ -98,7 +98,7 @@ def fpickle(object,fileorname,usecPickle=True,protocol=None,append=False):
     if protocol is None:
         protocol = pickle.HIGHEST_PROTOCOL
     
-   if isinstance(fileorname,basestring):
+    if isinstance(fileorname,basestring):
         f = open(filename,'a' if append else 'w')
         close = True
     else:
