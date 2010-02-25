@@ -322,16 +322,21 @@ class Spectrum(HasSpecUnits):
             state['_features'] = list(state['_features'])
         return state
     
-    def save(self,fn):
-        from cPickle import dump
-        with open(fn,'w') as f:
-            dump(self,f)
+    def save(self,fn,**kwargs):
+        """
+        Save this Spectrum as a pickled object with the provided file name.  
+        kwargs are passed into utils.fpickle
+        """
+        from .utils import fpickle
+        fpickle(self,fn,**kwargs)
     
     @staticmethod
     def load(fn):
-        from cPickle import load
-        with open(fn) as f:
-            obj = load(f)
+        """
+        Load a saved Spectrum from the given file
+        """
+        from .utils import funpickle
+        obj = funpickle(fn,0)
         if obj.__class__.__name__ != 'Spectrum':
             raise TypeError('file does not contain a Spectrum')
         return obj

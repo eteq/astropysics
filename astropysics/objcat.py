@@ -275,7 +275,7 @@ class CatalogNode(object):
             retvals = [v for v in retvals if v is not filterval]
         return retvals
     
-    def save(self,file,savechildren=True):
+    def save(self,file,savechildren=True,**kwargs):
         """
         save this node as a file with the given name or file-like object
         
@@ -284,9 +284,11 @@ class CatalogNode(object):
         
         Note that the parent and everything above this point will NOT be
         saved (when reloaded the parent will be None)
-        """
-        import cPickle
         
+        extra kwargs are passed into utils.fpickle
+        """
+        from .utils import fpickle
+
         oldpar = self._parent
         self._parent = None
         
@@ -295,13 +297,7 @@ class CatalogNode(object):
             self._children = []
           
         try:
-            pass
-            if isinstance(file,basestring):
-                #filename
-                with open(file,'w') as f:
-                    cPickle.dump(self,f,protocol = 0)
-            else:
-                cPickle.dump(self,file,protocol = 0)
+            fpickle(file,self,**kwargs)
         finally:
             self._parent = oldpar
             self._children = oldchildren

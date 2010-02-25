@@ -25,8 +25,92 @@ except ImportError: #support for earlier versions
     MutableMapping = type
     
 #<------------------------Python/generic utilities----------------------------->
+
+def funpickle(fileorname,number=0,usecPickle=True):
+    """
+    Unpickle a file specified by ``filename``, which can be either a
+    file name string or a file object, and return the pickled contents.
     
+    ``number`` specifies the number of objects to return -- if greater than 0,
+    a list of length equal to number is returned.  If exactly 0, just a single 
+    call to pickle.load is performed and the result is returned (e.g. the first 
+    object in the file).  If <0, all objects in the file are retreived and a 
+    list of all of them is returned.
     
+    ``usecPickle`` determines if the cPickle module is to be used in place of
+    pickle (generally cPickle is faster)
+    """
+    if Pickle:
+        import cPickle as pickle
+    else:
+        import pickle
+        
+    if isinstance(fileorname,basestring):
+        f = open(filename,'r')
+        close = True
+    else:
+        f = fileorname
+        close = False
+        
+    try:
+        if number > 0:
+            res = []
+            for i in range(number):
+                res.append(pickle.load(f))
+        elif number < 0:
+            res = []
+            eof = False
+            while not eof:
+                try:
+                    res.append(pickle.load(f))
+                except EOFError:
+                    eof = True
+        else: #number==0
+            res = pickle.load(f)
+    finally:
+        if close:
+            f.close()
+            
+    return res
+
+def fpickle(object,fileorname,usecPickle=True,protocol=None,append=False):
+    """
+    Pickle the ``object`` into the file given by ``fileorname``, which can be
+    either a file name string or a file object
+    
+    if ``append`` is True, the object is appended to the end of the file, 
+    otherwise the file will be replaced with a new one that the object will be
+    pickled into.
+    
+    ``protocol`` determines which pickle protocol to use - see the pickle module
+    for details on these options.  If None, the most recent protocol will be 
+    used.
+    
+    ``usecPickle`` determines if the cPickle module is to be used in place of
+    pickle (generally cPickle is faster)
+    """
+    
+    if usecPickle:
+        import cPickle as pickle
+    else:
+        import pickle
+        
+    if protocol is None:
+        protocol = pickle.HIGHEST_PROTOCOL
+    
+   if isinstance(fileorname,basestring):
+        f = open(filename,'a' if append else 'w')
+        close = True
+    else:
+        f = fileorname
+        close = False 
+        
+    try:
+        pickle.dump(object,f,protocol=protocol)
+    finally:
+        if close:
+            f.close()
+
 def check_type(types,val,acceptnone=True):
     """
     Call this function to check if the value matches the provided types.
