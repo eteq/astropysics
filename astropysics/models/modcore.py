@@ -2154,14 +2154,21 @@ class ModelSequence(object):
                 labelpars = list(m.pardict)
                 if self._extraparams is not None:
                     labelpars.extend(self._extraparams)
-                    
+            
+            fixedlabel = kwargs.pop('label',None)        
             for i,m in enumerate(self._models):
-                label = ['%s=%.2g'%t for t in m.pardict.iteritems() if t[0] in labelpars]
-                for ep,pv in self._extraparams.iteritems():
-                    if ep in labelpars:
-                        label.append('%s=%.2g'%(ep,pv[i]))
-                label = ','.join(label)
-                kwargs['label']=label
+                if fixedlabel is None:
+                    label = ['%s=%.2g'%t for t in m.pardict.iteritems() if t[0] in labelpars]
+                    for ep,pv in self._extraparams.iteritems():
+                        if ep in labelpars:
+                            label.append('%s=%.2g'%(ep,pv[i]))
+                    label = ','.join(label)
+                    kwargs['label']=label
+                elif fixedlabel is not True:
+                    kwargs['label'] = fixedlabel
+                    fixedlabel = True
+                elif 'label' in kwargs:
+                    del kwargs['label']
                 m.plot(x1,x2,**kwargs)
             
             if legend:
