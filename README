@@ -8,7 +8,7 @@ http://physics.uci.edu/~etolleru/software.html
 Installation
 ------------
 
-If you have numpy () and scipy () installed, just do
+If you have numpy (http://numpy.scipy.org/) and scipy (http://www.scipy.org/) installed, just do
 
 python setup.py install
 
