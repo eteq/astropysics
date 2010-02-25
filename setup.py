@@ -11,7 +11,7 @@ setup(name='Astropysics',
       description='Astrophysics libraries for Python',
       
       packages=find_packages(),
-      package_data={'astropysics':'data/*'},
+      package_data={'astropysics':['data/*']},
       scripts=['scripts/spylot'],
       install_requires=['numpy','scipy'],
       provides=['astropysics'],
