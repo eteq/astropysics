@@ -1,8 +1,8 @@
 
-Module API
-==========
+Core Modules
+============
 
-The modules with the non-GUI functionality of astropysics are documented below.
+The modules forming the core of astropysics' functionality are documented below.  These are primarily useful in a script or interpreter setting, and hence are non-GUI.
 
 .. toctree::
    :maxdepth: 2

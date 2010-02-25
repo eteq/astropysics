@@ -25,7 +25,7 @@ sys.path.insert(1,os.path.abspath('..')) #make sure it's on top except maybe loc
 # Add any Sphinx extension module names here, as strings. They can be extensions
 # coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinx.ext.todo', 'sphinx.ext.pngmath',
-              'sphinx.ext.inheritance_diagram','sphinx.ext.coverage']
+              'sphinx.ext.inheritance_diagram','sphinx.ext.coverage','sphinx.ext.ifconfig']
               #'matplotlib.sphinxext.plot_directive','matplotlib.sphinxext.ipython_console_highlighting']
 
 # Add any paths that contain templates here, relative to this directory.
@@ -233,14 +233,25 @@ class TodoModule(Todo):
             env.index_num += 1
             targetnode = nodes.target('', '', ids=[targetid])
             
-            admonition_node = todo_node(text)
-            self.state.nested_parse(self.content, self.content_offset, admonition_node)
-            admonition_node.line = self.lineno
+            td_node = todo_node(text)
+            
+            title_text = _('Module Todo')
+            textnodes, messages = self.state.inline_text(title_text, self.lineno)
+            td_node += nodes.title(title_text, '', *textnodes)
+            td_node += messages
+            if 'class' in self.options:
+                classes = self.options['class']
+            else:
+                classes = ['admonition-' + nodes.make_id(title_text)]
+            td_node['classes'] += classes
+            
+            td_node.append(nodes.paragraph(text,text))
+            td_node.line = self.lineno
             
             todoreses.append(targetnode)
-            todoreses.append(admonition_node)
-            
-        return todoreses[:2]
+            todoreses.append(td_node)
+        return todoreses
+
 
 def setup(app):
 

@@ -1,3 +1,4 @@
+Making output directory...
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:4: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:6: (WARNING/2) Definition list ends without a blank line; unexpected unindent.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd:5: (ERROR/3) Unexpected indentation.
@@ -7,7 +8,7 @@
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:11: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:13: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:15: (WARNING/2) Definition list ends without a blank line; unexpected unindent.
-/home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.CCDImage:4: (ERROR/3) Unexpected indentation.
+:0: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageBiasSubtractor:18: (WARNING/2) Block quote ends without a blank line; unexpected unindent.
@@ -31,7 +32,8 @@
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.ImageFlattener:3: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/ccd.py:docstring of astropysics.ccd.load_image_file:5: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/coords.py:docstring of astropysics.coords:3: (ERROR/3) Unexpected indentation.
-:0: (ERROR/3) Unexpected indentation.
+/home/erik/src/astropysics/docs/coremods/models.rst:18: (WARNING/2) No classes found for inheritance diagram
+/home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.BarrenNode:3: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.Catalog.extractField:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.Catalog.extractField:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.Catalog.extractField:15: (WARNING/2) Inline emphasis start-string without end-string.
@@ -44,7 +46,7 @@
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:5: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:5: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:5: (WARNING/2) Inline emphasis start-string without end-string.
-<autodoc>:0: (ERROR/3) Unexpected indentation.
+/home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.BarrenNode:4: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.CatalogNode.visit:15: (WARNING/2) Inline emphasis start-string without end-string.
@@ -52,7 +54,7 @@
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.DerivedValue:17: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.DerivedValue:17: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.DerivedValue:17: (WARNING/2) Inline emphasis start-string without end-string.
-<autodoc>:0: (ERROR/3) Unexpected indentation.
+/home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.BarrenNode:6: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:18: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:18: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:18: (WARNING/2) Inline emphasis start-string without end-string.
@@ -60,7 +62,7 @@
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:24: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:26: (WARNING/2) Definition list ends without a blank line; unexpected unindent.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractField:26: (WARNING/2) Inline emphasis start-string without end-string.
-/home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.BarrenNode:2: (ERROR/3) Unexpected indentation.
+<autodoc>:0: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractFieldAtNode:10: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractFieldAtNode:10: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.extractFieldAtNode:10: (WARNING/2) Inline emphasis start-string without end-string.
@@ -74,7 +76,7 @@
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.setToSourceAtNode:4: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.setToSourceAtNode:4: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.FieldNode.setToSourceAtNode:4: (WARNING/2) Inline emphasis start-string without end-string.
-/home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.BarrenNode:2: (ERROR/3) Unexpected indentation.
+<autodoc>:0: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.StructuredFieldNode:9: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.StructuredFieldNode:9: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/objcat.py:docstring of astropysics.objcat.StructuredFieldNode:9: (WARNING/2) Inline emphasis start-string without end-string.
@@ -93,7 +95,7 @@
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:7: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:7: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:7: (WARNING/2) Inline emphasis start-string without end-string.
-/home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:5: (ERROR/3) Unexpected indentation.
+<autodoc>:0: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:15: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:18: (WARNING/2) Block quote ends without a blank line; unexpected unindent.
 :0: (WARNING/2) Inline emphasis start-string without end-string.
@@ -103,7 +105,7 @@
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band.alignToBand:11: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band.plot:6: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band.plot:6: (WARNING/2) Inline emphasis start-string without end-string.
-/home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.Band:4: (ERROR/3) Unexpected indentation.
+:0: (ERROR/3) Unexpected indentation.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.ModelPhotometry.simulate:17: (WARNING/2) Block quote ends without a blank line; unexpected unindent.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.PhotObservation.plot:3: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/phot.py:docstring of astropysics.phot.PhotObservation.plot:3: (WARNING/2) Inline emphasis start-string without end-string.
@@ -131,4 +133,3 @@
 /home/erik/src/astropysics/astropysics/gui/spectarget.py:docstring of astropysics.gui.spectarget.MaskMaker:1: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/gui/spectarget.py:docstring of astropysics.gui.spectarget.MaskMaker:1: (WARNING/2) Inline emphasis start-string without end-string.
 /home/erik/src/astropysics/astropysics/gui/spectarget.py:docstring of astropysics.gui.spectarget.MaskMaker:1: (WARNING/2) Inline emphasis start-string without end-string.
-/home/erik/src/astropysics/docs/index.rst:7: (WARNING/2) Title underline too short.
