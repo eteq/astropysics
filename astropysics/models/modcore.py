@@ -48,6 +48,8 @@ class ParametricModel(object):
     """
     __metaclass__ = ABCMeta
     
+    _data = None
+    
     @abstractmethod
     def __call__(self,x):
         raise NotImplementedError
@@ -65,6 +67,28 @@ class ParametricModel(object):
     pardict = property(_getPardict,_setPardict,doc="""
         a dictionary of the parameter names and values
         """)
+        
+    def _getData(self):
+        return self._data
+    def _setData(self,val):
+        if val is None:
+            self._data = None
+        else:
+            try:
+                if not (2 <= len(val) <= 3):
+                    raise ValueError('input model data in invalid form - must be 2 or 3-sequence')
+                else:
+                    ind = np.array(val[0],copy=False)
+                    outd = np.array(val[1],copy=False)
+                    if len(val) < 3 or val[2] is None:
+                        ws = None
+                    else:
+                        ws = np.array(val[2],copy=False)
+                    self._data = (ind,outd,ws)
+            except TypeError,e:
+                e.args = ('invalid type for model data',)
+                raise
+    data = property(_getData,_setData,doc='data should be either None, or (datain,dataout,weights)')
     
     def inv(self,output,*args,**kwargs):
         """
@@ -74,6 +98,8 @@ class ParametricModel(object):
         the provided data set
         """
         raise ModelTypeError('Model is not invertible')
+    
+    
     
 
 class _AutoParameter(object):
@@ -250,7 +276,6 @@ class FunctionModel(ParametricModel):
     """
     
     defaultparval = 1
-    data = None #data should be either None, or (datain,dataout,weights)
     
     @abstractmethod
     def f(self,x,*params):
@@ -264,7 +289,6 @@ class FunctionModel(ParametricModel):
         order they are given in the _pars sequence.
         """
         raise NotImplementedError
-    
     
     
     def _filterfunc(self,*args,**kwargs):
@@ -1307,7 +1331,7 @@ class FunctionModel1D(FunctionModel):
         scatter. If it is 'auto', the last data input to fitData will be used
         (if savedata was true).  If it evaluates to False, no data will be 
         plotted and lower and upper must be set.  the data set can either
-        be of the form (x,y) or (x,y,xerr,yerr)
+        be of the form (x,y) or (x,y,(xerr,yerr))
         
         logplot determines whether or not to plot on a log scale, and powerx and
         powery determine if the model points should be used as powers (base 10)
@@ -1397,12 +1421,11 @@ class FunctionModel1D(FunctionModel):
                     plt.scatter(**data)
                 else:
                     plt.scatter(data[0],data[1],c='r',zorder=10)
-                    if len(data)>2:
-                        if len(data)==3:
-                            if data[2] is not None: 
-                                plt.errorbar(data[0],data[1],data[2][1],data[2][0],fmt=None,ecolor='k')
+                    if data[2] is not None:
+                        if len(data[2].shape)>1:
+                            plt.errorbar(data[0],data[1],data[2][1],data[2][0],fmt=None,ecolor='k')
                         else:
-                            plt.errorbar(data[0],data[1],data[3],data[2],fmt=None,ecolor='k')
+                            plt.errorbar(data[0],data[1],data[2],fmt=None,ecolor='k')
             plt.xlim(lower,upper)
             
             if self.xaxisname:
@@ -1949,17 +1972,57 @@ class ModelSequence(object):
     @property
     def extraparams(self):
         """
-        a tuple of the possible extra parameter names for this ModelSequence or
+        A tuple of the possible extra parameter names for this ModelSequence or
         None if there are none
         """
         return None if self._extraparams is None else tuple(self._extraparams) 
+    
+    def getParamArray(self,parnames):
+        """
+        Generates an array of values for the requested parameter corresponding to
+        each of the models.
         
+        `parnames` can be a single parameter name (output is then a scalar), a
+        stirng with a comma-seperated list of parameters, a sequence of 
+        parameter names, or None to get a dictionary mapping parameter names
+        to their arrays
+        """    
+        scalarout = dictout = False
+        if parnames is None:
+            parnames = self._models[0].params
+            if self._extraparams is not None:
+                parnames.extend(self.extraparams)
+            dictout = True
+        elif isinstance(parnames,basestring):
+            parnames = parnames.split(',')
+            if len(parnames) == 1:
+                scalarout = True
+            
+        res = []
+        for p in parnames:
+            if p in self.params:
+                res.append(np.array([getattr(m,p) for m in self._models]))
+            elif p in self._extraparams:
+                res.append(np.array(self._extraparams[p]))
+            else:
+                raise ValueError('invalid parameter name %s requested'%p)
+            
+        if dictout:
+            return dict([t for t in zip(parnames,res)])
+        elif scalarout:
+            return res[0]
+        else:
+            return res
         
     def getParam(self,x,y,parnames=None,contracty=True):
         """
+        Computes the value of a requested parameter at the provided point in 
+        the input/output space of the models.
+        
         `parnames` can be a single parameter name (output is then a scalar), a
-        sequence of parameter names, or None to get a dictionary mapping 
-        parameter names to their value at the provided point
+        stirng with a comma-seperated list of parameters, a sequence of 
+        parameter names, or None to get a dictionary mapping parameter names
+        to their value at the provided point
         
         `x` and `y` should be inputs and outputs, respectively, of the Model
         objects that define this sequence.
@@ -1970,10 +2033,13 @@ class ModelSequence(object):
         scalarout = dictout = False
         if parnames is None:
             parnames = self._models[0].params
+            if self._extraparams is not None:
+                parnames.extend(self.extraparams)
             dictout = True
         elif isinstance(parnames,basestring):
-            parnames = [parnames]
-            scalarout = True
+            parnames = parnames.split(',')
+            if len(parnames) == 1:
+                scalarout = True
             
         for p in parnames:
             if p not in self._params and p not in self._extraparams:
@@ -2029,14 +2095,15 @@ class ModelSequence(object):
         if scalarout:
             return res[0]
         elif dictout:
-            return dict([(p,val) for p in zip(parnames,res)])
+            return dict([t for t in zip(parnames,res)])
         else:
             return res
         
     def getParams(self,xs,ys,parnames=None,contracty=True):
         """
         Get parameters for an array of  inputs - `xs` and `ys` should be 
-        matching sequences.  For more info, see ModelSequence.getParam
+        matching sequences which each item matches the input and ouptut types of 
+        the models.  For more info, see ModelSequence.getParam
         """
         if len(xs) != len(ys):
             raise ValueError("xs and ys don't match") 
@@ -2422,10 +2489,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                     datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
                 maxmind = (np.max(dataval),np.min(dataval))
             elif datarange is None:
-                if self.rangehint is None:
-                    raise ValueError("Can't choose limits for plotting without data or a range hint")
-                else:
-                    datarange = self.rangehint
+                raise ValueError("Can't choose limits for plotting without data or a range hint")
                 
             
             grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
@@ -2504,10 +2568,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
             maxmind = (np.max(data[1]),np.min(data[1]))
         elif datarange is None:
-            if self.rangehint is None:
-                raise ValueError("Can't choose limits for plotting without data or a range hint")
-            else:
-                datarange = self.rangehint
+            raise ValueError("Can't choose limits for plotting without data or a range hint")
             maxmind = None
         
         grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
@@ -2519,7 +2580,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
 #            norm = plt.normalize(np.min(res),np.max(res))
         
         if clf:
-            plt.clf()
+            M.clf()
             
         M.mesh(grid[0],grid[1],res)
         
@@ -2534,7 +2595,6 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 kwscat = dict(data)
             else:
                 kwscat = {}
-            kwscat.setdefault('norm',norm)
             kwscat.setdefault('c',data[1])
             M.points3d(xd,yd,**kwscat)
                 
