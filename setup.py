@@ -23,7 +23,7 @@ setup(name='Astropysics',
       
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
-      licence = 'Apache License 2.0',
+      license = 'Apache License 2.0',
       url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
       
       
