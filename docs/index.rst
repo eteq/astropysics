@@ -9,7 +9,7 @@ Astropysics |version|: astrophysics utilities for python
 :Author: Erik Tollerud
 
 This document currently just describes the raw API for astropysics.  
-Examples and prettification like are on the todo list.
+Examples and prettification of various sorts are on the todo list.
 
 .. toctree::
    :maxdepth: 2
