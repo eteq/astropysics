@@ -9,8 +9,7 @@ Some of the calculations involved make use of the currently selected cosmology
 particularly strange cosmology is in use.
 """
 
-#TODO:  unified transformation framework possibly based on Kapteyn or other outside packages
-#TODO: WCSlib support
+#TODO: WCSlib or similar support - Kapteyn?
 
 
 from __future__ import division,with_statement
@@ -157,7 +156,7 @@ class AngularCoordinate(object):
         """
         self._range = None
         
-        if inpt.__class__.__name__=='AngularCoordinate':
+        if isinstance(inpt,AngularCoordinate):
             self._decval=inpt._decval
         elif isinstance(inpt,basestring):
             sexig=self.__sexre.match(inpt)
@@ -192,9 +191,12 @@ class AngularCoordinate(object):
                 self.degminsec=int(t[0]),int(t[1]),float(t[2])
                 self._decval *= sgn
             elif dm:
-                self.degrees=float(hm.group(1))
+                self.degrees=float(dm.group(1))
             else:
-                raise ValueError('Unrecognized string format '+inpt)
+                try:
+                    self.degrees = float(inpt)
+                except:
+                    raise ValueError('Unrecognized string format '+inpt)
             
         elif hasattr(inpt,'__iter__') and len(inpt)==3:
             self.degminsec=inpt
@@ -371,7 +373,7 @@ class AngularSeperation(AngularCoordinate):
     __slots__ = ('start',)
     def __init__(self,*args,**kwargs):
         """
-        inputs can be either AngularSeperation(sep) or 
+        inputs can be either AngularSeperation(sep), or
         AngularSeperation(start,end).  kwargs can be any of the kwargs to
         the initializer of AngularCoordinate.
         """
@@ -424,175 +426,345 @@ class AngularSeperation(AngularCoordinate):
         computes the physical projected seperation assuming a given distance.
         This implicitly assumes small-angle approximation.
         
-        if `zord` is True, the input will be interpreted as a redshift, and
+        if `usez` is True, the input will be interpreted as a redshift, and
         kwargs will be passed into the distance calculation.
         """
         return angular_to_physical_size(self.arcsec,zord,usez=True,**kwargs)
-        
-class EquatorialPosition(object):
+
+class _LatLongMeta(type):
+    def __init__(cls,name,bases,dct):
+        super(_LatLongMeta,cls).__init__(name,bases,dct)
+        if cls._latlongnames_[0] is not None:
+            setattr(cls,cls._latlongnames_[0],cls.lat)
+            setattr(cls,cls._latlongnames_[0]+'err',cls.laterr)
+        if cls._latlongnames_[1] is not None:
+            setattr(cls,cls._latlongnames_[1],cls.long)
+            setattr(cls,cls._latlongnames_[1]+'err',cls.longerr)
+            
+#    def __call__(cls,*args,**kwargs):
+#        obj = super(_LatLongMeta,_LatLongMeta).__call__(cls,**objkwargs) #object __init__ is called here
+#        return obj
+
+class LatLongPosition(object):
     """
-    This object represents an angular location on the unit sphere, specified in
-    ra and dec.
+    This object represents an angular location on a unit sphere as represented
+    in spherical coordinates with a latitude and longitude.  Subclasses specify 
+    details such as transformations or epochs.
     """
-    __slots__=('__ra','__dec','__raerr','__decerr','__epoch')
+    __slots__ = ('_lat','_long','_laterr','_longerr')
+    __metaclass__ = _LatLongMeta
+    _latlongnames_ = (None,None)
+    _longrange_ = None
     
-    def __init__(self,*args,**kwargs):
+    def __init__(self,lat=0,long=0,laterr=None,longerr=None):
         """
-        Coordinates can be specified by assigning the kwargs 
-        ra,dec,raerr,decerr,epoch or rarad,decrad,raerr,decerr,epoch, or follow
-        one of the following forms:
-        
-        * EquatorialPosition() (default)
-        * EquatorialPosition(EquatorialPosition | 'ra dec')
-        * EquatorialPosition(ra,dec)
-        * EquatorialPosition(ra,dec,epoch)
-        * EquatorialPosition(ra,dec,raerr,decerr)
-        * EquatorialPosition(ra,dec,raerr,decerr,epoch)
-        
+        `lat` and `long` are latitude and longitude for the position, respectively,
+        and may be any valid input to AngularCoordinate (if a number, default
+        is in degrees)        
         """
-        from math import degrees,radians
         
-        if len(args)  == 0:
-            pass
-        elif len(args) == 1:
-            if isinstance(args[0],EquatorialPosition):
-                kwargs['ra'] = AngularCoordinate(args[0].__ra)
-                kwargs['dec'] = AngularCoordinate(args[0].__dec)
-                kwargs['raerr'] = AngularSeperation(args[0].__raerr)
-                kwargs['decerr'] = AngularSeperation(args[0].__decerr)
-                kwargs['epoch'] = args[0].__epoch
-            aspl = args[0].split()
-            
-            kwargs['ra'] = aspl[0]
-            kwargs['dec'] = aspl[1],sghms=False
-        elif len(args) == 2:
-            kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-        elif len(args) == 3:
-            kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-            kwargs['epoch'] = args[2]
-        elif len(args) == 4:
-            kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-            kwargs['raerr'] = AngularSeperation(args[2])
-            kwargs['decerr'] = AngularSeperation(args[3])
-        elif len(args) == 5:
-            kwargs['ra'] = AngularCoordinate(args[0])
-            kwargs['dec'] = AngularCoordinate(args[1],sghms=False)
-            kwargs['raerr'] = AngularSeperation(args[2])
-            kwargs['decerr'] = AngularSeperation(args[3])
-            kwargs['epoch'] = args[4]
-        else:
-            raise ValueError('Unrecognized format for coordiantes')
+        self._lat = AngularCoordinate(range=(-90,90))
+        self._long = AngularCoordinate(range=self._longrange_)
         
-        if 'rarad' in kwargs:
-            if 'ra' in kwargs:
-                raise ValueError("can't specify RA in both radians and degrees")
-            kwargs['ra'] = degrees(kwargs.pop('rarad'))
-            kwargs['raerr'] = degrees(kwargs.pop('raerr',0))
-            
-        if 'decrad' in kwargs:
-            if 'dec' in kwargs:
-                raise ValueError("can't specify Dec in both radians and degrees")
-            kwargs['dec'] = degrees(kwargs.pop('decrad'))
-            kwargs['decerr'] = degrees(kwargs.pop('decerr',0))
-            
-        self.__ra = AngularCoordinate(kwargs.pop('ra'))
-        self.__dec = AngularCoordinate(kwargs.pop('dec'))
-        self.__raerr = AngularSeperation(kwargs.pop('raerr',0))
-        self.__decerr = AngularSeperation(kwargs.pop('decerr',0))
-        self.__epoch = kwargs.pop('epoch','J2000')
-        if len(kwargs) > 0:
-            raise ValeError('unrecognized keyword'+'s ' if len(kwargs)> 1 else ' '+','.join(kwargs.keys()))
+        if isinstance(lat,LatLongPosition):
+            if long is 0 and laterr is None and longerr is None:
+                self.lat = lat.lat
+                self.long = lat.long
+                self.laterr = lat.laterr
+                self.longerr = lat.longerr
+            else:
+                raise ValueError("can't provide a LatLongPosition as a constructor and set other values simultaneously")
         
-    
-    def __setra(self,ra):
-        if type(ra) == AngularCoordinate:
-            self.__ra=ra
-        else:
-            self.__ra=AngularCoordinate(ra)
-    
-    def __getra(self):
-        return self.__ra
-    
-    def __setdec(self,dec):
-        if type(dec) == AngularCoordinate:
-            self.__dec=dec
-        else:
-            self.__dec=AngularCoordinate(dec)
-    
-    def __getdec(self):
-        return self.__dec
-    
-    def __setraerr(self,raerr):
-        if type(raerr) == AngularCoordinate:
-            self.__raerr=raerr
-        else:
-            self.__raerr=AngularCoordinate(raerr)
-    
-    def __getraerr(self):
-        return self.__raerr
-    
-    def __setdecerr(self,decerr):
-        if type(decerr) == AngularCoordinate:
-            self.__decerr=decerr
-        else:
-            self.__dec=AngularCoordinate(decerr)
-    
-    def __getdecerr(self):
-        return self.__decerr
-    
-    def __setepoch(self,epoch):
-        ra,dec=epoch_transform(self.__ra.degrees,self.__dec.degrees,self.__epoch,epoch)
-        self.__ra=AngularCoordinate(ra)
-        self.__dec=AngularCoordinate(ra)
-        #TODO:should do some sort of error propogation, but that only matters for large precessions
-        self.__epoch=epoch
+        self.lat = lat
+        self.long = long
+        self.laterr = laterr
+        self.longerr = longerr
         
-    def __getepoch(self):
-        return self.__epoch
+    def __getstate__(self):
+        return dict([(k,getattr(k)) for k in LatLongPosition.__slots__])
+    
+    def __setstate__(self,d):
+        for k in LatLongPosition.__slots__:
+            setattr(k,d[k])
+        
+    def _getLat(self):
+        return self._lat
+    def _setLat(self,val):
+        if isinstance(val,AngularCoordinate):
+            self._lat.radians = val.radians
+        else:
+            self._lat.radians = AngularCoordinate(val).radians
+    lat = property(_getLat,_setLat,doc=None)
+    
+    def _getLong(self):
+        return self._long
+    def _setLong(self,val):
+        if isinstance(val,AngularCoordinate):
+            self._long.radians = val.radians
+        else:
+            self._long.radians = AngularCoordinate(val).radians
+    long = property(_getLong,_setLong,doc=None)
+    
+    def _getLaterr(self):
+        return self._laterr
+    def _setLaterr(self,val):
+        if val is None:
+            self._laterr = None
+        elif isinstance(val,AngularSeperation):
+            self._laterr = val
+        else:
+            self._laterr = AngularSeperation(val)
+    laterr = property(_getLaterr,_setLaterr,doc=None)
+    
+    def _getLongerr(self):
+        return self._longerr
+    def _setLongerr(self,val):
+        if val is None:
+            self._longerr = None
+        elif isinstance(val,AngularSeperation):
+            self._longerr = val
+        else:
+            self._longerr = AngularSeperation(val)
+    longerr = property(_getLongerr,_setLongerr,doc=None)
     
     def __str__(self):
-        rastr=self.__ra.getHmsStr()+('\\pm'+self.__raerr.getHmsStr() if self.__raerr != 0 else '')
-        decstr=self.__dec.getDmsStr()+('\\pm'+self.__decerr.getDmsStr() if self.__decerr != 0 else '')
-        return ' '.join((rastr,decstr))
-    
-    ra=property(fget=__getra,fset=__setra)
-    dec=property(fget=__getdec,fset=__setdec)
-    raerr=property(fget=__getraerr,fset=__setraerr)
-    decerr=property(fget=__getdecerr,fset=__setdecerr)
-    epoch=property(fget=__getepoch,fset=__setepoch)
-    e=epoch
-    
-    def __correctedra(self):
-        from math import cos
-        return self.ra.radians * cos(self.dec.radians)
+        return '{0}:({1[0]}={2},{1[1]}={3})'.format(self.__class__.__name__,self._latlongnames_,self._lat.d,self._long.d)
     
     def __eq__(self,other):
-        from operator import isSequenceType
-        if isinstance(other,self.__class__):
-            return self.__ra==other.__ra and self.__dec==other.__dec
+        if hasattr(other,'_lat') and hasattr(other,'_long'):
+            return self._lat==other._lat and self._long==other._long
         else:
             return False
+        
     def __ne__(self,other):
         return not self.__eq__(other)
     
     def __sub__(self,other):
         if isinstance(other,self.__class__):
-            dcra = self.__correctedra()-other.__correctedra()
-            ddec = self.__dec.radians-other.__dec.radians
-            sep = AngularSeperation(degrees((dcra*dcra+ddec*ddec)**0.5))
+            from math import cos
+            dcorrlong = self._long.radians * cos(self._lat.radians) \
+                 - other._long.radians * cos(other._lat.radians)
+            dlat = self._lat.radians-other._lat.radians
+            sep = AngularSeperation(degrees((dlat*dlat+dcorrlong*dcorrlong)**0.5))
             sep.start = other
             return sep
-        
         else:
-            raise "unsupported operand type(s) for -: 'EquatorialPosition' and '%s'"%other.__class__
+            raise "unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__)
 
-      
+class HorizontalPosition(LatLongPosition):
+    """
+    This object represents an angular location on the unit sphere, with the 
+    north pole of the coordinate position fixed to the local zenith
+    """  
+    __slots__ = tuple()
+    _latlongnames_ = ('alt','az')
+    _longrange_ = (0,360)
+    
+    @staticmethod
+    def fromEquatorial(eqpos,lsts,latitude,epoch=None):
+        """
+        Generates a list of horizontal positions (or just one) from a provided
+        equatorial position and local siderial time (or sequence of lsts) in 
+        decimal hours and a latitude in degrees.  If  `epoch` is not None, it 
+        will be used to set the epoch in the equatorial system.
+        """
+        oldepoch = eqpos.epoch
+        try:
+            if epoch is not None:
+                eqpos.epoch = epoch
+            lsts = np.array(lsts,copy=False)
+            singleout = lsts.shape == tuple()
+            
+            HA = lsts.ravel() - eqpos.ra.hours 
+            sHA = np.cos(pi*HA/12)
+            cHA = np.cos(pi*HA/12)
+            
+            sdec = np.sin(eqpos.dec.radians)
+            cdec = np.cos(eqpos.dec.radians)
+            slat = np.sin(np.radians(latitude))
+            clat = np.cos(np.radians(latitude))
+            
+            alts = np.arcsin(slat*sdec+clat*cdec*cHA)
+            calts = np.cos(alts)
+            #azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%360
+            azs = (np.arcsin(cdec*sHA)/calts)%360
+            raise NotImplementedError
+            
+            #TODO:error prop
+        finally:
+            if epoch is not None:
+                eqpos.epoch = oldepoch
+                
+        if singleout:
+            return HorizontalPosition(alts[0],azs[0])
+        else:
+            return [HorizontalPosition(alt,az) for alt,az in zip(alts,azs)]
+
+class EquatorialPosition(LatLongPosition):
+    """
+    This object represents an angular location on the unit sphere, specified in
+    right ascension and declination.  Thus, the fundamental plane is given by 
+    the projection of the equator in the sky.
+    """
+    
+    __slots__ = ('_epoch','_refsys')
+    _latlongnames_ = ('dec','ra')
+    _longrange_ = (0,360)
+    
+    def __getstate__(self):
+        d = super(EquatorialPosition,self).__getstate__
+        d['_epoch'] = self._epoch
+        return d
+    
+    def __setstate__(self,d):
+        super(EquatorialPosition,self).__setstate__
+        self._epoch = d['_epoch']
+    
+    def __init__(self,*args,**kwargs):
+        """
+        input may be in the following forms:
+        
+        * EquatorialPosition()
+        * EquatorialPosition(EquatorialPosition)
+        * EquatorialPosition('rastr decstr')
+        * EquatorialPosition(ra,dec)
+        * EquatorialPosition(ra,dec,raerr,decerr)
+        * EquatorialPosition(ra,dec,raerr,decerr,epoch)
+        * EquatorialPosition(ra,dec,raerr,decerr,epoch,refsys) 
+        
+        """
+        posargs = {}
+        if len(args) == 0:
+            pass
+        if len(args) == 1:
+            if isinstance(args[0],EquatorialPosition):
+                super(EquatorialPosition,self).__init__(args[0])
+                self.epoch = args[0].epoch
+                self.refsys = args[0].refsys
+                return
+            elif isinstance(args[0],basestring):
+                sargs = args[0].split()
+                posargs['ra'] = sargs[0]
+                posargs['dec'] = sargs[1]
+        elif len(args) == 2:
+            posargs['ra'] = args[0]
+            posargs['dec'] = args[1]
+        elif len(args) == 4:
+            posargs['ra'] = args[0]
+            posargs['dec'] = args[1]
+            posargs['raerr'] = args[2]
+            posargs['decerr'] = args[3]
+        elif len(args) == 5:
+            posargs['ra'] = args[0]
+            posargs['dec'] = args[1]
+            posargs['raerr'] = args[2]
+            posargs['decerr'] = args[3]
+            posargs['epoch'] = args[4]
+        
+        for k,v in posargs.iteritems():
+            if k in kwargs:
+                raise ValueError('got multiple values for argument '+k)
+            kwargs[k] = v
+        
+        kwargs.setdefault('ra',0)
+        kwargs.setdefault('dec',0)
+        kwargs.setdefault('raerr',None)
+        kwargs.setdefault('decerr',None)
+        kwargs.setdefault('epoch','J2000')
+        kwargs.setdefault('refsys','ICRS')
+        
+        super(EquatorialPosition,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        self.epoch = kwargs['epoch']
+        self.refsys = kwargs['refsys']
+            
+    def _getEpoch(self):
+        return self._epoch
+    def _setEpoch(self,val):
+        if hasattr(self,'_epoch') and self._epoch != val:
+            from warnings import warn
+            warn('epoch transforms not ready yet')
+        if not isinstance(val,basestring):
+            val = 'J'+str(float(val))
+        self._epoch = val
+    epoch = property(_getEpoch,_setEpoch,doc=None)
+    
+    def _getRefsys(self):
+        return self._refsys
+    def _setRefsys(self,val):
+        self._refsys = val
+        if hasattr(self,'_refsys') and self._refsys != val:
+            from warnings import warn
+            warn('refsys transforms not ready yet')
+    refsys = property(_getRefsys,_setRefsys,doc=None)
     
     
-#<-------------basic transforms-------------------->
+class EclipticPosition(LatLongPosition):
+    """
+    Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
+    through the ecliptic at the given epoch.
+    """
+    
+    __slots__ = ('_eclipticepoch','_refsys')
+    _latlongnames_ = ('beta','lamb')
+    _longrange_ = (0,360)
+    
+    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,eclipticepoch='J2000',refsys='ICRS'):
+        raise NotImplementedError
+    
+    def __getstate__(self):
+        d = super(EquatorialPosition,self).__getstate__
+        d['_eclipticepoch'] = self._eclipticepoch
+        return d
+    
+    def __setstate__(self,d):
+        super(EquatorialPosition,self).__setstate__
+        self._eclipticepoch = d['_eclipticepoch']
+        
+    def _getEclipticepoch(self):
+        return self._epoch
+    def _setEclipticepoch(self,val):
+        if hasattr(self,'_eclipticepoch') and self._eclipticepoch != val:
+            from warnings import warn
+            warn('epoch transforms not ready yet')
+        if not isinstance(val,basestring):
+            val = 'J'+str(float(val))
+        self._eclipticepoch = val
+    eclipticepoch = property(_getEclipticepoch,_setEclipticepoch,doc=None)
+    
+    def _getRefsys(self):
+        return self._refsys
+    def _setRefsys(self,val):
+        self._refsys = val
+        if hasattr(self,'_refsys') and self._refsys != val:
+            from warnings import warn
+            warn('refsys transforms not ready yet')
+    refsys = property(_getRefsys,_setRefsys,doc=None)
+    
+    def __init__(self,*args,**kwargs):
+        raise NotImplementedError
+    
+class GalacticPosition(LatLongPosition):
+    __slots__ = tuple()
+    _latlongnames_ = ('b','l')
+    _longrange_ = (0,360)
+    
+    _ngp_J2000 = EquatorialPosition(192.859508, 27.128336,epoch='J2000')
+    _long0_J2000 = 122.932
+    
+    
+class SupergalacticPosition(LatLongPosition):   
+    __slots__ = tuple()
+    _latlongnames_ = ('sgb','sgl')
+    _longrange_ = (0,360)
+    
+    _nsgp_gal = GalacticPosition(6.32,47.37)
+    _sglong0_gal = 137.37
+    _nsgp_J2000 = EquatorialPosition(283.75420420,15.70894043,epoch='J2000')
+    _sglong0_J2000 = 42.30997710
+    
+    
+    
+#<-------------------------------basic transforms------------------------------>
 def cartesian_to_polar(x,y,degrees=False):
     """
     Converts two arrays in 2D rectangular Cartesian coordinates to
@@ -661,6 +833,26 @@ def spherical_to_cartesian(r,t,p,degrees=False):
     
     return x,y,z
 
+def latitude_to_colatitude(lat,degrees=False):
+    """
+    converts from latitude  (i.e. 0 at the equator) to colatitude/inclination 
+    (i.e. "theta" in physicist convention).
+    """
+    if degrees:
+        return 90 - lat
+    else:
+        return pi/2 - lat
+
+def colatitude_to_latitude(theta,degrees=False):
+    """
+    converts from colatitude/inclination (i.e. "theta" in physicist convention) 
+    to latitude (i.e. 0 at the equator).
+    """
+    if degrees:
+        return 90 - theta
+    else:
+        return pi/2 - theta
+
 def cartesian_to_cylindrical(x,y,z,degrees=False):
     """
     Converts three arrays in 3D rectangular Cartesian coordinates
@@ -708,185 +900,6 @@ def proj_sep(rx,ty,pz,offset,spherical=False):
 
 
 
-
-#galactic coordate reference positions from IAU 1959 and wikipedia
-_galngpJ2000=EquatorialPosition('12h51m26.282s','+27d07m42.01s')
-_galngpB1950=EquatorialPosition('12h49m0s','27d24m0s')
-_gall0J2000=122.932
-_gall0B1950=123
-
-def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True):
-    """
-    Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
-    
-    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
-    'cg','cq','qc'
-    transtype   From           To       |  transtype    From         To
-        1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
-        2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
-        3     RA-Dec         Ecliptic   |     6       Galactic      Ecliptic
-        
-    adapted from IDL procedure EULER 
-    (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
-    """
-    #   J2000 coordinate conversions are based on the following constants
-    #   (see the Hipparcos explanatory supplement).
-    #  eps = 23.4392911111d              Obliquity of the ecliptic
-    #  alphaG = 192.85948d               Right Ascension of Galactic North Pole
-    #  deltaG = 27.12825d                Declination of Galactic North Pole
-    #  lomega = 32.93192d                Galactic longitude of celestial equator  
-    #  alphaE = 180.02322d              Ecliptic longitude of Galactic North Pole
-    #  deltaE = 29.811438523d            Ecliptic latitude of Galactic North Pole
-    #  Eomega  = 6.3839743d              Galactic longitude of ecliptic equator              
-
-    if epoch == 'B1950':
-            psi   = ( 0.57595865315, 4.9261918136,0, 0,0.11129056012, 4.7005372834)     
-            stheta =( 0.88781538514,-0.88781538514, 0.39788119938,-0.39788119938, 0.86766174755,-0.86766174755)    
-            ctheta =( 0.46019978478, 0.46019978478,0.91743694670, 0.91743694670, 0.49715499774, 0.49715499774)    
-            phi =   ( 4.9261918136,  0.57595865315,  0, 0,  4.7005372834, 0.11129056012)
-
-    elif epoch == 'J2000':
-            psi   = ( 0.57477043300,4.9368292465,0,0,0.11142137093, 4.71279419371)     
-            stheta =( 0.88998808748,-0.88998808748,  0.39777715593,-0.39777715593, 0.86766622025,-0.86766622025)   
-            ctheta =( 0.45598377618, 0.45598377618, 0.91748206207, 0.91748206207,  0.49714719172, 0.49714719172)    
-            phi  =  ( 4.9368292465,  0.57477043300,  0, 0,        4.71279419371, 0.11142137093)
-    else:
-            raise ValueError('unknown epoch')
-            
-    from math import pi
-    from numpy import array,sin,cos,arcsin,arctan2
-    twopi   =   2.0*pi
-    fourpi  =   4.0*pi
-    deg_to_rad = 180.0/pi
-    
-    
-    if degin:
-        ai,bi=array(ai),array(bi)
-    else:
-        ai,bi=np.degrees(ai),np.degrees(bi)
-    
-    if type(transtype) == int:
-        i = transtype - 1
-    else:
-        transd={'ge':1,'eg':0,'gq':1,'qg':0,'gc':5,'cg':4,'cq':3,'qc':2}
-        i  = transd[transtype]
-    a  = ai/deg_to_rad - phi[i]
-    b = bi/deg_to_rad
-    sb = sin(b) 
-    cb = cos(b)
-    cbsa = cb * sin(a)
-    b  = -stheta[i] * cbsa + ctheta[i] * sb
-    try:
-            b[b>1.0]=1.0
-    except TypeError: #scalar
-            if b > 1:
-                    b=array(1.0)
-    bo = arcsin(b)*deg_to_rad
-    a =  arctan2( ctheta[i] * cbsa + stheta[i] * sb, cb * cos(a) )
-    ao = ( (a+psi[i]+fourpi) % twopi) * deg_to_rad
-    
-    if not degout:
-        ao,bo = np.radians(ao),np.radians(bo)
-    
-    return ao,bo
-
-_B1950toJ2000xyz=np.matrix([[0.999926,  -0.011179,  -0.004859],
-                            [0.011179,   0.999938,  -0.000027],
-                            [0.004859,   0.000027,   0.999988]])
-
-def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
-    if inepoch != 'B1950' and inepoch != 'J2000':
-        raise ValueError('unrecognized epoch '+inepoch)
-    if outepoch != 'B1950' and outepoch != 'J2000':
-        raise ValueError('unrecognized epoch '+outepoch)
-    if degrees:
-        ra,dec=np.radians(ra),np.radians(dec)
-    else:
-        ra,dec=np.array(ar),np.array(dec)
-    
-    if inepoch == outepoch:
-        trans=np.matrix(np.eye(3))
-    elif inepoch == 'B1950' and outepoch == 'J2000':
-        trans=_B1950toJ2000xyz
-    elif inepoch == 'J2000' and outepoch == 'B1950':
-        trans=_B1950toJ2000xyz.I
-    else:
-        raise ('unrecognized epochs')
-    
-    x=np.cos(ra)*np.cos(dec)
-    y=np.sin(ra)*np.cos(dec)
-    z=np.sin(dec)
-    
-    v=matrix((x,y,z))
-    xp,yp,zp=trans*v
-    
-    rap=np.atan2(yp,xp)
-    decp=np.arcsin(zp)
-    
-    return rap,decp
-
-#<-------------convinience functions------------------------------------------->
-
-def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
-    """
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from operator import isSequenceType
-    
-    if type(l) == str:
-        l=AngularCoordinate(l).degrees
-        if strout is None:
-            strout=True
-    if type(b) == str:
-        b=AngularCoordinate(b).degrees
-        if strout is None:
-            strout=True
-    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
-    if strout:
-        if not isSequenceType(ra):
-            ra=[ra]
-        if not isSequenceType(dec):
-            dec=[dec]
-        rao,deco=[],[]
-        for rai in ra:
-            rao.append(AngularCoordinate(rai).getHmsStr())
-        for deci in dec:
-            deco.append(AngularCoordinate(deci).getDmsStr())
-        return rao,deco
-    else:
-        return ra,dec
-    
-    
-def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
-    """
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from operator import isSequenceType
-    
-    if type(ra) == str:
-        ra=AngularCoordinate(ra).degrees
-        if strout is None:
-            strout=True
-    if type(dec) == str:
-        dec=AngularCoordinate(dec).degrees
-        if strout is None:
-            strout=True
-    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
-    if strout:
-        if not isSequenceType(l):
-            l=[l]
-        if not isSequenceType(b):
-            b=[b]
-        lo,bo=[],[]
-        for li in l:
-            lo.append(AngularCoordinate(li).getDmsStr())
-        for bi in b:
-            bo.append(AngularCoordinate(bi).getDmsStr())
-        return lo,bo
-    else:
-        return l,b
 
 def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
     ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
@@ -1173,7 +1186,8 @@ def cosmo_z_to_H(z,zerr=None):
 
 def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     """
-    converts an observed angular size (in arcsec) to a physical size (in pc)
+    converts an observed angular size (in arcsec or as an AngularSeperation 
+    object) to a physical size (in pc)
     
     if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
     is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
@@ -1187,14 +1201,16 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
             raise TypeError('if not using redshift, kwargs should not be provided')
         d = zord
     
-    
+    if hasattr(angsize,'arcsec'):
+        angsize = angsize.arcsec
     sintheta = np.sin(angsize/206265)
     return d*(1/sintheta/sintheta-1)**-0.5
     #return angsize*d/206265
 
-def physical_to_angular_size(physize,zord,usez=True,**kwargs):
+def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     """
-    converts a physical size (in pc) to an observed angular size (in arcsec)
+    converts a physical size (in pc) to an observed angular size (in arcsec or 
+    as an AngularSeperation object if objout is True)
     
     if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
     is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
@@ -1209,6 +1225,200 @@ def physical_to_angular_size(physize,zord,usez=True,**kwargs):
         d = zord
         
     r=physize
-    return 206265*np.arcsin(r*(d*d+r*r)**-0.5)
+    res = 206265*np.arcsin(r*(d*d+r*r)**-0.5)
+    if objout:
+        return AngularSeperation(res/3600)
+    else:
+        return res
     
-    #return physize*206265/d
+    
+#<---------------------DEPRECATED transforms----------------------------------->
+
+#galactic coordate reference positions from IAU 1959 and wikipedia
+_galngpJ2000=EquatorialPosition('12h51m26.282s','+27d07m42.01s')
+_galngpB1950=EquatorialPosition('12h49m0s','27d24m0s')
+_gall0J2000=122.932
+_gall0B1950=123
+
+def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True):
+    """
+    Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
+    
+    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
+    'cg','cq','qc'
+    transtype   From           To       |  transtype    From         To
+        1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
+        2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
+        3     RA-Dec         Ecliptic   |     6       Galactic      Ecliptic
+        
+    adapted from IDL procedure EULER 
+    (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
+    """
+    #   J2000 coordinate conversions are based on the following constants
+    #   (see the Hipparcos explanatory supplement).
+    #  eps = 23.4392911111d              Obliquity of the ecliptic
+    #  alphaG = 192.85948d               Right Ascension of Galactic North Pole
+    #  deltaG = 27.12825d                Declination of Galactic North Pole
+    #  lomega = 32.93192d                Galactic longitude of celestial equator  
+    #  alphaE = 180.02322d              Ecliptic longitude of Galactic North Pole
+    #  deltaE = 29.811438523d            Ecliptic latitude of Galactic North Pole
+    #  Eomega  = 6.3839743d              Galactic longitude of ecliptic equator   
+    
+    from warnings import warn
+    warn('celestial_transforms function is deprecated - use general coordinate transform framework',DeprecationWarning)           
+
+    if epoch == 'B1950':
+            psi   = ( 0.57595865315, 4.9261918136,0, 0,0.11129056012, 4.7005372834)     
+            stheta =( 0.88781538514,-0.88781538514, 0.39788119938,-0.39788119938, 0.86766174755,-0.86766174755)    
+            ctheta =( 0.46019978478, 0.46019978478,0.91743694670, 0.91743694670, 0.49715499774, 0.49715499774)    
+            phi =   ( 4.9261918136,  0.57595865315,  0, 0,  4.7005372834, 0.11129056012)
+
+    elif epoch == 'J2000':
+            psi   = ( 0.57477043300,4.9368292465,0,0,0.11142137093, 4.71279419371)     
+            stheta =( 0.88998808748,-0.88998808748,  0.39777715593,-0.39777715593, 0.86766622025,-0.86766622025)   
+            ctheta =( 0.45598377618, 0.45598377618, 0.91748206207, 0.91748206207,  0.49714719172, 0.49714719172)    
+            phi  =  ( 4.9368292465,  0.57477043300,  0, 0,        4.71279419371, 0.11142137093)
+    else:
+            raise ValueError('unknown epoch')
+            
+    from math import pi
+    from numpy import array,sin,cos,arcsin,arctan2
+    twopi   =   2.0*pi
+    fourpi  =   4.0*pi
+    deg_to_rad = 180.0/pi
+    
+    
+    if degin:
+        ai,bi=array(ai),array(bi)
+    else:
+        ai,bi=np.degrees(ai),np.degrees(bi)
+    
+    if type(transtype) == int:
+        i = transtype - 1
+    else:
+        transd={'ge':1,'eg':0,'gq':1,'qg':0,'gc':5,'cg':4,'cq':3,'qc':2}
+        i  = transd[transtype]
+    a  = ai/deg_to_rad - phi[i]
+    b = bi/deg_to_rad
+    sb = sin(b) 
+    cb = cos(b)
+    cbsa = cb * sin(a)
+    b  = -stheta[i] * cbsa + ctheta[i] * sb
+    try:
+            b[b>1.0]=1.0
+    except TypeError: #scalar
+            if b > 1:
+                    b=array(1.0)
+    bo = arcsin(b)*deg_to_rad
+    a =  arctan2( ctheta[i] * cbsa + stheta[i] * sb, cb * cos(a) )
+    ao = ( (a+psi[i]+fourpi) % twopi) * deg_to_rad
+    
+    if not degout:
+        ao,bo = np.radians(ao),np.radians(bo)
+    
+    return ao,bo
+
+_B1950toJ2000xyz=np.matrix([[0.999926,  -0.011179,  -0.004859],
+                            [0.011179,   0.999938,  -0.000027],
+                            [0.004859,   0.000027,   0.999988]])
+
+def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
+    from warnings import warn
+    warn('epoch_transform function is deprecated - use general coordinate transform framework',DeprecationWarning)
+    
+    if inepoch != 'B1950' and inepoch != 'J2000':
+        raise ValueError('unrecognized epoch '+inepoch)
+    if outepoch != 'B1950' and outepoch != 'J2000':
+        raise ValueError('unrecognized epoch '+outepoch)
+    if degrees:
+        ra,dec=np.radians(ra),np.radians(dec)
+    else:
+        ra,dec=np.array(ar),np.array(dec)
+    
+    if inepoch == outepoch:
+        trans=np.matrix(np.eye(3))
+    elif inepoch == 'B1950' and outepoch == 'J2000':
+        trans=_B1950toJ2000xyz
+    elif inepoch == 'J2000' and outepoch == 'B1950':
+        trans=_B1950toJ2000xyz.I
+    else:
+        raise ('unrecognized epochs')
+    
+    x=np.cos(ra)*np.cos(dec)
+    y=np.sin(ra)*np.cos(dec)
+    z=np.sin(dec)
+    
+    v=matrix((x,y,z))
+    xp,yp,zp=trans*v
+    
+    rap=np.atan2(yp,xp)
+    decp=np.arcsin(zp)
+    
+    return rap,decp
+
+def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
+    """
+    convinience function for celestial_transforms
+    if strout is None, will automatically decide based on inputs
+    """
+    from warnings import warn
+    warn('galactic_to_equatorial function is deprecated - use general coordinate transform framework',DeprecationWarning)
+    
+    from operator import isSequenceType
+    
+    if type(l) == str:
+        l=AngularCoordinate(l).degrees
+        if strout is None:
+            strout=True
+    if type(b) == str:
+        b=AngularCoordinate(b).degrees
+        if strout is None:
+            strout=True
+    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
+    if strout:
+        if not isSequenceType(ra):
+            ra=[ra]
+        if not isSequenceType(dec):
+            dec=[dec]
+        rao,deco=[],[]
+        for rai in ra:
+            rao.append(AngularCoordinate(rai).getHmsStr())
+        for deci in dec:
+            deco.append(AngularCoordinate(deci).getDmsStr())
+        return rao,deco
+    else:
+        return ra,dec
+    
+    
+def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
+    """
+    convinience function for celestial_transforms
+    if strout is None, will automatically decide based on inputs
+    """
+    from warnings import warn
+    warn('equatorial_to_galactic function is deprecated - use general coordinate transform framework',DeprecationWarning)
+    
+    from operator import isSequenceType
+    
+    if type(ra) == str:
+        ra=AngularCoordinate(ra).degrees
+        if strout is None:
+            strout=True
+    if type(dec) == str:
+        dec=AngularCoordinate(dec).degrees
+        if strout is None:
+            strout=True
+    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
+    if strout:
+        if not isSequenceType(l):
+            l=[l]
+        if not isSequenceType(b):
+            b=[b]
+        lo,bo=[],[]
+        for li in l:
+            lo.append(AngularCoordinate(li).getDmsStr())
+        for bi in b:
+            bo.append(AngularCoordinate(bi).getDmsStr())
+        return lo,bo
+    else:
+        return l,b

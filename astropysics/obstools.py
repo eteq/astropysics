@@ -23,18 +23,23 @@ import numpy as np
 from .utils import PipelineElement,DataObjectRegistry
 #from .models import FunctionModel1DAuto as _FunctionModel1DAuto
 
-def jd_to_gregorian(jd,bceaction=None,msecrounding = 1e-5):
+def jd_to_gregorian(jd,bceaction=None,msecrounding=1e-5):
     """
     convert julian date number to a gregorian date and time
     
-    output is in a dateutil UTC
+    output is dateutil UTC datetime objects or (datetime,bcemask) if bceaction
+    is 'negreturn'
     
     bceaction indicates what to do if the result is a BCE year.   datetime 
     generally only supports positive years, so the following options apply:
     * 'raise' or None: raise an exception
-    * 'neg': for any BCE years, convert to positive years (delta operations will 
+    * 'neg': for any BCE years, convert to positive years (delta operations 
       in datetime will not be correct)
+    * 'negreturn': same as 'neg', but changes the return type to a tuple with 
+      the datetime objects as the first element and a boolean array that is True
+      for the objects that are BCE as the second element.
     * a scalar: add this number to the year
+    
     
     msecrounding does a fix for floating-point errors - if the seconds are 
     within the request number of seconds of an exact second, it will be set to
@@ -100,18 +105,26 @@ def jd_to_gregorian(jd,bceaction=None,msecrounding = 1e-5):
     if bceaction is not None:
         if bceaction == 'raise':
             pass
-        elif bceaction == 'neg':
-            yr[yr<datetime.MINYEAR]*= -1
+        elif bceaction == 'neg' or bceaction == 'return':
+            bcemask = yr<datetime.MINYEAR
+            yr[bcemask] -= 1 #correct by 1 because JD=0 -> 1 BCE
+            yr[bcemask]*= -1 
+                
         else:
             yr += bceaction
     
     if scalar:
-        return datetime.datetime(yr[0],mon[0],day[0],hr[0],min[0],sec[0],msec[0],tzi)
+        res = datetime.datetime(yr[0],mon[0],day[0],hr[0],min[0],sec[0],msec[0],tzi)
     else:
-        return [datetime.datetime(*t,tzinfo=tzi) for t in zip(yr,mon,day,hr,min,sec,msec)]
+        res = [datetime.datetime(*t,tzinfo=tzi) for t in zip(yr,mon,day,hr,min,sec,msec)]
+        
+    if bceaction == 'return':
+        return res,bcemask
+    else:
+        return res
     
 
-def gregorian_to_jd(gtime,utcconv=True):
+def gregorian_to_jd(gtime,utcoffset=None):
     """
     Convert gregorian to julian date
     
@@ -119,11 +132,12 @@ def gregorian_to_jd(gtime,utcconv=True):
     where each element may be  or a 
     datetime.datetime object
     
-    if utcconv is True and datetime objects are given, the time will be 
-    converted to UTC based on the datetime.tzinfo objects (if present).  If it
-    is a string, it is taken to be a timezone name that will be used to convert
-    all the gregorian dates to UTC (requires dateutil package).  If it is a 
-    scalar, it is taken to be the hour offset of the timezone to convert to UTC. 
+    if datetime objects are given, and utcoffset is None, values are
+    converted to UTC based on the datetime.tzinfo objects (if present).  If 
+    utcoffset is a string, it is taken to be a timezone name that will be used
+    to convert all the gregorian dates to UTC (requires dateutil package).  If 
+    it is a scalar, it is taken to be the hour offset of the timezone to convert
+    to UTC. 
     
     Adapted from xidl  jdcnv.pro
     """
@@ -138,17 +152,17 @@ def gregorian_to_jd(gtime,utcconv=True):
     else:
         datetimes = None
         gtime = list(gtime)
-        if not (3 < len(gtime) < 7):
+        if not (3 <= len(gtime) < 7):
             raise ValueError('gtime input sequence is invalid size')
         while len(gtime) < 6:
             gtime.append(np.zeros_like(gtime[-1]))
         yr,month,day,hr,min,sec = gtime
-        scalarout = np.isscalar(yr)
+        scalarout = False #already a scalar form
         
     if datetimes is not None:
         yr,month,day,hr,min,sec = [],[],[],[],[],[]
         for dt in datetimes:
-            if utcconv is True:
+            if utcoffset is None:
                 off = dt.utcoffset()
                 if off is not None:
                     dt = dt - off
@@ -159,8 +173,6 @@ def gregorian_to_jd(gtime,utcconv=True):
             min.append(dt.minute)
             sec.append(dt.second+dt.microsecond/1e6)
                 
-        if utcconv is True:
-            utcconv = False
                 
     
     yr = np.array(yr,dtype='int64',copy=False)
@@ -170,32 +182,84 @@ def gregorian_to_jd(gtime,utcconv=True):
     min = np.array(min,dtype=float,copy=False)
     sec = np.array(sec,dtype=float,copy=False)
     
-    if isinstance(utcconv,basestring):
+    if isinstance(utcoffset,basestring):
         from dateutil import tz
-        tzi = tz.gettz(utcconv)
+        tzi = tz.gettz(utcoffset)
         
-        utcconv = []
+        utcoffset = []
         for t in zip(yr,month,day,hr,min,sec):
             #microsecond from float component of seconds
             dt = datetime(*t,microseconds=int((t[-1]-np.floor(t[-1]))*1e6),tzinfo=tzi)
             utcdt = dt.utcoffset()
             if utcdt is None:
-                utcconv.append(0)
+                utcoffset.append(0)
             else:
-                utcconv.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
+                utcoffset.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
         
-    if np.any(utcconv):
-        hr -= np.array(utcconv)
+    
+        
+#    jdn = (1461 * (yr + 4800 + (month - 14)//12))//4 \
+#          + (367 * (month - 2 - 12 * ((month - 14)/12)))//12 \
+#          - (3 * ((yr + 4900 + (month - 14)/12)/100))//4  \
+#          + day - 32075   
+#    res = jdn + (hr-12)/24 + min/1440 + sec/86400
         
     ly = int((month-14)/12)		#In leap years, -1 for Jan, Feb, else 0
     jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
     jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
     
-    res = jdn + (hr/24.0) + min/1440 + sec/86400 - 0.5
+    res = jdn + (hr/24.0) + min/1440.0 + sec/86400.0 - 0.5
+    
+    if np.any(utcoffset):
+        res -= np.array(utcoffset)/24.0
+    
     if scalarout:
         return res[0]
     else:
         return res
+    
+    
+def besselian_epoch_to_JD(bepoch):
+    """
+    Convert a Besselian epoch to Julian Day, assuming a tropical year of 
+    365.242198781 days
+    
+    :Reference:
+    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
+    """
+    return (bepoch - 1900)*365.242198781 + 2415020.31352
+
+def JD_to_besselian_epoch(jd):
+    """
+    Convert a Julian Day to a Besselian epoch, assuming a tropical year of 
+    365.242198781 days
+    
+    :Reference:
+    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
+    """
+    return 1900 + (jd - 2415020.31352)/365.242198781
+
+def JD_to_epoch(jd):
+    """
+    Convert a Julian Day to a Julian Epoch, assuming the year is exactly
+    365.25 days long
+    
+    :Reference:
+    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
+    """
+    return 2000.0 + (jd - 2451545.0)/365.25
+
+def epoch_to_JD(jepoch):
+    """
+    Convert a Julian Epoch to a Julian Day, assuming the year is exactly
+    365.25 days long
+    
+    :Reference:
+    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
+    """
+    return (jepoch - 2000)*365.25 + 2451545.0
+    
+    
 
 class Site(object):
     """
@@ -305,7 +369,7 @@ class Site(object):
                                     args[0].second,args[0].microsecond,self.tz)
                 else:
                     dtobj = args[0]
-                jd = gregorian_to_jd(dtobj,utcconv=True)
+                jd = gregorian_to_jd(dtobj,utcoffset=True)
             else:
                 jd = args[0]
         elif len(args) == 4:
@@ -314,12 +378,12 @@ class Site(object):
             min = np.floor(60*(time - hr))
             sec = np.floor(60*(60*(time-hr) - min))
             msec = np.floor(1e6*(60*(60*(time-hr) - min) - sec))
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcconv=True)
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=True)
         elif len(args) == 6:
             day,month,year,hr,min,sec = args
             msec = 1e6*(sec - np.floor(sec))
             sec = np.floor(sec)
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcconv=True)
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=True)
         else:
             raise TypeError('invalid number of input arguments')
         
