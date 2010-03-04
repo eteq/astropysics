@@ -142,7 +142,8 @@ class AngularCoordinate(object):
     __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+))(?:d|deg).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3})[: ](\d{1,2})[: ](\d+(?:.\d+)?).*')
-    def __init__(self,inpt=None,sghms=None,range=None):
+    __radsre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:r|rad).*')
+    def __init__(self,inpt=None,sghms=None,range=None,radians=False):
         """
         If an undecorated 3-element iterator, `inpt` is taken to be deg,min,sec, 
         othewise, input is cast to a float and treated as decimal degrees
@@ -153,6 +154,9 @@ class AngularCoordinate(object):
         
         `range` sets the valid range of coordinates either any value (if None)
         or a 2-sequence (lowerdegrees,upperdegrees)
+        
+        if `radians` is True and the input is a float or ambiguous string, the
+        value will be taken to be in radians, otherwise degrees
         """
         self._range = None
         
@@ -164,6 +168,7 @@ class AngularCoordinate(object):
             hmsm=self.__hmsre.match(inpt)
             dm=self.__puredre.match(inpt)
             dmsm=self.__dmsre.match(inpt)
+            radsm=self.__radsre.match(inpt)
             if sexig:
                 t=sexig.group(2,3,4)
                 if sghms is None:
@@ -190,11 +195,16 @@ class AngularCoordinate(object):
                 t=dmsm.group(2,3,4)
                 self.degminsec=int(t[0]),int(t[1]),float(t[2])
                 self._decval *= sgn
+            elif radsm:
+                self.radians=float(hm.group(1))
             elif dm:
                 self.degrees=float(dm.group(1))
             else:
                 try:
-                    self.degrees = float(inpt)
+                    if radians:
+                        self.radians = float(inpt)
+                    else:
+                        self.degrees = float(inpt)
                 except:
                     raise ValueError('Unrecognized string format '+inpt)
             
@@ -202,6 +212,8 @@ class AngularCoordinate(object):
             self.degminsec=inpt
         elif inpt is None:
             self._decval=0
+        elif radians:
+            self._decval=float(inpt)
         else:
             self._decval=float(inpt)*pi/180.
         
@@ -576,7 +588,7 @@ class HorizontalPosition(LatLongPosition):
             singleout = lsts.shape == tuple()
             
             HA = lsts.ravel() - eqpos.ra.hours 
-            sHA = np.cos(pi*HA/12)
+            sHA = np.sin(pi*HA/12)
             cHA = np.cos(pi*HA/12)
             
             sdec = np.sin(eqpos.dec.radians)
@@ -586,19 +598,45 @@ class HorizontalPosition(LatLongPosition):
             
             alts = np.arcsin(slat*sdec+clat*cdec*cHA)
             calts = np.cos(alts)
-            #azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%360
-            azs = (np.arcsin(cdec*sHA)/calts)%360
-            raise NotImplementedError
+            azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%(2*pi)
+            #azs = (np.arcsin(cdec*sHA)/calts)%(2*pi)
             
-            #TODO:error prop
+            if eqpos.decerr is not None or eqpos.raerr is not None:
+                decerr = eqpos.decerr.radians if eqpos.decerr is not None else 0
+                raerr = eqpos.raerr.radians if eqpos.raerr is not None else 0
+                
+                dcosalt = np.cos(alts)
+                daltdH = -clat*cdec*sHA/dcosalt
+                daltddec = (slat*cdec-clat*sdec*cHA)/dcosalt
+                
+                dalts = ((daltdH*raerr)**2 + (daltddec*decerr)**2)**0.5
+                
+                #computed with sympy
+                dtanaz = 1+np.tan(azs)**2
+                dazdH = (cHA*cdec/(cHAcdecslat-clat*sdec) \
+                      + cdec*cdec*sHA*sHA*slat*(cHA*cdec*slat-clat*sdec)**-2) \
+                          /dtanaz
+                dazddec = ((sHA*sdec)/(clat*sdec - cHA*cdec*slat) \
+                         + ((cdec*clat+cHA*sdec*slat)*cdec*sHA)*(cHA*cdec*slat-clat*sdec)**-2) \
+                          /dtanaz
+                
+                dazs = ((dazdH*raerr)**2 + (dazddec*decerr)**2)**0.5
+            else:
+                dazs = dalts = None
         finally:
             if epoch is not None:
                 eqpos.epoch = oldepoch
                 
         if singleout:
-            return HorizontalPosition(alts[0],azs[0])
+            if dazs is None:
+                return HorizontalPosition(*np.degrees((alts[0],azs[0])))
+            else:
+                return HorizontalPosition(*np.degrees((alts[0],azs[0],dazs[0],dalts[0])))
         else:
-            return [HorizontalPosition(alt,az) for alt,az in zip(alts,azs)]
+            if dazs is None:
+                return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
+            else:
+                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,alt in np.degrees((alts,azs,dazs,dalts)).T]
 
 class EquatorialPosition(LatLongPosition):
     """
@@ -762,6 +800,43 @@ class SupergalacticPosition(LatLongPosition):
     _nsgp_J2000 = EquatorialPosition(283.75420420,15.70894043,epoch='J2000')
     _sglong0_J2000 = 42.30997710
     
+#<-----------------------------Utility functions for coord objects------------->
+def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
+    """
+    converts a sequence of position objects into an array of coordinates.  
+    
+    `coords` determines the order of the output coordinates - it can be a 
+    comma-seperated list of coordinate names or if 'auto', it will be 'lat,long'
+    for all coordinate systems except for Equatorial, which will use 'ra,dec'
+    
+    if `degrees` is True, returned arrays are in degrees, otherwise radians
+    """
+    if coords=='auto':
+        coordnames = None
+    else:
+        coordnames = coords.split(',')
+        
+    coords = []
+    if degrees:
+        for o in posobjs:
+            if coordnames is None:
+                if isinstance(o,EquatorialPosition):
+                    coords.append((o.ra.d,o.dec.d))
+                else:
+                    coords.append((o.lat.d,o.long.d))
+            else:
+                coords.append([getattr(o,c).d for c in coordnames])
+    else:
+        for o in posobjs:
+            if coordnames is None:
+                if isinstance(o,EquatorialPosition):
+                    coords.append((o.ra.r,o.dec.r))
+                else:
+                    coords.append((o.lat.r,o.long.r))
+            else:
+                coords.append([getattr(o,c).r for c in coordnames])
+
+    return np.array(coords).T
     
     
 #<-------------------------------basic transforms------------------------------>
@@ -915,17 +990,21 @@ def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
         sep = np.degrees(sep)
     return sep
 
-def seperation3d(d1,d2,ap1,ap2):
+def seperation3d(d1,d2,pos1,pos2):
+    """
+    Compute the full 3d seperation between two objects at distances `d1` and 
+    `d2` and angular positions `pos1` and `pos2` (LatLongPositions, or an
+    argument to initialize a new EquatorialPosition)
+    """
     from numpy import sin,cos
-    if type(ap1) != EquatorialPosition:
-        ap1=EquatorialPosition(ap1)
-    if type(ap2) != EquatorialPosition:
-        ap2=EquatorialPosition(ap2)
+    if not isinstance(pos1,LatLongPosition):
+        pos1=EquatorialPosition(pos1)
+    if not isinstance(pos2,LatLongPosition):
+        pos2=EquatorialPosition(pos2)
     
-    theta1,phi1=(pi/2-ap1.dec.radians,ap1.ra.radians)
-    theta2,phi2=(pi/2-ap2.dec.radians,ap2.ra.radians)
+    theta1,phi1=(pi/2-pos1.lat.radians,pos1.long.radians)
+    theta2,phi2=(pi/2-pos2.lat.radians,pos2.long.radians)
     
-    from math import degrees
     dx=d2*sin(theta2)*cos(phi2)-d1*sin(theta1)*cos(phi1)
     dy=d2*sin(theta2)*sin(phi2)-d1*sin(theta1)*sin(phi1)
     dz=d2*cos(theta2)-d1*cos(theta1)

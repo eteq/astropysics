@@ -219,7 +219,7 @@ def gregorian_to_jd(gtime,utcoffset=None):
         return res
     
     
-def besselian_epoch_to_JD(bepoch):
+def besselian_epoch_to_jd(bepoch):
     """
     Convert a Besselian epoch to Julian Day, assuming a tropical year of 
     365.242198781 days
@@ -229,7 +229,7 @@ def besselian_epoch_to_JD(bepoch):
     """
     return (bepoch - 1900)*365.242198781 + 2415020.31352
 
-def JD_to_besselian_epoch(jd):
+def jd_to_besselian_epoch(jd):
     """
     Convert a Julian Day to a Besselian epoch, assuming a tropical year of 
     365.242198781 days
@@ -239,7 +239,7 @@ def JD_to_besselian_epoch(jd):
     """
     return 1900 + (jd - 2415020.31352)/365.242198781
 
-def JD_to_epoch(jd):
+def jd_to_epoch(jd):
     """
     Convert a Julian Day to a Julian Epoch, assuming the year is exactly
     365.25 days long
@@ -249,7 +249,7 @@ def JD_to_epoch(jd):
     """
     return 2000.0 + (jd - 2451545.0)/365.25
 
-def epoch_to_JD(jepoch):
+def epoch_to_jd(jepoch):
     """
     Convert a Julian Epoch to a Julian Day, assuming the year is exactly
     365.25 days long
@@ -337,6 +337,7 @@ class Site(object):
         
         input forms:
         
+        * localSiderialTime(): current local siderial time for this Site 
         * localSiderialTime(JD): input argument is julian date UTC
         * localSiderialTime(datetime): input argument is a datetime object - if
                                        it has tzinfo, the datetime object's time
@@ -361,7 +362,9 @@ class Site(object):
         rettype = kwargs.pop('returntype',None)
         if len(kwargs)>0:
             raise TypeError('got unexpected argument '+kwargs.keys()[0])
-        if len(args)==1:
+        if len(args)==0:
+            jd = gregorian_to_jd(datetime.datetime.utcnow(),utcoffset=None)
+        elif len(args)==1:
             if isinstance(args[0],datetime.datetime):
                 if args[0].tzinfo is None:
                     dtobj = datetime.datetime(args[0].year,args[0].month,
@@ -369,7 +372,7 @@ class Site(object):
                                     args[0].second,args[0].microsecond,self.tz)
                 else:
                     dtobj = args[0]
-                jd = gregorian_to_jd(dtobj,utcoffset=True)
+                jd = gregorian_to_jd(dtobj,utcoffset=None)
             else:
                 jd = args[0]
         elif len(args) == 4:
@@ -378,12 +381,12 @@ class Site(object):
             min = np.floor(60*(time - hr))
             sec = np.floor(60*(60*(time-hr) - min))
             msec = np.floor(1e6*(60*(60*(time-hr) - min) - sec))
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=True)
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=None)
         elif len(args) == 6:
             day,month,year,hr,min,sec = args
             msec = 1e6*(sec - np.floor(sec))
             sec = np.floor(sec)
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=True)
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=None)
         else:
             raise TypeError('invalid number of input arguments')
         
@@ -420,15 +423,66 @@ class Site(object):
         else:
             raise ValueError('invallid returntype argument')
         
-    def currentLocalSiderialTime(self,**kwargs):
+    def apparentPosition(self,coords,datetime=None,setepoch=True):
         """
-        computes the current LST for this site
+        computes the positions in horizontal coordinates of an object with the 
+        provided fixed coordinates at the requested time(s).
         
-        kwargs are passed into localSiderialTime
+        datetime can be a sequence of datetime objects or similar representations,
+        or it can be a sequnce of JD's.
+        
+        If `setepoch` is True, the position will be precessed to the epoch of 
+        the observation
         """
+        from .coords import HorizontalPosition
+        from operator import isSequenceType
+        
+        if datetime is None:
+            return HorizontalPosition.fromEquatorial(coords,self.localSiderialTime(),self.latitude.d)
+        elif hasattr(datetime,'year') or (isSequenceType(datetime) and hasattr(datetime[0],'year')):
+            jd = gregorian_to_jd(datetime).ravel()
+        else:
+            jd = np.array(datetime,copy=False)
+        lsts = self.localSiderialTime(jd)
+        if setepoch:
+            return HorizontalPosition.fromEquatorial(coords,lsts,self.latitude.d,epoch=JD_to_epoch(jd[0]))
+        else:
+            return HorizontalPosition.fromEquatorial(coords,lsts,self.latitude.d)
+        
+    def observingTables(self,coord,date=None,n=15):
+        """
+        tabulates altitude, azimuth, and airmass values for the provided fixed
+        position on a particular date, specified either as a datetime.date 
+        object, a (yr,mon,day) tuple, or a julain date (will be rounded to 
+        nearest)
+        
+        if `date` is None, the current date is used
+        """        
+        from .astropysics import coords
         import datetime
-        from dateutil import tz
-        return self.localSiderialTime(datetime.datetime.now(tz.tzlocal()),**kwargs)
+        
+        if date is None:
+            date = datetime.datetime.now().date()
+        
+        if hasattr(date,'year'):
+            yr = date.year
+            mon = date.month
+            day = date.day
+            jd = gregorian_to_jd((date.year,date.month,date.day))
+        elif np.isscalar(date):
+            jd = date
+        else:
+            jd = gregorian_to_jd(date)
+        jds = np.linspace(jd,jd+.5,n)
+        timehr = (jds-np.round(jds)+.5)*24
+        timemin = timehr - np.floor(timehr)
+        timehr = np.ceil(timehr)
+        
+        alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,setepoch=False))
+        z = 90 - alt
+        airmass = 1/np.cos(np.radians(z))
+        
+        return np.rec.fromarrays((timehr,timemin,alt,az,airmass),names = 'hr,min,alt,az,airmass')
         
 class Observatory(Site):
     """
