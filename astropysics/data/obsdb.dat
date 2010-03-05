@@ -45,7 +45,7 @@ observatory = "mmto"
 observatory = "mmt"
 	name = "Whipple Observatory"
 	longitude = 110:53.1
-	latitude = 31.41.3
+	latitude = 31:41.3
 	altitude = 2608
 	timezone = 7
 

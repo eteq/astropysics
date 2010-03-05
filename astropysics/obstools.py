@@ -332,7 +332,10 @@ class Site(object):
     def _getAltitude(self):
         return self._alt
     def _setAltitude(self,val):
-        self._alt = float(val)
+        if val is None:
+            self._alt = None
+        else:
+            self._alt = float(val)
     altitude = property(_getAltitude,_setAltitude,doc='Altitude of the site in meters')
     
     def _getCurrentobsjd(self):
@@ -774,7 +777,7 @@ def __loadobsdb(sitereg):
         elif k == 'altitude':
             alt = float(v)
         elif k == 'timezone':
-            tz = int(v)
+            tz = float(v)
     if obs is not None:
         o = Observatory(lat,long,alt,-1*tz,name)
         sitereg[obs] = o
