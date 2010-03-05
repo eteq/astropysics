@@ -448,6 +448,29 @@ class Site(object):
         else:
             raise ValueError('invallid returntype argument')
         
+    def localTime(self,LST=None,date=None):
+        """
+        computes the local time given a particular value of local siderial time
+        and returns it as a datetime.time object.
+        
+        if `LST` is None, the current local time is returned.  If no date is
+        provided the current date is used 
+        """
+        import datetime,dateutil
+        
+        if LST is None:
+            return datetime.datetime.now().time()
+        else:
+            if date is None:
+                date = datetime.date.today()
+        
+            ut = LST*15.0-self._long.d
+            raise NotImplementedError
+            
+            
+            dt = datetime.datetime(date.year,date.month,date.day,uthr,utmin,utsec,utmsec,dateutil.tz.tzutc())
+            return dt.astimezone(self.tz).time()
+        
     def apparentPosition(self,coords,datetime=None,setepoch=True):
         """
         computes the positions in horizontal coordinates of an object with the 
@@ -753,7 +776,7 @@ def __loadobsdb(sitereg):
         elif k == 'timezone':
             tz = int(v)
     if obs is not None:
-        o = Observatory(lat,long,alt,tz,name)
+        o = Observatory(lat,long,alt,-1*tz,name)
         sitereg[obs] = o
 
 

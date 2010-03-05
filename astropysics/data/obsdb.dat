@@ -2,13 +2,15 @@
 #
 # Observatory Parameters.  Taken from the Almanac.
 #
+# Extras in this version from http://tdc-www.harvard.edu/iraf/rvsao/bcvcorr/obsdb.html
+#
 # Observatories wishing to be added or make changes in the default
 # distributed database should send information to iraf@noao.edu.
 
 observatory = "kpno"
 	name = "Kitt Peak National Observatory"
 	longitude = 111:36.0
-	latitude = 31:58.8
+	latitude = 31:57.8
 	altitude = 2120.
 	timezone = 7
 
@@ -43,8 +45,15 @@ observatory = "mmto"
 observatory = "mmt"
 	name = "Whipple Observatory"
 	longitude = 110:53.1
-	latitude = 31:41.3
+	latitude = 31.41.3
 	altitude = 2608
+	timezone = 7
+
+observatory = "flwo"
+	name = "Whipple Observatory"
+	longitude = 110:52:39
+	latitude = 31:40:51.4
+	altitude = 2320
 	timezone = 7
 
 observatory = "cfht"
@@ -55,10 +64,11 @@ observatory = "cfht"
 	timezone = 10
 
 observatory = "lapalma"
-	name = "Roque de los Mucachos, La Palma"
+	name = "Roque de los Muchachos, La Palma"
 	longitude = 17:52.8
 	latitude = 28:45.5
 	altitude = 2327
+	timezone = 0
 
 observatory = "mso"
 	name = "Mt. Stromlo Observatory"
@@ -74,123 +84,135 @@ observatory = "sso"
 	altitude = 1149
 	timezone = -10
 
-observatory = "aat"
+observatory = "aao"
 	name = "Anglo-Australian Observatory"
 	longitude = 210:56:2.09
 	latitude = -31:16:37.34
 	altitude = 1164
 	timezone = -10
 
-############################################################################
-#  Added at Lick upon request of Greg Wirth.
+observatory = "mcdonald"
+	name = "McDonald Observatory"
+	longitude = 104.0216667
+	latitude = 30.6716667
+	altitude = 2075
+	timezone = 6
 
-#  This position comes from the 1993 Astronomical Almanac and agrees
-#  to the specified accuracy with the numbers hardcoded into the Keck
-#  I user interface code.  According to Hilton Lewis, this position
-#  should be good to 3 arcseconds, which is 10x the separation of the
-#  2 telescopes.  So this position should be useable for either Keck I
-#  or Keck II unless your astrometric requirements are extremely
-#  precise.
+observatory = "lco"
+	name = "Las Campanas Observatory"
+	longitude = 70:42.1
+	latitude = -29:0.2
+	altitude = 2282
+	timezone = 4
 
+# Submitted by Alan Koski 1/13/93
+observatory = "mtbigelow"
+	name = "Catalina Observatory: 61 inch telescope"
+	longitude = 110:43.9
+	latitude = 32:25.0
+	altitude = 2510.
+	timezone = 7
+
+# Revised by Daniel Durand 2/23/93
+observatory = "dao"
+	name = "Dominion Astrophysical Observatory"
+	longitude = 123:25.0
+	latitude = 48:31.3
+	altitude = 229
+	timezone = 8
+
+# Submitted by Patrick Vielle 5/4/93
+observatory = "spm"
+	name = "Observatorio Astronomico Nacional, San Pedro Martir"
+	longitude = 115:29:13
+	latitude = 31:01:45
+	altitude = 2830
+	timezone = 7
+
+# Submitted by Patrick Vielle 5/4/93
+observatory = "tona"
+	name = "Observatorio Astronomico Nacional, Tonantzintla"
+	longitude = 98:18:50
+	latitude = 19:01:58
+	timezone = 8
+
+# Submitted by Don Hamilton 8/18/93
+observatory = "Palomar"
+	name = "The Hale Telescope"
+	longitude = 116:51:46.80
+	latitude = 33:21:21.6
+	altitude = 1706.
+	timezone = 8
+
+# Submitted by Pat Seitzer 10/31/93
+observatory = "mdm"
+	name = "Michigan-Dartmouth-MIT Observatory"
+	longitude = 111:37.0
+	latitude = 31:57.0
+	altitude = 1938.5
+	timezone = 7
+
+# Submitted by Ignacio Ferrin 9/1/94
+observatory = "NOV"
+	name = "National Observatory of Venezuela"
+	longitude = 70:52.0
+	latitude = 8:47.4
+	altitude = 3610
+	timezone = 4
+
+# Submitted by Alan Welty 10/28/94
+observatory = "bmo"
+	name = "Black Moshannon Observatory"
+	longitude = 78:00.3
+	latitude = 40:55.3
+	altitude = 738
+	timezone = 5
+
+# Submitted by Biwei JIANG 11/28/95
+observatory = "BAO"
+	name = "Beijing XingLong Observatory"
+	longitude = 242:25.5
+	latitude = 40:23.6
+	altitude = 950.
+	timezone = -8
+
+# From Astronomical Almanac 1996
 observatory = "keck"
-	name = "Keck 10-meter Telescope on Mauna Kea"
+	name = "W. M. Keck Observatory"
 	longitude = 155:28.7
 	latitude = 19:49.7
 	altitude = 4160
-	timezone = 0
+	timezone = 10
 
-############################################################################
-#   Added at Lick and not yet sent to NOAO for permanent inclusion.
-#
-#   We need the precise coords for lick1m, lick3m and lickcat.  All of
-#   these were taken from the 1984 Astronomical Almanac.  The
-#   coordinates there are all listed as being given in the North
-#   American Datum (presumably the 1927 NAD), except for the meridian
-#   circle, whose position is given as astrometric.  (I have omitted
-#   the position of the 12-inch Clark refractor which was in the dome
-#   currently occupied by the 40-inch Nickel.)
-#
-#   See http://www.ucolick/org/~sla/mtham/info.html for more details.
+# Padova Astronomical Observatory, Asiago, Italy.
+# Submitted by Lina Tomasella 6/11/96
+observatory = "ekar"
+	name = "Mt. Ekar 182 cm. Telescope"
+	longitude = 348:25:07.92
+	latitude = 45:50:54.92
+	altitude = 1413.69
+	timezone = -1
 
-observatory = "lick1m"
-	name = "Nickel 1-m Reflector at Lick Observatory"
-	longitude = 121:38:30.2
-	latitude = 37:20:30.6
-	altitude = 1285
-	timezone = 0
-#       long -121.64172
-#       lat    37.34183
+# Submitted by Michael Ledlow 8/8/96
+observatory = "apo"
+	name = "Apache Point Observatory"
+	longitude = 105:49.2
+	latitude = 32:46.8
+	altitude = 2798.
+	timezone = 7 
 
-observatory = "lick3m"
-	name = "Shane 3-m Reflector at Lick Observatory"
-	longitude = 121:38:09.9
-	latitude = 37:20:35.2
-	altitude = 1290
-	timezone = 0
-#       121.63608
-#       37.34311
+# Submitted by Michael Ledlow 8/8/96
+observatory = "lowell"
+	name = "Lowell Observatory"
+	longitude = 111:32.1
+	latitude = 35:05.8
+	altitude = 2198. 
+	timezone = 7 
 
-observatory = "lick36"
-	name = "36-inch Clark Refractor at Lick Observatory"
-	longitude = 121:38:31.1
-	latitude = 37:20:28.3
-	altitude = 1290
-	timezone = 0
-#       121.64197
-#       34.34119
-
-observatory = "lickmc"
-	name = "6.5-inch Clark-Reps. Meridian Circle at Lick Observatory"
-	longitude = 121:38:43.95
-	latitude = 37:20:25.3
-	altitude = 1283
-	timezone = 0
-#       Note:  As described in the URL above, this instrument was
-#       removed in the 1950s..
-
-observatory = "lick24"
-	name = "24-inch Cass. Reflector at Lick Observatory"
-	longitude = 121:38:00.7
-	latitude = 37:20:37.3
-	altitude = 1295
-	timezone = 0
-#       121.63353
-#       37.34369
-
-observatory = "lick2ast"
-	name = "Carnegie Double Astrograph at Lick Observatory"
-	longitude = 121:38:13.1
-	latitude = 37:20:33.6
-	altitude = 1285
-	timezone = 0
-#       121.63697
-#       37.34267
-
-observatory = "lickcros"
-	name = "36-inch Crossley Reflector at Lick Observatory"
-	longitude = 121:38:35.1
-	latitude = 37:20:18.0
-	altitude = 1235
-	timezone = 0
-#       121.64308
-#       37.33833
-
-observatory = "licktauch"
-	name = "22-inch Tauchmann Cass. Reflector at Lick Observatory"
-	longitude = 121:38:20.6
-	latitude = 37:20:31.1
-	altitude = 1270
-	timezone = 0
-#       121.63906
-#       37.34197
-
-observatory = "lick6"
-	name = "6-inch reflector at Lick Observatory"
-	longitude = 121:38:28.95
-	latitude = 37:20:29.7
-	altitude = 1280
-	timezone = 0
-#       Note: As seen in the URL above the identity and disposition of
-#       the optics of this telescope are unknown.  However, the position
-#       given here appears to place it very nearly in the known location
-#       of the Meridian Circle.
+# Submitted by S.G. Bhargavi 8/12/96
+observatory = "vbo"
+	name = "Vainu Bappu Observatory"
+	longitude = 281.1734
+	latitude = 12.57666
+	altitude = 725. 
+	timezone = -5.5
