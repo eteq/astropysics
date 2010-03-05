@@ -141,9 +141,9 @@ def gregorian_to_jd(gtime,utcoffset=None):
     
     Adapted from xidl  jdcnv.pro
     """
-    from datetime import datetime
+    from datetime import datetime,date
     
-    if isinstance(gtime,datetime):
+    if isinstance(gtime,datetime) or isinstance(gtime,date):
         datetimes = [gtime]
         scalarout = True
     elif all([isinstance(gt,datetime) for gt in gtime]):
@@ -162,6 +162,9 @@ def gregorian_to_jd(gtime,utcoffset=None):
     if datetimes is not None:
         yr,month,day,hr,min,sec = [],[],[],[],[],[]
         for dt in datetimes:
+            if isinstance(dt,date):
+                dt = datetime(dt.year,dt.month,dt.day)
+            
             if utcoffset is None:
                 off = dt.utcoffset()
                 if off is not None:
@@ -292,6 +295,7 @@ class Site(object):
         if name is None:
             name = 'Default Site'
         self.name = name
+        self._currjd = None
     
     @staticmethod
     def _tzFromLong(long):
@@ -331,13 +335,34 @@ class Site(object):
         self._alt = float(val)
     altitude = property(_getAltitude,_setAltitude,doc='Altitude of the site in meters')
     
+    def _getCurrentobsjd(self):
+        if self._currjd is None:
+            from datetime import datetime
+            return gregorian_to_jd(datetime.utcnow(),utcoffset=None)
+        else:
+            return self._currjd
+    def _setCurrentobsjd(self,val):
+        if val is None:
+            self._currjd = None
+        else:
+            if np.isscalar(val):
+                self._currjd = val
+            else:
+                self._currjd = gregorian_to_jd(val)
+    currentobsjd = property(_getCurrentobsjd,_setCurrentobsjd,doc="""
+    Date and time to use for computing time-dependent values.  If set to None,
+    the jd at the instant of calling will be used.  It can also be set as
+    datetime objects or (yr,mon,day,hr,min,sec) tuples.
+    """)
+    
     def localSiderialTime(self,*args,**kwargs):
         """
         compute the local siderial time given an input civil time.
         
         input forms:
         
-        * localSiderialTime(): current local siderial time for this Site 
+        * localSiderialTime(): current local siderial time for this Site or uses
+                               the value of the :attr:`currentobsjd` property.
         * localSiderialTime(JD): input argument is julian date UTC
         * localSiderialTime(datetime): input argument is a datetime object - if
                                        it has tzinfo, the datetime object's time
@@ -363,7 +388,7 @@ class Site(object):
         if len(kwargs)>0:
             raise TypeError('got unexpected argument '+kwargs.keys()[0])
         if len(args)==0:
-            jd = gregorian_to_jd(datetime.datetime.utcnow(),utcoffset=None)
+            jd = self.currentobsjd
         elif len(args)==1:
             if isinstance(args[0],datetime.datetime):
                 if args[0].tzinfo is None:
@@ -428,8 +453,9 @@ class Site(object):
         computes the positions in horizontal coordinates of an object with the 
         provided fixed coordinates at the requested time(s).
         
-        datetime can be a sequence of datetime objects or similar representations,
-        or it can be a sequnce of JD's.
+        `datetime` can be a sequence of datetime objects or similar representations,
+        or it can be a sequnce of JD's.  If None, it uses the current time or 
+        the value of the :attr:`currentobsjd` property.
         
         If `setepoch` is True, the position will be precessed to the epoch of 
         the observation
@@ -449,7 +475,7 @@ class Site(object):
         else:
             return HorizontalPosition.fromEquatorial(coords,lsts,self.latitude.d)
         
-    def observingTables(self,coord,date=None,n=15):
+    def observingTable(self,coord,date=None,strtablename=None,hrrange=(18,6,25)):
         """
         tabulates altitude, azimuth, and airmass values for the provided fixed
         position on a particular date, specified either as a datetime.date 
@@ -457,32 +483,227 @@ class Site(object):
         nearest)
         
         if `date` is None, the current date is used
+        
+        `tab` determines the size of the table - it should be a 3-tuple
+        (starthr,endhr,n)
+        
+        if `strtablename` is True, a string is returned with a printable table 
+        of observing data.  If `strtable` is a string, it will be used as the 
+        title for the table.  Otherwise, a record array is returned with the 
+        hour, alt, az, and airmass
         """        
         from .astropysics import coords
         import datetime
         
         if date is None:
-            date = datetime.datetime.now().date()
-        
-        if hasattr(date,'year'):
-            yr = date.year
-            mon = date.month
-            day = date.day
-            jd = gregorian_to_jd((date.year,date.month,date.day))
+            jd = self.currentobsjd
         elif np.isscalar(date):
             jd = date
         else:
             jd = gregorian_to_jd(date)
-        jds = np.linspace(jd,jd+.5,n)
-        timehr = (jds-np.round(jds)+.5)*24
-        timemin = timehr - np.floor(timehr)
-        timehr = np.ceil(timehr)
+            
+        date = jd_to_gregorian(jd).date()
+        jd0 = np.floor(jd)
+        
+        starthr,endhr,n = hrrange
+        startjd = jd0 + (starthr - 12)/24
+        endjd = jd0 + (endhr + 12)/24
+        jds = np.linspace(startjd,endjd,n)
+        
+        timehr = (jds-np.round(np.mean(jds))+.5)*24
+        
         
         alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,setepoch=False))
         z = 90 - alt
         airmass = 1/np.cos(np.radians(z))
         
-        return np.rec.fromarrays((timehr,timemin,alt,az,airmass),names = 'hr,min,alt,az,airmass')
+        ra = np.rec.fromarrays((timehr,alt,az,airmass),names = 'hour,alt,az,airmass')
+        if strtablename is not None:
+            lines = []
+            
+            if isinstance(strtablename,basestring):
+                lines.append('Object:'+str(strtablename))
+            lines.append('{0} {1}'.format(coord.ra.getHmsStr(),coord.dec.getDmsStr()))
+            lines.append(str(date))
+            lines.append('time\talt\taz\tairmass')
+            lines.append('-'*(len(lines[-1])+lines[-1].count('\t')*4))
+            for r in ra:
+                hr = int(np.floor(r.hour))
+                min = int(np.round((r.hour-hr)*60))
+                if min==60:
+                    hr+=1
+                    min = 0
+                alt = r.alt
+                az = r.az
+                am = r.airmass if r.airmass>0 else '...'
+                line = '{0:2}:{1:02}\t{2:.3}\t{3:.3}\t{4:.3}'.format(hr,min,alt,az,am)
+                lines.append(line)
+            return '\n'.join(lines)
+        else:
+            ra._sitedate = date
+            return ra
+        
+    def observingPlot(self,coords,date=None,names=None,clf=True,plottype='altam',
+                           plotkwargs=None):
+        """
+        generates plots of important observability quantities for the provided
+        coordinates.
+        
+        `coords` should be an :class:`astropysics.coords.LatLongPosition`
+        
+        `plottype` can be one of:
+        
+        * 'altam' : a plot of time vs. altitude with a secondary axis for sec(z)
+        * 'am' : a plot of time vs. airmass/sec(z)
+        * 'altaz': a plot of azimuth vs. altitude
+        * 'sky': polar projection of the path on the sky
+        
+        """
+        import matplotlib.pyplot as plt
+        from operator import isMappingType
+        from .coords import LatLongPosition
+        from .plotting import add_mapped_axis
+        
+        if isinstance(coords,LatLongPosition):
+            coords = [coords]
+            
+        nonames = False
+        if names is not None:
+            if isinstance(names,basestring):
+                names = [names]
+            if len(names) != len(coords):
+                raise ValueError('names do not match coords')
+        else:
+            nonames = True
+            names = ['' for c in coords]
+            
+        if isMappingType(plotkwargs):
+            plotkwargs = [plotkwargs for c in coords]    
+        elif plotkwargs is None:
+            plotkwargs = [None for c in coords]
+        
+        inter = plt.isinteractive()
+        try:
+            plt.ioff()
+            if clf:
+                plt.clf()
+            oldright = None
+            if plottype == 'altam' or plottype == 'alt':   
+                if plottype == 'altam':
+                    oldright = plt.gcf().subplotpars.right
+                    plt.subplots_adjust(right=0.86)
+                    
+                for n,c,kw in zip(names,coords,plotkwargs):
+                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    if kw is None:
+                        plt.plot(ra.hour,ra.alt,label=n)
+                    else:
+                        kw['label'] = n
+                        plt.plot(ra.hour,ra.alt,**kw)
+                    
+                plt.xlim(0,24)
+                
+                uppery = plt.ylim()[1]
+                plt.ylim(0,uppery)
+                
+                if not nonames:
+                    plt.legend(loc=0)
+                
+                plt.title(str(ra._sitedate))
+                plt.xlabel(r'$\rm hours$')
+                plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
+                if plottype == 'altam':
+                    yticks = plt.yticks()[0]
+                    newticks = list(yticks[1:])
+                    newticks.insert(0,(yticks[0]+newticks[0])/2)
+                    newticks.insert(0,(yticks[0]+newticks[0])/2)
+                    plt.twinx()
+                    plt.ylim(0,uppery)
+                    plt.yticks(newticks,['%2.2f'%(1/np.cos(np.radians(90-yt))) for yt in newticks])
+                    plt.ylabel(r'$\sec(z)$')
+                    
+                plt.xticks(np.arange(13)*2)
+                    
+            elif plottype == 'am':
+                for n,c,kw in zip(names,coords,plotkwargs):
+                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    
+                    ammask = ra.airmass>0
+                    if kw is None:
+                        plt.plot(ra.hour[ammask],ra.airmass[ammask],label=n)
+                    else:
+                        kw['label'] = n
+                        plt.plot(ra.hour[ammask],ra.airmass[ammask],**kw)
+                        
+                plt.xlim(0,24)
+                plt.xticks(np.arange(13)*2)
+                uppery = plt.ylim()[1]
+                plt.ylim(1,uppery)
+                yticks = list(plt.yticks()[0])
+                yticks.insert(0,1)
+                plt.yticks(yticks)
+                plt.ylim(1,uppery)
+                
+                plt.title(str(ra._sitedate))
+                plt.xlabel(r'$\rm hours$')
+                plt.ylabel(r'$airmass / \sec(z)$')
+                
+                if not nonames:
+                    plt.legend(loc=0)
+                    
+            elif plottype == 'altaz':
+                for n,c,kw in zip(names,coords,plotkwargs):
+                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    
+                    if kw is None:
+                        plt.plot(ra.az,ra.alt,label=n)
+                    else:
+                        kw['label'] = n
+                        plt.plot(ra.az,ra.alt,**kw)
+                        
+                plt.xlim(0,360)
+                plt.xticks(np.arange(9)*360/8)
+                
+                uppery = plt.ylim()[1]
+                plt.ylim(0,uppery)
+                
+                plt.title(str(ra._sitedate))
+                plt.xlabel(r'${\rm azimuth} [{\rm degrees}]$')
+                plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
+                
+                if not nonames:
+                    plt.legend(loc=0)
+                
+            elif plottype == 'sky':
+                for n,c,kw in zip(names,coords,plotkwargs):
+                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    
+                    if kw is None:
+                        plt.polar(np.radians(ra.az),90-ra.alt,label=n)
+                    else:
+                        kw['label'] = n
+                        plt.polar(np.radians(ra.az),90-ra.alt,**kw)
+                        
+                plt.ylim(0,90)
+                #yticks = plt.yticks()[0]
+                yticks = [15,30,45,60,75]
+                plt.yticks(yticks,[r'${0}^\circ$'.format(int(90-yt)) for yt in yticks])
+                
+                plt.title(str(ra._sitedate))
+                        
+                if not nonames:
+                    plt.legend(loc=0)
+            else:
+                raise ValueError('unrecognized plottype {0}'.format(plottype))
+            
+            plt.show()
+            plt.draw()
+            if oldright is not None:
+                plt.gcf().subplotpars.right = oldright
+        finally:
+            plt.interactive(inter)
+        
+        
         
 class Observatory(Site):
     """
