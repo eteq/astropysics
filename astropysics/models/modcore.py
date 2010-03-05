@@ -2855,6 +2855,12 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
     incdeg=property(_getIncDeg,_setIncDeg,doc="""
         inclination angle of object in degrees - maps onto atob
         """)
+        
+    def _getE(self):
+        return (1-(1/self.atob)**2)**0.5
+    def _setE(self,val):
+        self.atob = (1- val**2)**-0.5
+    e = property(_getE,_setE,doc='ellipticity given by e^2 = 1-(b/a)^2')
             
     @property
     def rangehint(self):
@@ -2863,6 +2869,8 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
             return None
         else:
             return -rh[1],rh[1],-rh[1],rh[1] #assume theta is not localized
+        
+    
         
 #<-------------------------------Module functions ----------------------------->  
 __model_registry={}
@@ -3119,3 +3127,25 @@ def binned_weights(values,n,log=False):
     wsr[edges[-1]==values] = w
     
     return ws
+
+def intrinsic_to_observed_ellipticity(ei,i,degrees=True):
+    """
+    converts intrinsic ellipticity to observed where e^2 = 1-(b/a)^2
+    
+    if `degrees` is True, the input inclination `i` is assumed to be in degrees
+    """
+    if degrees:
+        i = np.radians(i)
+        
+    return 1 - ((1-ei)**2*np.sin(i)**2+np.cos(i)**2)**0.5
+    
+def observed_to_intrinsic_ellipticity(eo,i):
+    """
+    converts observed ellipticity to intrinsic where e^2 = 1-(b/a)^2
+    
+    if `degrees` is True, the input inclination `i` is assumed to be in degrees
+    """
+    if degrees:
+        i = np.radians(i)
+        
+    return 1 - ((1-eo)-np.cos(i)**2)**0.5/np.sin(i)
