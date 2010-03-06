@@ -473,6 +473,74 @@ class Site(object):
             
             dt = datetime.datetime(date.year,date.month,date.day,uthr,utmin,utsec,utmsec,dateutil.tz.tzutc())
             return dt.astimezone(self.tz).time()
+    
+    def equatorialToHorizontal(self,eqpos,lsts,epoch=None):
+        """
+        Generates a list of horizontal positions (or just one) from a provided
+        equatorial position and local siderial time (or sequence of lsts) in 
+        decimal hours and a latitude in degrees.  If  `epoch` is not None, it 
+        will be used to set the epoch in the equatorial system.
+        """
+        from .coords import EquatorialPosition,HorizontalPosition
+        
+        latitude = self.latitude.d
+        
+        if epoch is not None:
+            #make copy so as not to change the epoch of the input
+            eqpos = EquatorialPosition(eqpos)
+            eqpos.epoch = epoch
+            
+        lsts = np.array(lsts,copy=False)
+        singleout = lsts.shape == tuple()
+        
+        HA = lsts.ravel() - eqpos.ra.hours 
+        sHA = np.sin(pi*HA/12)
+        cHA = np.cos(pi*HA/12)
+        
+        sdec = np.sin(eqpos.dec.radians)
+        cdec = np.cos(eqpos.dec.radians)
+        slat = np.sin(np.radians(latitude))
+        clat = np.cos(np.radians(latitude))
+        
+        alts = np.arcsin(slat*sdec+clat*cdec*cHA)
+        calts = np.cos(alts)
+        azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%(2*pi)
+        #azs = (np.arcsin(cdec*sHA)/calts)%(2*pi)
+        
+        if eqpos.decerr is not None or eqpos.raerr is not None:
+            decerr = eqpos.decerr.radians if eqpos.decerr is not None else 0
+            raerr = eqpos.raerr.radians if eqpos.raerr is not None else 0
+            
+            dcosalt = np.cos(alts)
+            daltdH = -clat*cdec*sHA/dcosalt
+            daltddec = (slat*cdec-clat*sdec*cHA)/dcosalt
+            
+            dalts = ((daltdH*raerr)**2 + (daltddec*decerr)**2)**0.5
+            
+            #error propogation computed with sympy following standard rules
+            dtanaz = 1+np.tan(azs)**2
+            dazdH = (cHA*cdec/(cHAcdecslat-clat*sdec) \
+                  + cdec*cdec*sHA*sHA*slat*(cHA*cdec*slat-clat*sdec)**-2) \
+                      /dtanaz
+            dazddec = ((sHA*sdec)/(clat*sdec - cHA*cdec*slat) \
+                     + ((cdec*clat+cHA*sdec*slat)*cdec*sHA)*(cHA*cdec*slat-clat*sdec)**-2) \
+                      /dtanaz
+            
+            dazs = ((dazdH*raerr)**2 + (dazddec*decerr)**2)**0.5
+        else:
+            dazs = dalts = None
+                
+        if singleout:
+            if dazs is None:
+                return HorizontalPosition(*np.degrees((alts[0],azs[0])))
+            else:
+                return HorizontalPosition(*np.degrees((alts[0],azs[0],dazs[0],dalts[0])))
+        else:
+            if dazs is None:
+                return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
+            else:
+                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,alt in np.degrees((alts,azs,dazs,dalts)).T]
+
         
     def apparentPosition(self,coords,datetime=None,setepoch=True):
         """
@@ -497,9 +565,9 @@ class Site(object):
             jd = np.array(datetime,copy=False)
         lsts = self.localSiderialTime(jd)
         if setepoch:
-            return HorizontalPosition.fromEquatorial(coords,lsts,self.latitude.d,epoch=JD_to_epoch(jd[0]))
+            return self.equatorialToHorizontal(coords,lsts,self.latitude.d,epoch=JD_to_epoch(jd[0]))
         else:
-            return HorizontalPosition.fromEquatorial(coords,lsts,self.latitude.d)
+            return self.equatorialToHorizontal(coords,lsts,self.latitude.d)
         
     def observingTable(self,coord,date=None,strtablename=None,hrrange=(18,6,25)):
         """

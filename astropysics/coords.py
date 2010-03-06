@@ -572,71 +572,6 @@ class HorizontalPosition(LatLongPosition):
     _latlongnames_ = ('alt','az')
     _longrange_ = (0,360)
     
-    @staticmethod
-    def fromEquatorial(eqpos,lsts,latitude,epoch=None):
-        """
-        Generates a list of horizontal positions (or just one) from a provided
-        equatorial position and local siderial time (or sequence of lsts) in 
-        decimal hours and a latitude in degrees.  If  `epoch` is not None, it 
-        will be used to set the epoch in the equatorial system.
-        """
-        oldepoch = eqpos.epoch
-        try:
-            if epoch is not None:
-                eqpos.epoch = epoch
-            lsts = np.array(lsts,copy=False)
-            singleout = lsts.shape == tuple()
-            
-            HA = lsts.ravel() - eqpos.ra.hours 
-            sHA = np.sin(pi*HA/12)
-            cHA = np.cos(pi*HA/12)
-            
-            sdec = np.sin(eqpos.dec.radians)
-            cdec = np.cos(eqpos.dec.radians)
-            slat = np.sin(np.radians(latitude))
-            clat = np.cos(np.radians(latitude))
-            
-            alts = np.arcsin(slat*sdec+clat*cdec*cHA)
-            calts = np.cos(alts)
-            azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%(2*pi)
-            #azs = (np.arcsin(cdec*sHA)/calts)%(2*pi)
-            
-            if eqpos.decerr is not None or eqpos.raerr is not None:
-                decerr = eqpos.decerr.radians if eqpos.decerr is not None else 0
-                raerr = eqpos.raerr.radians if eqpos.raerr is not None else 0
-                
-                dcosalt = np.cos(alts)
-                daltdH = -clat*cdec*sHA/dcosalt
-                daltddec = (slat*cdec-clat*sdec*cHA)/dcosalt
-                
-                dalts = ((daltdH*raerr)**2 + (daltddec*decerr)**2)**0.5
-                
-                #computed with sympy
-                dtanaz = 1+np.tan(azs)**2
-                dazdH = (cHA*cdec/(cHAcdecslat-clat*sdec) \
-                      + cdec*cdec*sHA*sHA*slat*(cHA*cdec*slat-clat*sdec)**-2) \
-                          /dtanaz
-                dazddec = ((sHA*sdec)/(clat*sdec - cHA*cdec*slat) \
-                         + ((cdec*clat+cHA*sdec*slat)*cdec*sHA)*(cHA*cdec*slat-clat*sdec)**-2) \
-                          /dtanaz
-                
-                dazs = ((dazdH*raerr)**2 + (dazddec*decerr)**2)**0.5
-            else:
-                dazs = dalts = None
-        finally:
-            if epoch is not None:
-                eqpos.epoch = oldepoch
-                
-        if singleout:
-            if dazs is None:
-                return HorizontalPosition(*np.degrees((alts[0],azs[0])))
-            else:
-                return HorizontalPosition(*np.degrees((alts[0],azs[0],dazs[0],dalts[0])))
-        else:
-            if dazs is None:
-                return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
-            else:
-                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,alt in np.degrees((alts,azs,dazs,dalts)).T]
 
 class EquatorialPosition(LatLongPosition):
     """
@@ -1107,6 +1042,7 @@ def seperation_matrix(v,w=None,tri=False):
         return np.triu(A)
     else:
         return A
+    
 
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
