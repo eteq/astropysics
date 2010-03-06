@@ -3139,7 +3139,7 @@ def intrinsic_to_observed_ellipticity(ei,i,degrees=True):
         
     return 1 - ((1-ei)**2*np.sin(i)**2+np.cos(i)**2)**0.5
     
-def observed_to_intrinsic_ellipticity(eo,i):
+def observed_to_intrinsic_ellipticity(eo,i,degrees=True):
     """
     converts observed ellipticity to intrinsic where e^2 = 1-(b/a)^2
     
