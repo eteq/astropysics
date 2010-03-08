@@ -138,8 +138,10 @@ class AngularCoordinate(object):
     ############################################################################
    
     __purehre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:h|hr).*')
+    __hmre=_re.compile('.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min).*')
     __hmsre=_re.compile(r'.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+))(?:d|deg).*')
+    __dmre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3})[: ](\d{1,2})[: ](\d+(?:.\d+)?).*')
     __radsre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:r|rad).*')
@@ -165,8 +167,10 @@ class AngularCoordinate(object):
         elif isinstance(inpt,basestring):
             sexig=self.__sexre.match(inpt)
             hm=self.__purehre.match(inpt)
+            hmm=self.__hmre.match(inpt)
             hmsm=self.__hmsre.match(inpt)
             dm=self.__puredre.match(inpt)
+            dmm=self.__dmre.match(inpt)
             dmsm=self.__dmsre.match(inpt)
             radsm=self.__radsre.match(inpt)
             if sexig:
@@ -188,6 +192,9 @@ class AngularCoordinate(object):
             elif hmsm:
                 t=hmsm.group(1,2,3)
                 self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
+            elif hmm:
+                t=hmm.group(1,2)
+                self.hrsminsec=int(t[0]),int(t[1]),0
             elif hm:
                 self.hours=float(hm.group(1))
             elif dmsm:
@@ -197,6 +204,9 @@ class AngularCoordinate(object):
                 self._decval *= sgn
             elif radsm:
                 self.radians=float(hm.group(1))
+            elif dmm:
+                t=dmm.group(1,2)
+                self.degminsec=int(t[0]),int(t[1]),0
             elif dm:
                 self.degrees=float(dm.group(1))
             else:
@@ -559,6 +569,50 @@ class LatLongPosition(object):
             return sep
         else:
             raise "unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__)
+        
+    def transform(self,matrix,apply=True,unitarycheck=False):
+        """
+        Applies the supplied transformation matrix (in cartesian coordinates) to
+        these coordinates.  The transform matrix is assumed to be unitary, 
+        although this is not checked unless `unitarycheck` is True
+        
+        if `apply` is True, the transform will be applied to this coordinate as
+        well as being returned
+        
+        *returns*
+        lat,long after the supplied transform is applied
+        """
+        #for single values, math module is much faster than numpy 
+        from math import sin,cos,atan2,sqrt
+        
+        m = np.asmatrix(matrix)
+        
+        if unitarycheck:
+            mdagger = m.H
+            rtol = 1e-5 if unitarycheck is True else unitarycheck
+            if not np.allclose(mdagger*m,m*mdagger,rtol):
+                raise ValueError('matrix not unitary')
+        
+        lat = self.lat.radians
+        long = self.long.radians    
+        
+        #spherical w/ r=1 > cartesian
+        x = cos(lat)*cos(long)
+        y = cos(lat)*sin(long) 
+        z = sin(t)
+        
+        #do transform
+        xp,yp,zp = m*np.matrix((x,y,z))
+        
+        #cartesian > spherical
+        latp = atan2(zp,sqrt(xp*xp+yp*yp))
+        longp = atan2(yp,xp)
+        
+        if apply:
+            self.lat = latp
+            self.long = longp
+        
+        return latp,longp
 
 class HorizontalPosition(LatLongPosition):
     """
@@ -671,6 +725,20 @@ class EquatorialPosition(LatLongPosition):
             warn('refsys transforms not ready yet')
     refsys = property(_getRefsys,_setRefsys,doc=None)
     
+    def toGal(self):
+        """
+        converts this position to Galactic coordinates
+        """
+        newpos = EquatorialPosition(self)
+        newpos.epoch = 'J2000'
+        
+        latang = GalacticPosition._ngp_J2000.lat.d
+        longang = GalacticPosition._ngp_J2000.long.d
+        long0 = GalacticPosition._long0_J2000.d
+        
+        mrot = rotZ(180-long0)*rotY(90-latang)*rotZ(longang)
+        newpos.transform(mrot)
+        return GalacticPosition(newpos)
     
 class EclipticPosition(LatLongPosition):
     """
@@ -723,7 +791,18 @@ class GalacticPosition(LatLongPosition):
     _longrange_ = (0,360)
     
     _ngp_J2000 = EquatorialPosition(192.859508, 27.128336,epoch='J2000')
-    _long0_J2000 = 122.932
+    _long0_J2000 = AngularCoordinate(122.932)
+    
+    def toSGal(self):
+        """
+        converts this position to Supergalactic coordinates
+        """
+        latang = SupergalacticPosition._nsgp_gal.lat.d
+        longang = SupergalacticPosition._nsgp_gal.long.d
+        mrot = rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
+        sgp = SupergalacticPosition(self)
+        sgp.transform(mrot)
+        return sgp
     
     
 class SupergalacticPosition(LatLongPosition):   
@@ -773,6 +852,87 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
                 coords.append([getattr(o,c).r for c in coordnames])
 
     return np.array(coords).T
+
+def rotation_matrix(angle,axis='z',degrees=True):
+    """
+    generates a 3x3 rotation matrix in cartesian coordinates for rotation about
+    the requested axis.
+    
+    `axis` can either be a string 'x','y', or 'z', or a 3-sequence specifying
+    an axis to rotate about.
+    
+    if `degrees` is True the input angle is in degrees, otherwise it is radians
+    """
+    from math import sin,cos,radians,sqrt
+    if degrees:
+        angle = radians(angle)
+        
+    
+    
+    if axis == 'z':
+        s = sin(angle)
+        c = cos(angle)
+        return np.matrix((( c,-s, 0),
+                          ( s, c, 0),
+                          ( 0, 0, 1)))
+    elif axis == 'y':
+        s = sin(angle)
+        c = cos(angle)
+        return np.matrix((( c, 0,-s),
+                          ( 0, 1, 0),
+                          ( s, 0, c)))
+    elif axis == 'x':
+        s = sin(angle)
+        c = cos(angle)
+        return np.matrix((( 1, 0, 0),
+                          ( 0, c,-s),
+                          ( 0, s, c)))
+    else:
+        x,y,z = axis
+        w = cos(angle/2)
+        
+        #normalize
+        if w == 1:
+            x=y=z=0
+        else:
+            l = sqrt((x*x + y*y + z*z)/(1-w*w))
+            x /= l
+            y /= l
+            z /= l
+        
+        wsq = w*w
+        xsq = x*x
+        ysq = y*y
+        zsq = z*z
+        return np.matrix((( wsq+xsq-ysq-zsq, 2*x*y-2*w*z, 2*x*z+2*w*y),
+                          ( 2*x*y+2*w*z, wsq-xsq+ysq-zsq,2*y*z-2*w*x),
+                          ( 2*x*z-2*w*y, 2*y*z+2*w*x, wsq-xsq-ysq+zsq)))
+def angle_axis(matrix,degrees=True):
+    """
+    Computes the angle of rotation and the rotation axis for a given rotation
+    matrix
+    
+    *returns*
+    angle,axis where angle is in degrees if `degrees` is True, otherwise in
+    radians
+    """
+    from math import sin,cos,acos,degrees,sqrt
+    
+    m = np.asmatrix(matrix)
+    if m.shape != (3,3):
+        raise ValueError('matrix is not 3x3')
+    
+    
+    
+    angle = acos((m[0,0] + m[1,1] + m[2,2] - 1)/2)
+    denom = sqrt(2*((m[2,1]-m[1,2])+(m[0,2]-m[2,0])+(m[1,0]-m[0,1])))
+    axis = np.array((m[2,1]-m[1,2],m[0,2]-m[2,0],m[1,0]-m[0,1]))/denom
+    axis /= sqrt(np.sum(axis**2)) 
+    
+    if degrees:
+        return degrees(angle),axis
+    else:
+        return angle,axis
     
     
 #<-------------------------------basic transforms------------------------------>
@@ -1349,7 +1509,7 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
     if degrees:
         ra,dec=np.radians(ra),np.radians(dec)
     else:
-        ra,dec=np.array(ar),np.array(dec)
+        ra,dec=np.array(ra),np.array(dec)
     
     if inepoch == outepoch:
         trans=np.matrix(np.eye(3))
@@ -1364,10 +1524,10 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
     y=np.sin(ra)*np.cos(dec)
     z=np.sin(dec)
     
-    v=matrix((x,y,z))
+    v=np.matrix((x,y,z))
     xp,yp,zp=trans*v
     
-    rap=np.atan2(yp,xp)
+    rap=np.arctan2(yp,xp)
     decp=np.arcsin(zp)
     
     return rap,decp
