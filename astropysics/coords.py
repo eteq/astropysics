@@ -20,6 +20,8 @@ from __future__ import division,with_statement
 from .constants import pi
 import numpy as np
 
+_twopi = 2*pi
+
 #<----------------coordinate classes and related functions------------------>
 
 
@@ -300,7 +302,7 @@ class AngularCoordinate(object):
         d,m,s = self.degminsec
         
         if canonical:
-            sgn = '-' if self._decval < 0 else '+'
+            sgn = '' if self._decval < 0 else '+'
             return '%s%02.i:%02.i:%05.2f'%(sgn,d,m,s)
         
         d,m=str(d),str(m)
@@ -314,8 +316,8 @@ class AngularCoordinate(object):
         
         tojoin = []
         
-        if sign:
-            d='+'+d if d >= 0 else d
+        if sign and self._decval  >= 0:
+            tojoin.append('+')
         
         if d is not '0':
             tojoin.append(d)
@@ -512,18 +514,24 @@ class LatLongPosition(object):
         return self._lat
     def _setLat(self,val):
         if isinstance(val,AngularCoordinate):
-            self._lat.radians = val.radians
+            rads = val.radians%_twopi
         else:
-            self._lat.radians = AngularCoordinate(val).radians
+            rads = AngularCoordinate(val).radians%_twopi
+        #fix for radian range
+        if rads > 3*pi/2:
+            rads -= _twopi
+        elif rads > pi/2:
+            rads = pi - rads
+        self._lat.radians = rads
     lat = property(_getLat,_setLat,doc=None)
     
     def _getLong(self):
         return self._long
     def _setLong(self,val):
         if isinstance(val,AngularCoordinate):
-            self._long.radians = val.radians
+            self._long.radians = val.radians%_twopi
         else:
-            self._long.radians = AngularCoordinate(val).radians
+            self._long.radians = AngularCoordinate(val).radians%_twopi
     long = property(_getLong,_setLong,doc=None)
     
     def _getLaterr(self):
@@ -549,7 +557,7 @@ class LatLongPosition(object):
     longerr = property(_getLongerr,_setLongerr,doc=None)
     
     def __str__(self):
-        return '{0}:({1[0]}={2},{1[1]}={3})'.format(self.__class__.__name__,self._latlongnames_,self._lat.d,self._long.d)
+        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._latlongnames_,self._lat.d,self._long.d)
     
     def __eq__(self,other):
         if hasattr(other,'_lat') and hasattr(other,'_long'):
@@ -649,6 +657,11 @@ class EquatorialPosition(LatLongPosition):
     def __setstate__(self,d):
         super(EquatorialPosition,self).__setstate__
         self._epoch = d['_epoch']
+        
+    def __str__(self):
+        rastr = self.ra.getHmsStr(canonical=True)
+        decstr = self.dec.getDmsStr(canonical=True)
+        return 'Equatorial Position: {0} {1} ({2})'.format(rastr,decstr,self.epoch)
     
     def __init__(self,*args,**kwargs):
         """
