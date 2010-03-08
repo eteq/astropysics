@@ -125,22 +125,25 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
         return res
     
 
-def gregorian_to_jd(gtime,utcoffset=None):
+def gregorian_to_jd(gtime,tz=None):
     """
     Convert gregorian calendar value to julian date
     
     the input `gtime` can either be a sequence (yr,month,day,[hr,min,sec]), 
-    where each element may be  or a datetime.datetime object
+    where each element may be  or a :class:`datetime.datetime` object
     
-    if datetime objects are given, and utcoffset is None, values are
-    converted to UTC based on the datetime.tzinfo objects (if present).  If 
-    utcoffset is a string, it is taken to be a timezone name that will be used
-    to convert all the gregorian dates to UTC (requires dateutil package).  If 
-    it is a scalar, it is taken to be the hour offset of the timezone to convert
-    to UTC.    
+    if datetime objects are given, and `tz` is None, values are converted to
+    UTC based on the datetime.tzinfo objects (if present).  if `tz` is not None,
+    the tzinfo in the datetime objects is ignored.
+    
+    If `tz` is a string, it is taken to be a timezone name that will be used
+    to convert all the dates to UTC (requires :mod:`dateutil` package).  If `tz`
+    it is a scalar, it is taken to be the hour offset of the timezone. 
+    Or, if it is a :class:`datetime.tzinfo` object, that object will be used to
+    do the conversion to UTC.  
     """
     #Adapted from xidl  jdcnv.pro
-    from datetime import datetime,date
+    from datetime import datetime,date,tzinfo
     
     if isinstance(gtime,datetime) or isinstance(gtime,date):
         datetimes = [gtime]
@@ -158,13 +161,14 @@ def gregorian_to_jd(gtime,utcoffset=None):
         yr,month,day,hr,min,sec = gtime
         scalarout = False #already a scalar form
         
+    #if input objects are datetime objects, generate arrays
     if datetimes is not None:
         yr,month,day,hr,min,sec = [],[],[],[],[],[]
         for dt in datetimes:
             if not hasattr(dt,'hour'):
                 dt = datetime(dt.year,dt.month,dt.day,12)
             
-            if utcoffset is None:
+            if tz is None:
                 off = dt.utcoffset()
                 if off is not None:
                     dt = dt - off
@@ -177,35 +181,35 @@ def gregorian_to_jd(gtime,utcoffset=None):
                 
                 
     
-    yr = np.array(yr,dtype='int64',copy=False)
-    month = np.array(month,dtype='int64',copy=False)
-    day = np.array(day,dtype='int64',copy=False)
-    hr = np.array(hr,dtype=float,copy=False)
-    min = np.array(min,dtype=float,copy=False)
-    sec = np.array(sec,dtype=float,copy=False)
+    yr = np.array(yr,dtype='int64',copy=False).ravel()
+    month = np.array(month,dtype='int64',copy=False).ravel()
+    day = np.array(day,dtype='int64',copy=False).ravel()
+    hr = np.array(hr,dtype=float,copy=False).ravel()
+    min = np.array(min,dtype=float,copy=False).ravel()
+    sec = np.array(sec,dtype=float,copy=False).ravel()
     
-    if isinstance(utcoffset,basestring):
-        from dateutil import tz
-        tzi = tz.gettz(utcoffset)
+    #do tz conversion if tz is provided  
+    if isinstance(tz,basestring) or isinstance(tz,tzinfo):
+        if isinstance(tz,basestring):
+            from dateutil import tz
+            tzi = tz.gettz(tz)
+        else:
+            tzi = tz
         
         utcoffset = []
         for t in zip(yr,month,day,hr,min,sec):
             #microsecond from float component of seconds
-            dt = datetime(*t,microseconds=int((t[-1]-np.floor(t[-1]))*1e6),tzinfo=tzi)
+            t = list(t)
+            t.append(int((t[-1]-np.floor(t[-1]))*1e6))
+            dt = datetime(*t,tzinfo=tzi)
             utcdt = dt.utcoffset()
             if utcdt is None:
                 utcoffset.append(0)
             else:
                 utcoffset.append(utcdt.days*24 + (utcdt.seconds + utcdt.microseconds*1e-6)/3600)
-        
-    
-        
-#    jdn = (1461 * (yr + 4800 + (month - 14)//12))//4 \
-#          + (367 * (month - 2 - 12 * ((month - 14)/12)))//12 \
-#          - (3 * ((yr + 4900 + (month - 14)/12)/100))//4  \
-#          + day - 32075   
-#    res = jdn + (hr-12)/24 + min/1440 + sec/86400
-        
+    else:
+        utcoffset = tz
+            
     ly = int((month-14)/12)		#In leap years, -1 for Jan, Feb, else 0
     jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
     jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
@@ -342,7 +346,7 @@ class Site(object):
     def _getCurrentobsjd(self):
         if self._currjd is None:
             from datetime import datetime
-            return gregorian_to_jd(datetime.utcnow(),utcoffset=None)
+            return gregorian_to_jd(datetime.utcnow(),tz=None)
         else:
             return self._currjd
     def _setCurrentobsjd(self,val):
@@ -374,9 +378,9 @@ class Site(object):
                                        specifies the local time.  If it has
                                        tzinfo, the object's time zone will 
                                        be used, otherwise the Site's 
-        * localSiderialTime(time,day,month,year): input arguments determine 
+        * localSiderialTime(time,year,month,day): input arguments determine 
           local time - time is in hours
-        * localSiderialTime(day,month,year,hr,min,sec): local time - hours and
+        * localSiderialTime(year,month,day,hr,min,sec): local time - hours and
           minutes will be interpreted as integers
           
         *keywords*  
@@ -416,21 +420,21 @@ class Site(object):
                 else: #only date provided
                     dtobj = datetime.datetime(args[0].year,args[0].month,
                                               args[0].day,tzinfo=self.tz)
-                jd = gregorian_to_jd(dtobj,utcoffset=None)
+                jd = gregorian_to_jd(dtobj,tz=None)
             else:
                 jd = args[0]
         elif len(args) == 4:
-            time,day,month,year = args
-            hr = np.floor(time)
-            min = np.floor(60*(time - hr))
-            sec = np.floor(60*(60*(time-hr) - min))
-            msec = np.floor(1e6*(60*(60*(time-hr) - min) - sec))
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=None)
+            time,year,month,day = args
+            hr = int(np.floor(time))
+            min = int(np.floor(60*(time - hr)))
+            sec = int(np.floor(60*(60*(time-hr) - min)))
+            msec = int(np.floor(1e6*(60*(60*(time-hr) - min) - sec)))
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
         elif len(args) == 6:
-            day,month,year,hr,min,sec = args
-            msec = 1e6*(sec - np.floor(sec))
-            sec = np.floor(sec)
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),utcoffset=None)
+            year,month,day,hr,min,sec = args
+            msec = int(1e6*(sec - np.floor(sec)))
+            sec = int(np.floor(sec))
+            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
         else:
             raise TypeError('invalid number of input arguments')
         
@@ -578,6 +582,11 @@ class Site(object):
         equatorial position and local siderial time (or sequence of LSTs) in 
         decimal hours and a latitude in degrees.  If  `epoch` is not None, it 
         will be used to set the epoch in the equatorial system.
+        
+        Note that this generally should *not* be used to compute the observed 
+        horizontal coordinates directly - :meth:`apparentPosition` includes all 
+        the corrections and formatting.  This method is purely for the 
+        coordinate conversion.
         """
         from .coords import EquatorialPosition,HorizontalPosition
         
@@ -602,7 +611,7 @@ class Site(object):
         
         alts = np.arcsin(slat*sdec+clat*cdec*cHA)
         calts = np.cos(alts)
-        azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%(2*pi)
+        azs = np.arctan2(-cdec*sHA,clat*sdec-slat*cdec*cHA)%(2*pi)
         
         if eqpos.decerr is not None or eqpos.raerr is not None:
             decerr = eqpos.decerr.radians if eqpos.decerr is not None else 0
@@ -643,28 +652,52 @@ class Site(object):
         computes the rise, set, and transit times of a provided equatorial 
         position.  
         
-        `alt` determines the altitude to be considered as risen or set
+        `alt` determines the altitude to be considered as risen or set in 
+        degrees
         
         *returns*
         (rise,set,transit) as :class:datetime.time objects if `timeobj` is True
-        or if it is False, they are in decimal hours
+        or if it is False, they are in decimal hours.  If the object is 
+        circumpolar, rise and set are both None.  If it is never visible,
+        rise,set, and transit are all None
         """
         import datetime
+        from math import sin,cos,radians,acos
+        
+        alt = radians(alt)
         
         transit = self.localTime(eqpos.ra.hours)
-        rise = (transit - 5.983617747440273)%24 #TODO:iterative algorithm
-        set = (transit + 5.983617747440273)%24 #TODO:iterative algorithm
+        
+        #TODO:iterative algorithm for rise/set
+        lat = self.latitude.radians
+        dec = eqpos.dec.radians
+        #local hour angle for alt
+        coslha = (sin(alt) - sin(lat)*sin(dec))/(cos(lat)*cos(dec))
+        if coslha<-1:
+            #circumpolar
+            rise=set=None
+        elif coslha>1:
+            #never visible
+            rise=set=transit=None
+        else:
+            lha = acos(coslha)*12/pi
+            lha /= 1.0027378507871321 #correction for siderial day != calendar day
+            rise = (transit - lha)%24 
+            set = (transit + lha)%24 #TODO:iterative algorithm
         
         if timeobj:
             def hrtotime(t):
-                hr = np.floor(t)
-                t = (t-hr)*60
-                min = np.floor(t)
-                t = (t-min)*60
-                sec = np.floor(t)
-                t = (t-sec)*1e6
-                msec = np.floor(t)
-                return datetime.time(int(hr),int(min),int(sec),int(msec))
+                if t is None:
+                    return None
+                else:
+                    hr = np.floor(t)
+                    t = (t-hr)*60
+                    min = np.floor(t)
+                    t = (t-min)*60
+                    sec = np.floor(t)
+                    t = (t-sec)*1e6
+                    msec = np.floor(t)
+                    return datetime.time(int(hr),int(min),int(sec),int(msec))
             return hrtotime(rise),hrtotime(set),hrtotime(transit)
         else:
             return rise,set,transit
@@ -692,9 +725,11 @@ class Site(object):
         if datetime is None:
             return self.equatorialToHorizontal(coords,self.localSiderialTime())
         elif hasattr(datetime,'year') or (isSequenceType(datetime) and hasattr(datetime[0],'year')):
-            jd = gregorian_to_jd(datetime).ravel()
+            jd = gregorian_to_jd(datetime,self.tz).ravel()
         else:
             jd = np.array(datetime,copy=False)
+            if len(jd.shape)>1:
+                jd = np.array([gregorian_to_jd(v,self.tz) for v in jd])
         lsts = self.localSiderialTime(jd)
         
         if precess:
@@ -711,8 +746,9 @@ class Site(object):
         
         if `date` is None, the current date is used
         
-        `tab` determines the size of the table - it should be a 3-tuple
-        (starthr,endhr,n)
+        `hrrange` determines the size of the table - it should be a 3-tuple
+        (starthr,endhr,n) where starthr is on the day specified in date and 
+        endhr is date + 1 day
         
         if `strtablename` is True, a string is returned with a printable table 
         of observing data.  If `strtable` is a string, it will be used as the 
@@ -756,14 +792,28 @@ class Site(object):
                 lines.append('Object:'+str(strtablename))
             lines.append('{0} {1}'.format(coord.ra.getHmsStr(),coord.dec.getDmsStr()))
             lines.append(str(date))
-            lines.append('Rise : {0}'.format(rise))
-            lines.append('Set : {0}'.format(set))
-            lines.append('Transit : {0}'.format(transit))
+            if transit is None:
+                lines.append('Not visible from this site!')
+            elif rise is None:
+                lines.append('Circumpolar')
+                lines.append('Transit : {0}'.format(transit))
+            else:
+                lines.append('Rise : {0}'.format(rise))
+                lines.append('Set : {0}'.format(set))
+                lines.append('Transit : {0}'.format(transit))
             lines.append('')
             lines.append('time\talt\taz\tairmass')
             lines.append('-'*(len(lines[-1])+lines[-1].count('\t')*4))
+            
+            currdate = date+datetime.timedelta(int(np.floor(starthr/24)))
+            lines.append('\t'+str(currdate))
+            
+            oldhr24 = int(np.floor(ra[0].hour))
             for r in ra:
                 hr = int(np.floor(r.hour))
+                if hr%24 < oldhr24:
+                    currdate = currdate+datetime.timedelta(1)
+                    lines.append('\t'+str(currdate))
                 min = int(np.round((r.hour-hr)*60))
                 if min==60:
                     hr+=1
@@ -771,8 +821,9 @@ class Site(object):
                 alt = r.alt
                 az = r.az
                 am = r.airmass if r.airmass>0 else '...'
-                line = '{0:2}:{1:02}\t{2:.3}\t{3:.3}\t{4:.3}'.format(hr,min,alt,az,am)
+                line = '{0:2}:{1:02}\t{2:.3}\t{3:.4}\t{4:.3}'.format(hr%24,min,alt,az,am)
                 lines.append(line)
+                oldhr24 = hr%24
             return '\n'.join(lines)
         else:
             rise,set,transit = self.riseSetTransit(coord,timeobj=False)
@@ -842,8 +893,12 @@ class Site(object):
                     
                 plt.xlim(0,24)
                 
-                uppery = plt.ylim()[1]
-                plt.ylim(0,uppery)
+                if plt.ylim()[0] < 0:
+                    lowery = 0
+                else:
+                    lowery = plt.ylim()[0]
+                uppery = plt.ylim()[1] if plt.ylim()[1]<90 else 90
+                plt.ylim(lowery,uppery)
                 
                 if not nonames:
                     plt.legend(loc=0)
@@ -857,7 +912,7 @@ class Site(object):
                     newticks.insert(0,(yticks[0]+newticks[0])/2)
                     newticks.insert(0,(yticks[0]+newticks[0])/2)
                     plt.twinx()
-                    plt.ylim(0,uppery)
+                    plt.ylim(lowery,uppery)
                     plt.yticks(newticks,['%2.2f'%(1/np.cos(np.radians(90-yt))) for yt in newticks])
                     plt.ylabel(r'$\sec(z)$')
                     
@@ -876,16 +931,21 @@ class Site(object):
                         
                 plt.xlim(0,24)
                 plt.xticks(np.arange(13)*2)
+                if plt.ylim()[0] < 1:
+                    lowery = 1
+                else:
+                    lowery = plt.ylim()[0]
                 uppery = plt.ylim()[1]
-                plt.ylim(1,uppery)
-                yticks = list(plt.yticks()[0])
-                yticks.insert(0,1)
-                plt.yticks(yticks)
-                plt.ylim(1,uppery)
+                plt.ylim(lowery,uppery)
+                if lowery==1:
+                    yticks = list(plt.yticks()[0])
+                    yticks.insert(0,1)
+                    plt.yticks(yticks)
+                    plt.ylim(lowery,uppery)
                 
                 plt.title(str(ra._sitedate))
                 plt.xlabel(r'$\rm hours$')
-                plt.ylabel(r'$airmass / \sec(z)$')
+                plt.ylabel(r'${\rm airmass} / \sec(z)$')
                 
                 if not nonames:
                     plt.legend(loc=0)
@@ -902,9 +962,7 @@ class Site(object):
                         
                 plt.xlim(0,360)
                 plt.xticks(np.arange(9)*360/8)
-                
-                uppery = plt.ylim()[1]
-                plt.ylim(0,uppery)
+                plt.ylim(0,90)
                 
                 plt.title(str(ra._sitedate))
                 plt.xlabel(r'${\rm azimuth} [{\rm degrees}]$')
@@ -922,9 +980,11 @@ class Site(object):
                     else:
                         kw['label'] = n
                         plt.polar(np.radians(ra.az),90-ra.alt,**kw)
-                        
+                
+                xticks = [0,45,90,135,180,225,270,315]      
+                xtlabs = ['N',r'$45^\circ$','E',r'$135^\circ$','S',r'$225^\circ$','W',r'$315^\circ$']  
+                plt.xticks(np.radians(xticks),xtlabs)
                 plt.ylim(0,90)
-                #yticks = plt.yticks()[0]
                 yticks = [15,30,45,60,75]
                 plt.yticks(yticks,[r'${0}^\circ$'.format(int(90-yt)) for yt in yticks])
                 

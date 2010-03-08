@@ -284,15 +284,14 @@ class AngularCoordinate(object):
     def __float__(self):
         return self.degrees
         
-    #unichr(176) for deg symbol
-    def getDmsStr(self,secform='%05.2f',sep=('d',"'",'"'), sign=True, canonical=False):
+    def getDmsStr(self,secform='%05.2f',sep=(unichr(176),"'",'"'), sign=True, canonical=False):
         """
         gets the string representation of this AngularCoordinate as degrees,
         minutes, and seconds
         
         `secform` should be a string to use as a formatter for the seconds
         
-        `sep` is the seperator between components - defaults to d,
+        `sep` is the seperator between components - defaults to degree sign,
         ' and " symbols, can be a single string or a 3-tuple of strings
         
         `sign` forces sign to be present before degree component
@@ -557,7 +556,20 @@ class LatLongPosition(object):
     longerr = property(_getLongerr,_setLongerr,doc=None)
     
     def __str__(self):
-        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._latlongnames_,self._lat.d,self._long.d)
+        lat,long = self._lat.d,self._long.d
+        #lat,long = self._lat.getDmsStr(),self._long.getDmsStr()
+        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._latlongnames_,lat,long)
+    
+    def getCoordinateString(self,sep=' ',labels=False,canonical=False,hmslong=False):
+        coords = []
+        if hmslong:
+            coords.append(self._long.getHmsStr(canonical=canonical,sign=False))
+        else:
+            coords.append(self._long.getDmsStr(canonical=canonical,sign=False))
+        coords[-1] = self._latlongnames_[1]+'='+coords[-1]
+        coords.append(self._lat.getDmsStr(canonical=canonical))
+        coords[-1] = self._latlongnames_[0]+'='+coords[-1]
+        return sep.join(coords)
     
     def __eq__(self,other):
         if hasattr(other,'_lat') and hasattr(other,'_long'):
