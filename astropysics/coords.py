@@ -271,19 +271,19 @@ class AngularCoordinate(object):
         return self.degrees
         
     #unichr(176) for deg symbol
-    def getDmsStr(self,secform=None,sep=('d',"'",'"'), sign=True, canonical=False):
+    def getDmsStr(self,secform='%05.2f',sep=('d',"'",'"'), sign=True, canonical=False):
         """
         gets the string representation of this AngularCoordinate as degrees,
         minutes, and seconds
         
-        secform is the formatter for the seconds component
+        `secform` should be a string to use as a formatter for the seconds
         
-        sep is the seperator between components - defaults to d,
+        `sep` is the seperator between components - defaults to d,
         ' and " symbols, can be a single string or a 3-tuple of strings
         
-        sign forces sign to be present before degree component
+        `sign` forces sign to be present before degree component
         
-        canonical forces [+/-]dd:mm:ss.ss , overriding other arguments
+        `canonical` forces [+/-]dd:mm:ss.ss , overriding other arguments
         """
         d,m,s = self.degminsec
         
@@ -293,10 +293,7 @@ class AngularCoordinate(object):
         
         d,m=str(d),str(m)
         
-        if secform is None:
-            s = str(s)
-        else:
-            s = secform%s
+        s = secform%s
         
         if isinstance(sep,basestring):
             if sep == 'dms':
@@ -478,7 +475,7 @@ class LatLongPosition(object):
         self._lat = AngularCoordinate(range=(-90,90))
         self._long = AngularCoordinate(range=self._longrange_)
         
-        if isinstance(lat,LatLongPosition):
+        if hasattr(lat,'lat') and hasattr(lat,'long'):
             if long is 0 and laterr is None and longerr is None:
                 self.lat = lat.lat
                 self.long = lat.long
@@ -486,11 +483,11 @@ class LatLongPosition(object):
                 self.longerr = lat.longerr
             else:
                 raise ValueError("can't provide a LatLongPosition as a constructor and set other values simultaneously")
-        
-        self.lat = lat
-        self.long = long
-        self.laterr = laterr
-        self.longerr = longerr
+        else:
+            self.lat = lat
+            self.long = long
+            self.laterr = laterr
+            self.longerr = longerr
         
     def __getstate__(self):
         return dict([(k,getattr(k)) for k in LatLongPosition.__slots__])
@@ -567,6 +564,10 @@ class HorizontalPosition(LatLongPosition):
     """
     This object represents an angular location on the unit sphere, with the 
     north pole of the coordinate position fixed to the local zenith
+    
+    To convert from other fixed position types to horizontal positions, see 
+    :class:`astropysics.obstools.Site`, as site information is required for
+    these corrections
     """  
     __slots__ = tuple()
     _latlongnames_ = ('alt','az')
@@ -698,7 +699,7 @@ class EclipticPosition(LatLongPosition):
     def _setEclipticepoch(self,val):
         if hasattr(self,'_eclipticepoch') and self._eclipticepoch != val:
             from warnings import warn
-            warn('epoch transforms not ready yet')
+            warn('warning: epoch transforms not ready yet')
         if not isinstance(val,basestring):
             val = 'J'+str(float(val))
         self._eclipticepoch = val
@@ -710,7 +711,7 @@ class EclipticPosition(LatLongPosition):
         self._refsys = val
         if hasattr(self,'_refsys') and self._refsys != val:
             from warnings import warn
-            warn('refsys transforms not ready yet')
+            warn('warning: refsys transforms not ready yet')
     refsys = property(_getRefsys,_setRefsys,doc=None)
     
     def __init__(self,*args,**kwargs):

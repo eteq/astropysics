@@ -11,8 +11,7 @@ does.
 Note that some of these functions require the dateutil package 
 ( http://pypi.python.org/pypi/python-dateutil , also included with matplotlib)
 """
-#TODO: implement ability for Sites to translate ra/dec into alt/az given time/date
-#TODO: add options for Observatory class to include more useful information
+#TODO: add info to Observatory class, particularly atmospheric extinction
 #TODO: exposure time calculator (maybe in phot instead?)
 #TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
 
@@ -23,14 +22,12 @@ import numpy as np
 from .utils import PipelineElement,DataObjectRegistry
 #from .models import FunctionModel1DAuto as _FunctionModel1DAuto
 
-def jd_to_gregorian(jd,bceaction=None,msecrounding=1e-5):
+def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     """
-    convert julian date number to a gregorian date and time
+    convert julian date to a gregorian calendar date and time
     
-    output is dateutil UTC datetime objects or (datetime,bcemask) if bceaction
-    is 'negreturn'
     
-    bceaction indicates what to do if the result is a BCE year.   datetime 
+    `bceaction` indicates what to do if the result is a BCE year.   datetime 
     generally only supports positive years, so the following options apply:
     * 'raise' or None: raise an exception
     * 'neg': for any BCE years, convert to positive years (delta operations 
@@ -41,9 +38,13 @@ def jd_to_gregorian(jd,bceaction=None,msecrounding=1e-5):
     * a scalar: add this number to the year
     
     
-    msecrounding does a fix for floating-point errors - if the seconds are 
-    within the request number of seconds of an exact second, it will be set to
-    that second 
+    `rounding` determines a fix for floating-point errors - if the seconds 
+    are within the request number of seconds of an exact second, the output will 
+    be set to that second 
+    
+    *returns*
+    :class:`datetime.datetime` objects in UTC.  If `bceaction` is 'negreturn',
+    instead it will be a (datetime,bcemask) tuple
     """
     import datetime
     
@@ -83,9 +84,9 @@ def jd_to_gregorian(jd,bceaction=None,msecrounding=1e-5):
         msec = np.floor(time*1e6).astype(int)
         
         #rounding fix for floating point errors
-        if msecrounding:
-            msecundermask = (1-time) < msecrounding
-            msecovermask = time < msecrounding
+        if rounding:
+            msecundermask = (1-time) < rounding
+            msecovermask = time < rounding
             msec[msecundermask|msecovermask] = 0
             sec[msecundermask] += 1
             min[sec==60] += 1
@@ -126,21 +127,19 @@ def jd_to_gregorian(jd,bceaction=None,msecrounding=1e-5):
 
 def gregorian_to_jd(gtime,utcoffset=None):
     """
-    Convert gregorian to julian date
+    Convert gregorian calendar value to julian date
     
     the input `gtime` can either be a sequence (yr,month,day,[hr,min,sec]), 
-    where each element may be  or a 
-    datetime.datetime object
+    where each element may be  or a datetime.datetime object
     
     if datetime objects are given, and utcoffset is None, values are
     converted to UTC based on the datetime.tzinfo objects (if present).  If 
     utcoffset is a string, it is taken to be a timezone name that will be used
     to convert all the gregorian dates to UTC (requires dateutil package).  If 
     it is a scalar, it is taken to be the hour offset of the timezone to convert
-    to UTC. 
-    
-    Adapted from xidl  jdcnv.pro
+    to UTC.    
     """
+    #Adapted from xidl  jdcnv.pro
     from datetime import datetime,date
     
     if isinstance(gtime,datetime) or isinstance(gtime,date):
@@ -162,8 +161,8 @@ def gregorian_to_jd(gtime,utcoffset=None):
     if datetimes is not None:
         yr,month,day,hr,min,sec = [],[],[],[],[],[]
         for dt in datetimes:
-            if isinstance(dt,date):
-                dt = datetime(dt.year,dt.month,dt.day)
+            if not hasattr(dt,'hour'):
+                dt = datetime(dt.year,dt.month,dt.day,12)
             
             if utcoffset is None:
                 off = dt.utcoffset()
@@ -224,7 +223,7 @@ def gregorian_to_jd(gtime,utcoffset=None):
     
 def besselian_epoch_to_jd(bepoch):
     """
-    Convert a Besselian epoch to Julian Day, assuming a tropical year of 
+    Convert a Besselian epoch to Julian Date, assuming a tropical year of 
     365.242198781 days
     
     :Reference:
@@ -234,7 +233,7 @@ def besselian_epoch_to_jd(bepoch):
 
 def jd_to_besselian_epoch(jd):
     """
-    Convert a Julian Day to a Besselian epoch, assuming a tropical year of 
+    Convert a Julian Date to a Besselian epoch, assuming a tropical year of 
     365.242198781 days
     
     :Reference:
@@ -244,7 +243,7 @@ def jd_to_besselian_epoch(jd):
 
 def jd_to_epoch(jd):
     """
-    Convert a Julian Day to a Julian Epoch, assuming the year is exactly
+    Convert a Julian Date to a Julian Epoch, assuming the year is exactly
     365.25 days long
     
     :Reference:
@@ -289,6 +288,8 @@ class Site(object):
         elif isinstance(tz,basestring):
             from dateutil import tz  as tzmod
             self.tz = tzmod.gettz(tz)
+            if self.tz is None:
+                raise ValueError('unrecognized time zone string '+tz)
         else:
             from dateutil import tz as tzmod
             self.tz = tzmod.tzoffset(str(tz),int(tz*60*60))
@@ -366,7 +367,7 @@ class Site(object):
         
         * localSiderialTime(): current local siderial time for this Site or uses
                                the value of the :attr:`currentobsjd` property.
-        * localSiderialTime(JD): input argument is julian date UTC
+        * localSiderialTime(JD): input argument is julian date UT1
         * localSiderialTime(datetime): input argument is a datetime object - if
                                        it has tzinfo, the datetime object's time
                                        zone will be used, otherwise the Site's
@@ -374,20 +375,28 @@ class Site(object):
           local time - time is in hours
         * localSiderialTime(day,month,year,hr,min,sec): local time - hours and
           minutes will be interpreted as integers
+          
+        *keywords*  
         
+        * `apparent`: if True (default) the returned time will be local apparent 
+                    sidereal time, otherwise it will be local mean sidereal time  
+        * `returntype`: a string that determines the form of the returned LST as
+                        described below
         
-        returns the local siderial time in a format that depends on the 
-        `returntype` keyword which can be (default None):
+        *returns*
+        the local siderial time in a format that depends on the 
+        `returntype` keyword.  It can be (default None):
         
         *None/'hours': return LST in decimal hours
         *'string': return LST as a hh:mm:ss.s 
         *'datetime': return a datetime.time object 
-        
-        guts of calculation adapted from xidl ct2lst.pro
+       
         """
+        #guts of calculation adapted from xidl 
         import datetime
         
         rettype = kwargs.pop('returntype',None)
+        apparent = kwargs.pop('apparent',True)
         if len(kwargs)>0:
             raise TypeError('got unexpected argument '+kwargs.keys()[0])
         if len(args)==0:
@@ -418,16 +427,37 @@ class Site(object):
         else:
             raise TypeError('invalid number of input arguments')
         
-        jd2000 = 2451545.0
-        t0 = jd - jd2000
-        t = t0//36525 #TODO:check if true-div
+        #algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
+        jd0 = np.round(jd-.5)+.5
+        h = (jd - jd0) * 24.0
+        d = jd - 2451545.0
+        d0 = jd0 - 2451545.0
+        t = d/36525
         
-        #Compute GST in seconds.
-        c1,c2,c3,c4 = 280.46061837,360.98564736629,0.000387933,38710000.0
-        theta = c1 + (c2 * t0) + t**2*(c3 - t/ c4 )
+        gmst = 6.697374558 + 0.06570982441908*d0 + 1.00273790935*h + 0.000026*t**2
+       
+        if apparent:
+            eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
+            L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
+            omega = np.radians(125.04 - 0.052954*d) #longitude ofascending node of moon
+            dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+            lst = (gmst + dpsi*np.cos(eps) + self._long.d/15)%24.0
+        else:
+            lst = (gmst + self._long.d/15)%24.0 
+        print d,d0
+#        #from idl astro ct2lst.pro         
+#        jd2000 = 2451545.0
+#        t0 = jd - jd2000
+#        t = t0//36525 #TODO:check if true-div
         
-        #Compute LST in hours.
-        lst = np.array((theta + self._long.d)/15.0) % 24.0
+#        #Compute GMST in seconds.  constants from Meeus 1ed, pg 84
+#        c1,c2,c3,c4 = 280.46061837,360.98564736629,0.000387933,38710000.0
+#        theta = c1 + (c2 * t0) + t**2*(c3 - t/ c4 )
+        
+#        #TODO: Add in mean->apparent corrections
+        
+#        #Compute LST in hours.
+#        lst = np.array((theta + self._long.d)/15.0) % 24.0
         
         if lst.shape == tuple():
             lst = lst.ravel()[0]
@@ -451,33 +481,84 @@ class Site(object):
         else:
             raise ValueError('invallid returntype argument')
         
-    def localTime(self,LST=None,date=None):
+    def localTime(self,LST=None,date=None,returntype=None,apparent=True):
         """
-        computes the local time given a particular value of local siderial time
-        and returns it as a datetime.time object.
+        computes the local time given a particular value of local siderial time.
         
-        if `LST` is None, the current local time is returned.  If no date is
-        provided the current date is used 
+        if `LST` is None, the current local time is returned.  Otherwise, it 
+        should be a decimal number of hours (or a vector thereof). If `apparent`
+        is True this is interpreted as the local apparent sidereal time, 
+        otherwise it is the local mean sidereal time
+        
+        `date` should be a (year,month,day) tuple or a :module:datetime with a 
+        date.  If not provided the current date is used.
+        
+        *returns*
+        the local time in a format that depends on the 
+        `returntype` keyword, which can be (default None):
+        
+        *None/'hours': return local time in decimal hours
+        *'string': return local time as a hh:mm:ss.s 
+        *'datetime': return a datetime.time object 
         """
         import datetime,dateutil
         
         if LST is None:
             return datetime.datetime.now().time()
         else:
+            if isinstance(LST,datetime.time):
+                LST = LST.hour + LST.minute/60.0 + LST.second/3600.0 +\
+                      LST.microsecond/3600000.0
             if date is None:
-                date = datetime.date.today()
-        
-            ut = LST*15.0-self._long.d
-            raise NotImplementedError
+                date = jd_to_gregorian(self.currentobsjd).date()
+            elif hasattr(date,'date'):
+                date = date.date()
+            elif not isinstance(date,datetime.date):
+                date = datetime.date(*date)
             
+            gst = LST - self._long.d/15.0
             
-            dt = datetime.datetime(date.year,date.month,date.day,uthr,utmin,utsec,utmsec,dateutil.tz.tzutc())
-            return dt.astimezone(self.tz).time()
+            #algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
+            jd = gregorian_to_jd(date)-.5
+            d = jd - 2451545.0
+            t = d/36525
+            print jd,d
+            
+            if apparent:
+                eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
+                L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
+                omega = np.radians(125.04 - 0.052954*d) #longitude ofascending node of moon
+                dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+                gmst = ((gst - dpsi*np.cos(eps))%24)/24+d
+            else:
+                gmst = (gst%24)/24+d
+            print gmst  
+            #ghr = (gmst - 6.697374558 - 0.06570982441908*d - 0.000026*t**2)/1.00273790935
+            gd = (gmst - 18.697374558)/24.06570982441908 
+            print gd
+            if returntype is None or returntype == 'hours':
+                return lthr
+            elif returntype == 'string':
+                hr = int(lthr)
+                min = 60*(lthr - hr)
+                sec = 60*(min - int(min))
+                min = int(min)
+                return '%i:%i:%f'%(hr,min,sec)
+            elif returntype == 'datetime':
+                hr = int(lthr)
+                min = 60*(lthr - hr)
+                sec = 60*(min - int(min))
+                min = int(min)
+                msec = int(1e6*(sec-int(sec)))
+                sec = int(sec)
+                return datetime.time(hr,min,sec,msec)
+            else:
+                raise ValueError('invalid returntype argument')
     
     def equatorialToHorizontal(self,eqpos,lsts,epoch=None):
         """
         Generates a list of horizontal positions (or just one) from a provided
-        equatorial position and local siderial time (or sequence of lsts) in 
+        equatorial position and local siderial time (or sequence of LSTs) in 
         decimal hours and a latitude in degrees.  If  `epoch` is not None, it 
         will be used to set the epoch in the equatorial system.
         """
@@ -505,7 +586,6 @@ class Site(object):
         alts = np.arcsin(slat*sdec+clat*cdec*cHA)
         calts = np.cos(alts)
         azs = np.arctan2(cdec*sHA,slat*cdec*cHA-clat*sdec)%(2*pi)
-        #azs = (np.arcsin(cdec*sHA)/calts)%(2*pi)
         
         if eqpos.decerr is not None or eqpos.raerr is not None:
             decerr = eqpos.decerr.radians if eqpos.decerr is not None else 0
@@ -519,7 +599,7 @@ class Site(object):
             
             #error propogation computed with sympy following standard rules
             dtanaz = 1+np.tan(azs)**2
-            dazdH = (cHA*cdec/(cHAcdecslat-clat*sdec) \
+            dazdH = (cHA*cdec/(cHA*cdec*slat-clat*sdec) \
                   + cdec*cdec*sHA*sHA*slat*(cHA*cdec*slat-clat*sdec)**-2) \
                       /dtanaz
             dazddec = ((sHA*sdec)/(clat*sdec - cHA*cdec*slat) \
@@ -539,10 +619,10 @@ class Site(object):
             if dazs is None:
                 return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
             else:
-                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,alt in np.degrees((alts,azs,dazs,dalts)).T]
+                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
 
         
-    def apparentPosition(self,coords,datetime=None,setepoch=True):
+    def apparentPosition(self,coords,datetime=None,precess=True):
         """
         computes the positions in horizontal coordinates of an object with the 
         provided fixed coordinates at the requested time(s).
@@ -551,23 +631,23 @@ class Site(object):
         or it can be a sequnce of JD's.  If None, it uses the current time or 
         the value of the :attr:`currentobsjd` property.
         
-        If `setepoch` is True, the position will be precessed to the epoch of 
+        If `precess` is True, the position will be precessed to the epoch of 
         the observation
         """
         from .coords import HorizontalPosition
         from operator import isSequenceType
         
         if datetime is None:
-            return HorizontalPosition.fromEquatorial(coords,self.localSiderialTime(),self.latitude.d)
+            return self.equatorialToHorizontal(coords,self.localSiderialTime())
         elif hasattr(datetime,'year') or (isSequenceType(datetime) and hasattr(datetime[0],'year')):
             jd = gregorian_to_jd(datetime).ravel()
         else:
             jd = np.array(datetime,copy=False)
         lsts = self.localSiderialTime(jd)
-        if setepoch:
-            return self.equatorialToHorizontal(coords,lsts,self.latitude.d,epoch=JD_to_epoch(jd[0]))
+        if precess:
+            return self.equatorialToHorizontal(coords,lsts,epoch=JD_to_epoch(jd[0]))
         else:
-            return self.equatorialToHorizontal(coords,lsts,self.latitude.d)
+            return self.equatorialToHorizontal(coords,lsts)
         
     def observingTable(self,coord,date=None,strtablename=None,hrrange=(18,6,25)):
         """
@@ -607,7 +687,7 @@ class Site(object):
         timehr = (jds-np.round(np.mean(jds))+.5)*24
         
         
-        alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,setepoch=False))
+        alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,precess=False))
         z = 90 - alt
         airmass = 1/np.cos(np.radians(z))
         
@@ -845,9 +925,10 @@ def __loadobsdb(sitereg):
         elif k == 'altitude':
             alt = float(v)
         elif k == 'timezone':
-            tz = float(v)
+            #time zones are also flipped
+            tz = -1*float(v)
     if obs is not None:
-        o = Observatory(lat,long,alt,-1*tz,name)
+        o = Observatory(lat,long,alt,tz,name)
         sitereg[obs] = o
 
 
@@ -1055,6 +1136,7 @@ class Extinction(PipelineElement):
             else:
                 assert False,'Impossible point - code error in Extinction pipeline'
         except:
+            #TODO:check this
             self.insert(0,spec(type,data))
             
     def _plExtract(self):
