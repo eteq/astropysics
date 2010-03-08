@@ -944,7 +944,7 @@ class EphemerisObject(object):
     used to construct ephemerides.
     """
     
-    __jd2000 = epoch_to_jd(0) #internally useful?
+    __jd2000 = 2451545.0 #internally useful?
     
     def __init__(self,e,a,i,longasc,argperi,M0,name=''):
         """
