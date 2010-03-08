@@ -5,8 +5,12 @@ This module contains objects and functions for specifying locations as well
 as calculating distances and similar tools.
 
 Some of the calculations involved make use of the currently selected cosmology 
-(see astropysics.constants) and hence may not function properly if a 
+(see astropysics.constants) and hence may not function as expected if a 
 particularly strange cosmology is in use.
+
+*see also*
+Kapteyn libraries: http://www.astro.rug.nl/software/kapteyn/index.html
+Pyephem: http://rhodesmill.org/pyephem/
 """
 
 #TODO: WCSlib or similar support - Kapteyn?
@@ -15,8 +19,6 @@ particularly strange cosmology is in use.
 from __future__ import division,with_statement
 from .constants import pi
 import numpy as np
-
-
 
 #<----------------coordinate classes and related functions------------------>
 
@@ -815,7 +817,7 @@ class SupergalacticPosition(LatLongPosition):
     _nsgp_J2000 = EquatorialPosition(283.75420420,15.70894043,epoch='J2000')
     _sglong0_J2000 = 42.30997710
     
-#<-----------------------------Utility functions for coord objects------------->
+
 def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
     """
     converts a sequence of position objects into an array of coordinates.  
@@ -935,7 +937,8 @@ def angle_axis(matrix,degrees=True):
         return angle,axis
     
     
-#<-------------------------------basic transforms------------------------------>
+    
+#<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
     """
     Converts two arrays in 2D rectangular Cartesian coordinates to
