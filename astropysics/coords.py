@@ -936,7 +936,53 @@ def angle_axis(matrix,degrees=True):
     else:
         return angle,axis
     
+    #<------------------------simple Ephemerides----------------------------------->
     
+class EphemerisObject(object):
+    """
+    An object with orbital elements (probably a solar system body) that can be
+    used to construct ephemerides.
+    """
+    
+    __jd2000 = epoch_to_jd(0) #internally useful?
+    
+    def __init__(self,e,a,i,longasc,argperi,M0,name=''):
+        """
+        Generates an object with the orbital elements: 
+        `e` is the ellipticity
+        `a` is the semimajor axis
+        `i` is the orbital inclination
+        `longasc` is the longitude of the ascending node
+        `argperi` is the argument of the perihelion
+        `meananom` is the mean anamoly at the epoch given in 'M0epoch'
+        
+        arguments for these orbital elements can be either fixed values or 
+        functions of the form f(jd) that return the orbital elements as
+        a function of Julian Day
+        
+        `name` is a string describing the object
+        """
+        self.e = e
+        self.a = a
+        self.i = i
+        self.longasc = longasc
+        self.argperi = argperi
+        self.M0 = M0
+        self.name = name
+        
+    def _getOmega(self):
+        return self.longasc
+    def _setOmega(self,val):
+        self.longasc = val
+    Omega = property(_getOmega,_setOmega,doc="""an alternative name for the 
+                                  lognitude of the ascending node `longasc`'""")
+                                  
+    def _getlOmega(self):
+        return self.argperi
+    def _setlOmega(self,val):
+        self.argperi = val
+    omega = property(_getlOmega,_setlOmega,doc="""an alternative name for the 
+                                      argument of the perihelion `argperi`'""")
     
 #<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
