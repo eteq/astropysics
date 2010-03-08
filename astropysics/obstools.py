@@ -363,14 +363,17 @@ class Site(object):
         """
         compute the local siderial time given an input civil time.
         
-        input forms:
+        the various input forms are used to determine the civil time
         
         * localSiderialTime(): current local siderial time for this Site or uses
                                the value of the :attr:`currentobsjd` property.
         * localSiderialTime(JD): input argument is julian date UT1
-        * localSiderialTime(datetime): input argument is a datetime object - if
-                                       it has tzinfo, the datetime object's time
-                                       zone will be used, otherwise the Site's
+        * localSdierialTime(:class:`datetime.date`): compute the local siderial 
+                                           time for midnight on the given date
+        * localSiderialTime(:class:`datetime.datetime`): the datetime object 
+                                       specifies the local time.  If it has
+                                       tzinfo, the object's time zone will 
+                                       be used, otherwise the Site's 
         * localSiderialTime(time,day,month,year): input arguments determine 
           local time - time is in hours
         * localSiderialTime(day,month,year,hr,min,sec): local time - hours and
@@ -387,9 +390,9 @@ class Site(object):
         the local siderial time in a format that depends on the 
         `returntype` keyword.  It can be (default None):
         
-        *None/'hours': return LST in decimal hours
-        *'string': return LST as a hh:mm:ss.s 
-        *'datetime': return a datetime.time object 
+        *None/'hours': LST in decimal hours
+        *'string': LST as a hh:mm:ss.s 
+        *'datetime': a :class:`datetime.time` object 
        
         """
         #guts of calculation adapted from xidl 
@@ -402,13 +405,17 @@ class Site(object):
         if len(args)==0:
             jd = self.currentobsjd
         elif len(args)==1:
-            if isinstance(args[0],datetime.datetime):
-                if args[0].tzinfo is None:
+            if hasattr(args[0],'year'):
+                if hasattr(args[0],'hour'):
+                    if args[0].tzinfo is None:
+                        dtobj = datetime.datetime(args[0].year,args[0].month,
+                                        args[0].day,args[0].hour,args[0].minute,
+                                        args[0].second,args[0].microsecond,self.tz)
+                    else:
+                        dtobj = args[0]
+                else: #only date provided
                     dtobj = datetime.datetime(args[0].year,args[0].month,
-                                    args[0].day,args[0].hour,args[0].minute,
-                                    args[0].second,args[0].microsecond,self.tz)
-                else:
-                    dtobj = args[0]
+                                              args[0].day,tzinfo=self.tz)
                 jd = gregorian_to_jd(dtobj,utcoffset=None)
             else:
                 jd = args[0]
@@ -444,7 +451,7 @@ class Site(object):
             lst = (gmst + dpsi*np.cos(eps) + self._long.d/15)%24.0
         else:
             lst = (gmst + self._long.d/15)%24.0 
-        print d,d0
+        
 #        #from idl astro ct2lst.pro         
 #        jd2000 = 2451545.0
 #        t0 = jd - jd2000
@@ -479,81 +486,91 @@ class Site(object):
             sec = int(sec)
             return datetime.time(hr,min,sec,msec)
         else:
-            raise ValueError('invallid returntype argument')
+            raise ValueError('invalid returntype argument')
         
-    def localTime(self,LST=None,date=None,returntype=None,apparent=True):
+    def localTime(self,lsts,date=None,apparent=True,returntype=None):
         """
-        computes the local time given a particular value of local siderial time.
+        computes the local civil time given a particular local siderial time. 
+        This currently does not acount for the 
         
-        if `LST` is None, the current local time is returned.  Otherwise, it 
-        should be a decimal number of hours (or a vector thereof). If `apparent`
-        is True this is interpreted as the local apparent sidereal time, 
-        otherwise it is the local mean sidereal time
+        `lsts` are the input local times, and may be either a scalar or array,
+        and must be in decimal hours.  
         
-        `date` should be a (year,month,day) tuple or a :module:datetime with a 
-        date.  If not provided the current date is used.
+        `date` should be a :class:`datetime.date` object or a (year,month,day)
+        tuple.  If None, the current date will be assumed as inferred from 
+        :attribute:`Site.currentobsjd`
         
+        if `lsts` is a :class:`datetime.datetime` object, the object will be 
+        interpreted as the local siderial time with the corresponding date (any 
+        timezone info will be ignored), and the `date` argument will be ignored.
+                        
+        if `apparent` is True, the inputs are assumed to be in local apparent
+        siderial time, otherwise local mean siderial time.
+                              
         *returns*
-        the local time in a format that depends on the 
-        `returntype` keyword, which can be (default None):
+        the local time in a form determined by the `returntype` argument:
         
-        *None/'hours': return local time in decimal hours
-        *'string': return local time as a hh:mm:ss.s 
-        *'datetime': return a datetime.time object 
+        *None/'hours': local time in decimal hours
+        *'string': local time as a hh:mm:ss.s 
+        *'datetime': a :class:`datetime.datetime` object with the local tzinfo
+        
         """
-        import datetime,dateutil
+        import datetime
         
-        if LST is None:
-            return datetime.datetime.now().time()
+        if isinstance(lsts,datetime.datetime):
+            date = lsts.date()
+            lsts = datetime.time()
+            lsts = lsts.hour+lsts.minute/60+(lsts.second+lsts.microsecond*1e6)/3600
         else:
-            if isinstance(LST,datetime.time):
-                LST = LST.hour + LST.minute/60.0 + LST.second/3600.0 +\
-                      LST.microsecond/3600000.0
             if date is None:
                 date = jd_to_gregorian(self.currentobsjd).date()
             elif hasattr(date,'date'):
                 date = date.date()
-            elif not isinstance(date,datetime.date):
-                date = datetime.date(*date)
-            
-            gst = LST - self._long.d/15.0
-            
-            #algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
-            jd = gregorian_to_jd(date)-.5
-            d = jd - 2451545.0
-            t = d/36525
-            print jd,d
-            
-            if apparent:
-                eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
-                L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
-                omega = np.radians(125.04 - 0.052954*d) #longitude ofascending node of moon
-                dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
-                gmst = ((gst - dpsi*np.cos(eps))%24)/24+d
             else:
-                gmst = (gst%24)/24+d
-            print gmst  
-            #ghr = (gmst - 6.697374558 - 0.06570982441908*d - 0.000026*t**2)/1.00273790935
-            gd = (gmst - 18.697374558)/24.06570982441908 
-            print gd
-            if returntype is None or returntype == 'hours':
-                return lthr
-            elif returntype == 'string':
+                date = datetime.date(*date)
+                
+        lsts = np.array(lsts,copy=False)
+        scalarout = False
+        if lsts.shape == tuple():
+            scalarout = True
+            lsts = lsts.ravel()
+        
+            
+        lst0 = self.localSiderialTime(date)
+        lthrs = (lsts - lst0)%24
+        dayoffs = np.floor(lsts - lst0/24)
+        
+        lthrs /= 1.0027378507871321 #correct for siderial day != civil day
+        
+        if returntype is None or returntype == 'hours':
+            res = lthrs
+        elif returntype == 'string':
+            res = []
+            for lthr in lthrs: 
                 hr = int(lthr)
                 min = 60*(lthr - hr)
                 sec = 60*(min - int(min))
                 min = int(min)
-                return '%i:%i:%f'%(hr,min,sec)
-            elif returntype == 'datetime':
+                res.append('%i:%i:%f'%(hr,min,sec))
+        elif returntype == 'datetime':
+            res = []
+            for i,dayoff in zip(lthrs,dayoffs): 
                 hr = int(lthr)
                 min = 60*(lthr - hr)
                 sec = 60*(min - int(min))
                 min = int(min)
                 msec = int(1e6*(sec-int(sec)))
                 sec = int(sec)
-                return datetime.time(hr,min,sec,msec)
-            else:
-                raise ValueError('invalid returntype argument')
+                
+                res.append(datetime.datetime(date.year,date.month,date.day+dayoff,hr,min,sec,msec,self.tz))
+        else:
+            raise ValueError('invalid returntype argument')
+        
+        if scalarout:
+            return res[0]
+        else:
+            return res
+       
     
     def equatorialToHorizontal(self,eqpos,lsts,epoch=None):
         """
@@ -620,7 +637,38 @@ class Site(object):
                 return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
             else:
                 return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
-
+            
+    def riseSetTransit(self,eqpos,alt=0,timeobj=False):
+        """
+        computes the rise, set, and transit times of a provided equatorial 
+        position.  
+        
+        `alt` determines the altitude to be considered as risen or set
+        
+        *returns*
+        (rise,set,transit) as :class:datetime.time objects if `timeobj` is True
+        or if it is False, they are in decimal hours
+        """
+        import datetime
+        
+        transit = self.localTime(eqpos.ra.hours)
+        rise = (transit - 5.983617747440273)%24 #TODO:iterative algorithm
+        set = (transit + 5.983617747440273)%24 #TODO:iterative algorithm
+        
+        if timeobj:
+            def hrtotime(t):
+                hr = np.floor(t)
+                t = (t-hr)*60
+                min = np.floor(t)
+                t = (t-min)*60
+                sec = np.floor(t)
+                t = (t-sec)*1e6
+                msec = np.floor(t)
+                return datetime.time(int(hr),int(min),int(sec),int(msec))
+            return hrtotime(rise),hrtotime(set),hrtotime(transit)
+        else:
+            return rise,set,transit
+        
         
     def apparentPosition(self,coords,datetime=None,precess=True):
         """
@@ -633,6 +681,10 @@ class Site(object):
         
         If `precess` is True, the position will be precessed to the epoch of 
         the observation
+        
+        
+        *returns*
+        a sequence of :class:`astropysics.coords.HorizontalPosition` objects
         """
         from .coords import HorizontalPosition
         from operator import isSequenceType
@@ -644,8 +696,9 @@ class Site(object):
         else:
             jd = np.array(datetime,copy=False)
         lsts = self.localSiderialTime(jd)
+        
         if precess:
-            return self.equatorialToHorizontal(coords,lsts,epoch=JD_to_epoch(jd[0]))
+            return self.equatorialToHorizontal(coords,lsts,epoch=jd_to_epoch(jd[0]))
         else:
             return self.equatorialToHorizontal(coords,lsts)
         
@@ -686,19 +739,27 @@ class Site(object):
         
         timehr = (jds-np.round(np.mean(jds))+.5)*24
         
-        
         alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,precess=False))
+        
         z = 90 - alt
         airmass = 1/np.cos(np.radians(z))
         
         ra = np.rec.fromarrays((timehr,alt,az,airmass),names = 'hour,alt,az,airmass')
+
+        
         if strtablename is not None:
+            rise,set,transit = self.riseSetTransit(coord,timeobj=True)
+            
             lines = []
             
             if isinstance(strtablename,basestring):
                 lines.append('Object:'+str(strtablename))
             lines.append('{0} {1}'.format(coord.ra.getHmsStr(),coord.dec.getDmsStr()))
             lines.append(str(date))
+            lines.append('Rise : {0}'.format(rise))
+            lines.append('Set : {0}'.format(set))
+            lines.append('Transit : {0}'.format(transit))
+            lines.append('')
             lines.append('time\talt\taz\tairmass')
             lines.append('-'*(len(lines[-1])+lines[-1].count('\t')*4))
             for r in ra:
@@ -714,7 +775,11 @@ class Site(object):
                 lines.append(line)
             return '\n'.join(lines)
         else:
+            rise,set,transit = self.riseSetTransit(coord,timeobj=False)
             ra._sitedate = date
+            ra.rise = rise
+            ra.set = set
+            ra.transit = transit
             return ra
         
     def observingPlot(self,coords,date=None,names=None,clf=True,plottype='altam',
