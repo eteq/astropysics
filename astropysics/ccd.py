@@ -1141,22 +1141,22 @@ class ImageBiasSubtractor(PipelineElement):
     Subtracts a dark/bias frame or uses an overscan region to define a 
     bias or bias curve to subtract
     
-    *biasframe: an image matching the input's shape that will be subtracted
-        or None to skip this step
-    *biasregion: a 4-tuple defining a region as (xmin,xmax,ymin,ymax)
-    *overscan: an integer defining the edge of the overscal region, or a 
-        2-tuple of the form (edge,bool) where the boolean indicates if the it 
-        is a left edge (True, default) or a right edge (False)
-    *overscanaxis: sets the axis along which the overscan
-        region is defined (typcally the readout axis): 'x'/0 or 'y'/1,
-        assumed for the overscan
-    *overscanfit: sets the default fitting method for the overscan region (if 
-        used) or None to just use the combined value directly
-    *interactive: if True, interactively fit the overscan curve
-    *combinemethod: method to 'mean','median','max','min' or a callable used
-        to combine the overscan area
-    *trim: trim off the overscan region if it is specified 
-    *save:if True, stores 'lastimage' and 'lastcurve' as appropriate
+    * :attr:`biasframe`: an image matching the input's shape that will be 
+      subtracted or None to skip this step
+    * :attr:`biasregion`: a 4-tuple defining a region as (xmin,xmax,ymin,ymax)
+    * :attr:`overscan`: an integer defining the edge of the overscal region, or 
+      a 2-tuple of the form (edge,bool) where the boolean indicates if the it 
+      is a left edge (True, default) or a right edge (False)
+    * :attr:`overscanaxis`: sets the axis along which the overscan
+      region is defined (typcally the readout axis): 'x'/0 or 'y'/1,
+      assumed for the overscan
+    * :attr:`overscanfit`: sets the default fitting method for the overscan
+      region (if used) or None to just use the combined value directly
+    * :attr:`interactive`: if True, interactively fit the overscan curve
+    * :attr:`combinemethod`: method to 'mean','median','max','min' or a callable 
+      used to combine the overscan area
+    * :attr:`trim`: trim off the overscan region if it is specified 
+    * :attr:`save`:if True, stores 'lastimage' and 'lastcurve' as appropriate
     """
     
     def __init__(self):
@@ -1288,23 +1288,26 @@ class ImageCombiner(PipelineElement):
     Combines a sequence of images into a single image.
     
     attributes that control combining are:
-    *method: can be 'mean', 'median', 'sum', or a callable that takes a 
-        sequence of matched images and returns an image of the size
-        of the inputs
-    *shifts: a sequence of 2-tuples that are taken as the amount to 
-        offset each image before combining (in pixels)
-    *shiftorder: order of the spline interpolation used when images are shifted
-    *trim: if True, the image is trimmed based on the shifts to only include
-        the pixels where the images overalap 
-    *sigclip: the number of standard deviations from the mean before a point
-        is rejected from the combination.  If None, no sigma clipping
-        is performed
-    *save: if True, the last set of operations will be stored for later use 
-        (see below)
+    
+    * :attr:`method`: can be 'mean', 'median', 'sum', or a callable that takes a 
+      sequence of matched images and returns an image of the size
+      of the inputs
+    * :attr:`shifts`: a sequence of 2-tuples that are taken as the amount to 
+      offset each image before combining (in pixels)
+    * :attr:`shiftorder`: order of the spline interpolation used when images are
+      shifted 
+    * :attr:`trim`: if True, the image is trimmed based on the shifts to only 
+      include the pixels where the images overalap 
+    * :attr:`sigclip`: the number of standard deviations from the mean before a 
+      point is rejected from the combination.  If None, no sigma clipping is
+      performed
+    * :attr:`save`: if True, the last set of operations will be stored for later 
+      use (see below)
         
-    these attributes will be set at each operation if the :
-    *lastimage: the last result of combineImages
-    *mask: the mask of altered/rejected pixels from the last result
+    these attributes will be set at each operation:
+    
+    * :attr:`lastimage`: the last result of combineImages
+    * :attr:`mask`: the mask of altered/rejected pixels from the last result
     
     """
     _plintype = Sequence
@@ -1393,9 +1396,9 @@ class ImageFlattener(PipelineElement):
     This object flattens an image using a flat field image
     
     the following attributes determine the flatfielding behavior:
-    *flatfield: the field to use to generate the flatting response
-    *combine: 'mean','median','min','max', or a callable
-    *save: store 'lastimage' as the last image that was flatted
+    * :attr:`flatfield`: the field to use to generate the flatting response
+    * :attr:`combine`: 'mean','median','min','max', or a callable
+    * :attr:`save`: store 'lastimage' as the last image that was flatted
     """
     
     def __init__(self):
@@ -1460,7 +1463,7 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,
     clf determines if the figure is cleared before the mosaic is generated
     imdict is a dictionary with values that are CCDImage objects.  Any image 
     filenames will be placed into the provided dictionary keys with values
-    generated by calling load_image_files on the filenames
+    generated by calling :func:`load_image_file` on the filenames
     """
     import matplotlib.pyplot as plt
     from operator import isSequenceType
