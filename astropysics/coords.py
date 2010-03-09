@@ -961,12 +961,17 @@ def angle_axis(matrix,degrees=True):
     else:
         return angle,axis
     
-    #<------------------------simple Ephemerides----------------------------------->
+#<----------------------simple Ephemerides classes----------------------------->
     
 class EphemerisObject(object):
     """
     An object with orbital elements (probably a solar system body) that can be
     used to construct ephemerides.
+    
+    Note that the algorithms used here (based on heavily modified versions of
+    `these methods <http://stjarnhimlen.se/comp/ppcomp.html>`_) are only 
+    accurate to ~ 1 arcmin within a millenium or so of J2000, but are 
+    computationally quite fast and simple.  
     """
     
     __jd2000 = 2451545.0 #internally useful?
@@ -1001,13 +1006,55 @@ class EphemerisObject(object):
         self.longasc = val
     Omega = property(_getOmega,_setOmega,doc="""an alternative name for the 
                                   lognitude of the ascending node `longasc`'""")
-                                  
+
     def _getlOmega(self):
         return self.argperi
     def _setlOmega(self,val):
         self.argperi = val
     omega = property(_getlOmega,_setlOmega,doc="""an alternative name for the 
                                       argument of the perihelion `argperi`'""")
+
+    def _getE(self):
+        raise NotImplementedError
+    def _setE(self,val):
+        raise NotImplementedError
+    e = property(_getE,_setE,doc='orbital eccentricity')
+    
+    def _getA(self):
+        raise NotImplementedError
+    def _setA(self,val):
+        raise NotImplementedError
+    a = property(_getA,_setA,doc='semi-major axis')
+    
+    def _getI(self):
+        raise NotImplementedError
+    def _setI(self,val):
+        raise NotImplementedError
+    i = property(_getI,_setI,doc='inclination')
+    
+    def _getLongasc(self):
+        raise NotImplementedError
+    def _setLongasc(self,val):
+        raise NotImplementedError
+    longasc = property(_getLongasc,_setLongasc,doc='Longitude of the ascending node')
+    
+    def _getArgperi(self):
+        raise NotImplementedError
+    def _setArgperi(self,val):
+        raise NotImplementedError
+    argperi = property(_getArgperi,_setArgperi,doc='Argument of the Perihelion')
+    
+    def _getM0(self):
+        raise NotImplementedError
+    def _setM0(self,val):
+        raise NotImplementedError
+    M0 = property(_getM0,_setM0,doc='Mean Anamoly')
+    
+    
+    
+    
+    
+    
     
 #<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
