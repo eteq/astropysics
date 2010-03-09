@@ -1399,6 +1399,21 @@ class NFWModel(FunctionModel1DAuto):
         Rvir = m.Mvir_to_Rvir(Mvir,z)
         m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
         return m
+    
+class AlphaBetaGammaModel(FunctionModel1DAuto):
+    """
+    This is a model of the form 
+    A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha)
+    where gamma is the inner log slope, beta is the outer log slope, and 
+    alpha controls the transition region.
+    """
+    
+    def f(self,r,rs=1,A=1,alpha=1,beta=1,gamma=1):
+        return A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha)
+    
+    @property
+    def rangehint(self):
+        return self.rs/1000,1000*self.rs
 
 class PlummerModel(FunctionModel1DAuto):
     xaxisname = 'r'
