@@ -961,53 +961,183 @@ def angle_axis(matrix,degrees=True):
     else:
         return angle,axis
     
-    #<------------------------simple Ephemerides----------------------------------->
+#<----------------------simple Ephemerides classes----------------------------->
     
 class EphemerisObject(object):
     """
     An object with orbital elements (probably a solar system body) that can be
     used to construct ephemerides.
+    
+    Note that the algorithms used here (based on heavily modified versions of
+    `these methods <http://stjarnhimlen.se/comp/ppcomp.html>`_) are only 
+    accurate to ~ 1 arcmin within a millenium or so of J2000, but are 
+    computationally quite fast and simple.  
     """
     
-    __jd2000 = 2451545.0 #internally useful?
+    _jd2000 = 2451545.0 #internally useful?
     
-    def __init__(self,e,a,i,longasc,argperi,M0,name=''):
+    def __init__(self,e,a,i,N,w,M,name='',jd0=_jd2000):
         """
         Generates an object with the orbital elements: 
-        `e` is the ellipticity
-        `a` is the semimajor axis
-        `i` is the orbital inclination
-        `longasc` is the longitude of the ascending node
-        `argperi` is the argument of the perihelion
-        `meananom` is the mean anamoly at the epoch given in 'M0epoch'
         
-        arguments for these orbital elements can be either fixed values or 
-        functions of the form f(jd) that return the orbital elements as
-        a function of Julian Day
+        * `e` is the ellipticity
+        * `a` is the semimajor axis
+        * `i` is the orbital inclination
+        * `N` is the longitude of the ascending node
+        * `w` is the argument of the perihelion
+        * `M` is the mean anamoly
+        
+        arguments for these orbital elements can be either fixed values or
+        functions of the form f(jd) that return the orbital element as a
+        function of Julian Day
         
         `name` is a string describing the object
+        `jd0` is a jd value to initialize the jd for this object
         """
         self.e = e
         self.a = a
         self.i = i
-        self.longasc = longasc
-        self.argperi = argperi
-        self.M0 = M0
+        self.N = N
+        self.w = w
+        self.M = M
         self.name = name
         
-    def _getOmega(self):
-        return self.longasc
-    def _setOmega(self,val):
-        self.longasc = val
-    Omega = property(_getOmega,_setOmega,doc="""an alternative name for the 
-                                  lognitude of the ascending node `longasc`'""")
-                                  
-    def _getlOmega(self):
-        return self.argperi
-    def _setlOmega(self,val):
-        self.argperi = val
-    omega = property(_getlOmega,_setlOmega,doc="""an alternative name for the 
-                                      argument of the perihelion `argperi`'""")
+        self.jd = jd0
+        self._jd0 = jd
+        
+    def _ecl(self,jd):
+        """
+        obliquity/ecliptic angle 
+        """
+        return 23.4393 - 3.563E-7 * (jd-self._jd2000)
+        
+    def _getE(self):
+        return self._e(self.jd)
+    def _setE(self,val):
+        if callable(val):
+            self._e = val
+        else:
+            self._e = lambda jd:val
+    e = property(_getE,_setE,doc='orbital eccentricity')
+    
+    def _getA(self):
+        return self._a(self.jd)
+    def _setA(self,val):
+        if callable(val):
+            self._a = val
+        else:
+            self._a = lambda jd:val
+    a = property(_getA,_setA,doc='semi-major axis')
+    
+    def _getI(self):
+        return self._i(self.jd)
+    def _setI(self,val):
+        if callable(val):
+            self._i = val
+        else:
+            self._i = lambda jd:val
+    i = property(_getI,_setI,doc='inclination')
+    
+    def _getN(self):
+        return self._N(self.jd)
+    def _setN(self,val):
+        if callable(val):
+            self._N = val
+        else:
+            self._N = lambda jd:val
+    N = property(_getN,_setN,doc='Longitude of the ascending node')
+    
+    def _getW(self):
+        return self._w(self.jd)
+    def _setW(self,val):
+        if callable(val):
+            self._w = val
+        else:
+            self._w = lambda jd:val
+    w = property(_getW,_setW,doc='Argument of the Perihelion')
+    
+    def _getM0(self):
+        return self._M0(self.jd)
+    def _setM0(self,val):
+        if callable(val):
+            self._M0 = val
+        else:
+            self._e = lambda jd:val
+    M0 = property(_getM0,_setM0,doc='Mean Anamoly')
+    
+class Sun(EphemerisObject):
+    """
+    This class represents the Sun's Ephemeris
+    """
+    
+    @property
+    def name(self):
+        return 'Sun'
+    
+    @property
+    def e(self,jd):
+        return 0.016709 - 1.151E-9 * (jd-self._jd2000)
+    
+    @property
+    def a(self,jd):
+        return 1
+    
+    @property
+    def i(self,jd):
+        return 0
+    
+    @property
+    def N(self,jd):
+        return 0
+    
+    @property
+    def w(self,jd):
+        return 282.9404 + 4.70935E-5 * (jd-self._jd2000)
+    
+    @property
+    def M(self,jd):
+        return 356.0470 + 0.9856002585 * (jd-self._jd2000)
+    
+    def equatorialCoordinates(self,datetime):
+        """
+        return the equatorial coordinates of the Sun at the requested datetime
+        or JD
+        """
+        from obstools import gregorian_to_jd
+        from math import radians,cos,sin,atan2,sqrt
+        
+        if np.isscalar(datetime):
+            jd = datetime
+        else:
+            jd = gregorian_to_jd(datetime)
+        
+        oldjd = self.jd
+        try:
+            self.jd = jd
+            Mr = radians(self.M)
+            e = self.e
+            
+            #approximate eccentric anamoly
+            E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
+            
+            xv = cos(E) - e
+            yv = sqrt(1.0 - e*e) * sin(E)
+            
+            v = atan2(yv,xv)
+            r = sqrt(xv*xv + yv*yv)
+            
+            lsun = v + w
+            rclsun = r*cos(lsun)
+            rslsun = r*sin(lsun)
+            
+            x = rclsun
+            y = rslsun*cos(ecl)  
+            z = rslsun*sin(ecl)
+            
+            return EquatorialPosition(atan2(y,x),atan2(ze,sqrt(x*x+y*y)))
+        finally:
+            self.jd = oldjd
+    
     
 #<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
