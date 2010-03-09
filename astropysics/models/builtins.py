@@ -1,13 +1,13 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains builtin function models following the framework 
-of the modcore module
+This module contains builtin function models following the framework of the
+:mod:`core` module
 """
 
 from __future__ import division,with_statement
 
-from modcore import *
+from core import *
 from ..spec import HasSpecUnits as _HasSpecUnits
 from math import e
 

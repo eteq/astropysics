@@ -11,8 +11,8 @@ right out of the box.
 Currently, the main fitting algorithms are those from scipy.optimize and the 
 PyMC package (http://code.google.com/p/pymc/)
 """
-from modcore import *
-from modbuiltins import *
+from core import *
+from builtins import *
 from pca import Pca
 
 del ABCMeta,abstractmethod,abstractproperty,np,pi #clean up namespace

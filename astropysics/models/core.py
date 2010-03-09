@@ -3,7 +3,7 @@
 """
 This module holds the core (mostly abstract) classes for the data model 
 framework used in astropysics, seperated from the specific models found in the 
-modbuiltins module.  
+:mod:`builtins` module.  
 """
 
 #TODO: refactor so that FunctionModels that interpolate over data have a common superclass, then add linear interpolator, polynomial interpolator
@@ -2056,7 +2056,7 @@ class ModelSequence(object):
             interpat = x
         elif self._interpdir == 'perp':
             raise NotImplementedError('perp interp direction not working yet')
-            from .modbuiltins import LinearModel
+            from .builtins import LinearModel
             ys = np.array([m(x)-y for m in self._models])
             closestmodel = self._models[np.where(ys==np.min(ys))[0][0]]
             dmod = closestmodel.derivative(x)
