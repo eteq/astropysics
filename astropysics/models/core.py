@@ -25,26 +25,31 @@ except ImportError: #support for earlier versions
 class ModelTypeError(Exception):
     """
     This exception indicates a problem with the value of the input 
-    or output of a model 
+    or output of a model. 
     """
     def __init__(self,message):
         super(ModelTypeError,self).__init__(message)
     
 class ParametricModel(object):
     """
-    The superclass of all models with parameters
+    The superclass of all models with parameters. Subclasses should implement
+    abstract properties and methods:
     
-    subclasses should implement abstract properties and methods:
-    * __call__: Takes a single argument as the model input, returns the
-                model output
-    
-    * params: a sequence of names for the parameters of the model
-    * parvals: a sequence of values for the parameters of the model
+    * :meth:`__call__`
+        Takes a single argument as the model input, returns the model output
+    * :meth:`params`
+        a sequence of names for the parameters of the model
+    * :meth:`parvals`
+        a sequence of values for the parameters of the model
     
     optional overrides:
-    * pardict: a dictionary with keys as parameter names and values as 
-      the value for that parameter
-    * inv: compute the inverse of the model
+    
+    * :meth:`pardict`
+        a dictionary with keys as parameter names and values as the value for
+        that parameter
+    * :meth:`inv`
+        compute the inverse of the model
+        
     """
     __metaclass__ = ABCMeta
     
@@ -130,23 +135,22 @@ class _AutoParameter(object):
 
 class AutoParamsMeta(ABCMeta):
     """
-    Metaclass used to auto-generate parameters from 'f' function
-    for FunctionModel classes
+    Metaclass used to auto-generate parameters from the :meth:`FunctionModel.f`
+    method of :class:`FunctionModel` subclasses.
     
-    This generates attributes for each of the 
-    inputs of the function "f" (except self and x)
-        
-    When a model is instantiated, the arguments specify initial values for 
-    the parameters, and any non-parameter kwargs will be passed into the 
-    __init__ method of the model class
+    This generates attributes for each of the inputs of the method
+    :meth:`FunctionModel.f` (except 'self' and 'x')
     
-    if f is of the form f(self,x,*args), the first argument of the 
-    constructor is taken to be the number of arguments that particular 
-    instance should have, and the 'paramnames' class attribute can be used
-    to specify the prefix for the name of the parameters (and can be 
-    an iterator, in which case one of each name will be made for each var
-    arg, in sequence order).  default values can be given by adding class 
-    variables of the form "_param0_default"
+    When a model is instantiated, the arguments specify initial values for the
+    parameters, and any non-parameter kwargs will be passed into the
+    :meth:`__init__` method of the model class.
+    
+    If f is of the form f(self,x,*args), the first argument of the constructor
+    is taken to be the number of arguments that particular instance should have,
+    and the :attr:`paramnames` class attribute can be used to specify the prefix
+    for the name of the parameters (and can be an iterator, in which case one of
+    each name will be made for each var arg, in sequence order). default values
+    can be given by adding class variables of the form :attr:`_param0_default`
     """
     def __init__(cls,name,bases,dct):
         #called on import of astro.models
@@ -1178,17 +1182,17 @@ class FunctionModel1D(FunctionModel):
     
     def inv(self,yval,*args,**kwargs):
         """
-        Find the x value matching the requested y-value.  
-        (note that yval must be a scalar)
+        Find the x value matching the requested y-value. (note that `yval` must
+        be a scalar)
         
         typical usage is inv(yval,a,b,method='brentq')
         
-        the kwarg 'method' can be any of the root finders from scipy.optimize 
-        scalar solvers are recommended (default is brentq or newton).  'method' 
-        can also be a function that should take f(g(x),*args,**kwargs) and 
-        return where g(x) is 0
+        the kwarg `method` can be a name of any of the root finders from
+        :mod:`scipy.optimize`. Scalar solvers are recommended (default is
+        'brentq' or 'newton'). `method` can also be a function that should take
+        f(g(x),*args,**kwargs) and return where g(x) is 0
         
-        *args and **kwargs are passed into the minimizer
+        args and kwargs are passed into the minimizer
         """    
         import scipy.optimize
         
@@ -1609,27 +1613,40 @@ class FunctionModel1D(FunctionModel):
         sets the type of function evaluation to occur when the model is called
         
         `calltype` can be:
-        *None: basic function evaluation
-        *'derivative': derivative at the location
-        *'integrate': integral - specify 'upper' or 'lower' kwarg and
-                    the evaluation location will be treated as the
-                    other bound.  If neither is given, lower=0 is assumed
-        *'integrateCircular': same as integrate, but using polar jacobian
-        *'integrateSpherical': same as integrate, but using spherical jacobian
-        *any other string that is the name of a method on this object
         
-        xtrans and ytrans are functions applied to either the input call (for x)
-        or the output (for y) - they can also be strings:
-        *'log':base-10 logarithm
-        *'ln':base-e logarithm
-        *'pow':10**
-        *'exp':e**
+        * None
+            basic function evaluation
+        * 'derivative'
+            derivative at the location
+        * 'integrate'
+            integral - specify `upper` or `lower` kwargs and the evaluation
+            location will be treated as the other bound. If neither is given,
+            lower = 0 is assumed
+        * 'integrateCircular'
+            same as 'integrate', but using polar jacobian
+        * 'integrateSpherical'
+            same as 'integrate', but using spherical jacobian
+        * any other string that is the name of a method on this object
+        
+        `xtrans` and `ytrans` are functions applied to either the input call
+        (for x) or the output (for y) - they can also be strings:
+        
+        * 'log'
+            base-10 logarithm
+        * 'ln'
+            base-e logarithm
+        * 'pow'
+            10**
+        * 'exp'
+            e**
         
         kwargs are passed into the function requested
         
-        note that there may be unintended consequences of this method due to 
-        methods using the call value instead of the default function evaluation
-        result
+        .. warning:: 
+            There may be unintended consequences of this method due to
+            methods using the call value instead of the default function evaluation
+            result.  You have been warned...
+        
         """
         from types import MethodType
         import inspect
@@ -1738,7 +1755,7 @@ class FunctionModel1D(FunctionModel):
     def getCall(self):
         """
         returns the type of evaluation to perform when this model is called - 
-        a string like that of the type passed into `setCall`, or None if
+        a string like that of the type passed into :meth:`setCall`, or None if
         the model function itself is to be called.
         """
         if hasattr(self,'_filterfunctype'):

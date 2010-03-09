@@ -2,18 +2,20 @@
 
 """
 This module stores tools for oberving (pre- and post-) as well as functioning as
-a "miscellaneous" bin for various corrections and calculations that don't have
-a better place to live.
+a module for various corrections and calculations that don't have a better place
+to live.
 
-The focus is currently on optical astronomy, as that is what the primary author 
+The focus is currently on optical astronomy, as that is what the primary author
 does.
 
-Note that some of these functions require the dateutil package 
-( http://pypi.python.org/pypi/python-dateutil , also included with matplotlib)
+Note that some of these functions require the
+:mod:`dateutil<http://pypi.python.org/pypi/python-dateutil>` package (it is
+included with matplotlib)
 """
 #TODO: add info to Observatory class, particularly atmospheric extinction
 #TODO: exposure time calculator (maybe in phot instead?)
 #TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
+#TODO: return Pipeline support to Extinction 
 
 from __future__ import division,with_statement
 from .constants import pi
@@ -24,27 +26,31 @@ from .utils import PipelineElement,DataObjectRegistry
 
 def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     """
-    convert julian date to a gregorian calendar date and time
+    Convert a julian date to a gregorian calendar date and time.
     
     
     `bceaction` indicates what to do if the result is a BCE year.   datetime 
     generally only supports positive years, so the following options apply:
-    * 'raise' or None: raise an exception
-    * 'neg': for any BCE years, convert to positive years (delta operations 
-      in datetime will not be correct)
-    * 'negreturn': same as 'neg', but changes the return type to a tuple with 
-      the datetime objects as the first element and a boolean array that is True
-      for the objects that are BCE as the second element.
-    * a scalar: add this number to the year
+    
+    * 'raise' or None
+        raise an exception
+    * 'neg'
+        for any BCE years, convert to positive years (delta operations in
+        datetime will not be correct)
+    * 'negreturn'
+        same as 'neg', but changes the return type to a tuple with the datetime
+        objects as the first element and a boolean array that is True for the
+        objects that are BCE as the second element.
+    * a scalar
+        add this number to the year
     
     
-    `rounding` determines a fix for floating-point errors - if the seconds 
-    are within the request number of seconds of an exact second, the output will 
-    be set to that second 
+    `rounding` determines a fix for floating-point errors - if the seconds are
+    within the request number of seconds of an exact second, the output will be
+    set to that second
     
-    *returns*
-    :class:`datetime.datetime` objects in UTC.  If `bceaction` is 'negreturn',
-    instead it will be a (datetime,bcemask) tuple
+    returns :class:`datetime.datetime` objects in UTC. If `bceaction` is
+    'negreturn', it will instead be a (datetime,bcemask) tuple
     """
     import datetime
     
@@ -228,10 +234,9 @@ def gregorian_to_jd(gtime,tz=None):
 def besselian_epoch_to_jd(bepoch):
     """
     Convert a Besselian epoch to Julian Date, assuming a tropical year of 
-    365.242198781 days
+    365.242198781 days.
     
-    :Reference:
-    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
+    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
     """
     return (bepoch - 1900)*365.242198781 + 2415020.31352
 
@@ -240,8 +245,7 @@ def jd_to_besselian_epoch(jd):
     Convert a Julian Date to a Besselian epoch, assuming a tropical year of 
     365.242198781 days
     
-    :Reference:
-    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
+    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
     """
     return 1900 + (jd - 2415020.31352)/365.242198781
 
@@ -250,8 +254,7 @@ def jd_to_epoch(jd):
     Convert a Julian Date to a Julian Epoch, assuming the year is exactly
     365.25 days long
     
-    :Reference:
-    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
+    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     """
     return 2000.0 + (jd - 2451545.0)/365.25
 
@@ -260,8 +263,7 @@ def epoch_to_jd(jepoch):
     Convert a Julian Epoch to a Julian Day, assuming the year is exactly
     365.25 days long
     
-    :Reference:
-    http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
+    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     """
     return (jepoch - 2000)*365.25 + 2451545.0
     
@@ -365,38 +367,43 @@ class Site(object):
     
     def localSiderialTime(self,*args,**kwargs):
         """
-        compute the local siderial time given an input civil time.
+        Compute the local siderial time given an input civil time. The various
+        input forms are used to determine the interpretation of the civil time:
         
-        the various input forms are used to determine the civil time
-        
-        * localSiderialTime(): current local siderial time for this Site or uses
-                               the value of the :attr:`currentobsjd` property.
-        * localSiderialTime(JD): input argument is julian date UT1
-        * localSdierialTime(:class:`datetime.date`): compute the local siderial 
-                                           time for midnight on the given date
-        * localSiderialTime(:class:`datetime.datetime`): the datetime object 
-                                       specifies the local time.  If it has
-                                       tzinfo, the object's time zone will 
-                                       be used, otherwise the Site's 
-        * localSiderialTime(time,year,month,day): input arguments determine 
-          local time - time is in hours
-        * localSiderialTime(year,month,day,hr,min,sec): local time - hours and
-          minutes will be interpreted as integers
+        * localSiderialTime()
+            current local siderial time for this Site or uses the value of the
+            :attr:`currentobsjd` property.
+        * localSiderialTime(JD)
+            input argument is julian date UT1
+        * localSdierialTime(:class:`datetime.date`)
+            compute the local siderial time for midnight on the given date
+        * localSiderialTime(:class:`datetime.datetime`)
+            the datetime object specifies the local time. If it has tzinfo, the
+            object's time zone will be used, otherwise the :class:`Site's<Site>`
+        * localSiderialTime(time,year,month,day)
+            input arguments determine local time - time is in hours
+        * localSiderialTime(year,month,day,hr,min,sec)
+            local time - hours and minutes will be interpreted as integers
           
         *keywords*  
         
-        * `apparent`: if True (default) the returned time will be local apparent 
-                    sidereal time, otherwise it will be local mean sidereal time  
-        * `returntype`: a string that determines the form of the returned LST as
-                        described below
+        * `apparent`
+            if True (default) the returned time will be local apparent sidereal
+            time (i.e. nutation terms included), otherwise it will be local mean
+            sidereal time
+        * `returntype`
+            a string that determines the form of the returned LST as described
+            below
         
-        *returns*
-        the local siderial time in a format that depends on the 
-        `returntype` keyword.  It can be (default None):
-        
-        *None/'hours': LST in decimal hours
-        *'string': LST as a hh:mm:ss.s 
-        *'datetime': a :class:`datetime.time` object 
+        returns the local siderial time in a format that depends on the
+        `returntype` keyword. It can be:
+    
+        * None/'hours' (default)
+            LST in decimal hours
+        * 'string'
+            LST as a hh:mm:ss.s 
+        * 'datetime'
+            a :class:`datetime.time` object 
        
         """
         #guts of calculation adapted from xidl 
@@ -494,29 +501,33 @@ class Site(object):
         
     def localTime(self,lsts,date=None,apparent=True,returntype=None):
         """
-        computes the local civil time given a particular local siderial time. 
-        This currently does not acount for the 
+        Computes the local civil time given a particular local siderial time. 
         
         `lsts` are the input local times, and may be either a scalar or array,
-        and must be in decimal hours.  
+        and must be in decimal hours.
         
         `date` should be a :class:`datetime.date` object or a (year,month,day)
         tuple.  If None, the current date will be assumed as inferred from 
-        :attribute:`Site.currentobsjd`
+        :attr:`Site.currentobsjd`
         
-        if `lsts` is a :class:`datetime.datetime` object, the object will be 
-        interpreted as the local siderial time with the corresponding date (any 
+        if `lsts` is a :class:`datetime.datetime` object, the object will be
+        interpreted as the local siderial time with the corresponding date (any
         timezone info will be ignored), and the `date` argument will be ignored.
                         
         if `apparent` is True, the inputs are assumed to be in local apparent
-        siderial time, otherwise local mean siderial time.
+        siderial time (i.e. nutation terms included), otherwise local mean
+        siderial time.
                               
-        *returns*
-        the local time in a form determined by the `returntype` argument:
+                              
+        returns the local time in a format that depends on the `returntype`
+        keyword. It can be:
         
-        *None/'hours': local time in decimal hours
-        *'string': local time as a hh:mm:ss.s 
-        *'datetime': a :class:`datetime.datetime` object with the local tzinfo
+        * None/'hours' (default)
+            local time in decimal hours
+        * 'string'
+            local time as a hh:mm:ss.s 
+        * 'datetime'
+            a :class:`datetime.time` object with the local tzinfo
         
         """
         import datetime
@@ -1237,44 +1248,44 @@ class Extinction(PipelineElement):
         return A0,np.std(A0)
     
     #PipelineElement methods
-    def _plFeed(self,data,src):
-        from .utils import  PipelineError
-        from .spec import Spectrum
-        if self._plbuffer is None:
-            self._plbuffer = {'in':[],'out':[]} 
+#    def _plFeed(self,data,src):
+#        from .utils import  PipelineError
+#        from .spec import Spectrum
+#        if self._plbuffer is None:
+#            self._plbuffer = {'in':[],'out':[]} 
     
-        if isinstance(data,Spectrum):
-            self._plbuffer['in'].append(('spec',data))
-        else:
-            raise PipelineError('unrecognized Extinction correction input data')
+#        if isinstance(data,Spectrum):
+#            self._plbuffer['in'].append(('spec',data))
+#        else:
+#            raise PipelineError('unrecognized Extinction correction input data')
         
-    def _plProcess(self):
-        from .utils import  PipelineError
-        if self._plbuffer is None:
-            self._plbuffer = {'in':[],'out':[]} 
+#    def _plProcess(self):
+#        from .utils import  PipelineError
+#        if self._plbuffer is None:
+#            self._plbuffer = {'in':[],'out':[]} 
         
-        type,data = self._plbuffer['in'].pop(0)
-        try:
-            if type=='spec':
-                newspec = self.correctSpectrum(data)
-                self._plbuffer['out'].append(newspec)
-            else:
-                assert False,'Impossible point - code error in Extinction pipeline'
-        except:
-            #TODO:check this
-            self.insert(0,spec(type,data))
+#        type,data = self._plbuffer['in'].pop(0)
+#        try:
+#            if type=='spec':
+#                newspec = self.correctSpectrum(data)
+#                self._plbuffer['out'].append(newspec)
+#            else:
+#                assert False,'Impossible point - code error in Extinction pipeline'
+#        except:
+#            #TODO:check this
+#            self.insert(0,spec(type,data))
             
-    def _plExtract(self):
-        if self._plbuffer is None:
-            self._plbuffer = {'in':[],'out':[]} 
+#    def _plExtract(self):
+#        if self._plbuffer is None:
+#            self._plbuffer = {'in':[],'out':[]} 
             
-        if len(self._plbuffer['out']<1):
-            return None
-        else:
-            return self._plbuffer['out'].pop(0)
+#        if len(self._plbuffer['out']<1):
+#            return None
+#        else:
+#            return self._plbuffer['out'].pop(0)
         
-    def _plClear(self):
-        self._plbuffer = None
+#    def plClear(self):
+#        self._plbuffer = None
     
 class CalzettiExtinction(Extinction):
     """
@@ -1411,21 +1422,28 @@ class SMCExtinction(FMExtinction):
 
 def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
     """
-    Gets map values from Schlegel, Finkbeiner, and Davis 1998 extinction maps
+    Gets map values from Schlegel, Finkbeiner, and Davis 1998 extinction maps.
     
-    dustmap can either be a filename (if '%s' appears in the string, it will be
+    `dustmap` can either be a filename (if '%s' appears in the string, it will be
     replaced with 'ngp' or 'sgp'), or one of:
-        i100: 100-micron map in MJy/Sr
-        x   : X-map, temperature-correction factor
-        t   : Temperature map in degrees Kelvin for n=2 emissivity
-        ebv : E(B-V) in magnitudes
-        mask: Mask values
-    (in which case the files are assumed to lie in the current directory)
     
-    input coordinates are in degrees of galactic latiude and logitude - they can
-    be scalars or arrays
+    * 'i100' 
+        100-micron map in MJy/Sr
+    * 'x'
+        X-map, temperature-correction factor
+    * 't'
+        Temperature map in degrees Kelvin for n=2 emissivity
+    * 'ebv'
+        E(B-V) in magnitudes
+    * 'mask'
+        Mask values 
+        
+    For these forms, the files are assumed to lie in the current directory.
     
-    if interpolate is an integer, it can be used to specify the order of the
+    Input coordinates are in degrees of galactic latiude and logitude - they can
+    be scalars or arrays.
+    
+    if `interpolate` is an integer, it can be used to specify the order of the
     interpolating polynomial
     """
     from numpy import sin,cos,round,isscalar,array,ndarray,ones_like

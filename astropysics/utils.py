@@ -526,7 +526,7 @@ class Pipeline(object):
         else:
             return d.pop()
         
-    def _processStage(self,stagenum):
+    def processStage(self,stagenum):
         st = self.elements[stagenum]
         
         #process the items to join into the stage if necessary
@@ -544,9 +544,9 @@ class Pipeline(object):
         data = self.datadeques[stagenum].pop()
         try:
             check_type(st._plintype,data) #does nothing if st._plintype is None
-            newdata = st._plProcess(data,self,stagenum)
+            newdata = st.plProcess(data,self,stagenum)
             if newdata is None:
-                newdata = st._plInteract(data,self,stagenum)
+                newdata = st.plInteract(data,self,stagenum)
                 if newdata is None:
                     self.cycles[stagenum] += 1
                 else:
@@ -644,21 +644,23 @@ class PipelineElement(object):
     """
     This class represents an element in a Pipeline.  Implementing classes
     must override the following method:
-    *_plProcess(self,data,last,pipeline): process the data
+    
+    * :meth:`plProcess`
+        Process the data in whatever manner is appropriate.
     
     This method may be overridden: 
-    *_plinteract(self,data,last,pipeline): perform interactive stage     
-    this attribute may be set (on classes or instances) as a processing 
-    indicator:
-    *_plintype: the type expected for data fed into this PipelineElement - 
-        see `check_type` for valid types to use (None means no checking)
+    * :meth:`plInteract`    
+        Performs interactive stage. The :attr:`_plintype` attribute may be set
+        (on classes or instances) as a processing indicator. See
+        :func:`check_type` for valid types to use (it it is None, no checking is
+        performed)
     """
     __metaclass__ = ABCMeta
     
     _plintype = None
     
     @abstractmethod
-    def _plProcess(self,data,pipeline,elemi):
+    def plProcess(self,data,pipeline,elemi):
         """
         this method should perform the data processing steps that 
         this element of the pipeline is supposed to do.  
@@ -678,12 +680,13 @@ class PipelineElement(object):
         """
         raise NotImplementedError
     
-    def _plInteract(self,data,pipeline,elemi):
+    def plInteract(self,data,pipeline,elemi):
         """
-        called if _plProcess returns None.  Should return the data to be 
-        passed into the next stage (if None, _plProcess will be called again)
+        called if :meth:`plProcess` returns None. Should return the data to be
+        passed into the next stage (if None, :meth:`plProcess` will be called
+        again)
         
-        arguments are the same as _plProcess
+        arguments are the same as :meth:`plProcess`
         """
         return None
         
@@ -725,7 +728,7 @@ class PipelineAccumulate(PipelineElement):
         self._onempty = val
     onempty = property(_getonempty,_setonempty)
     
-    def _plProcess(self,data,pipeline,elemi):
+    def plProcess(self,data,pipeline,elemi):
         self._accum.append(data)
         
         if self.stoponobj and data == self.stopobj:

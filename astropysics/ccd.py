@@ -785,13 +785,16 @@ class DataScaling(object):
     The base class for objects that scale the data in a CCDImage. Subclasses
     should override:
     
-    * 'name': an attribute with the name of the transform
-    * 'transform': accepts a 2D array of the image data and outputs a 
-      2D array of the same shape
-    * 'invtransform': accepts a 2D array of altered data and outpts a
-      2D array of the same shape.  Expected to match the property
-      x = invtransform(transform(x)) .  If it is set to None, 
-      it is assumed that an inverse transform is impossible
+    * 'name'
+        an attribute with the name of the transform
+    * 'transform'
+        accepts a 2D array of the image data and outputs a 2D array of the same
+        shape
+    * 'invtransform'
+        accepts a 2D array of altered data and outpts a 2D array of the same
+        shape. Expected to match the property x = invtransform(transform(x)) .
+        If it is set to None, it is assumed that an inverse transform is
+        impossible
       
     the __init__ method can be overridden, but will be called with
     the CCDImage object as the first argument
@@ -1273,13 +1276,13 @@ class ImageBiasSubtractor(PipelineElement):
             
         return image
     
-    def _plProcess(self,data,pipeline,elemi):
+    def plProcess(self,data,pipeline,elemi):
         if self.interactive:
             return None #interactive fit will occur in self
         else:
             return self.subtractFromImage(data)
     
-    def _plInteract(self,data,pipeline,elemi):
+    def plInteract(self,data,pipeline,elemi):
         return self.subtractFromImage(data)
 
 
@@ -1385,7 +1388,7 @@ class ImageCombiner(PipelineElement):
             self.mask = None
         return image
     
-    def _plProcess(self,data,pipeline,elemi):
+    def plProcess(self,data,pipeline,elemi):
         return self.combineImages(data)
     
     
@@ -1430,17 +1433,16 @@ class ImageFlattener(PipelineElement):
         
         return image
         
-    def _plProcess(self,data,pipeline,elemi):
+    def plProcess(self,data,pipeline,elemi):
         return self.flattenImage(data)
     
 def load_image_file(fn,**kwargs):
     """
-    Factory function for generating CCDImage objects from files - the exact 
-    class type will be inferred from the extension.  kwargs will be
-    passed into the appropriate constructor
+    Factory function for generating CCDImage objects from a file with filename
+    `fn` - the exact class type will be inferred from the extension. kwargs will
+    be passed into the appropriate constructor.
     
-    Supports:
-    *FITS files
+    Currently only supports FITS files.
     """
     from os import path
     ext = path.splitext(fn)[-1].lower()[1:]

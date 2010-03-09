@@ -24,5 +24,6 @@ Module API
 .. automodule:: astropysics.constants
    :members:
    :undoc-members:
+   :show-inheritance:
    
 .. todomodule:: astropysics.constants

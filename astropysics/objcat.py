@@ -192,29 +192,30 @@ class CatalogNode(object):
     
     def visit(self,func,traversal='postorder',filter=False,includeself=True):
         """
-        This function walks through the object and all its children, 
-        executing func(CatalogNode) and returning a list of the 
-        return values
+        This function walks through the object and all its children, executing
+        func(:class:`CatalogNode`) and returning a list of the return values
         
         traversal is the traversal order of the tree - can be:
-        *'preorder',
-        *'postorder'
-        *an integer indicating at which index the root should 
-        be evaluated (pre/post are 0/-1)
-        * a float between -1 and 1 indicating where the root should 
-        be evaluated as a fraction
-        *'level'/'breathfirst' 
-        *None:only visit this Node
         
-        filter can be:
-        *False: process and return all values
-        *a callable: is called as g(node) and if it returns False, the
-        node will not be processed nor put in the list (also ignores anything 
-        that returns None)
-        *any other: if the node returns this value on processing, it will
-                    not be included in the returned list
+        * 'preorder'
+        * 'postorder'
+        * an integer indicating at which index the root should be evaluated
+          (pre/post are 0/-1)
+        * a float between -1 and 1 indicating where the root should be evaluated
+          as a fraction
+        * 'level'/'breathfirst' 
+        * None:only visit this Node
+        
+        `filter` can be:
+        
+        * False: process and return all values
+        * a callable: is called as g(node) and if it returns False, the node
+          will not be processed nor put in the list (also ignores anything that
+          returns None)
+        * any other: if the node returns this value on processing, it will not
+          be included in the returned list
                     
-        if includeself is not True, the function will not visit the node 
+        if `includeself` is not True, the function will not visit the node 
         itself (only the sub-trees)
         """       
         if callable(filter):
@@ -538,13 +539,18 @@ class FieldNode(CatalogNode,Sequence):
     
     def setToSource(self,src,missing='skip'):
         """
-        Sets the given src string or Source object as the current source for
-        all fields in the node.
+        Sets a string or :class:`Source` object passed in as the `src` argument
+        as the current source for the requested FieldNode and it's subtree.
         
-        missing can be:
-        *'raise'/'exception':raise a ValueError if there is no value with that source
-        *'warn':give a warning if the value is missing
-        *'skip':do nothing 
+        `missing` can be:
+        
+        * 'raise'/'exception'
+            raise a ValueError if there is no value with that source
+        * 'warn'
+            give a warning if the value is missing
+        * 'skip'
+            do nothing 
+        
         """
         if not isinstance(src,Source) and src != 'derived':
             src = Source(src)      #TODO:see if this is speedier          
@@ -573,18 +579,23 @@ class FieldNode(CatalogNode,Sequence):
     @staticmethod
     def setToSourceAtNode(node,src,missing='skip',traversal='postorder',siblings=False):
         """
-        Sets the given src string or Source object as the current source for 
-        the requested FieldNode and it's subtree
+        Sets a string or :class:`Source` object passed in as the `src` argument
+        as the current source for the requested FieldNode and it's subtree.
         
-        missing can be:
-        *'raise'/'exception':raise a ValueError if there is no value with that source
-        *'warn':give a warning if the value is missing
-        *'skip':do nothing 
+        `missing` can be:
         
-        traversal is the type of traversal to perform on the subtree
+        * 'raise'/'exception'
+            raise a ValueError if there is no value with that source
+        * 'warn'
+            give a warning if the value is missing
+        * 'skip'
+            do nothing 
         
-        siblings applies the function to all the children of the parent of 
-        the node
+        `traversal` is the type of traversal to perform on the subtree. See
+        :meth:`FieldNode.visit` for values.
+        
+        If `siblings` is True, the function applies to all the children of this
+        :class:`FieldNode's<FieldNode>` parent.
         """
         if isinstance(node,FieldNode):
             if siblings and node.parent is not None:
@@ -603,89 +614,16 @@ class FieldNode(CatalogNode,Sequence):
             for n in node:
                 vals.extend(setToSourceAtNode(n,src,missing,traversal,siblings))
             return vals
+        
     def setToSourceAtSelf(self,*args,**kwargs):
         """
         Sets the given src string or Source object as the current source for 
         this FieldNode and it's subtree
         
-        see `FieldNode.setToSourceAtNode` for details
+        see :meth:`FieldNode.setToSourceAtNode` for details
         """
         return setToSourceAtNode(self,*args,**kwarg)
-
-    
-    def extractField(self,*args,**kwargs):
-        """
-        walk through the tree starting from this object
         
-        if the kwarg 'siblings' is set to True,this will 
-        also extract the siblings (e.g. the parent subtree,
-        except for the parent itself) , and overwrites includeself
-        
-        the other arguments are identical to FieldNode.extractFieldAtNode:
-        
-        extractField(fieldnames,traversal='postorder',filter=False,
-                     missing=0,converter=None,sources=False,errors=False,
-                     asrec=False,includeself=True)
-        
-        fieldnames can be a single field name, a sequence of fieldnames,
-        or a comma-seperated string of field names
-        
-        traversal and filter accept arguments like CatalogNode.visit
-        
-        missing determines the behavior in the event that a field is not 
-        present (or a non FieldNode is encountered) it can be:
-        *'exception': raise an exception if the field is missing
-        *'skip': do not include this object in the final array
-        *'mask': put 0 in the array location and return a mask of missing 
-                 values as the second return value
-        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
-                   the missing values masked
-        *any other: fill any missing entries with this value
-        
-        converter is a function that is applied to the data before being 
-        added to the array (or None to perform no conversion)
-        
-        sources determines if a sequence of sources should be returned - if
-        False, only the array is returned, if it evaluates to True, the sources
-        will be returned as described below.  By default, string representations
-        of the sources are returned - if sources=='object', the actual Source
-        objects will be returned instead
-        
-        dtypes determines the numpy data type of the output arrays - if None, 
-        they will be inferred from the data. Otherwise, it must be either a 
-        sequence of size matching the number of fields requested, an equivalent 
-        comma-seperated string, or a dictionary mapping fieldnames to dtypes
-        
-        errors determines if the errors should be returned
-        
-        asrec generates a record array instead of a regular array.  It can
-        optionally specify the numpy data type of the values.  It must be True,
-        in which case the dtype is inferred from the values, a sequence of size 
-        matching the number of fields requested, an equivalent comma-seperated 
-        string, or a dictionary mapping fieldnames to dtypes
-        
-        
-        includeself determines if the node itself should be included
-        
-        return value:
-        
-        * a record array if asrec is True
-        * an f x N array of values if sources and errors are False
-        * (values,errors,sources) if sources and errors are True
-        * (values,sources) if sources are True and errors are False
-        * (values,errors) if errors are True and sources are False
-        
-        if missing=='mask', return will be (values,mask)
-        """
-        sib = kwargs.pop('siblings',False)
-        if sib and self.parent is not None:
-            if len(args)<6:
-                kwargs['includeself'] = False
-            else:
-                args[5] = False
-            return FieldNode.extractFieldAtNode(self.parent,*args,**kwargs)
-        else:
-            return FieldNode.extractFieldAtNode(self,*args,**kwargs)
         
     def getFieldValueNodes(self,fieldname,value):
         """
@@ -699,59 +637,69 @@ class FieldNode(CatalogNode,Sequence):
                            missing=0,converter=None,sources=False,errors=False,
                            asrec=False,includeself=True):
         """
-        this will walk through the tree starting from the Node in the first
-        argument and generate an array of the values for the 
-        specified fieldname
+        This will walk through the tree starting from the :class:`FieldNode`
+        given by the `node` argument and generate an :class:`array
+        <numpy.ndarray>` of values for the specified fieldname.
         
-        fieldnames can be a single field name, a sequence of fieldnames,
-        or a comma-seperated string of field names
+        `fieldnames` can be a single field name, a sequence of fieldnames, or a
+        comma-seperated string of field names.
         
-        traversal and filter accept arguments like CatalogNode.visit
+        `traversal` and `filter` accept arguments like :meth:`CatalogNode.visit`
         
-        missing determines the behavior in the event that a field is not 
-        present (or a non FieldNode is encountered) it can be:
-        *'exception': raise an exception if the field is missing
-        *'skip': do not include this object in the final array
-        *'mask': put 0 in the array location and return a mask of missing 
-                 values as the second return value
-        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
-                   the missing values masked
-        *any other: fill any missing entries with this value
+        `missing` determines the behavior in the event that a field is not 
+        present (or a non :class:`FieldNode` is encountered) it can be:
         
-        converter is a function that is applied to the data before being 
-        added to the array (or None to perform no conversion)
+        * 'exception'
+            raise an exception if the field is missing
+        * 'skip'
+            do not include this object in the final array
+        * 'mask'
+            put 0 in the array location and return a mask of missing values as
+            the second return value
+        * 'masked'
+            return numpy.ma.MaskedArray objects instead of arrays, with the
+            missing values masked
+        * any other
+            fill any missing entries with this value
         
-        sources determines if a sequence of sources should be returned - if
+        `converter` is a function that is applied to the data before being 
+        added to the array (or None to perform no conversion).
+        
+        `sources` determines if a sequence of sources should be returned - if
         False, only the array is returned, if it evaluates to True, the sources
         will be returned as described below.  By default, string representations
-        of the sources are returned - if sources=='object', the actual Source
-        objects will be returned instead
+        of the sources are returned - if `sources`=='object', the actual
+        :class:`Source` objects will be returned instead.
         
-        dtypes determines the numpy data type of the output arrays - if None, 
+        `dtypes` determines the numpy data type of the output arrays - if None, 
         they will be inferred from the data. Otherwise, it must be either a 
         sequence of size matching the number of fields requested, an equivalent 
         comma-seperated string, or a dictionary mapping fieldnames to dtypes
         
-        errors determines if the errors should be returned
+        If `errors` is True, the errors will be returned (see return values
+        below).
         
-        asrec generates a record array instead of a regular array.  It can
-        optionally specify the numpy data type of the values.  It must be True,
-        in which case the dtype is inferred from the values, a sequence of size 
-        matching the number of fields requested, an equivalent comma-seperated 
-        string, or a dictionary mapping fieldnames to dtypes
+        Is `asrec` is True, a :class:`record array <numpy.recarray>` is
+        generated instead of a regular :class:`array <numpy.ndarray>`. It can
+        optionally specify the numpy data type of the values, if it is a
+        sequence of size matching the number of fields, an equivalent
+        comma-seperated string, or a dictionary mapping fieldnames to dtypes.
+        Otherwise, the dtypes are inferred from the arrays themselves.
         
         
-        includeself determines if the node itself should be included
+        If `includeself` is True, the node itself will be included.
         
-        return value:
+        *returns*
         
-        * a record array if asrec is True
-        * an f x N array of values if sources and errors are False
-        * (values,errors,sources) if sources and errors are True
-        * (values,sources) if sources are True and errors are False
-        * (values,errors) if errors are True and sources are False
+        * a :class:`record array<numpy.recarray>` if `asrec` is True
+        * an f x N :class:`array<numpy.ndarray>` of values if `sources` and 
+          `errors` are False
+        * (values,errors,sources) if `sources` and `errors` are True
+        * (values,sources) if `sources` are True and `errors` are False
+        * (values,errors) if `errors` are True and `sources` are False
         
-        if missing=='mask', return will be (values,mask)
+        If `missing` is 'mask', the above return values are wrapped in a
+        (returnval,mask) tuple.
         """
         from functools import partial
         
@@ -929,6 +877,28 @@ class FieldNode(CatalogNode,Sequence):
                 return (res,errs)
             else:
                 return res
+            
+    def extractField(self,*args,**kwargs):
+        """
+        Walk through the tree starting from this object.
+        
+        If the kwarg `siblings` is set to True, this will also extract the
+        siblings (e.g. the parent subtree, except for the parent itself), and
+        this overwrites `includeself`.
+        
+        The other arguments are identical to
+        :meth:`FieldNode.extractFieldAtNode`.
+        """
+        sib = kwargs.pop('siblings',False)
+        if sib and self.parent is not None:
+            if len(args)<6:
+                kwargs['includeself'] = False
+            else:
+                args[5] = False
+            return FieldNode.extractFieldAtNode(self.parent,*args,**kwargs)
+        else:
+            return FieldNode.extractFieldAtNode(self,*args,**kwargs)
+    #extractField.__doc__ += extractFieldAtNode.__doc__
     
     @staticmethod
     def getFieldValueNodesAtNode(node,fieldname,value,visitkwargs={}):
@@ -1994,30 +1964,35 @@ class ObservedErroredValue(ObservedValue):
         
 class DerivedValue(FieldValue):
     """
-    A FieldValue that derives its value from a function of other FieldValues.
+    A FieldValue that derives its value from a function of other
+    :class:`FieldValues<FieldValue>`.
     
-    The values to use as arguments to the function are initially set through 
-    the default values of the function, and can be either references to 
-    fields or strings used to locate the dependencies in the catalog tree, 
-    using the ``sourcenode`` argument as the current source (see DependentSource 
-    for details of how dependent values are derefernced)
+    The values to use as arguments to the function are initially set through the
+    default values of the function, and can be either references to fields or
+    strings used to locate the dependencies in the catalog tree, using the
+    `sourcenode` argument as the current source (see :class:`DependentSource`
+    for details of how dependent values are dereferenced)
     
-    Alternatively, the initializer argument ``flinkdict`` may 
-    be a dictionary of link values that overrides the defaults 
-    from the function
+    Alternatively, the initializer argument `flinkdict` may be a dictionary of
+    link values that overrides the defaults from the function.
     
-    if ``ferr`` is True, the return value of ``f`` should be a 3-sequence
-    of the form (value,uppererror,lowererror), and the arguments of ``f`` will
-    be passed as (depvalue,uerr,lerr) from the source Values
+    if `ferr` is True, the return value of `f` should be a 3-sequence of the
+    form (value,uppererror,lowererror), and the arguments of `f` will be passed
+    as (depvalue,uerr,lerr) from the source :class:`FieldValues<FieldValue>`.
     
-    The class attribute ``failedvalueaction`` determines the action to take if a
-    an exception is encountered while deriving the value and can be:
-    *'raise':raise an exception (or pass one along)
-    *'warn': issue a warning when it occurs, but continue execution with the 
-    value returned as None
-    *'skip':the value will be returned as None but the value
-    will be left invalid
-    *'ignore':the value will be returned as None and will be marked valid
+    The class attribute :attr:`failedvalueaction` determines the action to take
+    if a an exception is encountered while deriving the value and can be:
+    
+    * 'raise'
+        raise an exception (or pass one along)
+    * 'warn'
+        issue a warning when it occurs, but continue execution with the value
+        returned as None
+    * 'skip'
+        the value will be returned as None but the value will be left invalid
+    * 'ignore'
+        the value will be returned as None and will be marked valid
+    
     """
     __slots__=('_f','_ferr','_value','_errs','_valid','_fieldwr')
     #TODO: auto-reassign nodepath from source if Field moves
@@ -2025,14 +2000,14 @@ class DerivedValue(FieldValue):
     
     def __init__(self,f,sourcenode=None,flinkdict=None,ferr=False):
         """
-        ``f`` is the function to use for deriving the value - must have default
-        field links for every argument if ``flinkdict`` is None. 
+        `f` is the function to use for deriving the value - must have default
+        field links for every argument if `flinkdict` is None. 
         
-        ``sourcenode`` specifies the current node to allow for links to be 
-        stings instead of explicit references to Fields.
+        `sourcenode` specifies the current node to allow for links to be strings
+        instead of explicit references to :class:`Fields<Field>`.
         
-        ``flinkdict`` maps argument names to links, overriding the default
-        values of the arguments of ``f``
+        `flinkdict` maps argument names to links, overriding the default values
+        of the arguments of `f`
         """
         import inspect
         
@@ -2231,12 +2206,16 @@ class DerivedValue(FieldValue):
 
 class DependentSource(Source):
     """
-    This class holds weak references to the Field's that are
-    necessary to generate values such as in DerivedValue. 
+    This class holds weak references to the :class:`Field`s that are necessary
+    to generate values such as in :class:`DerivedValue`.
     
-    This source must know the Node that it is expected to inhabit to properly
-    interpret string codes for fields.  Otherwise, the input fields must be
-    Field objects
+    This source must know the :class:`CatalogNode` that it is expected to
+    inhabit to properly interpret string codes for fields. Otherwise, the input
+    fields must be :class:`Field` objects.
+    
+    References to parent objects or (first) child objects may be performed
+    achieved by putting '^' or '.', respectively in front of the field name
+    string (this can be done for multiple layers by chaining characters).
     """
     
     __slots__ = ('depfieldrefs','depstrs','_pathnoderef','notifierfunc')
@@ -2312,17 +2291,11 @@ class DependentSource(Source):
     def _locatestr(s,node):
         """
         this method translates from a string and a location to the actual
-        targretted Field
+        targeted Field
         
-        ^^^ means up that elements in the catalog, while ... means down 
-        ^(name) means go up until name is found 
+        see :class:`DependentSource` docs for a description of the mini-language
         """
-#        if s in node.fieldnames:
-#            return getattr(node,s)
-#        else:
-#            raise ValueError('Linked node does not have requested field "%s"'%self.depstrs[i])
-        
-        #TODO:optimize
+        #TODO:REIMPLEMENT!
         upd = {}
         for i,c in enumerate(s):
             if c is '^':
@@ -2357,7 +2330,7 @@ class DependentSource(Source):
                         while node.__class__!=substr and node['name']!=substr:
                             node = node.parent
                     except AttributeError:
-                        raise ValueError('No parrent matching "%s" found'%substr)
+                        raise ValueError('No parent matching "%s" found'%substr)
                 else:
                     try:
                         nchild = int(subs)
@@ -2374,9 +2347,9 @@ class DependentSource(Source):
     
     def populateFieldRefs(self):
         """
-        this relinks all dead weakrefs using the dependancy strings and returns 
-        all of the references or raises a ValueError if any of the strings
-        cannot be dereferenced
+        this relinks all dead weakrefs using the dependancy strings and returns
+        all of the references or raises a :exc:`ValueError` if any of the
+        strings cannot be dereferenced
         """
         from weakref import ref
         
@@ -2513,64 +2486,12 @@ class Catalog(CatalogNode):
     #<----------------------FieldNode children-specific ----------------------->
     def extractField(self,*args,**kwargs):
         """
-        walk through the tree starting from this object and generate an array 
-        of the values for the requested fieldname if any FieldNodes are in this
-        Catalog
+        Walk through the tree starting from this object and generate an array 
+        of the values for the requested fieldname if any :class:`FieldNode`s are in this
+        :class:`Catalog`.
         
-        the arguments are identical to those for FieldNode.extractFieldAtNode:
-              extractField(node,fieldnames,traversal='postorder',filter=False,
-                           missing=0,converter=None,sources=False,errors=False,
-                           asrec=False,includeself=True)
-        
-        fieldnames can be a single field name, a sequence of fieldnames,
-        or a comma-seperated string of field names
-        
-        traversal and filter accept arguments like CatalogNode.visit
-        
-        missing determines the behavior in the event that a field is not 
-        present (or a non FieldNode is encountered) it can be:
-        *'exception': raise an exception if the field is missing
-        *'skip': do not include this object in the final array
-        *'mask': put 0 in the array location and return a mask of missing 
-                 values as the second return value
-        *'masked': return numpy.ma.MaskedArray objects instead of arrays, with
-                   the missing values masked
-        *any other: fill any missing entries with this value
-        
-        converter is a function that is applied to the data before being 
-        added to the array (or None to perform no conversion)
-        
-        sources determines if a sequence of sources should be returned - if
-        False, only the array is returned, if it evaluates to True, the sources
-        will be returned as described below.  By default, string representations
-        of the sources are returned - if sources=='object', the actual Source
-        objects will be returned instead
-        
-        dtypes determines the numpy data type of the output arrays - if None, 
-        they will be inferred from the data. Otherwise, it must be either a 
-        sequence of size matching the number of fields requested, an equivalent 
-        comma-seperated string, or a dictionary mapping fieldnames to dtypes
-        
-        errors determines if the errors should be returned
-        
-        asrec generates a record array instead of a regular array.  It can
-        optionally specify the numpy data type of the values.  It must be True,
-        in which case the dtype is inferred from the values, a sequence of size 
-        matching the number of fields requested, an equivalent comma-seperated 
-        string, or a dictionary mapping fieldnames to dtypes
-        
-        
-        includeself determines if the node itself should be included
-        
-        return value:
-        
-        * a record array if asrec is True
-        * an f x N array of values if sources and errors are False
-        * (values,errors,sources) if sources and errors are True
-        * (values,sources) if sources are True and errors are False
-        * (values,errors) if errors are True and sources are False
-        
-        if missing=='mask', return will be (values,mask)
+        The other arguments are identical to
+        :meth:`FieldNode.extractFieldAtNode`.
         """
         kwargs['includeself']=False
         return FieldNode.extractFieldAtNode(self,*args,**kwargs)
@@ -2622,22 +2543,33 @@ class _StructuredFieldNodeMeta(ABCMeta):
 
 class StructuredFieldNode(FieldNode):
     """
-    This class represents a FieldNode in the catalog that follows a particular
-    data structure (i.e. a consistent set of Fields).  It is meant to be
-    subclassed to define generic types of objects in the catalog.
+    This class represents a :class:`FieldNode` in the catalog that follows a
+    particular data structure (i.e. a consistent set of :class:`Fields<Field>`).
+    It is meant to be subclassed to define generic types of objects in the
+    catalog.
     
-    The fields and names are inferred from the class definition and 
-    hence the class attribute name must match the field name.  Any 
-    FieldValues present in the class objects will be ignored.
+    The fields and names are inferred from the class definition and hence the
+    class attribute name must match the field name. Any
+    :class:`FieldValues<FieldValue>` present in the class objects will be
+    ignored.
     
-    the checkonload class attribute determines the action to take if an
-    unaltered StructuredFieldNode is loaded and found to be inconsistent 
-    with  the current class definition
-    *False/None/0: Do no checking
-    *'warn': show a warning when
-    *'raise': raise a ValueError
-    *'revert': silently revert to the current definition
-    *'revertwarn': issue a warning, then revert
+    The :attr:`checkonload` class attribute determines the action to take if an
+    unaltered :class:`StructuredFieldNode` is loaded and found to be
+    inconsistent with the current class definition. It may be:
+    
+    * False/None/0
+        Do no checking.
+    * 'warn'
+        show a warning when the loaded object is inconsistent with the
+        definition
+    * 'raise'
+        raise a ValueError when the loaded object is inconsistent with the
+        definition
+    * 'revert'
+        silently revert to the current definition if inconsistencies are found
+    * 'revertwarn'
+        issue a warning, then revert
+    
     """
     __metaclass__ = _StructuredFieldNodeMeta
     

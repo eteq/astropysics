@@ -86,11 +86,15 @@ class AsinhMagnitude(Magnitude):
 
 def choose_magnitude_system(system):
     """
-    This function is used to change the magnitude system used where
-    magnitudes are used in astropysics.  It can be:
-    *pogson: mag = -2.5 log10(f/f0)
-    *asinh mag = -2.5 log10(e) [asinh(x/2b)+ln(b)] (TODO: choose b from the band or something instead of fixed @ 25 zptmag)
+    This function is used to change the magnitude system used where magnitudes
+    are used in astropysics. It can be:
+    
+    * 'pogson'
+        :math:`M = -2.5 \\log_{10}(f/f_0)`
+    * 'asinh'
+        :math:`M = -2.5 \\log_10(e) [{\\rm asinh}(x/2b)+\\ln(b)]` 
     """
+    #TODO: choose b from the band or something instead of fixed @ 25 zptmag
     global _magsys,_mag_to_flux,_magerr_to_fluxerr,_flux_to_mag,_fluxerr_to_magerr
     if isinstance(system,Magnitude):
         _magsys = system
@@ -116,21 +120,31 @@ class Band(_HasSpecUnits):
     to be immutable once created except for changes of units.
     
     The response functions should be photon-counting response functions (see
-    e.g. Bessell et al 2000)
+    e.g. Bessell et al 2000).
     
-    subclasses must implement the following functions:
-    *__init__ : initialize the object
-    *_getCen : return the center of band 
-    *_getFWHM : return the FWHM of the band
-    *_getx: return an array with the x-axis
-    *_getS: return the photon sensitivity (shape should match x)
-    *_applyUnits: units support (see ``astropysics.spec.HasSpecUnits``)
+    Subclasses must implement the following methods:
     
-    #the following can be optionally overriden:
-    *alignBand(x): return the sensitivity of the Band interpolated to the 
-                   provided x-array
-    *alignToBand(x,S): return the provided sensitivity interpolated onto the 
-                       x-array of the Band
+    * :meth:`__init__`
+        initialize the object
+    * :meth:`_getCen`
+        return the center of band 
+    * :meth:`_getFWHM`
+        return the FWHM of the band
+    * :meth:`_getx`
+        return an array with the x-axis
+    * :meth:`_getS`
+        return the photon sensitivity (shape should match x)
+    * :meth:`_applyUnits`
+        units support (see :class:`astropysics.spec.HasSpecUnits`)
+    
+    the following can be optionally overriden:
+    
+    * :meth:`alignBand`
+        return the sensitivity of the Band interpolated to the provided x-array
+    * :meth:`alignToBand`: 
+        return the provided sensitivity interpolated onto the x-array of the
+        Band
+
     """
     __metaclass__ = ABCMeta
     
@@ -284,18 +298,23 @@ class Band(_HasSpecUnits):
         
     def alignToBand(self,*args,**kwargs):
         """
-        interpolates the provided function onto the Band x-axis
+        Interpolates the provided function onto the :class:`Band` x-axis. Input
+        arguments can be of the following forms:
         
-        args can be:
-        *alignToBand(arr): assume that the provided sequence fills the band and
-        interpolate it onto the band coordinates
-        *alignToBand(specobj): if specobj is of type ``Spectrum``, the ``Spectrum``
-        flux will be returned aligned to the band, in the units of the Band
-        *alignToBand(x,y): the function with coordinates (x,y) will be aligned
-        to the Band x-axis
+        * alignToBand(arr)
+            assume that the provided sequence fills the band and interpolate it
+            onto the :class:`Band` coordinates
+        * alignToBand(specobj)
+            if specobj is of type :class:`astropyics.spec.Spectrum`, the
+            spectrum's flux will be returned aligned to the band, in the units
+            of the :class:`Band`
+        * alignToBand(x,y)
+            the function with coordinates (x,y) will be aligned to the
+            :class:`Band` x-axis
         
-        keywords:
-        *interpolation:see Band.alignBand for interpolation types/options
+        *keywords*
+            * `interpolation`
+                see :meth:`alignBand` for interpolation types/options
         """
         if len(args) == 1:
             from operator import isSequenceType
@@ -427,9 +446,13 @@ class Band(_HasSpecUnits):
         if spec is provided, the spectrum will be plotted along with the band and 
         the convolution
         
-        other kwargs:
-        *clf : clear the figure before plotting
-        *leg : show legend where appropriate
+        *keywords*
+            
+            * `clf`
+                clear the figure before plotting
+            * `leg` 
+                show legend where appropriate
+        
         """
         from matplotlib import pyplot as plt
         band = self
@@ -665,17 +688,23 @@ class FileBand(ArrayBand):
         
 def plot_band_group(bandgrp,**kwargs):
     """
-    this will plot a group of bands on the same plot
+    Plot a group of bands on the same plot using :mod:`matplotlib`
     
-    group can be a sequnce of bands, strings or a dictionary mapping names to
+    `group` can be a sequnce of bands, strings or a dictionary mapping names to
     bands
     
-    kwargs go into Band.plot except for:
-    *clf : clear figure before plotting
-    *leg : show legend with band names
-    *unit : unit to use on plots (defaults to angstroms)
-    *c : (do not use)
-    *spec : (do not use)
+    kwargs go into :meth:`matplotlib.pyplot.plot` except for:
+    
+    * `clf`
+        clear figure before plotting
+    * `leg`
+        show legend with band names
+    * `unit`
+        unit to use on plots (defaults to angstroms)
+    * `c`
+        (do not use)
+    * `spec`
+        (do not use)
     """
     from matplotlib import pyplot as plt
 #    from operator import isMappingType,isSequenceType
@@ -989,13 +1018,18 @@ class PhotObservation(object):
     
     def plot(self,includebands=True,fluxtype=None,unit='angstroms',clf=True,**kwargs):
         """
-        plots these photometric points
+        Plots these photometric data points.
         
-        fluxtype can be:
-        *None: either magnitude or flux depending on the input type
-        *'mag': magnitudes
-        *'flux': flux in erg cm^-2 s^-1
-        *'fluxden': flux spectral density e.g. erg cm^-2 s^-1 angstroms^-1
+        `fluxtype` can be:
+        
+        * None
+            either magnitude or flux depending on the input type
+        * 'mag'
+            magnitudes
+        * 'flux'
+            flux in :math:`erg cm^{-2} s^{-1}`
+        * 'fluxden'
+            flux spectral density e.g. :math:`erg cm^{-2} s^{-1} angstroms^{-1}`
         
         kwargs go into matplotlib.pyplot.errorbar
         """
@@ -2346,35 +2380,41 @@ class ModelPhotometry(object):
     
     def simulate(self,pixels,scale=1,background=0,noise=None,psf=None,sampling=None):
         """
-        simulate how this model would appear on an image. 
+        Simulate how this model would appear on an image. 
         
-        pixels is a 2D array that described the number of pixels to use, 
-        a scalar describing the number of pixels in both directions,
-        or a sequence (npixx,npixy)
+        `pixels` is a 2D array that described the number of pixels to use, a
+        scalar describing the number of pixels in both directions, or a sequence
+        (npixx,npixy)
         
-        scale is either a scalar giving the pixel scale or a 2-sequence
+        `scale` is either a scalar giving the pixel scale or a 2-sequence
         (xscale,yscale) as units/pixel
         
-        background is a scalar background level to assume or a 2D array
-        of matching shape as the simulation
+        `background` is a scalar background level to assume or a 2D array of
+        matching shape as the simulation
         
-        noise can be:
-        * None : no noise is applied
-        * 'poisson' : assumes the flux units are counts and returns the
-          poisson noise model
-        * a scalar : uniform gaussian noise with the scalar as sigma
-        * a 2d array : gaussian noise with the value at each array
-          point as sigma - array dimension must match simulation
-        * a callable : will be called as noise(imagearr2d) and
-          should return the value of the model+noise
+        `noise` can be:
+        
+        * None 
+            no noise is applied
+        * 'poisson'
+            assumes the flux units are counts and returns the poisson noise
+            model
+        * a scalar
+            uniform gaussian noise with the scalar as sigma
+        * a 2d array
+            gaussian noise with the value at each array point as sigma - array
+            dimension must match simulation
+        * a callable 
+            will be called as noise(imagearr2d) and should return the value of
+            the model+noise
           
-        psf is the point-spread function to be applied before the noise,
-        either a scalar/2-tuple for a gaussian PSF (specifies the FWHM
-        in actual units, not pixels), or a 2D measured PSF to 
-        convolve with the model. If None, no psf will be included.
+        `psf` is the point-spread function to be applied before the noise,
+        either a scalar/2-tuple for a gaussian PSF (specifies the FWHM in actual
+        units, not pixels), or a 2D measured PSF to convolve with the model. If
+        None, no psf will be included.
         
-        sampling is passed into the model's `pixelize` method (see
-        `FunctionModel2DScalar.pixelize`)
+        `sampling` is passed into the model's `pixelize` method (see
+        :meth:`FunctionModel2DScalar.pixelize`)
         """
         pixels = np.array(pixels,copy=False)
         if len(pixels.shape)==0:

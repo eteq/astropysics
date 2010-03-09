@@ -24,6 +24,8 @@ Module API
 .. automodule:: astropysics.objcat
    :members:
    :undoc-members:
+   :show-inheritance:
+   :exclude-members: EquatorialPosition
    
 .. todomodule:: astropysics.objcat
    

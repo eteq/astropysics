@@ -15,14 +15,29 @@ This documentation is generated directly from the source code and hence is likel
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.models
+:mod:`astropysics.models.core`
+
+.. inheritance-diagram:: astropysics.models.core
+   :parts: 1
+   
+:mod:`astropysics.models.builtins`
+   
+.. inheritance-diagram:: astropysics.models.builtins
    :parts: 1
 
 Module API
 ^^^^^^^^^^
 
-.. automodule:: astropysics.models
+The :mod:`astropysics.models` package is composed of two submodules that are both imported into the main module.  The first, :mod:`astropysics.models.core` contains the classes and functions that structure and do most of the work of the models.  The second, :mod:`astropysics.models.builtins` contains a large, default set of models, as well as a model registry to store these models.
+
+.. automodule:: astropysics.models.core
    :members:
    :undoc-members:
+   :show-inheritance:
+   
+.. automodule:: astropysics.models.builtins
+   :members:
+   :undoc-members:
+   :show-inheritance:
    
 .. todomodule:: astropysics.models

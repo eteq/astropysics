@@ -20,15 +20,18 @@ from ..phot import CMDAnalyzer
 class MaskMaker(object):
     """
     base class for objects that make masks - subclasses should:
-    *replace name with a name for the mask-making operation
-    *shortlen: maximum length of shortname
-    *override makeMask(self,filename)
-    *size: approximate dimensions of a mask as (len,width) in degrees
+    
+    * replace name with a name for the mask-making operation
+    * shortlen: maximum length of shortname
+    * override makeMask(self,filename)
+    * size: approximate dimensions of a mask as (len,width) in degrees
     
     expectations for special priority groups:
-    -1: alignment stars
-    -2: guide stars
-    -9: remove from list unless guide/align star
+    
+    * -1: alignment stars
+    * -2: guide stars
+    * -9: remove from list unless guide/align star
+    
     """
     name = 'Default mask-maker'
     shortlen = None
@@ -143,9 +146,11 @@ class SpecTarget(HasTraits):
         """
         generates the SpecTarget GUI - args can be either:
         
-        *SpecTarget(cmdanalyzer) - provide a ready-made CMDAnalyzer
-        *SpecTarget(fiducialdict,data) - provide a dictionary of fiducial 
-        data and a set of data (array or dict)
+        * SpecTarget(cmdanalyzer) 
+            provide a ready-made CMDAnalyzer
+        * SpecTarget(fiducialdict,data) 
+            provide a dictionary of fiducial data and a set of data (array or
+            dict)
         
         kwargs get applied to the CMDAnalyzer
         """

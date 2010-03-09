@@ -1,20 +1,20 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains objects and functions for specifying locations as well 
-as calculating distances and similar tools.
+This module contains objects and functions for specifying locations as well as
+calculating distances and similar tools.
 
-Some of the calculations involved make use of the currently selected cosmology 
-(see astropysics.constants) and hence may not function as expected if a 
+Some of the calculations involved make use of the currently selected cosmology
+(see :mod:`astropysics.constants`) and hence may not function as expected if a
 particularly strange cosmology is in use.
 
-*see also*
-Kapteyn libraries: http://www.astro.rug.nl/software/kapteyn/index.html
-Pyephem: http://rhodesmill.org/pyephem/
 """
 
 #TODO: WCSlib or similar support - Kapteyn?
 
+#useful references:
+#http://www.astro.rug.nl/software/kapteyn/index.html
+#"astronomical algorithms" by jean meeus 
 
 from __future__ import division,with_statement
 from .constants import pi
