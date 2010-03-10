@@ -782,6 +782,10 @@ class Site(object):
         from .astropysics import coords
         import datetime
         
+        #for objects that can get a position with no argument
+        if hasattr(coord,'equatorialPosition'):
+            coord = coord.equatorialPosition()
+        
         if date is None:
             jd = self.currentobsjd
         elif np.isscalar(date):
@@ -858,7 +862,7 @@ class Site(object):
             return ra
         
     def observingPlot(self,coords,date=None,names=None,clf=True,plottype='altam',
-                           plotkwargs=None):
+                           moon=True,sun=True,plotkwargs=None):
         """
         generates plots of important observability quantities for the provided
         coordinates.
@@ -872,15 +876,22 @@ class Site(object):
         * 'altaz': a plot of azimuth vs. altitude
         * 'sky': polar projection of the path on the sky
         
+        If `moon` is True, the path of the Moon will be plotted on relevant
+        plots. If it is a dictionary, they will be passed as kwargs to
+        :func:`matplotlib.pyplot.plot` for the moon.
+        
+        If `sun` is True, shaded regions for 18 degree,12 degree, and
+        sunrise/set will be added
+        
         `plotkwargs` will be provided as a keyword dictionary to
         :func:`matplotlib.pyplot.plot`, unless it is None
         """
         import matplotlib.pyplot as plt
-        from operator import isMappingType
-        from .coords import LatLongPosition
+        from operator import isMappingType,isSequenceType
+        from .coords import LatLongPosition,Sun,Moon
         from .plotting import add_mapped_axis
         
-        if isinstance(coords,LatLongPosition):
+        if not isSequenceType(coords):
             coords = [coords]
             
         nonames = False
@@ -912,10 +923,11 @@ class Site(object):
                 for n,c,kw in zip(names,coords,plotkwargs):
                     ra = self.observingTable(c,date,hrrange=(0,0,100))
                     if kw is None:
-                        plt.plot(ra.hour,ra.alt,label=n)
-                    else:
-                        kw['label'] = n
-                        plt.plot(ra.hour,ra.alt,**kw)
+                        kw = {}
+                    kw.setdefault('label',n)
+                    kw.setdefault('zorder',3)
+                    kw.setdefault('lw',2)
+                    plt.plot(ra.hour,ra.alt,**kw)
                     
                 plt.xlim(0,24)
                 
@@ -932,7 +944,49 @@ class Site(object):
                 plt.title(str(ra._sitedate))
                 plt.xlabel(r'$\rm hours$')
                 plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
+                    
+                plt.xticks(np.arange(13)*2)
+                
+                if sun:
+                    seqp = Sun(jd=ra._sitedate).equatorialPosition()
+                    rise,set,t = self.riseSetTransit(seqp,0)
+                    rise12,set12,t12 = self.riseSetTransit(seqp,-12)
+                    rise18,set18,t18 = self.riseSetTransit(seqp,-18)
+                    
+                    xl,xu = plt.xlim()
+                    yl,yu = plt.ylim()
+                    
+                    plt.fill_between((rise12,rise18),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
+                    plt.fill_between((set18,set12),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
+                    
+                    plt.fill_between((rise,rise12),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
+                    plt.fill_between((set12,set),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
+                    
+                    plt.fill_between((rise,set),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=1,zorder=1)
+                    
+                    plt.xlim(xl,xu)
+                    plt.ylim(yl,yu)
+                    
+                if moon:
+                    xls = plt.xlim()
+                    yls = plt.ylim()
+                    
+                    m = Moon()
+                    ram = self.observingTable(m,date,hrrange=(0,0,100))
+                    if not isMappingType(moon):
+                        moon = {}
+                    moon.setdefault('label','Moon')
+                    moon.setdefault('zorder',2)
+                    moon.setdefault('ls','--')
+                    moon.setdefault('lw',1)
+                    moon.setdefault('c','k')
+                    plt.plot(ram.hour,ram.alt,**moon)
+                    
+                    plt.xlim(*xls)
+                    plt.ylim(*yls)
+                    
                 if plottype == 'altam':
+                    firstax = plt.gca()
                     yticks = plt.yticks()[0]
                     newticks = list(yticks[1:])
                     newticks.insert(0,(yticks[0]+newticks[0])/2)
@@ -941,8 +995,7 @@ class Site(object):
                     plt.ylim(lowery,uppery)
                     plt.yticks(newticks,['%2.2f'%(1/np.cos(np.radians(90-yt))) for yt in newticks])
                     plt.ylabel(r'$\sec(z)$')
-                    
-                plt.xticks(np.arange(13)*2)
+                    plt.axes(firstax)
                     
             elif plottype == 'am':
                 for n,c,kw in zip(names,coords,plotkwargs):
@@ -1320,9 +1373,6 @@ class _EBmVExtinction(Extinction):
     """
     Base class for Extinction classes that get normalization from E(B-V)
     """
-    from .phot import bandwl
-    __lambdaV=bandwl['V']
-    del bandwl
     
     def __init__(self,EBmV=1,Rv=3.1):
         super(_EBmVExtinction,self).__init__(f=None,A0=1)
@@ -1330,10 +1380,12 @@ class _EBmVExtinction(Extinction):
         self.EBmV=EBmV
     
     def _getEBmV(self):
-        return self.A0*self.f(self.__lambdaV)/self.Rv
+        from .phot import bandwl
+        return self.A0*self.f(bandwl['V'])/self.Rv
     def _setEBmV(self,val):
+        from .phot import bandwl
         Av=self.Rv*val
-        self.A0=Av/self.f(self.__lambdaV)
+        self.A0=Av/self.f(bandwl['V'])
     EBmV = property(_getEBmV,_setEBmV)
     
     def f(self,lamb):

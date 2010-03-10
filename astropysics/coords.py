@@ -1225,7 +1225,7 @@ class KeplerianOrbit(object):
         
         return xh,yh,zh
         
-    def equatorialCoordinates(self):
+    def equatorialPosition(self):
         """
         Returns the equatorial coordinates of this object at the current
         date/time as a :class:`EquatorialPosition` object.
@@ -1265,6 +1265,31 @@ class KeplerianOrbit(object):
         
         return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
     
+    def phase(self,perc=False):
+        """
+        Compute the phase of this object - 0 is "new", 1 is "full".
+        
+        if `perc` is True, returns percent illumination.
+        """
+        from math import sqrt
+        
+        xh,yh,zh = self.cartesianCoordinates()
+        xs,ys,zs = Sun(jd=jd).cartesianCoordinates()
+        xg = xh + xs
+        yg = yh + ys
+        zg = zh + zs
+        
+        r = sqrt(xh*xh+yh*yh+zh*zh)
+        R = sqrt(xg*xg+yg*yg+zg*zg)
+        s = sqrt(xs*xs+ys*ys+zs*zs)
+        
+        phase = (1+(r*r + R*R - s*s)/(2*r*R))/2
+        
+        if perc:
+            return 100*phase
+        else:
+            return phase
+    
     def radecs(self,ds,usejd=False):
         """
         Generates an array of RAs and Decs for a set of input julian dates. `ds`
@@ -1287,7 +1312,7 @@ class KeplerianOrbit(object):
                 else:
                     self.d = d
                     
-                eqpos = self.equatorialCoordinates()
+                eqpos = self.equatorialPosition()
                 ra.append(eqpos.ra.d)
                 dec.append(eqpos.dec.d)
                 
@@ -1371,7 +1396,7 @@ class Sun(KeplerianOrbit):
         
         return xs,ys,0
     
-    def equatorialCoordinates(self):
+    def equatorialPosition(self):
         """
         Returns the equatorial coordinates of the Sun at the current date/time
         as a :class:`EquatorialPosition` object.
@@ -1444,7 +1469,7 @@ class Moon(KeplerianOrbit):
     def M(self):
         return 115.3654 + 13.0649929509 * self.d
     
-    def equatorialCoordinates(self):
+    def equatorialPosition(self):
         """
         Returns the equatorial coordinates of the Moon at the current date/time
         as a :class:`EquatorialPosition` object.
@@ -1479,7 +1504,28 @@ class Moon(KeplerianOrbit):
         self._eqcache = (self._jd,ra,dec)
         
         return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+    
+    def phase(self,perc=False):
+        """
+        Compute the phase of the moon - 0 is "new", 1 is "full".
         
+        if `perc` is True, returns percent illumination.
+        """
+        from math import sqrt,atan2
+        
+        xg,yg,zg = self.cartesianCoordinates()
+        xs,ys,zs = Sun(jd=jd).cartesianCoordinates()
+        
+        longsun = atan2(ys,xs)
+        longmoon = atan2(yg,xg)
+        latmoon = atan2(zh,sqrt(xg*xg + yg*yg))
+        
+        phase = (1 + cos(longsun - longmoon)*cos(latmoon))/2
+        
+        if perc:
+            return 100*phase
+        else:
+            return phase
         
 #now generate the registry of solar system objects
 solsysobjs = DataObjectRegistry('object',KeplerianOrbit)
