@@ -19,9 +19,10 @@ included with matplotlib)
 
 from __future__ import division,with_statement
 from .constants import pi
+from .utils import PipelineElement,DataObjectRegistry
 import numpy as np
 
-from .utils import PipelineElement,DataObjectRegistry
+
 #from .models import FunctionModel1DAuto as _FunctionModel1DAuto
 
 def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
@@ -65,9 +66,9 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     c1 = (100*x1 + 99)//36525
     x0 = x1 - (36525*c1)//100
     
-    yr = 100*c2 + c1
-    mon = (5*x0 + 461)//153
-    day = x0 - (153*mon-457)//5 + 1
+    yr = (100*c2 + c1).astype(int)
+    mon = ((5*x0 + 461)//153).astype(int)
+    day = (x0 - (153*mon-457)//5 + 1).astype(int)
     
     mmask = mon>12
     mon[mmask] -= 12
@@ -135,12 +136,20 @@ def gregorian_to_jd(gtime,tz=None):
     """
     Convert gregorian calendar value to julian date
     
-    the input `gtime` can either be a sequence (yr,month,day,[hr,min,sec]), 
-    where each element may be  or a :class:`datetime.datetime` object
+    the input `gtime` can either be:
     
-    if datetime objects are given, and `tz` is None, values are converted to
+    * a sequence (yr,month,day,[hr,min,sec]). 
+    * a sequence as above with one or more elements a sequence; a sequence will
+      be returned.
+    * a :class:`datetime.datetime` or :class:`datetime.date`object 
+    * a sequence of such objects; a sequence will be returned.
+    
+    If datetime objects are given, and `tz` is None, values are converted to
     UTC based on the datetime.tzinfo objects (if present).  if `tz` is not None,
     the tzinfo in the datetime objects is ignored.
+    
+    If the time is unspecified, it is taken to be noon (i.e. Julian Date =
+    Julian Day Number)
     
     If `tz` is a string, it is taken to be a timezone name that will be used
     to convert all the dates to UTC (requires :mod:`dateutil` package).  If `tz`
@@ -160,16 +169,20 @@ def gregorian_to_jd(gtime,tz=None):
     else:
         datetimes = None
         gtime = list(gtime)
-        if not (3 <= len(gtime) < 7):
+        if not (3 <= len(gtime) < 8):
             raise ValueError('gtime input sequence is invalid size')
-        while len(gtime) < 6:
-            gtime.append(np.zeros_like(gtime[-1]))
-        yr,month,day,hr,min,sec = gtime
-        scalarout = False #already a scalar form
+        while len(gtime) < 7:
+            if len(gtime) == 3:
+                #make hours 12
+                gtime.append(12*np.ones_like(gtime[-1]))
+            else:
+                gtime.append(np.zeros_like(gtime[-1]))
+        yr,month,day,hr,min,sec,msec = gtime
+        scalarout = all([np.shape(v) is tuple() for v in gtime])
         
     #if input objects are datetime objects, generate arrays
     if datetimes is not None:
-        yr,month,day,hr,min,sec = [],[],[],[],[],[]
+        yr,month,day,hr,min,sec,msec = [],[],[],[],[],[],[]
         for dt in datetimes:
             if not hasattr(dt,'hour'):
                 dt = datetime(dt.year,dt.month,dt.day,12)
@@ -183,7 +196,8 @@ def gregorian_to_jd(gtime,tz=None):
             day.append(dt.day)
             hr.append(dt.hour)
             min.append(dt.minute)
-            sec.append(dt.second+dt.microsecond/1e6)
+            sec.append(dt.second)
+            msec.append(dt.microsecond)
                 
                 
     
@@ -193,6 +207,7 @@ def gregorian_to_jd(gtime,tz=None):
     hr = np.array(hr,dtype=float,copy=False).ravel()
     min = np.array(min,dtype=float,copy=False).ravel()
     sec = np.array(sec,dtype=float,copy=False).ravel()
+    msec = np.array(msec,dtype=float,copy=False).ravel()
     
     #do tz conversion if tz is provided  
     if isinstance(tz,basestring) or isinstance(tz,tzinfo):
@@ -203,10 +218,8 @@ def gregorian_to_jd(gtime,tz=None):
             tzi = tz
         
         utcoffset = []
-        for t in zip(yr,month,day,hr,min,sec):
+        for t in zip(yr,month,day,hr,min,sec,msec):
             #microsecond from float component of seconds
-            t = list(t)
-            t.append(int((t[-1]-np.floor(t[-1]))*1e6))
             dt = datetime(*t,tzinfo=tzi)
             utcdt = dt.utcoffset()
             if utcdt is None:
@@ -859,6 +872,8 @@ class Site(object):
         * 'altaz': a plot of azimuth vs. altitude
         * 'sky': polar projection of the path on the sky
         
+        `plotkwargs` will be provided as a keyword dictionary to
+        :func:`matplotlib.pyplot.plot`, unless it is None
         """
         import matplotlib.pyplot as plt
         from operator import isMappingType
@@ -1070,6 +1085,7 @@ def __loadobsdb(sitereg):
 
 sites = DataObjectRegistry('sites',Site)
 sites['uciobs'] = Observatory(33.63614044191056,-117.83079922199249,80,'PST','UC Irvine Observatory')
+sites['greenwich'] = Observatory('51d28m38s',0,7,0,'Royal Observatory,Greenwich')
 __loadobsdb(sites)
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 

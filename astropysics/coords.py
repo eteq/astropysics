@@ -18,6 +18,7 @@ particularly strange cosmology is in use.
 
 from __future__ import division,with_statement
 from .constants import pi
+from .utils import DataObjectRegistry
 import numpy as np
 
 _twopi = 2*pi
@@ -117,7 +118,7 @@ class AngularCoordinate(object):
             return degrees(self._range[0]),degrees(self._range[1])
     
     def __str__(self):
-        return self.getDmsStr()
+        return self.getDmsStr(sep=('d',"'",'"'))
     
     degminsec=property(fget=__getdegminsec,fset=__setdegminsec)
     dms=degminsec
@@ -969,9 +970,9 @@ class KeplerianOrbit(object):
     
     The orbital elements are accessible as properties, computed for a Julian
     Date given by the :attr:`jd` attribute. They can also be set to a function
-    of the form element(d), where `d` is the offset from `jd0`.  Alternatively,
+    of the form `element(d)`, where `d` is the offset from `jd0`. Alternatively,
     subclasses may directly override the orbital elements with their own custom
-    properties that are expected to return The primary 
+    properties that should return orbital elements at time `d`. The primary
     orbital elements are:
     
     * :attr:`e`
@@ -994,6 +995,8 @@ class KeplerianOrbit(object):
     """
     
     jd0  = jd2000 = 2451545.0 #set default epoch to J2000.0
+    jd = jd0
+    name = ''
     
     def __init__(self,name,e,a,i,N,w,M,jd0=None):
         """
@@ -1003,10 +1006,9 @@ class KeplerianOrbit(object):
         functions of the form f(jd-jd0) that return the orbital element as a
         function of Julian Day from the epoch
         
-        `name` is a string describing the object
-        `jd0` is the epoch for these orbital elements (e.g. where their input 
-        functions are 0).  To use raw JD, set this to 0.  If None, it defaults
-        to J2000
+        `name` is a string describing the object `jd0` is the epoch for these
+        orbital elements (e.g. where their input functions are 0). To use raw
+        JD, set this to 0. If None, it defaults to J2000
         """
         self.e = e
         self.a = a
@@ -1016,76 +1018,99 @@ class KeplerianOrbit(object):
         self.M = M
         self.name = name
         
-        self.jd = jd0
+        self.jd0 = jd0
+        self._jd = jd0
         
-    def obliquity(self,jd):
+        
+        
+    def _obliquity(self,jd):
         """
         obliquity of the Earth/angle of the ecliptic in degrees
         
-        the input `jd` is the Julian Day, *not* the offset jd used for the 
-        orbital elements
+        the input `jd` is the actual Julian Day, *not* the offset `d` used for
+        the orbital elements
         """
-        return 23.4393 - 3.563E-7 * (jd-KeplerianOrbit.jd2000)
+        #TODO: eventually pull this from Ecliptic coordinate transform
+        return 23.4393 - 3.563E-7 * (jd - KeplerianOrbit.jd2000)
+    
+    def _getJd(self):
+        return self._jd
+    def _setJd(self,val):
+        from operator import isSequenceType
+        from obstools import gregorian_to_jd
+        from datetime import datetime
+        
+        if val == 'now':
+            self._jd =  gregorian_to_jd(datetime.utcnow(),tz=None)
+        elif hasattr(val,'year') or isSequenceType(val):
+            self._jd = gregorian_to_jd(val)
+        else:
+            self._jd = val
+    jd = property(_getJd,_setJd,doc="""
+    Julian Date at which to calculate the orbital elements. Can be set either as
+    a scalar JD, 'now', :class:`datetime.datetime` object or a compatible tuple.
+    """)
+    
     
     def _getD(self):
-        return self.jd - self.jd0
+        return self._jd - self.jd0
     def _setD(self,val):
-        self.jd = val + self.jd0
+        self._jd = val + self.jd0
     d = property(_getD,_setD,doc='the julian date offset by the epoch')
     
     #primary orbital elements
     def _getE(self):
-        return self._e(self.jd)
+        return self._e(self.d)
     def _setE(self,val):
         if callable(val):
             self._e = val
         else:
-            self._e = lambda jd:val
+            self._e = lambda d:val
     e = property(_getE,_setE,doc='orbital eccentricity')
     
     def _getA(self):
-        return self._a(self.jd)
+        return self._a(self.d)
     def _setA(self,val):
         if callable(val):
             self._a = val
         else:
-            self._a = lambda jd:val
+            self._a = lambda d:val
     a = property(_getA,_setA,doc='semi-major axis (au)')
     
     def _getI(self):
-        return self._i(self.jd)
+        return self._i(self.d)
     def _setI(self,val):
         if callable(val):
             self._i = val
         else:
-            self._i = lambda jd:val
+            self._i = lambda d:val
     i = property(_getI,_setI,doc='inclination (degrees)')
     
     def _getN(self):
-        return self._N(self.jd)
+        return self._N(self.d)
     def _setN(self,val):
         if callable(val):
             self._N = val
         else:
-            self._N = lambda jd:val
+            self._N = lambda d:val
     N = property(_getN,_setN,doc='Longitude of the ascending node (degrees)')
     
     def _getW(self):
-        return self._w(self.jd)
+        return self._w(self.d)
     def _setW(self,val):
         if callable(val):
             self._w = val
         else:
-            self._w = lambda jd:val
+            self._w = lambda d:val
     w = property(_getW,_setW,doc='Argument of the perihelion (degrees)')
     
     def _getM0(self):
-        return self._M0(self.jd)
+        return self._M0(self.d)
     def _setM0(self,val):
         if callable(val):
             self._M0 = val
         else:
-            self._e = lambda jd:val
+            self._e = lambda d:val
     M0 = property(_getM0,_setM0,doc='Mean anamoly (degrees)')
     
     #secondary/read-only orbital elements
@@ -1160,6 +1185,116 @@ class KeplerianOrbit(object):
         
         return degrees(atan2(yv,xv))
     
+    
+    def cartesianCoordinates(self):
+        """
+        Returns the heliocentric ecliptic rectangular coordinates of this object
+        at the current date/time as an (x,y,z) tuple (in AU)
+        """
+        from math import radians,degrees,cos,sin,atan2,sqrt
+        
+        #now get the necessary elements
+        Mr = radians(self.M)
+        wr = radians(self.w)
+        ir = radians(self.i)
+        Nr = radians(self.N)
+        e = self.e
+        a = self.a
+        
+        #compute coordinates
+        #approximate eccentric anamoly
+        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
+        
+        xv = a*(cos(E) - e)
+        yv = a*(sqrt(1.0 - e*e) * sin(E))
+        
+        v = atan2(yv,xv)
+        r = sqrt(xv*xv + yv*yv)
+        
+        sN = sin(Nr)
+        cN = cos(Nr)
+        si = sin(ir)
+        ci = cos(ir)
+        svw = sin(v + wr)
+        cvw = cos(v + wr)
+        
+        #convert to heliocentric ecliptic coords
+        xh = r*(cN*cvw - sN*svw*ci)
+        yh = r*(sN*cvw + cN*svw*ci)
+        zh = r*(svw*si)
+        
+        return xh,yh,zh
+        
+    def equatorialCoordinates(self):
+        """
+        Returns the equatorial coordinates of this object at the current
+        date/time as a :class:`EquatorialPosition` object.
+        """
+        from math import radians,degrees,cos,sin,atan2,sqrt
+        
+        if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
+            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+        
+        jd = self.jd
+        
+        eclr = radians(self._obliquity(jd))
+        
+        #heliocentric coordinates
+        xh,yh,zh = self.cartesianCoordinates()
+        #get Earth position - from the Sun ephemeris
+        xs,ys,zs = Sun(jd=jd).cartesianCoordinates()
+        
+        #geocentric coordinates -- + sign because we are using sun coords which
+        #are negative of earth coords
+        xg = xh + xs
+        yg = yh + ys
+        zg = zh + zs
+        
+        #finally correct for obliquity to get equatorial coordinates
+        cecl = cos(eclr)
+        secl = sin(eclr)
+        x = xg
+        y = cecl*yg - secl*zg
+        z = secl*yg + cecl*zg
+        
+        ra = degrees(atan2(y,x))
+        dec = degrees(atan2(z,sqrt(x*x+y*y)))
+        
+        #cache for faster retrieval if JD is not changed
+        self._eqcache = (self._jd,ra,dec)
+        
+        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+    
+    def radecs(self,ds,usejd=False):
+        """
+        Generates an array of RAs and Decs for a set of input julian dates. `ds`
+        must be a sequence of objects that can be set to `d` or `jd`.
+        
+        If `usejd` is True, the inputs are interpreted as Julian Dates without
+        the epoch offset. Otherwise, they are interpreted as offsets from `jd0`.
+        
+        Returns a 2xN array with the first column RA and the second Dec in
+        degrees.
+        """
+        
+        oldjd = self._jd
+        try:
+            ra = []
+            dec = []
+            for d in ds:
+                if usejd:
+                    self.jd = d
+                else:
+                    self.d = d
+                    
+                eqpos = self.equatorialCoordinates()
+                ra.append(eqpos.ra.d)
+                dec.append(eqpos.dec.d)
+                
+            return np.array((ra,dec))
+        finally:
+            self._jd = oldjd
+    
 class Sun(KeplerianOrbit):
     """
     This class represents the Sun's ephemeris.  Properly this is actually the 
@@ -1167,9 +1302,21 @@ class Sun(KeplerianOrbit):
     sun
     """
     
-    @property
-    def name(self):
-        return 'Sun'
+    #strictly unnecessary as it is is the same as in KeplerianOrbit, but included
+    #for clarity
+    jd0 = KeplerianOrbit.jd2000 - 0.5
+    
+    def __init__(self,jd=None):    
+        """
+        Initialize the object and optionally set the initial Julian Date (by
+        default this is J2000)
+        """    
+        if jd is None:
+            self.jd = self.jd0 
+        else:
+            self.jd = jd
+            
+        self.name = 'Sol'
     
     @property
     def e(self):
@@ -1195,47 +1342,214 @@ class Sun(KeplerianOrbit):
     def M(self):
         return 356.0470 + 0.9856002585 * self.d
     
-    def equatorialCoordinates(self,datetime):
+    def cartesianCoordinates(self):
         """
-        return the equatorial coordinates of the Sun at the requested datetime
-        or JD
+        Returns the ecliptic coordinates of the Sun at the current date/time as
+        an (x,y,z) tuple (in AU)
         """
-        from obstools import gregorian_to_jd
+        
         from math import radians,cos,sin,atan2,sqrt
         
-        if np.isscalar(datetime):
-            jd = datetime
-        else:
-            jd = gregorian_to_jd(datetime)
+        #now get the necessary elements
+        Mr = radians(self.M)
+        wr = radians(self.w)
+        e = self.e
         
-        oldjd = self.jd
-        try:
-            self.jd = jd
-            Mr = radians(self.M)
-            e = self.e
-            ecl = self.obliquity(self.jd)
-            
-            #approximate eccentric anamoly
-            E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
-            
-            xv = cos(E) - e
-            yv = sqrt(1.0 - e*e) * sin(E)
-            
-            v = atan2(yv,xv)
-            r = sqrt(xv*xv + yv*yv)
-            
-            lsun = v + self.w
-            rclsun = r*cos(lsun)
-            rslsun = r*sin(lsun)
-            
-            x = rclsun
-            y = rslsun*cos(ecl)  
-            z = rslsun*sin(ecl)
-            
-            return EquatorialPosition(atan2(y,x),atan2(z,sqrt(x*x+y*y)))
-        finally:
-            self.jd = oldjd
+        #compute coordinates
+        #approximate eccentric anamoly
+        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
+        
+        xv = cos(E) - e
+        yv = sqrt(1.0 - e*e) * sin(E)
+        
+        v = atan2(yv,xv)
+        r = sqrt(xv*xv + yv*yv)
+        
+        lsun = v + wr
+        xs = r*cos(lsun)
+        ys = r*sin(lsun)
+        
+        return xs,ys,0
     
+    def equatorialCoordinates(self):
+        """
+        Returns the equatorial coordinates of the Sun at the current date/time
+        as a :class:`EquatorialPosition` object.
+        """
+        from math import radians,degrees,cos,sin,atan2,sqrt
+        
+        if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
+            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+        
+        xs,ys,zs = self.cartesianCoordinates()
+        
+        eclr = radians(self._obliquity(self.jd))
+        
+        x = xs
+        y = ys*cos(eclr)  
+        z = ys*sin(eclr)
+        
+        ra = degrees(atan2(y,x))
+        dec = degrees(atan2(z,sqrt(x*x+y*y)))
+        
+        #cache for faster retrieval if JD is not changed
+        self._eqcache = (self._jd,ra,dec)
+        
+        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+    
+    
+
+class Moon(KeplerianOrbit):
+    """
+    Orbital Elements for Earth's Moon
+    """
+    
+    #strictly unnecessary as it is is the same as in KeplerianOrbit, but included
+    #for clarity
+    jd0 = KeplerianOrbit.jd2000 - 0.5
+    
+    def __init__(self,jd=None):    
+        """
+        Initialize the object and optionally set the initial Julian Date (by
+        default this is J2000)
+        """    
+        if jd is None:
+            self.jd = self.jd0 
+        else:
+            self.jd = jd
+            
+        self.name = 'Luna'
+        
+    @property
+    def e(self):
+        return 0.054900
+    
+    @property
+    def a(self):
+        return 0.00256955
+    
+    @property
+    def i(self):
+        return 5.1454
+    
+    @property
+    def N(self):
+        return 125.1228 - 0.0529538083 * self.d
+    
+    @property
+    def w(self):
+        return 318.0634 + 0.1643573223 * self.d
+    
+    @property
+    def M(self):
+        return 115.3654 + 13.0649929509 * self.d
+    
+    def equatorialCoordinates(self):
+        """
+        Returns the equatorial coordinates of the Moon at the current date/time
+        as a :class:`EquatorialPosition` object.
+        
+        .. warning::
+            These coordinates do not correct for solar perturbations nor
+            topocentric corrections, and hence are +/- a few degrees.
+        """
+        from math import radians,degrees,cos,sin,atan2,sqrt
+        
+        if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
+            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+        
+        jd = self.jd
+        
+        eclr = radians(self._obliquity(jd))
+        
+        #geocentric coordinates, as these orbital elements are for Earth orbit
+        xg,yg,zg = self.cartesianCoordinates()
+        
+        #finally correct for obliquity to get equatorial coordinates
+        cecl = cos(eclr)
+        secl = sin(eclr)
+        x = xg
+        y = cecl*yg - secl*zg
+        z = secl*yg + cecl*zg
+        
+        ra = degrees(atan2(y,x))
+        dec = degrees(atan2(z,sqrt(x*x+y*y)))
+        
+        #cache for faster retrieval if JD is not changed
+        self._eqcache = (self._jd,ra,dec)
+        
+        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+        
+        
+#now generate the registry of solar system objects
+solsysobjs = DataObjectRegistry('object',KeplerianOrbit)
+solsysobjs['sun'] = Sun()
+solsysobjs['moon'] = Moon()
+
+#all of these from http://stjarnhimlen.se/comp/ppcomp.html#4
+solsysobjs['mercury'] = KeplerianOrbit('Mercury',
+                        e=lambda d: 0.205635 + 5.59E-10 * d,
+                        a=0.387098,
+                        i=lambda d: 7.0047 + 5.00E-8 * d,
+                        N=lambda d: 48.3313 + 3.24587E-5 * d,
+                        w=lambda d: 29.1241 + 1.01444E-5 * d,
+                        M=lambda d: 168.6562 + 4.0923344368 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+                        
+solsysobjs['venus'] = KeplerianOrbit('Venus',
+                        e=lambda d: 0.006773 - 1.302E-9 * d,
+                        a=0.723330,
+                        i=lambda d: 3.3946 + 2.75E-8 * d,
+                        N=lambda d: 76.6799 + 2.46590E-5 * d,
+                        w=lambda d: 54.8910 + 1.38374E-5 * d,
+                        M=lambda d: 48.0052 + 1.6021302244 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+    
+solsysobjs['mars'] = KeplerianOrbit('Mars',
+                        e=lambda d: 0.093405 + 2.516E-9 * d,
+                        a=1.523688,
+                        i=lambda d: 1.8497 - 1.78E-8 * d,
+                        N=lambda d: 49.5574 + 2.11081E-5 * d,
+                        w=lambda d: 286.5016 + 2.92961E-5 * d,
+                        M=lambda d: 18.6021 + 0.5240207766 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+
+solsysobjs['jupiter'] = KeplerianOrbit('Jupiter',
+                        e=lambda d: 0.048498 + 4.469E-9 * d,
+                        a=5.20256,
+                        i=lambda d: 1.3030 - 1.557E-7 * d,
+                        N=lambda d: 100.4542 + 2.76854E-5 * d,
+                        w=lambda d: 273.8777 + 1.64505E-5 * d,
+                        M=lambda d: 19.8950 + 0.0830853001 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+
+solsysobjs['saturn'] = KeplerianOrbit('Saturn',
+                        e=lambda d: 0.055546 - 9.499E-9 * d,
+                        a=9.55475,
+                        i=lambda d: 2.4886 - 1.081E-7 * d,
+                        N=lambda d: 113.6634 + 2.38980E-5 * d,
+                        w=lambda d: 339.3939 + 2.97661E-5 * d,
+                        M=lambda d:  316.9670 + 0.0334442282 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+
+solsysobjs['uranus'] = KeplerianOrbit('Uranus',
+                        e=lambda d: 0.047318 + 7.45E-9 * d,
+                        a=lambda d: 19.18171 - 1.55E-8 * d,
+                        i=lambda d: 0.7733 + 1.9E-8 * d,
+                        N=lambda d: 74.0005 + 1.3978E-5 * d,
+                        w=lambda d: 96.6612 + 3.0565E-5 * d,
+                        M=lambda d: 142.5905 + 0.011725806 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+
+solsysobjs['neptune'] = KeplerianOrbit('Neptune',
+                        e=lambda d: 0.008606 + 2.15E-9 * d,
+                        a=lambda d: 30.05826 + 3.313E-8 * d,
+                        i=lambda d: 1.7700 - 2.55E-7 * d,
+                        N=lambda d: 131.7806 + 3.0173E-5 * d,
+                        w=lambda d: 272.8461 - 6.027E-6 * d,
+                        M=lambda d: 260.2471 + 0.005995147 * d,
+                        jd0=KeplerianOrbit.jd2000 - 0.5)
+
     
 #<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
