@@ -142,14 +142,15 @@ class AngularCoordinate(object):
     #                                             comment poem by Rie O:-)     #
     ############################################################################
    
-    __purehre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:h|hr).*')
+    __purehre=_re.compile(r'.*?(\d+(?:\.?\d+)?)(?:h|hr).*')
     __hmre=_re.compile('.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min).*')
     __hmsre=_re.compile(r'.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
-    __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+))(?:d|deg).*')
+    __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+)?)(?:d|deg).*')
     __dmre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min).*')
     __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
     __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3})[: ](\d{1,2})[: ](\d+(?:.\d+)?).*')
     __radsre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:r|rad).*')
+    __puresre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+)?)(?:s|sec).*')
     def __init__(self,inpt=None,sghms=None,range=None,radians=False):
         """
         If an undecorated 3-element iterator, `inpt` is taken to be deg,min,sec, 
@@ -178,6 +179,8 @@ class AngularCoordinate(object):
             dmm=self.__dmre.match(inpt)
             dmsm=self.__dmsre.match(inpt)
             radsm=self.__radsre.match(inpt)
+            sm=self.__puresre.match(inpt)
+            
             if sexig:
                 t=sexig.group(2,3,4)
                 if sghms is None:
@@ -213,7 +216,9 @@ class AngularCoordinate(object):
                 t=dmm.group(1,2)
                 self.degminsec=int(t[0]),int(t[1]),0
             elif dm:
-                self.degrees=float(dm.group(1))
+                self.degrees = float(dm.group(1))
+            elif sm:
+                self.dms = (0,0,float(sm.group(1)))
             else:
                 try:
                     if radians:
