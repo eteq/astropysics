@@ -1044,42 +1044,41 @@ class Spectrum(HasSpecUnits):
         del self._features[i]
         
     def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
-                  clf=True,colors=('b','g','r','k'),restframe=True,**kwargs):
+                  step=True,clf=True,colors=('b','g','r','k'),restframe=True,
+                  **kwargs):
         """
-        uses matplotlib to plot the Spectrum object.  The resulting plot
-        shows the flux, error (if present), and continuum (if present)
+        Use :mod:`matplotlib` to plot the :class:`Spectrum` object. The
+        resulting plot shows the flux, error (if present), and continuum (if
+        present).
         
-        if the linestyle is 'steps' (the default), the spectrum will
-        be offset so that the steps are centered on the pixels
+        If `step` is True, the plot will be a step plot instead of a line plot.
         
-        colors should be a 3-tuple that applies to 
-        (spectrum,error,invaliderror,continuum) and kwargs go into spectrum
-        and error plots
+        `colors` should be a 3-tuple that applies to
+        (spectrum,error,invaliderror,continuum) and kwargs go into spectrum and
+        error plots.
         
-        if restframe is True, the x-axis is in the rest frame
+        If `restframe` is True, the x-axis is offset to the rest frame.
         
-        if ploterrs or plotcontinuum is a number, the plot will be 
-        scaled so that the mean value matches the mean  of the spectrum 
-        times the numeric value
-        if True, the scaling will match the actual value
-        if False, the plots will not be shown
+        If `ploterrs` or `plotcontinuum` is a number, the plot will be scaled so
+        that the mean value matches the mean of the spectrum times the numeric
+        value. If either are True, the scaling will match the actual value. If
+        False, the plots will not be shown.
+        
+        kwargs are passed into either the :func:`matplotlib.pyplot.plot` or
+        :func:`matplotlib.pyplot.step` function.
         """
         
         import matplotlib.pyplot as plt
+        
+        if step:
+            kwargs.setdefault('where','mid')
         
         if smoothing:
             x,(y,e) = self.x0 if restframe else self.x,self.smooth(smoothing,replace=False)
         else:
             x,y,e = self.x0 if restframe else self.x,self.flux,self.err
-        
-        if 'ls' not in kwargs and 'linestyle' not in kwargs:
-            kwargs['ls']='steps'
             
-        if kwargs['ls']=='steps' and len(x)>=4:
-            x = np.hstack((1.5*x[0]-x[1]/2,np.convolve(x,[0.5,0.5],mode='valid'),1.5*x[-1]-x[-2]/2))
-            y = np.hstack((y[0],y))
-            e = np.hstack((e[0],e))
-        elif len(x)==3:
+        if len(x)==3:
             dx1 = x[1]-x[0]
             dx2 = x[2]-x[1]
             x = np.array((x[0]-dx1/2,x[0]+dx1/2,x[1]+dx2/2,x[2]+dx2/2))
@@ -1094,14 +1093,21 @@ class Spectrum(HasSpecUnits):
             x = np.array((0,2*x[0]))
             y = np.array((y[0],y[0]))
             e = np.array((e[0],e[0]))
+            
         if clf:
             plt.clf()
             
         kwargs['c'] = colors[0]
         if fmt is None:
-            res = [plt.plot(x,y,**kwargs)]
+            if step:
+                res = [plt.step(x,y,**kwargs)]
+            else:
+                res = [plt.plot(x,y,**kwargs)]
         else:
-            res = [plt.plot(x,y,fmt,**kwargs)]
+            if step:
+                res = [plt.step(x,y,fmt,**kwargs)]
+            else:
+                res = [plt.plot(x,y,fmt,**kwargs)]
             
         if ploterrs and np.any(e):
             from operator import isMappingType
@@ -1119,13 +1125,17 @@ class Spectrum(HasSpecUnits):
             
             if np.sum(m) > 0:
                 kwargs['c'] = colors[1]
-                res.append(plt.plot(x[m],scale*e[m],**kwargs))
+                if step:
+                    res.append(plt.step(x[m],scale*e[m],**kwargs))
+                else:
+                    res.append(plt.plot(x[m],scale*e[m],**kwargs))
             if np.sum(~m) > 0:
-                res.append(plt.plot(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                if step:
+                    res.append(plt.step(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                else:
+                    res.append(plt.plot(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                
         if plotcontinuum and self.continuum is not None:
-            
-            
-            
             if callable(self.continuum):
                 cont = self.continuum(self.x)
             else:
@@ -1138,7 +1148,10 @@ class Spectrum(HasSpecUnits):
                 
             kwargs['c'] = colors[3]
             kwargs['ls'] =  '--'
-            res.append(plt.plot(self.x,scale*cont,**kwargs))
+            if step:
+                res.append(plt.step(self.x,scale*cont,**kwargs))
+            else:
+                res.append(plt.plot(self.x,scale*cont,**kwargs))
                 
                 
         plt.xlim(np.min(x),np.max(x))
