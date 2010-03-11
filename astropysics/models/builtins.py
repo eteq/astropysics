@@ -407,7 +407,7 @@ class DoubleGaussianModel(FunctionModel1DAuto):
                 dgm.sig2=gm.sig*2
             else:
                 raise ValueError('unrecognized wider component')
-            print dgm.pardict
+            
             dgm.fitData(x,y,fixedpars=('mu1','A','sig1'),**kwargs)
         elif taller == 'B':
             dgm.B=gm.A
@@ -419,7 +419,7 @@ class DoubleGaussianModel(FunctionModel1DAuto):
                 dgm.sig1=gm.sig*2
             else:
                 raise ValueError('unrecognized wider component')
-            print dgm.pardict
+            
             dgm.fitData(x,y,fixedpars=('mu2','B','sig2'),**kwargs)
         else:
             raise ValueError('unrecognized main component')
@@ -1573,7 +1573,6 @@ class SersicModel(FunctionModel1DAuto):
         if clf:
             plt.clf()
         
-        print '?',lower,upper
         x = np.linspace(lower,upper,n)
         plt.plot(x,zpt-2.5*np.log10(self(x)))
         if data:

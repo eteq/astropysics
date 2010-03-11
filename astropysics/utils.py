@@ -214,9 +214,7 @@ class _LinkedDict(dict):
         return super(_LinkedDict,self).__getitem__(key)
     def __setitem__(self,key,val):
         if not self.setting:
-            print 'at',key,val
             oldval = self[key] if key in self else None
-            print 'ov',oldval
             if isinstance(self.link,_LinkedDict) and self.link.setting and (oldval is not None):
                         raise KeyError('Tried to set a symmetric dict with value %s already present'%key)
             

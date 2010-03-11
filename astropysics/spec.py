@@ -1486,8 +1486,6 @@ class SpectralFeature(HasSpecUnits):
         else:
             cont = self.continuum
             
-        print 'cont',cont
-            
         xi1 = spec.x.searchsorted(x1)
         xi2 = spec.x.searchsorted(x2)
         

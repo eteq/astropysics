@@ -1007,17 +1007,6 @@ class CompositeModel(FunctionModel):
                         argmap[argnames[i]] = argmap[a]
                         del argmap[a]
                         args[i] = argnames[i]
-#            for i,a in enumerate(cargs):
-#                if a not in parnames.values():
-#                    argname = argmap[a][1]
-#                    print argname,a
-#                    for j,a2 in enumerate(cargs):
-#                        if a2.startswith(argname) and i != j:
-#                            break
-#                    else:
-#                        argmap[argname] = argmap[a]
-#                        del argmap[a]
-#                        args[i] = argname
             
         self._pars = tuple(args)
         self._argmap = argmap
@@ -3074,7 +3063,6 @@ def scale_model(model,scaleparname='A'):
     factor multiplying the wrapped model.
     """
     model = get_model_instance(model)
-    print model.params,scaleparname in model.params
     if scaleparname in model.params:
         scaleparname += '1'
     if isinstance(model,FunctionModel1D):

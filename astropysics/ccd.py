@@ -671,7 +671,7 @@ class CCDImage(object):
             def onclick(event):
                 if event.inaxes and event.button>2:
                     x,y=event.xdata,event.ydata
-                    print x,y,vals[y,x] #TODO:check if there is a 1-pixel offset
+                    #TODO:check if there is a 1-pixel offset
                     
             self.__examcid=plt.gcf().canvas.mpl_connect('button_release_event',onclick)
         

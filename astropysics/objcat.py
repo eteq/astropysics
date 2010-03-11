@@ -995,7 +995,6 @@ class Field(MutableSequence):
                     Field._okDVs.remove(v)
                 else:
                     from warnings import warn
-                    print Field._okDVs
                     warn("can't pickle DerivedValue in %s"%self)
             else:
                 prunedvals.append(v)
@@ -2906,15 +2905,7 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
             convseq.append(lambda val:val)
         else:
             convseq.append(converters[i])
-#            cver = converters[i]
-#            print 'cv',i,cver
-#            nargs = len(getargspec(cver)[0])
-#            if nargs == 1:
-#                convseq.append(lambda val,row:cver(val))
-#            elif nargs == 2:
-#                convseq.append(cver)
-#            else:
-#                raise TypeError('provided converter %i has incorrect number of arguments'%i)
+    
     convseq = tuple(convseq)
     
     twoargseq =[]

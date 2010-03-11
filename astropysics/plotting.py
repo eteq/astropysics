@@ -493,7 +493,6 @@ def scatter_panel(p,plims,x,y,c=None,s=20,xe=None,ye=None,logax=(False,False,Fal
                 yfp=10**(m*np.log10(xfp)+b)
                 stra='$\\log y=%0.3g\\log x+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
             elif logax[0]:
-                print fixslope,fixint
                 mask=np.logical_and(mask,xi>0)#make it safe for logs
                 
                 maski=np.where(mask)
@@ -915,7 +914,6 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
                 tks = np.linspace(threshold,np.max(n),int(cb))
             else:
                 tks = None
-            print tks
             if type(cb) is str:
                 cb = plt.colorbar(orientation=cb,ticks=tks)
             else:

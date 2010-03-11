@@ -780,7 +780,6 @@ def plot_band_group(bandgrp,**kwargs):
         for u,b in zip(oldunits,bs):
             b.unit = u
     except (NameError,NotImplementedError),e:
-        print 'hit'
         pass
     
     

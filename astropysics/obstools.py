@@ -1058,7 +1058,6 @@ class Site(object):
                 for n,c,kw in zip(names,coords,plotkwargs):
                     
                     ra = self.observingTable(c,date,hrrange=(0,0,100))
-                    print ra._sitedate
                     if kw is None:
                         plt.polar(np.radians(ra.az),90-ra.alt,label=n)
                     else:
