@@ -861,13 +861,18 @@ class Site(object):
             ra.transit = transit
             return ra
         
-    def observingPlot(self,coords,date=None,names=None,clf=True,plottype='altam',
+    def observingPlot(self,coords,date=None,clf=True,plottype='altam',
                            moon=True,sun=True,plotkwargs=None):
         """
         generates plots of important observability quantities for the provided
         coordinates.
         
-        `coords` should be an :class:`astropysics.coords.LatLongPosition`
+        `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
+        sequence of such objects, or a dictionary mapping the name of an object
+        to the object itself. These names will be used to label the plot
+        
+        If `clf` is True, the figure is cleared before the observing plot is
+        made.
         
         `plottype` can be one of:
         
@@ -891,18 +896,17 @@ class Site(object):
         from .coords import LatLongPosition,Sun,Moon
         from .plotting import add_mapped_axis
         
-        if not isSequenceType(coords):
+        if isMappingType(coords):
+            names = coords.keys()
+            coords = coords.values()
+            nonames = False
+        elif not isSequenceType(coords):
             coords = [coords]
-            
-        nonames = False
-        if names is not None:
-            if isinstance(names,basestring):
-                names = [names]
-            if len(names) != len(coords):
-                raise ValueError('names do not match coords')
-        else:
-            nonames = True
             names = ['' for c in coords]
+            nonames = True
+        else:
+            names = ['' for c in coords]
+            nonames = True
             
         if isMappingType(plotkwargs):
             plotkwargs = [plotkwargs for c in coords]    
@@ -1052,8 +1056,9 @@ class Site(object):
                 
             elif plottype == 'sky':
                 for n,c,kw in zip(names,coords,plotkwargs):
-                    ra = self.observingTable(c,date,hrrange=(0,0,100))
                     
+                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    print ra._sitedate
                     if kw is None:
                         plt.polar(np.radians(ra.az),90-ra.alt,label=n)
                     else:
