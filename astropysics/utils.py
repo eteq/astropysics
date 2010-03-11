@@ -952,7 +952,67 @@ def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
         return np.log10(val)
     else:
         return np.log(val)/np.log(base)
+
+def crossmask(x,threshold=0,belowtoabove=True):
+    """
+    Returns a boolean mask :class:`array<numpy.ndarray>` for the point where the
+    input (interpreted as a 1D array) crosses or has complted crossing (if
+    between) from below (or above) a threshold.
     
+    If `belowtoabove is True, the returned masks is for where the input
+    transitions from below to above.  Otherwise, from above to below.
+    
+    **Example**
+    
+    .. testsetup::
+    
+        from astropysics.utils import crossmask
+        from numpy import array,where
+    
+    .. doctest::
+        
+        >>> xup = [-2,-1,0,1,2]
+        >>> xdn = [2,1,0,-1,-2]
+        
+        >>> print crossmask(xup,0,True)
+        [False False  True False False]
+        >>> print crossmask(xup,-0.5,True)
+        [False False  True False False]
+        >>> print crossmask(xup,0.5,True)
+        [False False False  True False]
+        
+        >>> print crossmask(xdn,0,True)
+        [False False False False False]
+        
+        >>> print crossmask(xdn,0,False)
+        [False False  True False False]
+        >>> print crossmask(xdn,0.5,False)
+        [False False  True False False]
+        >>> print crossmask(xdn,-0.5,False)
+        [False False False  True False]
+        
+        >>> xupdnup = [-2,-1,0,1,2,1,0,-1,-2,-1,0,1,2]
+        >>> where(crossmask(xupdnup,0.5,True))
+        (array([ 3, 11]),)
+        >>> print array(xupdnup)[crossmask(xupdnup,0,True)]
+        [0 0]
+
+
+        
+    """
+    x = np.array(x,copy=False).ravel()
+    if belowtoabove:
+        a = x <  threshold
+        b = x >= threshold
+    else:
+        a = x >  threshold
+        b = x <= threshold
+        
+    mask = np.roll(a,1)&b
+    mask[0] = False
+    return mask
+
+#<--------------------------Robust statistics---------------------------------->    
 def interquartile_range(values,scaletonormal=False):
     """
     Computes the interquartile range for the provided sequence of values, a
