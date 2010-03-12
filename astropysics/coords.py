@@ -1236,9 +1236,10 @@ class KeplerianOrbit(object):
         date/time as a :class:`EquatorialPosition` object.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
+        from .obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+            return EquatorialPosition(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
         
         jd = self.jd
         
@@ -1268,7 +1269,7 @@ class KeplerianOrbit(object):
         #cache for faster retrieval if JD is not changed
         self._eqcache = (self._jd,ra,dec)
         
-        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+        return EquatorialPosition(ra,dec,epoch=jd_to_epoch(self._jd))
     
     def phase(self,perc=False):
         """
@@ -1485,9 +1486,10 @@ class Moon(KeplerianOrbit):
             topocentric corrections, and hence are +/- a few degrees.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
+        from .obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+            return EquatorialPosition(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
         
         jd = self.jd
         
@@ -1509,7 +1511,7 @@ class Moon(KeplerianOrbit):
         #cache for faster retrieval if JD is not changed
         self._eqcache = (self._jd,ra,dec)
         
-        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+        return EquatorialPosition(ra,dec,epoch=jd_to_epoch(self._jd))
     
     def phase(self,perc=False):
         """

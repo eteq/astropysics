@@ -52,6 +52,16 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     
     returns :class:`datetime.datetime` objects in UTC. If `bceaction` is
     'negreturn', it will instead be a (datetime,bcemask) tuple
+    
+    **Examples**
+    .. testsetup::
+    
+        from astropysics.obstools import jd_to_gregorian
+    
+    .. doctest::
+        
+        >>> gregorian_to_jd((2010,1,1))
+        
     """
     import datetime
     
@@ -76,9 +86,9 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     
     
     time = (jdn - np.floor(jdn) - 0.5) % 1
-    if time == 0:
+    if np.all(time) == 0:
         hr = min = sec = msec = np.zeros_like(yr)
-    elif time == 0.5:
+    elif np.all(time) == 0.5:
         min = sec = msec = np.zeros_like(yr)
         hr = 12*np.ones_like(yr)
     else:
@@ -156,6 +166,30 @@ def gregorian_to_jd(gtime,tz=None):
     it is a scalar, it is taken to be the hour offset of the timezone. 
     Or, if it is a :class:`datetime.tzinfo` object, that object will be used to
     do the conversion to UTC.  
+    
+    
+    **Examples**
+    .. testsetup::
+    
+        from astropysics.obstools import gregorian_to_jd
+        import datetime,dateutil
+    
+    .. doctest::
+        
+        >>> gregorian_to_jd((2010,1,1))
+        2455198.0
+        >>> gregorian_to_jd(datetime.datetime(2000,12,21,3,0,0))
+        2451899.625
+        >>> gregorian_to_jd([2004,3,(5,6)])
+        array([ 2453070.,  2453071.])
+        >>> dates = [datetime.datetime(2004,3,5),datetime.datetime(2004,3,9)]
+        >>> gregorian_to_jd(dates)
+        array([ 2453069.5,  2453073.5])
+        >>> tz = dateutil.tz.tzoffset('2',3*3600)
+        >>> gregorian_to_jd((2010,1,1),tz)
+        2455197.875
+
+        
     """
     #Adapted from xidl  jdcnv.pro
     from datetime import datetime,date,tzinfo
@@ -163,7 +197,7 @@ def gregorian_to_jd(gtime,tz=None):
     if isinstance(gtime,datetime) or isinstance(gtime,date):
         datetimes = [gtime]
         scalarout = True
-    elif all([isinstance(gt,datetime) for gt in gtime]):
+    elif all([isinstance(gt,datetime) or isinstance(gt,date) for gt in gtime]):
         datetimes = gtime
         scalarout = False
     else:
@@ -191,6 +225,7 @@ def gregorian_to_jd(gtime,tz=None):
                 off = dt.utcoffset()
                 if off is not None:
                     dt = dt - off
+                
             yr.append(dt.year)
             month.append(dt.month)
             day.append(dt.day)
@@ -220,7 +255,8 @@ def gregorian_to_jd(gtime,tz=None):
         utcoffset = []
         for t in zip(yr,month,day,hr,min,sec,msec):
             #microsecond from float component of seconds
-            dt = datetime(*t,tzinfo=tzi)
+            
+            dt = datetime(*[int(ti) for ti in t],tzinfo=tzi)
             utcdt = dt.utcoffset()
             if utcdt is None:
                 utcoffset.append(0)
@@ -229,8 +265,9 @@ def gregorian_to_jd(gtime,tz=None):
     else:
         utcoffset = tz
             
-    ly = int((month-14)/12)		#In leap years, -1 for Jan, Feb, else 0
+    ly = ((month-14)/12).astype(int) #In leap years, -1 for Jan, Feb, else 0
     jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
+    
     jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
     
     res = jdn + (hr/24.0) + min/1440.0 + sec/86400.0 - 0.5
@@ -259,26 +296,67 @@ def jd_to_besselian_epoch(jd):
     365.242198781 days
     
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
-    """
+    """ 
     return 1900 + (jd - 2415020.31352)/365.242198781
 
-def jd_to_epoch(jd):
+def jd_to_epoch(jd,julian=True,asstring=False):
     """
-    Convert a Julian Date to a Julian Epoch, assuming the year is exactly
-    365.25 days long
+    Convert a Julian Date to a Julian or Besselian Epoch.
+    
+    If `julian` is True, a Julian Epoch will be used (the year is exactly 365.25
+    days long). Otherwise, the epoch will be Besselian (assuming a tropical year
+    of 365.242198781 days). 
+    
+    if `asstring` is True, a string of the form 'J2000.0' will be returned. If
+    it is an integer, the number sets the number of significant figures in the
+    output string Otherwise, a scalar is returned (an int if a whole year, float
+    if not).
     
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     """
-    return 2000.0 + (jd - 2451545.0)/365.25
+    if julian:
+        epoch = 2000.0 + (jd - 2451545.0)/365.25
+    else:
+        epoch = 1900 + (jd - 2415020.31352)/365.242198781
+        
+    if round(epoch)==epoch:
+        epoch = int(epoch) 
+        
+    if asstring:
+        if asstring is not True:
+            fmt = ('J' if julian else 'B')+'{0:.'+str(int(asstring))+'}'
+        else: 
+            fmt = 'J{0}' if julian else 'B{0}'
+        return fmt.format(epoch)
+    else:
+        return epoch
 
-def epoch_to_jd(jepoch):
+def epoch_to_jd(epoch,julian=True):
     """
-    Convert a Julian Epoch to a Julian Day, assuming the year is exactly
-    365.25 days long
+    Convert a Julian or Besselian Epoch to a Julian Day.
+    
+    `jepoch` can be a string (if the string has a B or J at the beginning, the
+    `julian` argument is ignored), or a float.
+    
+    If `julian` is True, a Julian Epoch will be used (the year is exactly 365.25
+    days long). Otherwise, the epoch will be Besselian (assuming a tropical year
+    of 365.242198781 days). 
     
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     """
-    return (jepoch - 2000)*365.25 + 2451545.0
+    if isinstance(epoch,basestring):
+        if epoch[0]=='J':
+            julian = True
+            epoch = epoch[1:]
+        elif epoch[0]=='B':
+            julian = False
+            epoch = epoch[1:]
+        epoch = float(epoch)
+    
+    if julian:
+        return (epoch - 2000)*365.25 + 2451545.0
+    else:
+        return (epoch - 1900)*365.242198781 + 2415020.31352
     
     
 
@@ -768,6 +846,22 @@ class Site(object):
         else:
             return self.equatorialToHorizontal(coords,lsts)
         
+    def _processDate(self,date):
+        """
+        utitily function to convert a date in a variety of formats to a 
+        tuple jds,datetimes,scalar
+        """
+        if startdate is None:
+            jd = self.currentobsjd
+        elif np.isscalar(startdate):
+            jd = date
+        else:
+            jd = gregorian_to_jd(startdate)
+            
+        startdate = jd_to_gregorian(jd)
+        
+        return jd,startdate,np.isscalar(startdate)
+        
     def nightTable(self,coord,date=None,strtablename=None,localtime=True,
                             hrrange=(18,6,25)):
         """
@@ -1123,8 +1217,8 @@ class Site(object):
                 plt.gcf().subplotpars.right = oldright
         finally:
             plt.interactive(inter)
-        
-        
+            
+
         
 class Observatory(Site):
     """
