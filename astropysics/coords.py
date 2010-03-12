@@ -1042,7 +1042,7 @@ class KeplerianOrbit(object):
         return self._jd
     def _setJd(self,val):
         from operator import isSequenceType
-        from obstools import gregorian_to_jd
+        from .obstools import gregorian_to_jd
         from datetime import datetime
         
         if val == 'now':
@@ -1336,15 +1336,15 @@ class Sun(KeplerianOrbit):
     #for clarity
     jd0 = KeplerianOrbit.jd2000 - 0.5
     
-    def __init__(self,jd=None):    
+    def __init__(self,jdordate=None):    
         """
-        Initialize the object and optionally set the initial Julian Date (by
-        default this is J2000)
+        Initialize the object and optionally set the initial date with the 
+        `jdordate` argument (by default this is J2000)
         """    
-        if jd is None:
+        if jdordate is None:
             self.jd = self.jd0 
         else:
-            self.jd = jd
+            self.jd = jdordate
             
         self.name = 'Sol'
     
@@ -1409,7 +1409,8 @@ class Sun(KeplerianOrbit):
         from math import radians,degrees,cos,sin,atan2,sqrt
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialPosition(*self._eqcache[1:],epoch=self._eqcache[0]-KeplerianOrbit.jd2000+2000)
+            epoch = (self._eqcache[0]-KeplerianOrbit.jd2000)/365.25+2000
+            return EquatorialPosition(*self._eqcache[1:],epoch=epoch)
         
         xs,ys,zs = self.cartesianCoordinates()
         
@@ -1424,8 +1425,8 @@ class Sun(KeplerianOrbit):
         
         #cache for faster retrieval if JD is not changed
         self._eqcache = (self._jd,ra,dec)
-        
-        return EquatorialPosition(ra,dec,epoch=self._jd-KeplerianOrbit.jd2000+2000)
+        epoch = (self._eqcache[0]-KeplerianOrbit.jd2000)/365.25+2000
+        return EquatorialPosition(ra,dec,epoch=epoch)
     
     
 

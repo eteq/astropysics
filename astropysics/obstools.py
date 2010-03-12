@@ -517,7 +517,9 @@ class Site(object):
         Computes the local civil time given a particular local siderial time. 
         
         `lsts` are the input local times, and may be either a scalar or array,
-        and must be in decimal hours.
+        and must be in decimal hours. Althernatively, it can be a
+        :class:`datetime.datetime` object, in which case the date will be
+        inferred from this object and the `date` argument will be ignored.
         
         `date` should be a :class:`datetime.date` object or a (year,month,day)
         tuple.  If None, the current date will be assumed as inferred from 
@@ -552,10 +554,12 @@ class Site(object):
         else:
             if date is None:
                 date = jd_to_gregorian(self.currentobsjd).date()
+            elif hasattr(date,'year'):
+                pass
             elif hasattr(date,'date'):
                 date = date.date()
             else:
-                date = datetime.date(*date)
+                date = datetime.datetime(*date).date()
                 
         lsts = np.array(lsts,copy=False)
         scalarout = False
@@ -671,13 +675,16 @@ class Site(object):
             else:
                 return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
             
-    def riseSetTransit(self,eqpos,alt=0,timeobj=False):
+    def riseSetTransit(self,eqpos,alt=0,date=None,timeobj=False):
         """
-        computes the rise, set, and transit times of a provided equatorial 
+        Computes the rise, set, and transit times of a provided equatorial 
         position.  
         
         `alt` determines the altitude to be considered as risen or set in 
         degrees
+        
+        `date` determines the date at which to do the computation. See
+        :func:`gregorian_to_jd` for acceptable formats
         
         *returns*
         (rise,set,transit) as :class:datetime.time objects if `timeobj` is True
@@ -690,7 +697,7 @@ class Site(object):
         
         alt = radians(alt)
         
-        transit = self.localTime(eqpos.ra.hours)
+        transit = self.localTime(eqpos.ra.hours,date)
         
         #TODO:iterative algorithm for rise/set
         lat = self.latitude.radians
@@ -761,7 +768,8 @@ class Site(object):
         else:
             return self.equatorialToHorizontal(coords,lsts)
         
-    def observingTable(self,coord,date=None,strtablename=None,hrrange=(18,6,25)):
+    def nightTable(self,coord,date=None,strtablename=None,localtime=True,
+                            hrrange=(18,6,25)):
         """
         tabulates altitude, azimuth, and airmass values for the provided fixed
         position on a particular date, specified either as a datetime.date 
@@ -770,6 +778,9 @@ class Site(object):
         
         if `date` is None, the current date is used
         
+        If `localtime` is True, the hours output (and input) will be in local
+        time for this Site. Otherwise, it is UTC.
+        
         `hrrange` determines the size of the table - it should be a 3-tuple
         (starthr,endhr,n) where starthr is on the day specified in date and 
         endhr is date + 1 day
@@ -777,7 +788,7 @@ class Site(object):
         if `strtablename` is True, a string is returned with a printable table 
         of observing data.  If `strtable` is a string, it will be used as the 
         title for the table.  Otherwise, a record array is returned with the 
-        hour, alt, az, and airmass
+        hour(UTC), alt, az, and airmass
         """        
         from .astropysics import coords
         import datetime
@@ -796,12 +807,23 @@ class Site(object):
         date = jd_to_gregorian(jd).date()
         jd0 = np.floor(jd)
         
+        if localtime:
+            dt = datetime.datetime.combine(date,datetime.time(12,tzinfo=self.tz))
+            offs = dt.utcoffset()
+            utcoffset = offs.days*24+offs.seconds/3600
+        else:
+            utcoffset = 0
+        
         starthr,endhr,n = hrrange
+        starthr -= utcoffset #local->UTC
+        endhr -= utcoffset #local->UTC
+        
         startjd = jd0 + (starthr - 12)/24
         endjd = jd0 + (endhr + 12)/24
         jds = np.linspace(startjd,endjd,n)
         
-        timehr = (jds-np.round(np.mean(jds))+.5)*24
+        timehr = (jds-np.round(np.mean(jds))+.5)*24+utcoffset #UTC hr
+        
         
         alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,precess=False))
         
@@ -812,7 +834,7 @@ class Site(object):
 
         
         if strtablename is not None:
-            rise,set,transit = self.riseSetTransit(coord,timeobj=True)
+            rise,set,transit = self.riseSetTransit(coord,date=date,timeobj=True)
             
             lines = []
             
@@ -854,25 +876,24 @@ class Site(object):
                 oldhr24 = hr%24
             return '\n'.join(lines)
         else:
-            rise,set,transit = self.riseSetTransit(coord,timeobj=False)
-            ra._sitedate = date
+            rise,set,transit = self.riseSetTransit(coord,date=date,timeobj=False)
+            ra.sitedate = date
+            ra.utcoffset = utcoffset
             ra.rise = rise
             ra.set = set
             ra.transit = transit
             return ra
         
-    def observingPlot(self,coords,date=None,clf=True,plottype='altam',
-                           moon=True,sun=True,plotkwargs=None):
+    def nightPlot(self,coords,date=None,plottype='altam',onlynight=False,
+                       moon=True,sun=True,clf=True,utc=False,plotkwargs=None):
+                           
         """
-        generates plots of important observability quantities for the provided
-        coordinates.
+        Generates plots of important observability quantities for the provided
+        coordinate objects for a single night.
         
         `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
         sequence of such objects, or a dictionary mapping the name of an object
         to the object itself. These names will be used to label the plot
-        
-        If `clf` is True, the figure is cleared before the observing plot is
-        made.
         
         `plottype` can be one of:
         
@@ -881,12 +902,21 @@ class Site(object):
         * 'altaz': a plot of azimuth vs. altitude
         * 'sky': polar projection of the path on the sky
         
+        If `onlynight` is True, the plot will be shrunk to only show the times 
+        between sunset and sunrise.  Otherwise, an entire day/night will be 
+        plotted.
+        
         If `moon` is True, the path of the Moon will be plotted on relevant
         plots. If it is a dictionary, they will be passed as kwargs to
         :func:`matplotlib.pyplot.plot` for the moon.
         
         If `sun` is True, shaded regions for 18 degree,12 degree, and
-        sunrise/set will be added
+        sunrise/set will be added where relevant.
+        
+        If `clf` is True, the figure is cleared before the observing plot is
+        made.
+        
+        If `utc` is True, the times will be in UTC instead of local time.
         
         `plotkwargs` will be provided as a keyword dictionary to
         :func:`matplotlib.pyplot.plot`, unless it is None
@@ -919,54 +949,86 @@ class Site(object):
             if clf:
                 plt.clf()
             oldright = None
-            if plottype == 'altam' or plottype == 'alt':   
+            if plottype == 'altam' or plottype == 'alt' or plottype == 'am':   
                 if plottype == 'altam':
                     oldright = plt.gcf().subplotpars.right
                     plt.subplots_adjust(right=0.86)
                     
                 for n,c,kw in zip(names,coords,plotkwargs):
-                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    ra = self.nightTable(c,date,hrrange=(12,12,100),localtime=True)
                     if kw is None:
                         kw = {}
                     kw.setdefault('label',n)
                     kw.setdefault('zorder',3)
                     kw.setdefault('lw',2)
-                    plt.plot(ra.hour,ra.alt,**kw)
-                    
-                plt.xlim(0,24)
+                    if plottype == 'am':
+                        ammask = ra.airmass>0
+                        x = ra.hour[ammask]
+                        y = ra.airmass[ammask]
+                    else:
+                        x = ra.hour
+                        y = ra.alt
+                    plt.plot(x,y,**kw)
                 
-                if plt.ylim()[0] < 0:
-                    lowery = 0
+                
+                plt.title(str(ra.sitedate))
+                
+                xtcks = np.round(np.arange(13)*(x[-1]-x[0])/12+x[0]).astype(int)
+                if utc:
+                    plt.xticks(xtcks,['%i'%np.round(xt%24) for xt in xtcks])
+                    plt.xlabel(r'$\rm UTC (hours)$')
                 else:
-                    lowery = plt.ylim()[0]
-                uppery = plt.ylim()[1] if plt.ylim()[1]<90 else 90
-                plt.ylim(lowery,uppery)
+                    plt.xticks(xtcks,[xt%24 for xt in xtcks])
+                    plt.xlabel(r'$\rm Local Time (hours)$')
                 
+                plt.xlim(xtcks[0],xtcks[-1])
+                    
+                
+                if 'alt' in plottype:
+                    if plt.ylim()[0] < 0:
+                        lowery = 0
+                    else:
+                        lowery = plt.ylim()[0]
+                    uppery = plt.ylim()[1] if plt.ylim()[1]<90 else 90
+                    plt.ylim(lowery,uppery)
+                    plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
+                elif 'am' == plottype:
+                    if plt.ylim()[0] < 1:
+                        lowery = 1
+                    else:
+                        lowery = plt.ylim()[0]
+                    uppery = plt.ylim()[1]
+                    plt.ylim(lowery,uppery)
+                    if lowery==1:
+                        yticks = list(plt.yticks()[0])
+                        yticks.insert(0,1)
+                        plt.yticks(yticks)
+                        plt.ylim(uppery,lowery)
+                    plt.ylabel(r'${\rm airmass} / \sec(z)$')
+                    
                 if not nonames:
                     plt.legend(loc=0)
-                
-                plt.title(str(ra._sitedate))
-                plt.xlabel(r'$\rm hours$')
-                plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
                     
-                plt.xticks(np.arange(13)*2)
-                
                 if sun:
-                    seqp = Sun(jd=ra._sitedate).equatorialPosition()
-                    rise,set,t = self.riseSetTransit(seqp,0)
-                    rise12,set12,t12 = self.riseSetTransit(seqp,-12)
-                    rise18,set18,t18 = self.riseSetTransit(seqp,-18)
+                    seqp = Sun(ra.sitedate).equatorialPosition()
+                    rise,set,t = self.riseSetTransit(seqp,0,date)
+                    rise12,set12,t12 = self.riseSetTransit(seqp,-12,date)
+                    rise18,set18,t18 = self.riseSetTransit(seqp,-18,date)
+                    #need to correct them back to the previous day
+                    set -= 24
+                    set12 -= 24
+                    set18 -= 24
                     
                     xl,xu = plt.xlim()
                     yl,yu = plt.ylim()
                     
-                    plt.fill_between((rise12,rise18),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
-                    plt.fill_between((set18,set12),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
+                    plt.fill_between((set,set12),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
+                    plt.fill_between((set12,set18),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
+                    plt.fill_between((set18,rise18),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=1,zorder=1)
+                    plt.fill_between((rise18,rise12),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
+                    plt.fill_between((rise12,rise),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
                     
-                    plt.fill_between((rise,rise12),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
-                    plt.fill_between((set12,set),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
                     
-                    plt.fill_between((rise,set),90,-90,lw=0,color=(0.5,0.5,0.5),alpha=1,zorder=1)
                     
                     plt.xlim(xl,xu)
                     plt.ylim(yl,yu)
@@ -976,7 +1038,7 @@ class Site(object):
                     yls = plt.ylim()
                     
                     m = Moon()
-                    ram = self.observingTable(m,date,hrrange=(0,0,100))
+                    ram = self.nightTable(m,date,hrrange=(12,12,100),localtime=True)
                     if not isMappingType(moon):
                         moon = {}
                     moon.setdefault('label','Moon')
@@ -984,10 +1046,15 @@ class Site(object):
                     moon.setdefault('ls','--')
                     moon.setdefault('lw',1)
                     moon.setdefault('c','k')
-                    plt.plot(ram.hour,ram.alt,**moon)
+                    if plottype == 'am':
+                        ammask = ram.airmass>0
+                        plt.plot(ram.hour[ammask],ram.airmass[ammask],**moon)
+                    else:
+                        plt.plot(ram.hour,ram.alt,**moon)
                     
                     plt.xlim(*xls)
                     plt.ylim(*yls)
+                    
                     
                 if plottype == 'altam':
                     firstax = plt.gca()
@@ -1001,41 +1068,10 @@ class Site(object):
                     plt.ylabel(r'$\sec(z)$')
                     plt.axes(firstax)
                     
-            elif plottype == 'am':
-                for n,c,kw in zip(names,coords,plotkwargs):
-                    ra = self.observingTable(c,date,hrrange=(0,0,100))
-                    
-                    ammask = ra.airmass>0
-                    if kw is None:
-                        plt.plot(ra.hour[ammask],ra.airmass[ammask],label=n)
-                    else:
-                        kw['label'] = n
-                        plt.plot(ra.hour[ammask],ra.airmass[ammask],**kw)
-                        
-                plt.xlim(0,24)
-                plt.xticks(np.arange(13)*2)
-                if plt.ylim()[0] < 1:
-                    lowery = 1
-                else:
-                    lowery = plt.ylim()[0]
-                uppery = plt.ylim()[1]
-                plt.ylim(lowery,uppery)
-                if lowery==1:
-                    yticks = list(plt.yticks()[0])
-                    yticks.insert(0,1)
-                    plt.yticks(yticks)
-                    plt.ylim(lowery,uppery)
-                
-                plt.title(str(ra._sitedate))
-                plt.xlabel(r'$\rm hours$')
-                plt.ylabel(r'${\rm airmass} / \sec(z)$')
-                
-                if not nonames:
-                    plt.legend(loc=0)
                     
             elif plottype == 'altaz':
                 for n,c,kw in zip(names,coords,plotkwargs):
-                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    ra = self.nightTable(c,date,hrrange=(0,0,100))
                     
                     if kw is None:
                         plt.plot(ra.az,ra.alt,label=n)
@@ -1047,7 +1083,7 @@ class Site(object):
                 plt.xticks(np.arange(9)*360/8)
                 plt.ylim(0,90)
                 
-                plt.title(str(ra._sitedate))
+                plt.title(str(ra.sitedate))
                 plt.xlabel(r'${\rm azimuth} [{\rm degrees}]$')
                 plt.ylabel(r'${\rm altitude} [{\rm degrees}]$')
                 
@@ -1057,7 +1093,7 @@ class Site(object):
             elif plottype == 'sky':
                 for n,c,kw in zip(names,coords,plotkwargs):
                     
-                    ra = self.observingTable(c,date,hrrange=(0,0,100))
+                    ra = self.nightTable(c,date,hrrange=(0,0,100))
                     if kw is None:
                         plt.polar(np.radians(ra.az),90-ra.alt,label=n)
                     else:
@@ -1071,7 +1107,7 @@ class Site(object):
                 yticks = [15,30,45,60,75]
                 plt.yticks(yticks,[r'${0}^\circ$'.format(int(90-yt)) for yt in yticks])
                 
-                plt.title(str(ra._sitedate))
+                plt.title(str(ra.sitedate))
                         
                 if not nonames:
                     plt.legend(loc=0)
