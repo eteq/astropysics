@@ -981,7 +981,10 @@ class Site(object):
                     plt.xticks(xtcks,[xt%24 for xt in xtcks])
                     plt.xlabel(r'$\rm Local Time (hours)$')
                 
-                plt.xlim(xtcks[0],xtcks[-1])
+                if onlynight:
+                    plt.xlim(xtcks[0]/2,xtcks[-1]/2)
+                else:
+                    plt.xlim(xtcks[0],xtcks[-1])
                     
                 
                 if 'alt' in plottype:
