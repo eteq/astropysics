@@ -577,12 +577,15 @@ def dual_value_plot(x,y1,y2,fmt='-o',yerrs=None,xerrs=None,**kwargs):
     #        y2n[i]=y2[i]
     #y2=y2n
     pon=plt.isinteractive()
-    plt.ioff()
-    for xi,y1i,y2i,yei,xei in zip(x,y1,y2,yerrs,xerrs):
-        plt.errorbar((xi,xi),(y1i,y2i),yei,xei,'o-',**kwargs)
-    if pon:
-        plt.ion()
-        plt.show()
+    try:
+        plt.ioff()
+        for xi,y1i,y2i,yei,xei in zip(x,y1,y2,yerrs,xerrs):
+            plt.errorbar((xi,xi),(y1i,y2i),yei,xei,'o-',**kwargs)
+        if pon:
+            plt.draw()
+            plt.show()
+    finally:
+        plt.interactive(pon)
         
 def square_axes(axes=None):
     if axes is None:
@@ -938,12 +941,12 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
             plt.semilogy()
         plt.xlim(xe[0],xe[-1])    
         plt.ylim(ye[0],ye[-1])  
-            
-        plt.draw()
-        plt.show()
+        
+        if isinter:    
+            plt.draw()
+            plt.show()
     finally:
-        if isinter:
-            plt.ion()
+        plt.interactive(isinter)
         
     return tuple(reses)
 

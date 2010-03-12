@@ -2179,9 +2179,10 @@ class ModelSequence(object):
             
             if legend:
                 plt.legend()
-                    
-            plt.show()
-            plt.draw()
+            
+            if isinter:        
+                plt.show()
+                plt.draw()
         finally:
             plt.interactive(isinter)
 
@@ -2652,6 +2653,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             plt.plot(xt,res,fmt)
             plt.axhline(0,color='k',ls=':')
             plt.xlabel(xaxis)
+            
             if isinter:
                     plt.draw()
                     plt.show()

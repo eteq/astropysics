@@ -1548,8 +1548,9 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,
                 plt.xticks([])
                 plt.yticks([])
             plt.title(ti)
-        plt.show()
-        plt.draw()
+        if preint:
+            plt.draw()
+            plt.show()
     finally:
         if preint:
             plt.ion()

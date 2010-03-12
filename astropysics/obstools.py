@@ -1077,9 +1077,9 @@ class Site(object):
                     plt.legend(loc=0)
             else:
                 raise ValueError('unrecognized plottype {0}'.format(plottype))
-            
-            plt.show()
-            plt.draw()
+            if inter:
+                plt.show()
+                plt.draw()
             if oldright is not None:
                 plt.gcf().subplotpars.right = oldright
         finally:

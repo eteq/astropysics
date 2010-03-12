@@ -1584,8 +1584,9 @@ class SEDField(Field):
             
             plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
             
-            plt.show()
-            plt.draw()
+            if preint:
+                plt.show()
+                plt.draw()
         finally:
             plt.interactive(preint)
     
