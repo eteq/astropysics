@@ -1076,20 +1076,7 @@ class Site(object):
                 
                 
                 plt.title(str(ra.sitedate))
-                
-                xtcks = np.round(np.arange(13)*(x[-1]-x[0])/12+x[0]).astype(int)
-                if utc:
-                    plt.xticks(xtcks,['%i'%np.round(xt%24) for xt in xtcks])
-                    plt.xlabel(r'$\rm UTC (hours)$')
-                else:
-                    plt.xticks(xtcks,[xt%24 for xt in xtcks])
-                    plt.xlabel(r'$\rm Local Time (hours)$')
-                
-                if onlynight:
-                    plt.xlim(xtcks[0]/2,xtcks[-1]/2)
-                else:
-                    plt.xlim(xtcks[0],xtcks[-1])
-                    
+                 
                 
                 if 'alt' in plottype:
                     if plt.ylim()[0] < 0:
@@ -1132,11 +1119,11 @@ class Site(object):
                     grey1 = (0.5,0.5,0.5)  
                     grey2 = (0.65,0.65,0.65)
                     grey3 = (0.8,0.8,0.8)
-                    plt.fill_between((set,set12),lowery,uppery,lw=0,color=gery3,zorder=1)
+                    plt.fill_between((set,set12),lowery,uppery,lw=0,color=grey3,zorder=1)
                     plt.fill_between((set12,set18),lowery,uppery,lw=0,color=grey2,zorder=1)
                     plt.fill_between((set18,rise18),lowery,uppery,lw=0,color=grey1,zorder=1)
                     plt.fill_between((rise18,rise12),lowery,uppery,lw=0,color=grey2,zorder=1)
-                    plt.fill_between((rise12,rise),lowery,uppery,lw=0,color=gery3,zorder=1)
+                    plt.fill_between((rise12,rise),lowery,uppery,lw=0,color=grey3,zorder=1)
                     
                     
                     
@@ -1147,7 +1134,7 @@ class Site(object):
                     xls = plt.xlim()
                     yls = plt.ylim()
                     
-                    m = Moon()
+                    m = Moon(ra.sitedate)
                     ram = self.nightTable(m,date,hrrange=(12,12,100),localtime=True)
                     if not isMappingType(moon):
                         moon = {}
@@ -1165,7 +1152,6 @@ class Site(object):
                     plt.xlim(*xls)
                     plt.ylim(*yls)
                     
-                    
                 if plottype == 'altam':
                     firstax = plt.gca()
                     yticks = plt.yticks()[0]
@@ -1177,6 +1163,20 @@ class Site(object):
                     plt.yticks(newticks,['%2.2f'%(1/np.cos(np.radians(90-yt))) for yt in newticks])
                     plt.ylabel(r'$\sec(z)$')
                     plt.axes(firstax)
+                    
+                xtcks = np.round(np.arange(13)*(x[-1]-x[0])/12+x[0]).astype(int)
+                if utc:
+                    plt.xticks(xtcks,['%i'%np.round(xt%24) for xt in xtcks])
+                    plt.xlabel(r'$\rm UTC (hours)$')
+                else:
+                    print 'here'
+                    plt.xticks(xtcks,[xt%24 for xt in xtcks])
+                    plt.xlabel(r'$\rm Local Time (hours)$')
+                    
+                if onlynight:
+                    plt.xlim(xtcks[0]/2,xtcks[-1]/2)
+                else:
+                    plt.xlim(xtcks[0],xtcks[-1])  
                     
                     
             elif plottype == 'altaz':
@@ -1264,7 +1264,8 @@ class Site(object):
                       
         import matplotlib.pyplot as plt
         import datetime
-        from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter,MONDAY
+        from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter, \
+                                     MONDAY,DayLocator,YearLocator
         from operator import isMappingType,isSequenceType
         from .coords import Sun,Moon
         
@@ -1340,7 +1341,7 @@ class Site(object):
                 plt.fill_between(jd1sun,set,set12,color=grey3)
             
             if moon:
-                jdmoon = jdstart+np.linspace(0,365.25*months/12,365)
+                jdmoon = jdstart+np.linspace(0,365.25*months/12,30*months)
                 jd1moon = jdmoon - gregorian_to_jd((1,1,1))
                 moon = Moon()
                 
@@ -1368,12 +1369,28 @@ class Site(object):
                 plt.ylabel('Local Time (hours)')
             plt.xlabel('Month (small ticks on Mondays)')
             
-            plt.gca().xaxis.set_major_locator(MonthLocator())
-            plt.gca().xaxis.set_major_formatter(DateFormatter("%b '%y"))
-            plt.gca().xaxis.set_minor_locator(WeekdayLocator(MONDAY))
-            plt.gcf().autofmt_xdate()
+                
             
-            plt.xlim(jd1[0],jd1[-1]+1)
+            if months <=3:
+                plt.gca().xaxis.set_major_locator(MonthLocator())
+                plt.gca().xaxis.set_major_formatter(DateFormatter("%b"))
+                plt.gca().xaxis.set_minor_locator(DayLocator((6,10,15,20,25)))
+                plt.gca().xaxis.set_minor_formatter(DateFormatter('$%d$'))
+            elif 36 >= months > 12:
+                plt.gca().xaxis.set_major_locator(MonthLocator(interval=3))
+                plt.gca().xaxis.set_major_formatter(DateFormatter("%b '%y"))
+                plt.gcf().autofmt_xdate()
+            elif months > 36:
+                plt.gca().xaxis.set_major_locator(YearLocator())
+                plt.gca().xaxis.set_major_formatter(DateFormatter("%Y"))
+                plt.gcf().autofmt_xdate()
+            else:
+                plt.gca().xaxis.set_major_locator(MonthLocator())
+                plt.gca().xaxis.set_major_formatter(DateFormatter("%b '%y"))
+                plt.gca().xaxis.set_minor_locator(WeekdayLocator(MONDAY))
+                plt.gcf().autofmt_xdate()
+            
+            plt.xlim(jd1[0],jd1[-1])
             plt.ylim(center-12,center+12)
             ytcks = np.round(np.arange(13)*2-12+center).astype(int)
             plt.yticks(ytcks,ytcks%24)
