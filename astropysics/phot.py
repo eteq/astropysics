@@ -1203,7 +1203,7 @@ class CMDAnalyzer(object):
         from warnings import warn
         from operator import isSequenceType
         
-        arr = np.atleast_2d(fiducial)
+        arr = np.array(fiducial,ndmin=2)
         bandd,datad,maskd = self._dataAndBandsToDicts(fbands,arr)
                 
         self._banddict = bandd
@@ -1390,7 +1390,7 @@ class CMDAnalyzer(object):
         """
         from operator import isMappingType
         if isMappingType(val):
-            bandd,datad,maskd = self._dataAndBandsToDicts(val.keys(),np.atleast_2d(val.values()))
+            bandd,datad,maskd = self._dataAndBandsToDicts(val.keys(),np.array(val.values(),ndmin=2))
             
             arrinddict = {}
             currnd = None
@@ -1422,7 +1422,7 @@ class CMDAnalyzer(object):
         else:
             if len(val) != self._nb:
                 raise ValueError('input sequence does not match number of bands')
-            self._data = arr = np.atleast_2d(val)
+            self._data = arr = np.array(val,ndmin=2)
             self._nd = arr.shape[1]
             self._datamask = np.ones(arr.shape[0],dtype=bool)
             
@@ -1448,7 +1448,7 @@ class CMDAnalyzer(object):
         if val is None:
             self._locs = None
         else:
-            arr = np.atleast_2d(val)
+            arr = np.array(val,ndmin=2)
             if arr.shape[0] < 2 or arr.shape[0] > 3:
                 raise ValueError('locations must have either two componets or three')
             if arr.shape[1] != self._nd:

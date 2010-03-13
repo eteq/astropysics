@@ -861,7 +861,7 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
     from matplotlib.colors import Normalize
     
     if ncontours is None:
-        ncontours = int(np.ceil(np.atleast_1d(bins).mean()/3.0))+1
+        ncontours = int(np.ceil(np.array(bins,ndmin=1).mean()/3.0))+1
         
     if lims is not None:
         xmin,xmax,ymin,ymax=lims

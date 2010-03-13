@@ -1754,7 +1754,7 @@ class CardelliExtinction(_EBmVExtinction):
     """
     def f(self,lamb):
         scalar=np.isscalar(lamb)
-        x=1e4/np.atleast_1d(lamb) #CCM x is 1/microns
+        x=1e4/np.array(lamb,ndmin=1) #CCM x is 1/microns
         a,b=np.ndarray(x.shape,x.dtype),np.ndarray(x.shape,x.dtype)
         
         if any((x<0.3)|(10<x)):
@@ -1988,9 +1988,9 @@ def extinction_correction(lineflux,linewl,EBmV,Rv=3.1,exttype='MW'):
         lineflux=np.nan
         
     
-    lineflux=np.atleast_1d(lineflux).astype(float)
-    linewl=np.atleast_1d(linewl)
-    EBmV=np.atleast_1d(EBmV)
+    lineflux=np.array(lineflux,ndmin=1,dtype=float)
+    linewl=np.array(linewl,ndmin=1)
+    EBmV=np.array(EBmV,ndmin=1)
     n=np.max((lineflux.size,linewl.size,EBmV.size))
     
     if n!=1:
@@ -2079,7 +2079,7 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
     
     scalarout=np.isscalar(frobs)
     
-    frobs=np.atleast_1d(frobs)
+    frobs=np.array(frobs,ndmin=1)
     
     hd={
     'Hab':(2.86,6562.82,4861.33),

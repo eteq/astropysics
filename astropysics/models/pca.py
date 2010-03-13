@@ -181,7 +181,7 @@ class Pca(object):
         
         output is p X n
         """
-        A=np.atleast_2d(A)
+        A=np.array(A,ndmin=2)
         n,q = A.shape
         p = self.A.shape[1]
         if q > p :

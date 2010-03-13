@@ -1824,9 +1824,10 @@ def air_to_vacuum(airwl,nouvconv=True):
     Adapted from idlutils airtovac.pro, based on the IAU standard 
     for conversion in Morton (1991 Ap.J. Suppl. 77, 119)
     """
-    isscal = np.isscalar(airwl)
-    airwl = np.array(airwl,copy=False,dtype=float)
-    airwl = np.atleast_1d(airwl)
+    airwl = np.array(airwl,copy=False,dtype=float,ndmin=1)
+    isscal = airwl.shape == tuple()
+    if isscal:
+        airwl = airwl.ravel()
     
     #wavenumber squared
     sig2 = (1e4/airwl)**2
@@ -1851,9 +1852,10 @@ def vacuum_to_air(vacwl,nouvconv=True):
     
     Adapted from idlutils vactoair.pro.
     """
-    isscal = np.isscalar(vacwl)
     vacwl = np.array(vacwl,copy=False,dtype=float)
-    vacwl = np.atleast_1d(vacwl)
+    isscal = vacwl.shape == tuple()
+    if isscal:
+        vacwl = vacwl.ravel()
     
     #wavenumber squared
     wave2 = vacwl*vacwl
@@ -1929,7 +1931,7 @@ def zfind(specobj,templates,lags=(0,200),checkspec=True,checktemplates=True,verb
                     print 'template',i,'does not match spectrum -- resampling'
                 t.resample(x)
         templates = [t.flux for t in templates]
-    templates=np.atleast_1d(templates)
+    templates=np.array(templates,ndmin=1)
     
     if templates.shape[0] == npix:
         tm = np.asmatrix(templates)
