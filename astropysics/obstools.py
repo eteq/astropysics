@@ -624,20 +624,17 @@ class Site(object):
         
         """
         import datetime
+        from operator import isSequenceType
         
         if isinstance(lsts,datetime.datetime):
             date = lsts.date()
             lsts = datetime.time()
             lsts = lsts.hour+lsts.minute/60+(lsts.second+lsts.microsecond*1e6)/3600
         else:
-            if date is None:
-                date = jd_to_gregorian(self.currentobsjd).date()
-            elif hasattr(date,'year'):
-                pass
-            elif hasattr(date,'date'):
-                date = date.date()
-            else:
-                date = datetime.datetime(*date).date()
+            jds,dt = self._processDate(date)
+            if isSequenceType(dt):
+                raise ValueError('must provide only one date for localTime')
+            date = dt.date()
                 
         lsts = np.array(lsts,copy=False)
         scalarout = False
@@ -753,7 +750,7 @@ class Site(object):
             else:
                 return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
             
-    def riseSetTransit(self,eqpos,alt=0,date=None,timeobj=False):
+    def riseSetTransit(self,eqpos,date=None,alt=0,timeobj=False):
         """
         Computes the rise, set, and transit times of a provided equatorial 
         position.  
@@ -776,6 +773,7 @@ class Site(object):
         alt = radians(alt)
         
         transit = self.localTime(eqpos.ra.hours,date)
+        print 'tr',transit,eqpos.ra.hours,date
         
         #TODO:iterative algorithm for rise/set
         lat = self.latitude.radians
@@ -849,18 +847,18 @@ class Site(object):
     def _processDate(self,date):
         """
         utitily function to convert a date in a variety of formats to a 
-        tuple jds,datetimes,scalar
+        tuple jds,datetimes
         """
-        if startdate is None:
+        if date is None:
             jd = self.currentobsjd
-        elif np.isscalar(startdate):
+        elif np.isscalar(date):
             jd = date
         else:
-            jd = gregorian_to_jd(startdate)
+            jd = gregorian_to_jd(date)
             
         startdate = jd_to_gregorian(jd)
         
-        return jd,startdate,np.isscalar(startdate)
+        return jd,startdate
         
     def nightTable(self,coord,date=None,strtablename=None,localtime=True,
                             hrrange=(18,6,25)):
@@ -1108,9 +1106,9 @@ class Site(object):
                     
                 if sun:
                     seqp = Sun(ra.sitedate).equatorialPosition()
-                    rise,set,t = self.riseSetTransit(seqp,0,date)
-                    rise12,set12,t12 = self.riseSetTransit(seqp,-12,date)
-                    rise18,set18,t18 = self.riseSetTransit(seqp,-18,date)
+                    rise,set,t = self.riseSetTransit(seqp,date,0)
+                    rise12,set12,t12 = self.riseSetTransit(seqp,date,-12)
+                    rise18,set18,t18 = self.riseSetTransit(seqp,date,-18)
                     #need to correct them back to the previous day
                     set -= 24
                     set12 -= 24
@@ -1218,7 +1216,89 @@ class Site(object):
         finally:
             plt.interactive(inter)
             
+    def yearPlot(self,coords,startdate=None,nyears=1,nsamples=25,sun=True,
+                      moon=True,clf=True):
+        """
+        TODO:DOC
+        """
+                      
+        import matplotlib.pyplot as plt
+        from operator import isMappingType,isSequenceType
+        from .coords import Sun,Moon
+        
+        if isMappingType(coords):
+            names = coords.keys()
+            coords = coords.values()
+        elif not isSequenceType(coords):
+            coords = [coords]
+            names = ['' for c in coords]
+        else:
+            names = ['' for c in coords]
+            
+#        if isMappingType(kwargs):
+#            plotkwargs = [kwargs for c in coords]    
+#        elif plotkwargs is None:
+#            plotkwargs = [{} for c in coords]
+            
+        jdstart,startdt = self._processDate(startdate)
+        jds = jdstart+np.linspace(0,nyears*365.25,nsamples)
+        
+        inter = plt.isinteractive()
+        try:
+            plt.ioff()
+            
+            if clf:
+                plt.clf()
+            
+            jdo = jdstart
+                
+            for c,n in zip(coords,names):
+                rst = [self.riseSetTransit(c,jd_to_gregorian(jd),0) for jd in jds]
+                rise,set,transit = np.array(rst).T
+                
+                tline = plt.plot(jds-2451545.0,transit)[0]
+                c = tline.get_color()
+                plt.plot(jds-2451545.0,np.vstack((rise,set)).T,color=c,linestyle='--')            
+                
+                
+            if sun:
+                sun = Sun()
+                    
+                rst = []
+                for jd in jds:
+                    sun.jd = jd
+                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),0))
+                rise,set,t = np.array(rst).T
+                #rise12,set12,t12 = self.riseSetTransit(seqp,date,-12)
+                #rise18,set18,t18 = self.riseSetTransit(seqp,date,-18)
+                
+                plt.fill_between(jds-2451545.0,rise,set,color=(0.5,0.5,0.5),alpha=0.5)
+            
+            if moon:
+                jds = jdstart+np.linspace(0,nyears*365.25,nsamples*10)
+                moon = Moon()
+                
+                rst = []
+                for jd in jds:
+                    moon.jd = jd
+                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_gregorian(jd),0))
+                rise,set,t = np.array(rst).T
+                
+                plt.plot(jds-2451545.0,t,'--k')
+                
+            plt.xlabel('JD-start')
+            plt.ylabel('hours')
+            
+            plt.xlim(jds[0]-2451545.0,jds[-1]-2451545.0)
+            plt.ylim(0,24)
 
+            if inter:
+                plt.show()
+                plt.draw()
+        finally:
+            plt.interactive(inter)
+        
+        
         
 class Observatory(Site):
     """
