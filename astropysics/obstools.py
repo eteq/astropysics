@@ -60,10 +60,12 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     
     .. doctest::
         
-        >>> gregorian_to_jd((2010,1,1))
+        >>> gregorian_to_jd((2000,1,1))
+        2451545.0
         
     """
     import datetime
+    from dateutil import tz
     
     jdn = np.array(jd,copy=False)
     scalar = jdn.shape == ()
@@ -114,11 +116,7 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
             #date is always right
         
     
-    try:
-        from dateutil import tz
-        tzi = tz.tzutc()
-    except ImportError:
-        tzi = None
+    tzi = tz.tzutc()
     
     if bceaction is not None:
         if bceaction == 'raise':
@@ -590,7 +588,7 @@ class Site(object):
         else:
             raise ValueError('invalid returntype argument')
         
-    def localTime(self,lsts,date=None,apparent=True,returntype=None):
+    def localTime(self,lsts,date=None,apparent=True,returntype=None,utc=False):
         """
         Computes the local civil time given a particular local siderial time. 
         
@@ -620,18 +618,23 @@ class Site(object):
         * 'string'
             local time as a hh:mm:ss.s 
         * 'datetime'
-            a :class:`datetime.time` object with the local tzinfo
+            a :class:`datetime.time` object with the appropriate tzinfo
+            
+        If `utc` is True, the time will be converted to UTC before being
+        returned.
         
         """
         import datetime
         from operator import isSequenceType
         
         if isinstance(lsts,datetime.datetime):
+            utcoffset = lsts.replace(tzinfo=self.tz).utcoffset()
             date = lsts.date()
             lsts = datetime.time()
             lsts = lsts.hour+lsts.minute/60+(lsts.second+lsts.microsecond*1e6)/3600
         else:
             jds,dt = self._processDate(date)
+            utcoffset = dt.replace(tzinfo=self.tz).utcoffset()
             if isSequenceType(dt):
                 raise ValueError('must provide only one date for localTime')
             date = dt.date()
@@ -648,6 +651,9 @@ class Site(object):
         dayoffs = np.floor(lsts - lst0/24)
         
         lthrs /= 1.0027378507871321 #correct for siderial day != civil day
+        
+        if utc:
+            lthrs = (lthrs - utcoffset.days*24 - utcoffset.seconds/3600)%24
         
         if returntype is None or returntype == 'hours':
             res = lthrs
@@ -750,10 +756,10 @@ class Site(object):
             else:
                 return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
             
-    def riseSetTransit(self,eqpos,date=None,alt=0,timeobj=False):
+    def riseSetTransit(self,eqpos,date=None,alt=0,timeobj=False,utc=False):
         """
         Computes the rise, set, and transit times of a provided equatorial 
-        position.  
+        position in local time.  
         
         `alt` determines the altitude to be considered as risen or set in 
         degrees
@@ -768,12 +774,12 @@ class Site(object):
         rise,set, and transit are all None
         """
         import datetime
+        from dateutil import tz
         from math import sin,cos,radians,acos
         
         alt = radians(alt)
         
-        transit = self.localTime(eqpos.ra.hours,date)
-        print 'tr',transit,eqpos.ra.hours,date
+        transit = self.localTime(eqpos.ra.hours,date,utc=utc)
         
         #TODO:iterative algorithm for rise/set
         lat = self.latitude.radians
@@ -804,7 +810,8 @@ class Site(object):
                     sec = np.floor(t)
                     t = (t-sec)*1e6
                     msec = np.floor(t)
-                    return datetime.time(int(hr),int(min),int(sec),int(msec))
+                    return datetime.time(int(hr),int(min),int(sec),int(msec),
+                                    tzinfo=tz.tzutc() if utc else tz.tzlocal())
             return hrtotime(rise),hrtotime(set),hrtotime(transit)
         else:
             return rise,set,transit
@@ -856,9 +863,7 @@ class Site(object):
         else:
             jd = gregorian_to_jd(date)
             
-        startdate = jd_to_gregorian(jd)
-        
-        return jd,startdate
+        return jd,jd_to_gregorian(jd)
         
     def nightTable(self,coord,date=None,strtablename=None,localtime=True,
                             hrrange=(18,6,25)):
@@ -977,7 +982,8 @@ class Site(object):
             return ra
         
     def nightPlot(self,coords,date=None,plottype='altam',onlynight=False,
-                       moon=True,sun=True,clf=True,utc=False,plotkwargs=None):
+                       moon=True,sun=True,clf=True,utc=False,colors=None,
+                       plotkwargs=None):
                            
         """
         Generates plots of important observability quantities for the provided
@@ -985,7 +991,7 @@ class Site(object):
         
         `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
         sequence of such objects, or a dictionary mapping the name of an object
-        to the object itself. These names will be used to label the plot
+        to the object itself. These names will be used to label the plot.
         
         `plottype` can be one of:
         
@@ -1010,6 +1016,9 @@ class Site(object):
         
         If `utc` is True, the times will be in UTC instead of local time.
         
+        `colors` should be a sequence of :mod:`matplotlib` color specifiers, or
+        None to use the default color cycle.
+        
         `plotkwargs` will be provided as a keyword dictionary to
         :func:`matplotlib.pyplot.plot`, unless it is None
         """
@@ -1029,6 +1038,9 @@ class Site(object):
         else:
             names = ['' for c in coords]
             nonames = True
+            
+        if colors:
+            plt.gca().set_color_cycle(colors)
             
         if isMappingType(plotkwargs):
             plotkwargs = [plotkwargs for c in coords]    
@@ -1117,11 +1129,14 @@ class Site(object):
                     xl,xu = plt.xlim()
                     yl,yu = plt.ylim()
                     
-                    plt.fill_between((set,set12),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
-                    plt.fill_between((set12,set18),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
-                    plt.fill_between((set18,rise18),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=1,zorder=1)
-                    plt.fill_between((rise18,rise12),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.5,zorder=1)
-                    plt.fill_between((rise12,rise),lowery,uppery,lw=0,color=(0.5,0.5,0.5),alpha=.2,zorder=1)
+                    grey1 = (0.5,0.5,0.5)  
+                    grey2 = (0.65,0.65,0.65)
+                    grey3 = (0.8,0.8,0.8)
+                    plt.fill_between((set,set12),lowery,uppery,lw=0,color=gery3,zorder=1)
+                    plt.fill_between((set12,set18),lowery,uppery,lw=0,color=grey2,zorder=1)
+                    plt.fill_between((set18,rise18),lowery,uppery,lw=0,color=grey1,zorder=1)
+                    plt.fill_between((rise18,rise12),lowery,uppery,lw=0,color=grey2,zorder=1)
+                    plt.fill_between((rise12,rise),lowery,uppery,lw=0,color=gery3,zorder=1)
                     
                     
                     
@@ -1216,13 +1231,40 @@ class Site(object):
         finally:
             plt.interactive(inter)
             
-    def yearPlot(self,coords,startdate=None,nyears=1,nsamples=25,sun=True,
-                      moon=True,clf=True):
+    def yearPlot(self,coords,startdate=None,n=13,months=12,sun=True,moon=True,
+                      utc=False,clf=True,colors=None):
         """
-        TODO:DOC
+        Plots the location transit and rise/set times of object(s) over ~year
+        timescales.
+        
+        `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
+        sequence of such objects, or a dictionary mapping the name of an object
+        to the object itself. These names will be used to label the plot.
+        
+        `startdate` is a :class:`datetime.date` object or a date tuple
+        (year,month,day) that is used as the start of the plot.
+        
+        `n` specifies the number of points to include of the objects
+        
+        `months` is the number of months to draw the plot for.        
+        
+        If `sun` is True, shaded regions for 18 degree,12 degree, and
+        sunrise/set will be included.
+        
+        If `moon` is True, the path of the Moon will be plotted.
+        
+        If `utc` is True, the times will be in UTC instead of local time.
+        
+        If `clf` is True, the figure is cleared before the observing plot is
+        made.
+        
+        `colors` should be a sequence of :mod:`matplotlib` color specifiers, or
+        None to use the default color cycle.
         """
                       
         import matplotlib.pyplot as plt
+        import datetime
+        from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter,MONDAY
         from operator import isMappingType,isSequenceType
         from .coords import Sun,Moon
         
@@ -1235,13 +1277,16 @@ class Site(object):
         else:
             names = ['' for c in coords]
             
-#        if isMappingType(kwargs):
-#            plotkwargs = [kwargs for c in coords]    
-#        elif plotkwargs is None:
-#            plotkwargs = [{} for c in coords]
-            
         jdstart,startdt = self._processDate(startdate)
-        jds = jdstart+np.linspace(0,nyears*365.25,nsamples)
+        jds = jdstart+np.linspace(0,365.25*months/12,n)
+        jd1 = jds - gregorian_to_jd((1,1,1))
+        
+        if utc:
+            utco = startdt.replace(tzinfo=self.tz).utcoffset()
+            center = -utco.days*24 - utco.seconds/3600
+        else:
+            center = 0
+        cp12 = center + 12
         
         inter = plt.isinteractive()
         try:
@@ -1249,48 +1294,92 @@ class Site(object):
             
             if clf:
                 plt.clf()
-            
-            jdo = jdstart
                 
-            for c,n in zip(coords,names):
-                rst = [self.riseSetTransit(c,jd_to_gregorian(jd),0) for jd in jds]
+            if colors:
+                plt.gca().set_color_cycle(colors)
+            for c,nm in zip(coords,names):
+                rst = [self.riseSetTransit(c,jd_to_gregorian(jd),0,utc=utc) for jd in jds]
                 rise,set,transit = np.array(rst).T
+                transit[transit>cp12] -= 24 #do this to get the plot to cross over night time
                 
-                tline = plt.plot(jds-2451545.0,transit)[0]
-                c = tline.get_color()
-                plt.plot(jds-2451545.0,np.vstack((rise,set)).T,color=c,linestyle='--')            
+                c = plt.gca()._get_lines.color_cycle.next()
+                
+                tline = plt.plot_date(jd1,transit,label=nm,color=c)[0]
+                rise[rise>transit]-=24
+                set[set<transit]+=24
+                plt.errorbar(jd1,transit,(set-transit,transit-rise),ecolor=c,fmt=None)
                 
                 
             if sun:
+                jdsun = jdstart+np.linspace(0,365.25*months/12,365)
+                jd1sun = jdsun - gregorian_to_jd((1,1,1))
                 sun = Sun()
                     
                 rst = []
-                for jd in jds:
+                rst12 = []
+                rst18 = []
+                for jd in jdsun:
                     sun.jd = jd
-                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),0))
+                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),0,utc=utc))
+                    rst12.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),-12,utc=utc))
+                    rst18.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),-18,utc=utc))
+                    
                 rise,set,t = np.array(rst).T
-                #rise12,set12,t12 = self.riseSetTransit(seqp,date,-12)
-                #rise18,set18,t18 = self.riseSetTransit(seqp,date,-18)
-                
-                plt.fill_between(jds-2451545.0,rise,set,color=(0.5,0.5,0.5),alpha=0.5)
+                rise12,set12,t12 = np.array(rst12).T
+                rise18,set18,t18 = np.array(rst18).T
+                for a in (rise,set,rise12,set12,rise18,set18):
+                    a[a>cp12] -= 24
+                    
+                grey1 = (0.5,0.5,0.5)  
+                grey2 = (0.65,0.65,0.65)
+                grey3 = (0.8,0.8,0.8)
+                plt.fill_between(jd1sun,rise18,set18,color=grey1)
+                plt.fill_between(jd1sun,rise18,rise12,color=grey2)
+                plt.fill_between(jd1sun,rise12,rise,color=grey3)
+                plt.fill_between(jd1sun,set12,set18,color=grey2)
+                plt.fill_between(jd1sun,set,set12,color=grey3)
             
             if moon:
-                jds = jdstart+np.linspace(0,nyears*365.25,nsamples*10)
+                jdmoon = jdstart+np.linspace(0,365.25*months/12,365)
+                jd1moon = jdmoon - gregorian_to_jd((1,1,1))
                 moon = Moon()
                 
                 rst = []
-                for jd in jds:
+                for jd in jdmoon:
                     moon.jd = jd
-                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_gregorian(jd),0))
+                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_gregorian(jd),0,utc=utc))
                 rise,set,t = np.array(rst).T
                 
-                plt.plot(jds-2451545.0,t,'--k')
+                t[t>cp12] -= 24
+                transitionmask = np.roll(t,1)>t
+                transitionmask[0] = transitionmask[-1] = False
                 
-            plt.xlabel('JD-start')
-            plt.ylabel('hours')
+                lasti = 0
+                for i in np.where(transitionmask)[0]:
+                    lastplot = plt.plot(jd1moon[lasti:i],t[lasti:i],'--k')[0]
+                    lasti = i
+                if lasti == len(t):
+                    lastplot._label = 'Moon'
+                else:
+                    plt.plot(jd1moon[lasti:],t[lasti:],'--k',label='Moon')
+            if utc:
+                plt.ylabel('UTC (hours)')
+            else:    
+                plt.ylabel('Local Time (hours)')
+            plt.xlabel('Month (small ticks on Mondays)')
             
-            plt.xlim(jds[0]-2451545.0,jds[-1]-2451545.0)
-            plt.ylim(0,24)
+            plt.gca().xaxis.set_major_locator(MonthLocator())
+            plt.gca().xaxis.set_major_formatter(DateFormatter("%b '%y"))
+            plt.gca().xaxis.set_minor_locator(WeekdayLocator(MONDAY))
+            plt.gcf().autofmt_xdate()
+            
+            plt.xlim(jd1[0],jd1[-1]+1)
+            plt.ylim(center-12,center+12)
+            ytcks = np.round(np.arange(13)*2-12+center).astype(int)
+            plt.yticks(ytcks,ytcks%24)
+            
+            if any([nm!='' for nm in names]):
+                plt.legend(loc=0)
 
             if inter:
                 plt.show()
