@@ -14,7 +14,7 @@ particularly strange cosmology is in use.
 
 #useful references:
 #http://www.astro.rug.nl/software/kapteyn/index.html
-#"astronomical algorithms" by jean meeus 
+#"Astronomical Algorithms" by Jean Meeus 
 
 from __future__ import division,with_statement
 from .constants import pi
@@ -28,7 +28,7 @@ _twopi = 2*pi
 
 class AngularCoordinate(object):
     """
-    An angular coordinate that can be initialized in various formats.
+    An angular coordinate that on the unit sphere.
     
     Arithmetic operators can be applied to the coordinate, and will be applied 
     directly to the numerical value in radians.  For + and -, two angular 
@@ -38,61 +38,208 @@ class AngularCoordinate(object):
     import re as _re
     __slots__=('_decval','_range')
     
-    def __setdegminsec(self,dms):
+    __acregex = _re.compile(r'(?:([+-])?(\d+(?:[.]\d*)?)(hours|h|degrees|d|radians|rads|rad|r|:(?=\d+:\d+[.]?\d*$)))?(?:(\d+(?:[.]\d*)?)(m|\'|[:]))?(?:(\d+(?:[.]\d*)?)(s|"|$))?$')
+    __decregex = _re.compile(r'[+-]\d+([.]\d*)') 
+    
+    def __init__(self,inpt=None,sghms=None,range=None,radians=False):
+        """
+        `inpt` can be one of the following forms, controlled in part by the
+        `sghms` and `radians` parameters:
+        
+        * A float value
+            f `radians` is True, this will be interpreted as decimal radians,
+            otherwise, it is in degrees.
+        * A :class:`AngularCoordinate` object
+            A copy of the input object will be created.
+        * None
+            The default of 0 will be used.
+        * A 3-tuple
+            If `sghms` is True, the tuple will be interpreted as
+            (hours,min,sec), otherwise, (degrees,min,sec).
+        * A string of the form ##.##
+            If `radians` is True, this will be cast to a float and used as
+            decimal radians, otherwise, it is in degrees.
+        * A string of the form ##.##d or ##.##degrees
+            The numerical part will be cast to a float and used as degrees.
+        * A string of the form ##.##h or ##.##hours
+            The numerical part will be cast to a float and used as hours.
+        * A string of the form ##.##radians,##.##rads, or ##.##r
+            The numerical part will be cast to a float and used as radians.
+        * A string of the form (+/-)##h##m##.##s:
+            The numerical parts will be treated as hours,minutes, and seconds.
+        * A string of the form (+/-)##d##m##.##s or (+/-)##d##'##.##"
+            The numerical parts will be treated as degrees,minutes, and seconds.
+        * A string of the form (+/-)##:##:##.##
+            Sexigesimal form: If `sghms` is None the presence of a a + or - sign
+            idicates that it should be interpreted as degreesminutes, and
+            seconds. If the sign is absent, the numerical portions will be
+            treated as hours,min,sec. thewise, if `sghms` evaluates to True, the
+            numerical parts will be treated as hours,minutes, and seconds, and
+            if `sghms` evaluates to False, degrees,minutes, and seconds.
+        
+        `range` sets the valid range of coordinates either any value (if None)
+        or a 2-sequence (lowerdegrees,upperdegrees)
+        
+        **Examples**
+        
+        .. testsetup::
+        
+            >>> from astropysics.coords import AngularCoordinate
+        
+        .. doctest::
+        
+            >>> ac = AngularCoordinate(2.5)
+            >>> print ac
+            +2d30'00.00"
+            >>> >> print AngularCoordinate(ac)
+            +2d30'00.00"
+            >>> print AngularCoordinate(pi,radians=True)
+            +180d00.00"
+            >>> print AngularCoordinate('12d25m12.5s')
+            +12d25'12.50"
+            >>> print AngularCoordinate('3:30:30',sghms=True)
+            +52d37'30.00"
+            >>> print AngularCoordinate('3:30:30',sghms=False)
+            +3d30'30.00"
+            >>> print AngularCoordinate('-3:30:30',sghms=None)
+            -3d30'30.00"
+            >>> print AngularCoordinate('+3:30:30',sghms=None)
+            +3d30'30.00"
+            >>> print AngularCoordinate('3:30:30',sghms=None)
+            +52d37'30.00"
+        
+        """
+        from operator import isSequenceType
+        
+        self._range = None
+        
+        if isinstance(inpt,AngularCoordinate):
+            self._decval = inpt._decval
+            self._range = inpt._range
+            return
+        elif inpt is None:
+            self._decval = 0
+        elif isinstance(inpt,basestring):
+            sinpt = inpt.strip()
+            acm = self.__acregex.match(sinpt)
+            if acm:
+                sgn,dec1,mark1,dec2,mark2,dec3,mark3 = acm.group(1,2,3,4,5,6,7)
+                val = float(dec1)+float(dec2)/60+float(dec3)/3600
+                if sgn == '-':
+                    val *= -1
+                if mark1 == ':':
+                    if sghms is None:
+                        if sgn is None:
+                            self.hours = val
+                        else: #'+' or '-'
+                            self.degrees = val
+                    elif sghms:
+                        self.hours = val
+                    else:
+                        self.degrees = val
+                elif mark1 == 'hours' or mark1 == 'h':
+                    self.hours = val
+                elif mark1 == 'degrees' or mark1 == 'd':
+                    self.degrees = val
+                elif mark1 == 'radians' or mark1 == 'rad' or mark1 == 'rads' or mark1=='r':
+                    self.radians = val
+            else:
+                decm = self.__decregex.match(sinpt)
+                if decm:
+                    if radians:
+                        self.r = float(decm.group(0))
+                    else:
+                        self.d = float(decm.group(0))
+                else:
+                    raise ValueError('Invalid string input for AngularCoordinate: '+inpt)
+            
+        elif isSequenceType(inpt) and len(inpt)==3:
+            self.degminsec = inpt
+        elif radians:
+            self._decval = float(inpt)
+        else:
+            from math import radians
+            self._decval = radians(inpt)
+            
+        self.range = range
+    
+    def _setDegminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
-            raise ValueError('Must set as a length-3 iterator')
+            raise ValueError('Must set degminsec as a length-3 iterator')
         self.degrees=abs(dms[0])+abs(dms[1])/60.+abs(dms[2])/3600.
         if dms[0]<0:
             self._decval*=-1
-    def __getdegminsec(self):
+    def _getDegminsec(self):
         fulldeg=abs(self.degrees)
         deg=int(fulldeg)
         fracpart=fulldeg-deg
         min=int(fracpart*60.)
         sec=fracpart*3600.-min*60.
         return -deg if self.degrees < 0 else deg,min,sec
+    degminsec = property(_getDegminsec,_setDegminsec,doc="""
+    The value of this :class:`AngularCoordinate` as an (degrees,minutes,seconds)
+    tuple, with degrees and minutes as integers and seconds as a float.    
+    """)
+    dms = degminsec
     
-    def __sethrsminsec(self,dms):
+    def _setHrsminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
-            raise ValueError('Must set as a length-3 iterator')
+            raise ValueError('Must set hrsminsec as a length-3 iterator')
         self.degrees=15*(dms[0]+dms[1]/60.+dms[2]/3600.)
-    def __gethrsminsec(self):
+    def _getHrsminsec(self):
         factorized=self.degrees/15.
         hrs=int(factorized)
         mspart=factorized-hrs
         min=int(mspart*60.)
         sec=mspart*3600.-min*60.
         return hrs,min,sec
+    hrsminsec = property(_getHrsminsec,_setHrsminsec,doc="""
+    The value of this :class:`AngularCoordinate` as an (hours,minutes,seconds)
+    tuple, with hours and minutes as integers and seconds as a float.    
+    """)
+    hms = hrsminsec
     
-    def __setdegdec(self,deg):
+    def _setDecdeg(self,deg):
         rads = deg*pi/180.
         if self.range is not None:
-            self.__checkRange(rads)
+            self._checkRange(rads)
         self._decval = rads
-    def __getdegdec(self):
+    def _getDecdeg(self):
         return self._decval*180/pi
+    degrees = property(_getDecdeg,_setDecdeg,doc="""
+    The value of this :class:`AngularCoordinate` in decimal degrees.   
+    """)
+    d = degrees    
     
-    def __setrad(self,rads):
+    def _setRad(self,rads):
         if self.range is not None:
-            self.__checkRange(rads)
+            self._checkRange(rads)
         self._decval = rads
-    def __getrad(self):
+    def _getRad(self):
         return self._decval
+    radians = property(_getRad,_setRad,doc="""
+    The value of this :class:`AngularCoordinate` in decimal radians.   
+    """)
+    r = radians
     
-    def __sethrdec(self,hr):
+    def _setDechr(self,hr):
         rads = hr*pi/12
         if self.range is not None:
-            self.__checkRange(rads)
+            self._checkRange(rads)
         self._decval = rads
-    def __gethrdec(self):
+    def _getDechr(self):
         return self._decval*12/pi
+    hours = property(_getDechr,_setDechr,doc="""
+    The value of this :class:`AngularCoordinate` in decimal hours.   
+    """)
+    h = hours
     
-    def __checkRange(self,rads):
+    def _checkRange(self,rads):
         if self._range is not None:
             low,up = self._range
             if not low <= rads <= up:
                 raise ValueError('Attempted to set angular coordinate outside range')
-    def __setrange(self,newrng):
+    def _setRange(self,newrng):
         oldrange = self._range        
         try:
             if newrng is None:
@@ -106,31 +253,21 @@ class AngularCoordinate(object):
                     raise ValueError('lower edge of range is not <= upper')
                 newrng = (radians(newrng[0]),radians(newrng[1]))
             self._range = newrng
-            self.__checkRange(self._decval)
+            self._checkRange(self._decval)
         except ValueError:
             self._range = oldrange
             raise ValueError('Attempted to set range when value is out of range')
-    def __getrange(self):
+    def _getRange(self):
         if self._range is None:
             return None
         else:
             from math import degrees
             return degrees(self._range[0]),degrees(self._range[1])
-    
-    def __str__(self):
-        return self.getDmsStr(sep=('d',"'",'"'))
-    
-    degminsec=property(fget=__getdegminsec,fset=__setdegminsec)
-    dms=degminsec
-    hrsminsec=property(fget=__gethrsminsec,fset=__sethrsminsec)
-    hms=hrsminsec
-    degrees=property(fget=__getdegdec,fset=__setdegdec)
-    d=degrees
-    radians=property(fget=__getrad,fset=__setrad)
-    r=radians
-    hours=property(fget=__gethrdec,fset=__sethrdec)
-    h=hours
-    range=property(fget=__getrange,fset=__setrange)
+    range=property(_getRange,_setRange,doc="""
+    The acceptable range of angles for this :class:`AngularCoordinate` as a
+    2-tuple (lower,upper) with both angles in degrees. Will raise a
+    :exc:`ValueError` if the current value is outside the range.
+    """)
     
     ############################################################################
     #                                                                          #
@@ -142,102 +279,8 @@ class AngularCoordinate(object):
     #                                             comment poem by Rie O:-)     #
     ############################################################################
    
-    __purehre=_re.compile(r'.*?(\d+(?:\.?\d+)?)(?:h|hr).*')
-    __hmre=_re.compile('.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min).*')
-    __hmsre=_re.compile(r'.*?(\d{1,2})(?:h|hr)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
-    __puredre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+)?)(?:d|deg).*')
-    __dmre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min).*')
-    __dmsre=_re.compile(r'.*?([+-])?(\d{1,2})(?:d|deg)\s*(\d{1,2})(?:m|min)\s*(\d+(?:\.?\d*))(?:s|sec).*')
-    __sexre=_re.compile(r'.*?(\+|\-)?(\d{1,3})[: ](\d{1,2})[: ](\d+(?:.\d+)?).*')
-    __radsre=_re.compile(r'.*?(\d+(?:\.?\d+))(?:r|rad).*')
-    __puresre=_re.compile(r'.*?([+-]?\s*\d+(?:\.?\d+)?)(?:s|sec).*')
-    def __init__(self,inpt=None,sghms=None,range=None,radians=False):
-        """
-        If an undecorated 3-element iterator, `inpt` is taken to be deg,min,sec, 
-        othewise, input is cast to a float and treated as decimal degrees
-        
-        if sexigesimal, input will be interpreted as h:m:s if `sghms`
-        is True, or d:m:s if `sghms` is False.  If None, a +/- will indicate
-        d:m:s and nothing indicates r:m:s
-        
-        `range` sets the valid range of coordinates either any value (if None)
-        or a 2-sequence (lowerdegrees,upperdegrees)
-        
-        if `radians` is True and the input is a float or ambiguous string, the
-        value will be taken to be in radians, otherwise degrees
-        """
-        self._range = None
-        
-        if isinstance(inpt,AngularCoordinate):
-            self._decval=inpt._decval
-        elif isinstance(inpt,basestring):
-            sexig=self.__sexre.match(inpt)
-            hm=self.__purehre.match(inpt)
-            hmm=self.__hmre.match(inpt)
-            hmsm=self.__hmsre.match(inpt)
-            dm=self.__puredre.match(inpt)
-            dmm=self.__dmre.match(inpt)
-            dmsm=self.__dmsre.match(inpt)
-            radsm=self.__radsre.match(inpt)
-            sm=self.__puresre.match(inpt)
-            
-            if sexig:
-                t=sexig.group(2,3,4)
-                if sghms is None:
-                    if sexig.group(1) is None:
-                        self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
-                    else:
-                        sgn = 1 if sexig.group(1) == '+' else -1
-                        self.degminsec=int(t[0]),int(t[1]),float(t[2])
-                        self._decval *= sgn
-                else:
-                    sgn = -1 if sexig.group(1) == '-' else 1
-                    if sghms:
-                        self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
-                    else:
-                        self.degminsec=int(t[0]),int(t[1]),float(t[2]) 
-                    self._decval *= sgn
-            elif hmsm:
-                t=hmsm.group(1,2,3)
-                self.hrsminsec=int(t[0]),int(t[1]),float(t[2])
-            elif hmm:
-                t=hmm.group(1,2)
-                self.hrsminsec=int(t[0]),int(t[1]),0
-            elif hm:
-                self.hours=float(hm.group(1))
-            elif dmsm:
-                sgn = -1 if dmsm.group(1) =='-' else 1
-                t=dmsm.group(2,3,4)
-                self.degminsec=int(t[0]),int(t[1]),float(t[2])
-                self._decval *= sgn
-            elif radsm:
-                self.radians=float(hm.group(1))
-            elif dmm:
-                t=dmm.group(1,2)
-                self.degminsec=int(t[0]),int(t[1]),0
-            elif dm:
-                self.degrees = float(dm.group(1))
-            elif sm:
-                self.dms = (0,0,float(sm.group(1)))
-            else:
-                try:
-                    if radians:
-                        self.radians = float(inpt)
-                    else:
-                        self.degrees = float(inpt)
-                except:
-                    raise ValueError('Unrecognized string format '+inpt)
-            
-        elif hasattr(inpt,'__iter__') and len(inpt)==3:
-            self.degminsec=inpt
-        elif inpt is None:
-            self._decval=0
-        elif radians:
-            self._decval=float(inpt)
-        else:
-            self._decval=float(inpt)*pi/180.
-        
-        self.range = range
+    def __str__(self):
+        return self.getDmsStr(sep=('d',"'",'"'))
             
     def __eq__(self,other):
         if hasattr(other,'_decval'):
@@ -380,30 +423,46 @@ class AngularCoordinate(object):
             
         return ''.join(tojoin)
     
-    def getSizeAtDistance(self,distance):
-        """
-        computes the size of an angular seperation given by this coordinate
-        """
-        from math import cos
-        return distance*(2-2*cos(self.radians))**0.5
-    
-def angular_string_to_dec(instr,hms=True):
+def angular_string_to_dec(instr,hms=True,degrees=True):
     """
-    convinience function to convert a sexigesimal angular position to a decimal
+    Convinience function to convert a angular coordinate string to a decimal
     value.
     
-    if hms is True, the coordinate will be assumed to be h:m:s, otherwise d:m:s
+    if `hms` is True, the coordinate will be assumed to be h:m:s, otherwise
+    d:m:s. This will be ignored if the coordinates are specified as ##h##m##s or
+    ##d##m##s, or if the input is not in sexigesimal form.
+    
+    If `degrees` is True, the output will be decimal degrees, otherwise radians.
     """
     ac = AngularCoordinate(instr)
-    return ac.degrees
+    if degrees:
+        return ac.degrees
+    else:
+        return ac.radians
 
 class AngularSeperation(AngularCoordinate):
+    """
+    This class represents a seperation between two angular coordinates on the
+    unit sphere.
+    
+    A constructor is available, but the most natural way to generate this object
+    is to use the subtraction (-) operator on two :class:`AngularCoordinate`
+    objects.
+    """
+    
     __slots__ = ('start',)
-    def __init__(self,*args,**kwargs):
+    def __init__(self,*args):
         """
-        inputs can be either AngularSeperation(sep), or
-        AngularSeperation(start,end).  kwargs can be any of the kwargs to
-        the initializer of AngularCoordinate.
+        Input arguments can be either:
+        
+        * AngularSeperation(:class:`AngularSeperation` object) 
+            Generates a copy of the provided object.
+        * AngularSeperation(sep) 
+            Generates a seperation of the provided distance with no starting point.
+        * AngularSeperation(start,end) 
+            Computes the seperation from the start and end objects, which must
+            be :class:`AngularCoordinate` objects.
+          
         """
         if len(args) == 1:
             a = args[0]
@@ -424,7 +483,7 @@ class AngularSeperation(AngularCoordinate):
         else:
             raise ValueError('inproper number of inputs to AngularSeperation')
         
-        super(AngularSeperation,self).__init__(sep,**kwargs)
+        super(AngularSeperation,self).__init__(sep)
         self.start = start
         
     def __add__(self,other):
@@ -441,7 +500,6 @@ class AngularSeperation(AngularCoordinate):
         self.degrees = val/3600
     arcsec = property(_getArcsec,_setArcsec,doc=None)
     
-    
     def _getArcmin(self):
         return self.degrees*60
     def _setArcmin(self,val):
@@ -452,12 +510,12 @@ class AngularSeperation(AngularCoordinate):
     def projectedSeperation(self,zord,usez=False,**kwargs):
         """
         computes the physical projected seperation assuming a given distance.
-        This implicitly assumes small-angle approximation.
+        This method assumes small-angle approximation.
         
         if `usez` is True, the input will be interpreted as a redshift, and
         kwargs will be passed into the distance calculation.
         """
-        return angular_to_physical_size(self.arcsec,zord,usez=True,**kwargs)
+        return angular_to_physical_size(self.arcsec,zord,usez=usez,**kwargs)
 
 class _LatLongMeta(type):
     def __init__(cls,name,bases,dct):
