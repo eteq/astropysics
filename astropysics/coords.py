@@ -84,14 +84,15 @@ class AngularCoordinate(object):
         
         .. testsetup::
         
-            >>> from astropysics.coords import AngularCoordinate
+            from astropysics.coords import AngularCoordinate
+            from math import pi
         
         .. doctest::
         
             >>> ac = AngularCoordinate(2.5)
             >>> print ac
             +2d30'00.00"
-            >>> >> print AngularCoordinate(ac)
+            >>> print AngularCoordinate(ac)
             +2d30'00.00"
             >>> print AngularCoordinate(pi,radians=True)
             +180d00.00"
@@ -124,7 +125,9 @@ class AngularCoordinate(object):
             acm = self.__acregex.match(sinpt)
             if acm:
                 sgn,dec1,mark1,dec2,mark2,dec3,mark3 = acm.group(1,2,3,4,5,6,7)
-                val = float(dec1)+float(dec2)/60+float(dec3)/3600
+                val = (0 if dec1 is None else float(dec1)) + \
+                      (0 if dec2 is None else float(dec2)/60) + \
+                      (0 if dec3 is None else float(dec3)/3600)
                 if sgn == '-':
                     val *= -1
                 if mark1 == ':':

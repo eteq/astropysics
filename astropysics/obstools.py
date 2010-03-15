@@ -54,14 +54,19 @@ def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
     'negreturn', it will instead be a (datetime,bcemask) tuple
     
     **Examples**
+    
     .. testsetup::
     
         from astropysics.obstools import jd_to_gregorian
     
     .. doctest::
         
-        >>> gregorian_to_jd((2000,1,1))
-        2451545.0
+        >>> jd_to_gregorian(2451545.0)
+        datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
+        >>> jd_to_gregorian(2451910.25)
+        datetime.datetime(2000, 12, 31, 18, 0, tzinfo=tzutc())
+        >>> jd_to_gregorian(2453006.0)
+        datetime.datetime(2004, 1, 1, 12, 0, tzinfo=tzutc())
         
     """
     import datetime
@@ -167,6 +172,7 @@ def gregorian_to_jd(gtime,tz=None):
     
     
     **Examples**
+    
     .. testsetup::
     
         from astropysics.obstools import gregorian_to_jd
