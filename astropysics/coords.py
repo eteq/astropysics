@@ -1060,11 +1060,11 @@ class EphemerisObject(object):
         return self._jd0
     def _setJd0(self,val):
         from operator import isSequenceType
-        from .obstools import gregorian_to_jd
+        from .obstools import calendar_to_jd
         from datetime import datetime
         
         if hasattr(val,'year') or isSequenceType(val):
-            self._jd0 = gregorian_to_jd(val)
+            self._jd0 = calendar_to_jd(val)
         else:
             self._jd0 = val
     jd0 = property(_getJd0,_setJd0,doc="""
@@ -1078,13 +1078,13 @@ class EphemerisObject(object):
         return self._jd
     def _setJd(self,val):
         from operator import isSequenceType
-        from .obstools import gregorian_to_jd
+        from .obstools import calendar_to_jd
         from datetime import datetime
         
         if val == 'now':
-            jd =  gregorian_to_jd(datetime.utcnow(),tz=None)
+            jd =  calendar_to_jd(datetime.utcnow(),tz=None)
         elif hasattr(val,'year') or isSequenceType(val):
-            jd = gregorian_to_jd(val)
+            jd = calendar_to_jd(val)
         else:
             jd = val
         if self._validrange is not None:
@@ -1120,7 +1120,7 @@ class EphemerisObject(object):
                 self._validrange = None
             else:
                 from operator import isSequenceType
-                from .obstools import gregorian_to_jd
+                from .obstools import calendar_to_jd
                 from datetime import datetime
                 
                 vs = []
@@ -1128,9 +1128,9 @@ class EphemerisObject(object):
                     if v is None:
                         vs.append(None)
                     elif v == 'now':
-                        vs.append(gregorian_to_jd(datetime.utcnow(),tz=None))
+                        vs.append(calendar_to_jd(datetime.utcnow(),tz=None))
                     elif hasattr(val,'year') or isSequenceType(val):
-                        vs.append(gregorian_to_jd(val))
+                        vs.append(calendar_to_jd(val))
                     else:
                         vs.append(val)
                 self._validrange = tuple(vs)

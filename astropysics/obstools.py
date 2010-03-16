@@ -25,127 +25,177 @@ import numpy as np
 
 #from .models import FunctionModel1DAuto as _FunctionModel1DAuto
 
-def jd_to_gregorian(jd,bceaction=None,rounding=1e-5):
+def test_jdc(jd):
+    jdp5= jd + .5
+    
+    Z = int(jd)
+    d = jdp5 - Z
+    if d == 1.0:
+        Z+=1
+        d = 0.0
+    if Z >= 2299161:
+        alpha = int((Z-1867216.25)//36524.25)
+        A = Z + 1 + alpha - alpha//4
+    else:
+        A = Z
+    B = A + 1524
+    C = int((B-122.1)//365.25) 
+    D = int(365.25*C)
+    E = int((B-D)//30.6001)  
+     
+    
+    d = B-D-int(30.6001*E)+d
+    m = E-1 if E<14 else E-13
+    return (C-4716 if m > 2 else C-4715),m,d
+
+def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
     """
-    Convert a julian date to a gregorian calendar date and time.
+    Convert a julian date to a calendar date and time.
     
     
-    `bceaction` indicates what to do if the result is a BCE year.   datetime 
-    generally only supports positive years, so the following options apply:
+    `rounding` determines a fix for floating-point errors. It specifies the
+    number of milliseconds by which to round the result to the nearest second.
+    If 1000000, no milliseconds are recorded. If larger, a ValueError is raised.
     
-    * 'raise' or None
-        raise an exception
-    * 'neg'
-        for any BCE years, convert to positive years (delta operations in
-        datetime will not be correct)
-    * 'negreturn'
-        same as 'neg', but changes the return type to a tuple with the datetime
-        objects as the first element and a boolean array that is True for the
-        objects that are BCE as the second element.
-    * a scalar
-        add this number to the year
+    If `gregorian` is True, the output will be in the Gregorian calendar.
+    Otherwise, it will be Julian. If None, it will be assumed to switch over on
+    October 4/15 1582.
     
+    `output can` be:
     
-    `rounding` determines a fix for floating-point errors - if the seconds are
-    within the request number of seconds of an exact second, the output will be
-    set to that second
-    
-    returns :class:`datetime.datetime` objects in UTC. If `bceaction` is
-    'negreturn', it will instead be a (datetime,bcemask) tuple
+    * 'datetime'
+        A list of :class:`datetime.datetime` objects in UTC will be returned. If
+        the input is a scalar, a single object will be returned.
+    * 'array'
+        A Nx7 array will be returned of the form
+        [(year,month,day,hr,min,sec,msec),...] unless the input was a scalar, in
+        which case it will be a length-7 array.
+    * 'fracarray'
+        An Nx3 array (year,month,day) where day includes the decimal portion.
     
     **Examples**
     
     .. testsetup::
     
-        from astropysics.obstools import jd_to_gregorian
+        from astropysics.obstools import jd_to_calendar
     
     .. doctest::
         
-        >>> jd_to_gregorian(2451545.0)
+        >>> jd_to_calendar(2451545)
         datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
-        >>> jd_to_gregorian(2451910.25)
-        datetime.datetime(2000, 12, 31, 18, 0, tzinfo=tzutc())
-        >>> jd_to_gregorian(2453006.0)
-        datetime.datetime(2004, 1, 1, 12, 0, tzinfo=tzutc())
+        >>> jd_to_calendar(2305812.5)
+        datetime.datetime(1600, 12, 31, 0, 0, tzinfo=tzutc())
+        >>> jd_to_calendar([2415020.5,2305447.5],output='array')
+        array([[1900,    1,    1,    0,    0,    0,    0],
+               [1600,    1,    1,    0,    0,    0,    0]])
+        >>> jd_to_calendar(0.0,output='fracarray')
+        array([[ -4.71200000e+03,   1.00000000e+00,   1.50000000e+00]])
         
     """
     import datetime
     from dateutil import tz
     
-    jdn = np.array(jd,copy=False)
-    scalar = jdn.shape == ()
-    jdn = jdn.ravel()
+    jd = np.array(jd,copy=False)
+    scalar = jd.shape == ()
+    jd = jd.ravel()
     
-    #implementation from http://www.astro.uu.nl/~strous/AA/en/reken/juliaansedag.html
-    x2 = np.floor(jdn - 1721119.5)
-    c2 = (4*x2 + 3)//146097
-    x1 = x2 - (146097*c2)//4
-    c1 = (100*x1 + 99)//36525
-    x0 = x1 - (36525*c1)//100
-    
-    yr = (100*c2 + c1).astype(int)
-    mon = ((5*x0 + 461)//153).astype(int)
-    day = (x0 - (153*mon-457)//5 + 1).astype(int)
-    
-    mmask = mon>12
-    mon[mmask] -= 12
-    yr[mmask] += 1
-    
-    
-    time = (jdn - np.floor(jdn) - 0.5) % 1
-    if np.all(time) == 0:
-        hr = min = sec = msec = np.zeros_like(yr)
-    elif np.all(time) == 0.5:
-        min = sec = msec = np.zeros_like(yr)
-        hr = 12*np.ones_like(yr)
+    if rounding > 1000000:
+        raise ValueError('rounding cannot exceed a second')
+    elif rounding <= 0:
+        jd5 = jd + .5
     else:
-        hr = np.floor(time*24).astype(int)
-        time = time*24 - hr
-        min = np.floor(time*60).astype(int)
-        time = time*60 - min
-        sec = np.floor(time*60).astype(int)
-        time = time*60 - sec
-        msec = np.floor(time*1e6).astype(int)
+        rounding = int(rounding)
+        roundingfrac = rounding/86400000000
+        jd5 = jd + .5 + roundingfrac
         
-        #rounding fix for floating point errors
-        if rounding:
-            msecundermask = (1-time) < rounding
-            msecovermask = time < rounding
-            msec[msecundermask|msecovermask] = 0
-            sec[msecundermask] += 1
-            min[sec==60] += 1
-            sec[sec==60] = 0
-            hr[min==60] += 1
-            min[min==60] = 0
-            hr[hr==24] = 0
-            #date is always right
+    z = np.floor(jd).astype(int) 
+    dec = jd5 - z #fractional piece
+    
+    #fix slight floating-point errors if they hapepn TOOD:check
+    dgtr1 = dec>=1.0
+    dec[dgtr1] -= 1.0
+    z[dgtr1] += 1
+    
+    
+    if gregorian is None:
+        gregorian = 2299161
         
+    if gregorian is True:
+        alpha = ((z-1867216.25)/36524.25).astype(int)
+        z += 1 + alpha - alpha//4
+    elif gregorian is False:
+        pass
+    else:
+        gmask = z >= gregorian
+        alpha = ((z[gmask]-1867216.25)/36524.25).astype(int)
+        z[gmask] += 1 + alpha - alpha//4
     
-    tzi = tz.tzutc()
+    b = z + 1524
+    c = ((b-122.1)/365.25).astype(int)
+    d = (365.25*c).astype(int)
+    e = ((b-d)/30.6001).astype(int)
     
-    if bceaction is not None:
-        if bceaction == 'raise':
-            pass
-        elif bceaction == 'neg' or bceaction == 'return':
-            bcemask = yr<datetime.MINYEAR
-            yr[bcemask] -= 1 #correct by 1 because JD=0 -> 1 BCE
-            yr[bcemask]*= -1 
-                
+    day = b - d - (30.6001*e).astype(int)
+    
+    mmask = e<14
+    month = e
+    month[mmask] -= 1
+    month[~mmask] -= 13
+    year = c
+    year[month>2] -= 4716
+    year[month<=2] -= 4715
+    
+    if output == 'fracarray':
+        dec = dec-roundingfrac
+        dec[dec<0]=0
+        return np.array((year,month,day+dec)).T
+    
+    if rounding == 1000000:
+        secdec = dec*86400
+        sec = secdec.astype(int)
+        min = sec//60
+        sec -= 60*min
+        hr = min//60
+        min -= 60*hr
+        sec[sec==secdec] -= 1
+        msec = None
+    else:
+        msec = (dec*86400000000.).astype('int64') 
+        if rounding > 0:
+            div = (msec//1000000)*1000000
+            toround = (msec - div)<(2*rounding)
+            msec[toround] = div + rounding
+            msec  -= rounding
+
+        sec = msec//1000000
+        msec -= 1000000*sec
+        
+        min = sec//60
+        sec -= 60*min
+        hr = min//60
+        min -= 60*hr
+    
+    if output == 'datetime':
+        tzi = tz.tzutc()
+        if msec is None:
+            ts = (year,month,day,hr%24,min%60,sec%60)
         else:
-            yr += bceaction
-    
-    if scalar:
-        res = datetime.datetime(yr[0],mon[0],day[0],hr[0],min[0],sec[0],msec[0],tzi)
+            ts = (year,month,day,hr%24,min%60,sec%60,msec%1000000)
+        res = [datetime.datetime(*t,tzinfo=tzi) for t in zip(*ts)]
+    elif output == 'array':
+        msec = np.zeros_like(sec) if msec is None else msec
+        res = np.array([year,month,day,hr%24,min%60,sec%60,msec]).T
     else:
-        res = [datetime.datetime(*t,tzinfo=tzi) for t in zip(yr,mon,day,hr,min,sec,msec)]
-        
-    if bceaction == 'return':
-        return res,bcemask
+        raise ValueError('invlid output form '+str(output))
+    if scalar:
+        return res[0]
     else:
         return res
     
+    
+    
 
-def gregorian_to_jd(gtime,tz=None):
+def calendar_to_jd(gtime,tz=None,gregorian=True):
     """
     Convert gregorian calendar value to julian date
     
@@ -170,27 +220,31 @@ def gregorian_to_jd(gtime,tz=None):
     Or, if it is a :class:`datetime.tzinfo` object, that object will be used to
     do the conversion to UTC.  
     
+    If `gregorian` is True, the input will be interpreted as in the Gregorian
+    calendar. Otherwise, it will be Julian. If None, it will be assumed to
+    switch over on October 4/15 1582.
+    
     
     **Examples**
     
     .. testsetup::
     
-        from astropysics.obstools import gregorian_to_jd
+        from astropysics.obstools import calendar_to_jd
         import datetime,dateutil
     
     .. doctest::
         
-        >>> gregorian_to_jd((2010,1,1))
+        >>> calendar_to_jd((2010,1,1))
         2455198.0
-        >>> gregorian_to_jd(datetime.datetime(2000,12,21,3,0,0))
+        >>> calendar_to_jd(datetime.datetime(2000,12,21,3,0,0))
         2451899.625
-        >>> gregorian_to_jd([2004,3,(5,6)])
+        >>> calendar_to_jd([2004,3,(5,6)])
         array([ 2453070.,  2453071.])
         >>> dates = [datetime.datetime(2004,3,5),datetime.datetime(2004,3,9)]
-        >>> gregorian_to_jd(dates)
+        >>> calendar_to_jd(dates)
         array([ 2453069.5,  2453073.5])
         >>> tz = dateutil.tz.tzoffset('2',3*3600)
-        >>> gregorian_to_jd((2010,1,1),tz)
+        >>> calendar_to_jd((2010,1,1),tz)
         2455197.875
 
         
@@ -269,12 +323,36 @@ def gregorian_to_jd(gtime,tz=None):
     else:
         utcoffset = tz
             
-    ly = ((month-14)/12).astype(int) #In leap years, -1 for Jan, Feb, else 0
-    jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
+#    ly = ((month-14)/12).astype(int) #In leap years, -1 for Jan, Feb, else 0
+#    jdn = day - 32075l + 1461l*(yr+4800l+ly)//4
     
-    jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
+#    jdn += 367l*(month - 2-ly*12)//12 - 3*((yr+4900l+ly)//100)//4
     
-    res = jdn + (hr/24.0) + min/1440.0 + sec/86400.0 - 0.5
+#    res = jdn + (hr/24.0) + min/1440.0 + sec/86400.0 - 0.5
+
+    #this algorithm from meeus 2ed
+    m3 = month < 3
+    yr[m3] -= 1
+    month[m3] += 12
+        
+    cen = yr//100
+    
+    if gregorian is None:
+        gregorian = (1582,10,4)
+    if gregorian is True:
+        gregoffset = 2 - cen + cen//4
+    elif gregorian is False:
+        gregoffset = 0
+    else:
+        gregoffset = 2 - cen + cen//4
+        gmask = (yr>gregorian[0])&(month>gregorian[1])&(day>gregorian[2])
+        gregoffset[~gmask] = 0
+    
+        
+    jdn = (365.25*(yr+4716)).astype(int) + \
+          (30.6001*(month + 1)).astype(int) + \
+               day + gregoffset - 1524.5
+    res = jdn + hr/24.0 + min/1440.0 + sec/86400.0
     
     if np.any(utcoffset):
         res -= np.array(utcoffset)/24.0
@@ -443,7 +521,7 @@ class Site(object):
     def _getCurrentobsjd(self):
         if self._currjd is None:
             from datetime import datetime
-            return gregorian_to_jd(datetime.utcnow(),tz=None)
+            return calendar_to_jd(datetime.utcnow(),tz=None)
         else:
             return self._currjd
     def _setCurrentobsjd(self,val):
@@ -453,7 +531,7 @@ class Site(object):
             if np.isscalar(val):
                 self._currjd = val
             else:
-                self._currjd = gregorian_to_jd(val)
+                self._currjd = calendar_to_jd(val)
     currentobsjd = property(_getCurrentobsjd,_setCurrentobsjd,doc="""
     Date and time to use for computing time-dependent values.  If set to None,
     the jd at the instant of calling will be used.  It can also be set as
@@ -522,7 +600,7 @@ class Site(object):
                 else: #only date provided
                     dtobj = datetime.datetime(args[0].year,args[0].month,
                                               args[0].day,tzinfo=self.tz)
-                jd = gregorian_to_jd(dtobj,tz=None)
+                jd = calendar_to_jd(dtobj,tz=None)
             else:
                 jd = args[0]
         elif len(args) == 4:
@@ -531,12 +609,12 @@ class Site(object):
             min = int(np.floor(60*(time - hr)))
             sec = int(np.floor(60*(60*(time-hr) - min)))
             msec = int(np.floor(1e6*(60*(60*(time-hr) - min) - sec)))
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
+            jd = calendar_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
         elif len(args) == 6:
             year,month,day,hr,min,sec = args
             msec = int(1e6*(sec - np.floor(sec)))
             sec = int(np.floor(sec))
-            jd = gregorian_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
+            jd = calendar_to_jd(datetime.datetime(year,month,day,hr,min,sec,msec,self.tz),tz=None)
         else:
             raise TypeError('invalid number of input arguments')
         
@@ -771,7 +849,7 @@ class Site(object):
         degrees
         
         `date` determines the date at which to do the computation. See
-        :func:`gregorian_to_jd` for acceptable formats
+        :func:`calendar_to_jd` for acceptable formats
         
         *returns*
         (rise,set,transit) as :class:datetime.time objects if `timeobj` is True
@@ -845,11 +923,11 @@ class Site(object):
         if datetime is None:
             return self.equatorialToHorizontal(coords,self.localSiderialTime())
         elif hasattr(datetime,'year') or (isSequenceType(datetime) and hasattr(datetime[0],'year')):
-            jd = gregorian_to_jd(datetime,self.tz).ravel()
+            jd = calendar_to_jd(datetime,self.tz).ravel()
         else:
             jd = np.array(datetime,copy=False)
             if len(jd.shape)>1:
-                jd = np.array([gregorian_to_jd(v,self.tz) for v in jd])
+                jd = np.array([calendar_to_jd(v,self.tz) for v in jd])
         lsts = self.localSiderialTime(jd)
         
         if precess:
@@ -867,9 +945,9 @@ class Site(object):
         elif np.isscalar(date):
             jd = date
         else:
-            jd = gregorian_to_jd(date)
+            jd = calendar_to_jd(date)
             
-        return jd,jd_to_gregorian(jd)
+        return jd,jd_to_calendar(jd)
         
     def nightTable(self,coord,date=None,strtablename=None,localtime=True,
                             hrrange=(18,6,25)):
@@ -905,9 +983,9 @@ class Site(object):
         elif np.isscalar(date):
             jd = date
         else:
-            jd = gregorian_to_jd(date)
+            jd = calendar_to_jd(date)
             
-        date = jd_to_gregorian(jd).date()
+        date = jd_to_calendar(jd).date()
         jd0 = np.floor(jd)
         
         if localtime:
@@ -1286,7 +1364,7 @@ class Site(object):
             
         jdstart,startdt = self._processDate(startdate)
         jds = jdstart+np.linspace(0,365.25*months/12,n)
-        jd1 = jds - gregorian_to_jd((1,1,1))
+        jd1 = jds - calendar_to_jd((1,1,1))
         
         if utc:
             utco = startdt.replace(tzinfo=self.tz).utcoffset()
@@ -1305,7 +1383,7 @@ class Site(object):
             if colors:
                 plt.gca().set_color_cycle(colors)
             for c,nm in zip(coords,names):
-                rst = [self.riseSetTransit(c,jd_to_gregorian(jd),0,utc=utc) for jd in jds]
+                rst = [self.riseSetTransit(c,jd_to_calendar(jd),0,utc=utc) for jd in jds]
                 rise,set,transit = np.array(rst).T
                 transit[transit>cp12] -= 24 #do this to get the plot to cross over night time
                 
@@ -1319,7 +1397,7 @@ class Site(object):
                 
             if sun:
                 jdsun = jdstart+np.linspace(0,365.25*months/12,365)
-                jd1sun = jdsun - gregorian_to_jd((1,1,1))
+                jd1sun = jdsun - calendar_to_jd((1,1,1))
                 sun = Sun()
                     
                 rst = []
@@ -1327,9 +1405,9 @@ class Site(object):
                 rst18 = []
                 for jd in jdsun:
                     sun.jd = jd
-                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),0,utc=utc))
-                    rst12.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),-12,utc=utc))
-                    rst18.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_gregorian(jd),-18,utc=utc))
+                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),0,utc=utc))
+                    rst12.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),-12,utc=utc))
+                    rst18.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),-18,utc=utc))
                     
                 rise,set,t = np.array(rst).T
                 rise12,set12,t12 = np.array(rst12).T
@@ -1348,13 +1426,13 @@ class Site(object):
             
             if moon:
                 jdmoon = jdstart+np.linspace(0,365.25*months/12,30*months)
-                jd1moon = jdmoon - gregorian_to_jd((1,1,1))
+                jd1moon = jdmoon - calendar_to_jd((1,1,1))
                 moon = Moon()
                 
                 rst = []
                 for jd in jdmoon:
                     moon.jd = jd
-                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_gregorian(jd),0,utc=utc))
+                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_calendar(jd),0,utc=utc))
                 rise,set,t = np.array(rst).T
                 
                 t[t>cp12] -= 24
