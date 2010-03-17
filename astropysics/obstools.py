@@ -48,20 +48,20 @@ def test_jdc(jd):
     m = E-1 if E<14 else E-13
     return (C-4716 if m > 2 else C-4715),m,d
 
-def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
+def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
     Convert a julian date to a calendar date and time.
+    
+    The julian date should be passed as the `jd` parameter, or None to get a 
     
     
     `rounding` determines a fix for floating-point errors. It specifies the
     number of milliseconds by which to round the result to the nearest second.
     If 1000000, no milliseconds are recorded. If larger, a ValueError is raised.
     
-    If `gregorian` is True, the output will be in the Gregorian calendar.
-    Otherwise, it will be Julian. If None, it will be assumed to switch over on
-    October 4/15 1582.
     
-    `output can` be:
+    
+    `output` determines the format of the returned object and can be:
     
     * 'datetime'
         A list of :class:`datetime.datetime` objects in UTC will be returned. If
@@ -72,6 +72,14 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
         which case it will be a length-7 array.
     * 'fracarray'
         An Nx3 array (year,month,day) where day includes the decimal portion.
+        
+    If `gregorian` is True, the output will be in the Gregorian calendar.
+    Otherwise, it will be Julian. If None, it will be assumed to switch over on
+    October 4/15 1582.
+    
+    If `mjd` is True, the input is interpreted as a modified julian date instead
+    of a standard julian date.
+    
     
     **Examples**
     
@@ -95,21 +103,27 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
     import datetime
     from dateutil import tz
     
-    jd = np.array(jd,copy=False)
+    if jd is None:
+        jd = calendar_to_jd(datetime.datetime.now(tz.tzlocal()))
+    
+    jd = np.array(jd,copy=True)
     scalar = jd.shape == ()
     jd = jd.ravel()
+    
+    if mjd:
+        jd += 2400000.5
     
     if rounding > 1000000:
         raise ValueError('rounding cannot exceed a second')
     elif rounding <= 0:
-        jd5 = jd + .5
+        jd += .5 
     else:
         rounding = int(rounding)
         roundingfrac = rounding/86400000000
-        jd5 = jd + .5 + roundingfrac
+        jd += .5 + roundingfrac 
         
     z = np.floor(jd).astype(int) 
-    dec = jd5 - z #fractional piece
+    dec = jd - z #fractional piece
     
     #fix slight floating-point errors if they hapepn TOOD:check
     dgtr1 = dec>=1.0
@@ -157,7 +171,7 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
         sec -= 60*min
         hr = min//60
         min -= 60*hr
-        sec[sec==secdec] -= 1
+        #sec[sec==secdec] -= 1
         msec = None
     else:
         msec = (dec*86400000000.).astype('int64') 
@@ -195,11 +209,11 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None):
     
     
 
-def calendar_to_jd(gtime,tz=None,gregorian=True):
+def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
     """
-    Convert gregorian calendar value to julian date
+    Convert calendar value to julian date
     
-    the input `gtime` can either be:
+    the input `caltime` can either be:
     
     * a sequence (yr,month,day,[hr,min,sec]). 
     * a sequence as above with one or more elements a sequence; a sequence will
@@ -223,6 +237,9 @@ def calendar_to_jd(gtime,tz=None,gregorian=True):
     If `gregorian` is True, the input will be interpreted as in the Gregorian
     calendar. Otherwise, it will be Julian. If None, it will be assumed to
     switch over on October 4/15 1582.
+    
+    If `mjd` is True, a modified julian date is returned instead of a standard
+    julian date.
     
     
     **Examples**
@@ -252,25 +269,29 @@ def calendar_to_jd(gtime,tz=None,gregorian=True):
     #Adapted from xidl  jdcnv.pro
     from datetime import datetime,date,tzinfo
     
-    if isinstance(gtime,datetime) or isinstance(gtime,date):
-        datetimes = [gtime]
+    if caltime is None:
+        from dateutil.tz import tzlocal
+        datetimes = [datetime.now(tzlocal())]
         scalarout = True
-    elif all([isinstance(gt,datetime) or isinstance(gt,date) for gt in gtime]):
-        datetimes = gtime
+    elif isinstance(caltime,datetime) or isinstance(caltime,date):
+        datetimes = [caltime]
+        scalarout = True
+    elif all([isinstance(ct,datetime) or isinstance(ct,date) for ct in caltime]):
+        datetimes = caltime
         scalarout = False
     else:
         datetimes = None
-        gtime = list(gtime)
-        if not (3 <= len(gtime) < 8):
-            raise ValueError('gtime input sequence is invalid size')
-        while len(gtime) < 7:
-            if len(gtime) == 3:
+        caltime = list(caltime)
+        if not (3 <= len(caltime) < 8):
+            raise ValueError('caltime input sequence is invalid size')
+        while len(caltime) < 7:
+            if len(caltime) == 3:
                 #make hours 12
-                gtime.append(12*np.ones_like(gtime[-1]))
+                caltime.append(12*np.ones_like(caltime[-1]))
             else:
-                gtime.append(np.zeros_like(gtime[-1]))
-        yr,month,day,hr,min,sec,msec = gtime
-        scalarout = all([np.shape(v) is tuple() for v in gtime])
+                caltime.append(np.zeros_like(caltime[-1]))
+        yr,month,day,hr,min,sec,msec = caltime
+        scalarout = all([np.shape(v) is tuple() for v in caltime])
         
     #if input objects are datetime objects, generate arrays
     if datetimes is not None:
@@ -354,6 +375,9 @@ def calendar_to_jd(gtime,tz=None,gregorian=True):
                day + gregoffset - 1524.5
     res = jdn + hr/24.0 + min/1440.0 + sec/86400.0
     
+    if mjd:
+        res -= 2400000.5
+    
     if np.any(utcoffset):
         res -= np.array(utcoffset)/24.0
     
@@ -362,24 +386,6 @@ def calendar_to_jd(gtime,tz=None,gregorian=True):
     else:
         return res
     
-    
-def besselian_epoch_to_jd(bepoch):
-    """
-    Convert a Besselian epoch to Julian Date, assuming a tropical year of 
-    365.242198781 days.
-    
-    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
-    """
-    return (bepoch - 1900)*365.242198781 + 2415020.31352
-
-def jd_to_besselian_epoch(jd):
-    """
-    Convert a Julian Date to a Besselian epoch, assuming a tropical year of 
-    365.242198781 days
-    
-    :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epb.html
-    """ 
-    return 1900 + (jd - 2415020.31352)/365.242198781
 
 def jd_to_epoch(jd,julian=True,asstring=False):
     """
