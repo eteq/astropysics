@@ -953,11 +953,11 @@ def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
 
 def crossmask(x,threshold=0,belowtoabove=True):
     """
-    Returns a boolean mask :class:`array<numpy.ndarray>` for the point where the
+    Returns a boolean mask :class:`numpy.ndarray` for the point where the
     input (interpreted as a 1D array) crosses or has complted crossing (if
     between) from below (or above) a threshold.
     
-    If `belowtoabove is True, the returned masks is for where the input
+    If `belowtoabove` is True, the returned masks is for where the input
     transitions from below to above.  Otherwise, from above to below.
     
     **Example**
