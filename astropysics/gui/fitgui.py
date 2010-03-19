@@ -111,7 +111,8 @@ class _TraitedModel(HasTraits):
                 
                 ffp = 'fixfit_'+p
                 self.add_trait(ffp,Bool)
-                setattr(self,ffp,False)
+                #default to fixed if the paramtere is a class-level fixed model
+                setattr(self,ffp,p in self.model.__class__.fixedpars)
                 self.on_trait_change(self._param_change_handler,ffp)
                 gi.content.append(Item(ffp,label='Fix?'))
                 
