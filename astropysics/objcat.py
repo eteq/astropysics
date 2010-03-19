@@ -483,11 +483,25 @@ class FieldNode(CatalogNode,Sequence):
     def __getitem__(self,key):
         if key not in self._fieldnames:
             try:
-                key = self._fieldnames[key]
+                iserr = issrc = False
+                if key.endswith('_src'):
+                    key = key[:-4]
+                    issrc = True
+                elif key.endswith('_err'):
+                    key = key[:-4]
+                    iserr = True
+                else:
+                    key = self._fieldnames[key]
             except (IndexError,TypeError):
                 raise IndexError('Field "%s" not found'%key)
         try:
-            return getattr(self,key)()
+            if iserr:
+                return getattr(self,key).currenterror
+            elif issrc:
+                return getattr(self,key).currentsource
+            else:
+                return getattr(self,key)()
+            
         except IndexError: #field empty
             return None
     
@@ -1024,6 +1038,10 @@ class Field(MutableSequence):
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
     
+    @property
+    def currentsource(self):
+        return self.currentobj.source
+        
     @property
     def currenterror(self):
         o = self.currentobj
