@@ -603,6 +603,9 @@ class TwoSlopeModel(FunctionModel1DAuto):
     
     specifically, a*(x-xs)+(b-a)*log_base(1+base^(x-xs))+C
     """
+    
+    fixedpars = ('base',)
+    
     def f(self,x,a=1,b=2,C=0,xs=0,base=e):
         z = x-xs
         return a*z+(b-a)*np.log(1+base**z)/np.log(base)+C
@@ -1168,20 +1171,34 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
     
 class NFWModel(FunctionModel1DAuto):
     """
-    A Navarro, Frenk, and White 1996 profile
+    A Navarro, Frenk, and White 1996 profile. Equivalent to
+    :class:`AlphaBetaGammaModel` with alpha,beta,gamma = (1,3,1)
     
-    united operations have r in kpc and rho in Msun kpc^-3
+    where relevant, units have r in kpc and rho in Msun kpc^-3
     """
     xaxisname = 'r'
     yaxisname = 'rho'
         
-    def f(self,x,rho0=1,rc=1):
-        #return TwoPowerModel.f(self,x,rho0*rc*rc*rc,rc,-1,-3)
-        return rho0*rc*rc*rc*((x+rc)**(-2))*(x**-1)
+    def f(self,r,rho0=1,rc=1):
+        return rho0*rc*rc*rc*((r+rc)**(-2))*(r**-1)
     
     @property
     def rangehint(self):
         return self.rc/1000,1000*self.rc
+    
+    def toAlphaBetaGamma(self):
+        """
+        returns a new :class:`AlphaBetaGammaModel` based on this model's
+        parameters.
+        """
+        mod = AlphaBetaGammaModel(A=self.rho0,rs=self.rc,alpha=1,beta=3,gamma=1)
+        if self.data is None:
+            mod.data = None
+        else:
+            mod.data = (self.data[0].copy(),
+                        self.data[1].copy(),
+                        None if self.data[2] is None else self.data[2].copy())
+        return mod
     
     def integrateSpherical(self,lower,upper,*args,**kwargs):
         """
@@ -1408,12 +1425,62 @@ class AlphaBetaGammaModel(FunctionModel1DAuto):
     alpha controls the transition region.
     """
     
-    def f(self,r,rs=1,A=1,alpha=1,beta=1,gamma=1):
-        return A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha)
+    def f(self,r,rs=1,A=1,alpha=1,beta=2,gamma=1):
+        ro = r/rs
+        return A*(ro)**-gamma*(1+(ro)**alpha)**((gamma-beta)/alpha)
     
     @property
     def rangehint(self):
         return self.rs/1000,1000*self.rs
+    
+    def toLogAlphaBetaGamma(self,base=10):
+        """
+        generates a new :class:`LogAlphaBetaGammaModel` object based on this
+        object's parameter values with the specified base for the logarithm
+        """
+        logb = np.log(base)
+        
+        C = np.log(self.A)/logb
+        xs = np.log(self.rs)/logb
+        
+        mod = LogAlphaBetaGammaModel(C=C,xs=xs,alpha=alpha,beta=beta,gamma=gamma,base=base)
+        xd = np.log(self.fitData[0])/logb
+        yd = np.log(self.fitData[1])/logb
+        ws = None if self.fitData[2] is None else self.fitData[2].copy()
+        mod.fitData = (xd,yd,ws)
+        return mod
+    
+class LogAlphaBetaGammaModel(FunctionModel1DAuto):
+    """
+    This is a model of the same form as the :class:`AlphaBetaGammaModel`, but
+    with logarithmic axes. e.g. LogAlphaBetaGammaModel(x) =
+    log_base(AlphaBetaGammaModel(r)), where x = log_base(r). Similarly, xs =
+    log_base(rs) and C = log_base(A)
+    """
+    
+    fixedpars = ('b',)
+    
+    def f(self,x,xs=0,C=0,alpha=1,beta=2,gamma=1,base=10):
+        xo = x - xs
+        return C - gamma*xo + (gamma-beta)/alpha*np.log((1+base**(alpha*xo)))/np.log(base)
+    
+    @property
+    def rangehint(self):
+        return self.xs - 3,self.xs + 3
+    
+    def toAlphaBetaGamma(self):
+        """
+        generates a new :class:`AlphaBetaGammaModel` object based on this
+        object's parameter values
+        """
+        A = self.b**self.C
+        rs = self.b**self.xs
+        mod = AlphaBetaGammaModel(A=A,rs=rs,alpha=alpha,beta=beta,gamma=gamma)
+        xd = self.b**self.fitData[0]
+        yd = self.b**self.fitData[1]
+        ws = None if self.fitData[2] is None else self.fitData[2].copy()
+        mod.fitData = (xd,yd,ws)
+        return mod
 
 class PlummerModel(FunctionModel1DAuto):
     xaxisname = 'r'
