@@ -1,11 +1,31 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains objects and functions for generating catalogs of objects
-where derived quantities are dynamically updated as they are changed.
 
-Fundamentally, this structure is a tree/DAG of FieldNode objects, normally with 
-a Catalog object as the root.
+======
+objcat
+======
+
+The :mod:`objcat` module contains classes and functions for generating catalogs
+of objects. This catalog is unique in that it stores source information and can
+dynamical deriv quantities that are dynamically updated as their sources are
+changed. It also provides mechanisms for safely saving these object catalogss in
+a database, and someday soon will include a web interface to interact with the
+catalog via the internet.
+
+Fundamentally, the catalog should be thought of as a tree in the computer
+science sense, or a directed acyclic graph of :class:`FieldNode` objects.
+Normally, a :class:`Catalog` object acts as the root.
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.objcat
+   :parts: 1
+
+Module API
+----------
+
 """
 
 #TODO: seperate CatalogNode into a class that has children and one that doesnt

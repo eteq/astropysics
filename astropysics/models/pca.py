@@ -1,5 +1,10 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu)
 
+"""
+This module implements a single class :class:`Pca` to perform Principal
+Component Analysis.
+"""
+
 import numpy as np
 from ..constants import pi
 

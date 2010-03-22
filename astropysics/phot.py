@@ -1,9 +1,26 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 """
-This module is for observed or synthetic photometry and 
-related operations.
 
-Tends to be oriented towards optical techniques.
+====
+phot
+====
+
+The :mod:`phot` module contains classes and funtions for photometry or other
+image-based flux measurements.
+
+
+.. todo:: examples/tutorials
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.phot
+   :parts: 1
+
+Module API
+----------
+
 """
 
 #TODO: c-based kcorrect

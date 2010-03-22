@@ -1,10 +1,25 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains functions and classes of various specialized plot types 
-used in astropysics
 
-2D plots depend on matplotlib, 3D plots depend on MayaVI
+========
+plotting
+========
+
+The :mod:`plotting` module contains classes and funtions to aid in making plots
+useful for astrophysics.
+
+The 2D plots in this module all use the matplotlib_ package, while 3d plots are
+a mix of matplotlib_ and mayavi_ .
+
+.. _matplotlib: http://matplotlib.sourceforge.net/
+.. _mayavi: http://code.enthought.com/projects/mayavi/
+
+.. todo:: examples
+
+Module API
+----------
+
 """
 
 from __future__ import division,with_statement

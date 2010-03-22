@@ -1,16 +1,34 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module stores tools for oberving (pre- and post-) as well as functioning as
-a module for various corrections and calculations that don't have a better place
-to live.
 
-The focus is currently on optical astronomy, as that is what the primary author
-does.
+========
+obstools
+========
+
+The :mod:`obstools` module stores tools for oberving (pre- and post-) as well as
+functioning as a module for various corrections and simple calculations that
+don't have a better place to live.
+
+Most implementations are for optical astronomy, as that is what the primary
+author does.
 
 Note that some of these functions require the
-:mod:`dateutil<http://pypi.python.org/pypi/python-dateutil>` package (it is
+:mod:`dateutil <http://pypi.python.org/pypi/python-dateutil>` package (it is
 included with matplotlib)
+
+.. todo:: examples/tutorials
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.obstools
+   :parts: 1
+
+Module API
+----------
+
 """
 #TODO: exposure time calculator (maybe in phot instead?)
 #TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
@@ -1527,15 +1545,6 @@ class Site(object):
         finally:
             plt.interactive(inter)
         
-        
-        
-class Observatory(Site):
-    """
-    Represents an observatory/Telescope with associated information such as
-    platform limits or extinction measurements
-    """
-    
-
 
 def __loadobsdb(sitereg):
     from .io import _get_package_data
@@ -2241,3 +2250,4 @@ def extinction_from_flux_ratio(frobs,frexpect,outlambda=None,Rv=3.1,tol=1e-4):
     else:
         return EBmV
     
+

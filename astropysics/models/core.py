@@ -1,9 +1,20 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module holds the core (mostly abstract) classes for the data model 
-framework used in astropysics, seperated from the specific models found in the 
-:mod:`builtins` module.  
+This module holds the (mostly abstract) classes for the data modeling framework
+used in astropysics, seperated from the implementations of specific models found
+in the :mod:`builtins` module.
+
+
+Classes and Inheritance Structure
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. inheritance-diagram:: astropysics.models.core
+   :parts: 1
+   
+Module API
+^^^^^^^^^^
+
 """
 
 #TODO: refactor so that FunctionModels that interpolate over data have a common superclass, then add linear interpolator, polynomial interpolator

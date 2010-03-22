@@ -1,10 +1,28 @@
 #Copyright (c)2008 Erik Tollerud (etolleru@uci.edu) 
 """
-This module is for observed or synthetic spectra (Spectrum object) and 
-related operations.
 
-Methods/functions tend to be oriented towards optical, but will work in other
-bands.
+====
+spec
+====
+
+The :mod:`spec` module contains classes and funtions focused on plotting and
+analysis of arbitrary spectra and SEDs, as well as related utility functions.
+
+Defaults tend to be oriented towards optical, but everything should still be
+valid in other bands.
+
+.. todo:: examples/tutorials
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.spec
+   :parts: 1
+
+Module API
+----------
+
 """
 
 #TODO: RV corrections for heliocentric and LSR 

@@ -1,8 +1,18 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains builtin function models following the framework of the
-:mod:`core` module
+This module contains builtin function models that use the framework of the
+:mod:`core` module.
+
+Classes and Inheritance Structure
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. inheritance-diagram:: astropysics.models.builtins
+   :parts: 1
+   
+Module API
+^^^^^^^^^^
+
 """
 
 from __future__ import division,with_statement
@@ -2044,4 +2054,6 @@ for o in locals().values():
     if isclass(o) and not o.__name__.startswith('_') and issubclass(o,ParametricModel):
         if 'FunctionModel' not in o.__name__ and 'CompositeModel' not in o.__name__:
             register_model(o)
-del isclass
+            
+#cleanup namespace
+del isclass,o

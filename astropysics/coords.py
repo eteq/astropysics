@@ -1,12 +1,42 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains objects and functions for specifying locations as well as
-calculating distances and similar tools.
+
+======
+coords
+======
+
+The :mod:`coords` module contains classes and funtions specifying locations of
+objects on the sky as well as coordinate converstions and distance computations.
 
 Some of the calculations involved make use of the currently selected cosmology
 (see :mod:`astropysics.constants`) and hence may not function as expected if a
 particularly strange cosmology is in use.
+
+.. seealso::
+
+   `Kapteyn libraries <http://www.astro.rug.nl/software/kapteyn/index.html>`_
+        A set of python libraries with excellent coordinate transform and other
+        capabilities.
+        
+   `Pyephem <http://rhodesmill.org/pyephem/>`_
+        A Pythonic implementation of the 
+        `xephem <http://www.clearskyinstitute.com/xephem/>`_ ephemerides 
+        algorithms. 
+        
+   `Meeus, Jean H. "Astronomical Algorithms" ISBN  0943396352 <http://www.willbell.com/MATH/mc1.htm>`_
+        The authoritative reference on coordinates, ephemerides, and related transforms in astronomy
+
+.. todo:: examples
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.coords
+   :parts: 1
+
+Module API
+----------
 
 """
 

@@ -1,10 +1,27 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains various astropysics or python-related utility
-functions that have no obvious place in some other module, as well
-as a variety of general-purpose algorithms that are not particular
-to a module.
+
+=====
+utils
+=====
+
+The ``utils`` module contains classes and funtions of general utility used in
+multiple places throughout `astropysics`. Some of these are
+astropyhysics-specific algorithms while others are more python tricks.
+
+.. todo:: examples/tutorials
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.utils
+   :parts: 1
+
+Module API
+----------
+
 """
 
 #TODO: implement generalized grid-inverter, possibly tied to modcore.modelgrid1d

@@ -1,8 +1,27 @@
 #Copyright (c) 2009 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains functions and classes for various forms of data/file
-input and output As well as library retrieval for built-in data.
+
+==
+io
+==
+
+The ``io`` module contains classes and functions for loading and saving data in
+various relevant formats used in astronomy, as well as convinience functions
+retrieval for built-in data.
+
+.. todo:: examples
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.io
+   :parts: 1
+
+Module API
+----------
+
 """
 
 from __future__ import division,with_statement

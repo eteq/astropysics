@@ -1,10 +1,34 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
-"""
-This module stores physical constants and conversion factors for the astropysics
-package.
 
-Some of the package-level variables are generated from the currently selected
-Cosmology (see Cosmology object and choose_cosmology function for details)
+"""
+
+=========
+constants
+=========
+
+The :mod:`constants` module contains attributes storing physical constants and
+conversion factors. Most of these are at the package level and should be
+imported as::
+
+    from astropysics.constants import c,G
+
+It also includes classes representing various cosmologies that are used to
+derive relevant cosmological parameters. The current default is the
+:class:`WMAP7Cosmology`, based on the LCDM cosmology with parameters favored by
+`WMAP7 <http://lambda.gsfc.nasa.gov/product/map/dr4/parameters.cfm>`_
+
+.. todo:: examples
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.constants
+   :parts: 1
+
+Module API
+----------
+
 """
 
 from __future__ import division,with_statement
@@ -13,7 +37,6 @@ import numpy as np
 
 #<--------------------------------Constants------------------------------------>
 #all in cgs including gaussian esu for charge
-prop=property(lambda:5)
 unit_system='cgs'
 
 G = 6.673e-8 #gravitational constant

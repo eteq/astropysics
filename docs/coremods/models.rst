@@ -1,43 +1,5 @@
-
-Models
-======
-
-The ``models`` module contains classes and funtions for modeling of data sets using an array of techniques.
-
-.. todo:: examples and monkeys
-
-
-API
----
-
-This documentation is generated directly from the source code and defines the usage of all classes and functions in this module (although it may be a bit austere).
-
-Classes and Inheritance Structure
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-:mod:`astropysics.models.core`
-
-.. inheritance-diagram:: astropysics.models.core
-   :parts: 1
    
-:mod:`astropysics.models.builtins`
-   
-.. inheritance-diagram:: astropysics.models.builtins
-   :parts: 1
-
-Module API
-^^^^^^^^^^
-
-The :mod:`astropysics.models` package is composed of two submodules that are both imported into the main module.  The first, :mod:`astropysics.models.core` contains the classes and functions that structure and do most of the work of the models.  The second, :mod:`astropysics.models.builtins` contains a large, default set of models, as well as a model registry to store these models.
-
-.. automodule:: astropysics.models.core
+.. automodule:: astropysics.models
    :members:
    :undoc-members:
    :show-inheritance:
-   
-.. automodule:: astropysics.models.builtins
-   :members:
-   :undoc-members:
-   :show-inheritance:
-   
-.. todomodule:: astropysics.models

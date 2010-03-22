@@ -9,13 +9,13 @@ The modules forming the core of astropysics' functionality are documented below.
    
    
    constants
-   io
-   ccd
-   phot
-   plotting
    objcat
-   models
-   utils
-   spec
    obstools
    coords
+   phot
+   spec
+   models
+   plotting
+   io
+   ccd
+   utils

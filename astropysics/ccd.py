@@ -1,11 +1,30 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
 """
-This module contains objects and functions for viewing and/or reducing CCD 
-images.
 
-This package deals mostly with the raw CCD images themselves - for science tools
-see the phot and spec packages.
+===
+ccd
+===
+
+The :mod:`ccd` module contains classes and functions for processing CCD images
+or similar.
+
+Detailed analysis tools are in :mod:`phot` and :mod:`spec` -- this module is
+mainly for low-level operations like direct viewing of images, calibrations, and
+similar.
+
+.. todo:: examples
+
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.ccd
+   :parts: 1
+
+Module API
+----------
+
 """
 
 #TODO: ccd image viewing gui
