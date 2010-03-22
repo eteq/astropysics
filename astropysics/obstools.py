@@ -12,10 +12,10 @@ Note that some of these functions require the
 :mod:`dateutil<http://pypi.python.org/pypi/python-dateutil>` package (it is
 included with matplotlib)
 """
-#TODO: add info to Observatory class, particularly atmospheric extinction
 #TODO: exposure time calculator (maybe in phot instead?)
 #TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
 #TODO: return Pipeline support to Extinction 
+#TODO: Instruments and telescopes for sites
 
 from __future__ import division,with_statement
 from .constants import pi
@@ -631,7 +631,9 @@ class Site(object):
         d0 = jd0 - 2451545.0
         t = d/36525
         
-        gmst = 6.697374558 + 0.06570982441908*d0 + 1.00273790935*h + 0.000026*t**2
+        #mean sidereal time @ greenwich
+        gmst = 6.697374558 + 0.06570982441908*d0 + 0.000026*t**2 + 1.00273790935*h
+               #- 1.72e-9*t**3 #left off as precision to t^3 is unneeded
        
         if apparent:
             eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
@@ -1517,7 +1519,7 @@ def __loadobsdb(sitereg):
         k,v = [ss.strip() for ss in l.split('=')]
         if k == 'observatory':
             if obs is not None:
-                o = Observatory(lat,long,alt,tz,name)
+                o = Site(lat,long,alt,tz,name)
                 sitereg[obs] = o
             obs = v.replace('"','')
             name = long = lat = alt = tz = None
@@ -1545,13 +1547,13 @@ def __loadobsdb(sitereg):
             #time zones are also flipped
             tz = -1*float(v)
     if obs is not None:
-        o = Observatory(lat,long,alt,tz,name)
+        o = Site(lat,long,alt,tz,name)
         sitereg[obs] = o
 
 
 sites = DataObjectRegistry('sites',Site)
-sites['uciobs'] = Observatory(33.63614044191056,-117.83079922199249,80,'PST','UC Irvine Observatory')
-sites['greenwich'] = Observatory('51d28m38s',0,7,0,'Royal Observatory,Greenwich')
+sites['uciobs'] = Site(33.63614044191056,-117.83079922199249,80,'PST','UC Irvine Observatory')
+sites['greenwich'] = Site('51d28m38s',0,7,0,'Royal Observatory,Greenwich')
 __loadobsdb(sites)
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 
