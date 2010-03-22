@@ -218,7 +218,7 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
     * a sequence (yr,month,day,[hr,min,sec]). 
     * a sequence as above with one or more elements a sequence; a sequence will
       be returned.
-    * a :class:`datetime.datetime` or :class:`datetime.date`object 
+    * a :class:`datetime.datetime` or :class:`datetime.date` object 
     * a sequence of such objects; a sequence will be returned.
     
     If datetime objects are given, and `tz` is None, values are converted to

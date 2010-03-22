@@ -1044,7 +1044,7 @@ class EphemerisObject(object):
     An object that can be used to generate positions on the sky for a given 
     date and time as dictated by the :attr:`jd` attribute.
     
-    :method:`equatorialPosition` must be overridden.
+    :meth:`equatorialPosition` must be overridden.
     """
     
     __metaclass__ = ABCMeta
@@ -1187,7 +1187,7 @@ class SolarSystemObject(EphemerisObject):
     A :class:`EphemerisObject` that can be interpreted as an object in the Solar
     System.  
     
-    :method:`cartesianCoordinates` must be overridden in subclasses.
+    :meth:`cartesianCoordinates` must be overridden in subclasses.
     """
     
     def _obliquity(self,jd):
