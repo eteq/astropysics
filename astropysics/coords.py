@@ -150,6 +150,8 @@ class AngularCoordinate(object):
                     self.degrees = val
                 elif mark1 == 'radians' or mark1 == 'rad' or mark1 == 'rads' or mark1=='r':
                     self.radians = val
+                else:
+                    raise ValueError('invalid or ambiguous string input for AngularCoordinate')
             else:
                 decm = self.__decregex.match(sinpt)
                 if decm:
