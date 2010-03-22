@@ -16,37 +16,38 @@ import numpy as np
 prop=property(lambda:5)
 unit_system='cgs'
 
-G=6.673e-8
-mp=1.67262171e-24
-me=9.1093897e-28
-e=4.8032068e-10
-Ms=1.9891e33
-Mj=1.8986e30
-Me=5.9742e27
-Rs=6.96e10
-Rj=7.1492e9
-Re=6.371e8
-Lsun=3.839e33
-De=1.49597887e13
-kb=1.3807e-16 
-#sigma=5.6704e-5
-c=2.99792458e10 #exact
-h=6.626068E-27
+G = 6.673e-8 #gravitational constant
+mp = 1.67262171e-24 #proton mass
+me = 9.1093897e-28 #electron mass
+e = 4.8032068e-10 #electron charge
+Ms = 1.9891e33 #solar mass
+Mj = 1.8986e30 #jupiter mass
+Me = 5.9742e27 #earth mass
+Rs = 6.96e10 #solar radius
+Rj = 7.1492e9 #jupiter radius
+Re = 6.371e8 #earth radius
+Lsun = 3.839e33 #solar luminosity
+kb = 1.3807e-16 #boltzmann's constant
+Rb = 8.314472e7 #gas constant
+c = 2.99792458e10 #speed of light - exact
+h = 6.626068E-27 #planck's constant
+hbar = h/2/pi
+g0 = 980.665 #mean earth gravitational acceleration at sea level
 
 #<-------------------------------Conversions----------------------------------->
-ergperev=1.60217646e-12
-secperday=86400 #IAU standard
-secperyr=365.25*secperday#3.15576926e7
-secpergyr=secperyr*1e9
-cmperpc=3.08568025e18
-pcpercm=1.0/cmperpc
-lyperpc=3.26
-pcperly=1.0/lyperpc
-cmperau=1.49598e13
-aupercm=1.0/cmperau
+ergperev = 1.60217646e-12
+secperday = 86400 #IAU standard
+secperyr = 365.25*secperday#3.15576926e7
+secpergyr = secperyr*1e9
+cmperpc = 3.08568025e18
+pcpercm = 1.0/cmperpc
+lyperpc = 3.26
+pcperly = 1.0/lyperpc
+cmperau = 1.49597887e13
+aupercm = 1.0/cmperau
 
 
-#TODO:rethink flux units and adapt to BlackbodyModel
+#TODO:remove this once these are no longer in use in favor of spec.HasSpectrumUnits?
 def flambda_to_fnu_l(flambda,lamb):
     return flambda*lamb*lamb/c
 

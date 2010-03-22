@@ -848,13 +848,13 @@ class Site(object):
             else:
                 return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
             
-    def riseSetTransit(self,eqpos,date=None,alt=0,timeobj=False,utc=False):
+    def riseSetTransit(self,eqpos,date=None,alt=-.5667,timeobj=False,utc=False):
         """
         Computes the rise, set, and transit times of a provided equatorial 
         position in local time.  
         
         `alt` determines the altitude to be considered as risen or set in 
-        degrees
+        degrees. Default is for approximate rise/set including refraction.
         
         `date` determines the date at which to do the computation. See
         :func:`calendar_to_jd` for acceptable formats
@@ -909,7 +909,7 @@ class Site(object):
             return rise,set,transit
         
         
-    def apparentPosition(self,coords,datetime=None,precess=True):
+    def apparentPosition(self,coords,datetime=None,precess=True,refraction=True):
         """
         computes the positions in horizontal coordinates of an object with the 
         provided fixed coordinates at the requested time(s).
@@ -919,7 +919,13 @@ class Site(object):
         the value of the :attr:`currentobsjd` property.
         
         If `precess` is True, the position will be precessed to the epoch of 
-        the observation
+        the observation (almost always the right thing to do)
+        
+        If `refraction` is True, an added correction to the altitude due to
+        atmospheric refraction at STP (formula from Meeus ch 16) is included. If
+        `refraction` is a (non-0) float, it will be taken as the temperature at
+        which to perform the refraction calculation. If it evaluates to False,
+        no refraction correction is performed
         
         
         *returns*
@@ -939,9 +945,34 @@ class Site(object):
         lsts = self.localSiderialTime(jd)
         
         if precess:
-            return self.equatorialToHorizontal(coords,lsts,epoch=jd_to_epoch(jd[0]))
+            res = self.equatorialToHorizontal(coords,lsts,epoch=jd_to_epoch(jd[0]))
         else:
-            return self.equatorialToHorizontal(coords,lsts)
+            res = self.equatorialToHorizontal(coords,lsts)
+            
+        if refraction:
+            from math import tan,radians
+            if not hasattr(self,'_cached_pressure') or self._cached_pressure is None:
+                from math import exp
+                from.constants import g0,Rb
+                t0 = 273 #K
+                M = 28.9644 #g/mol
+                self._cached_pressure = P = exp(g0*M*self.altitude/(Rb*t0))
+            else:
+                P = self._cached_pressure
+                
+            if refraction is True:
+                T = 273
+            else:
+                T  = float(refraction)
+            
+            h = res.alt.radians
+            R = 1.02/tan(h+(10.3/(h+5.11))) #additive correction in arcmin
+            #for inverse problem of apparent h->true/airless h, use:
+            #R = 1/tan(h0+(7.31/(h0+4.4)))
+            
+            res.alt._decval += radians(R/60.)
+        
+        return res
         
     def _processDate(self,date):
         """
