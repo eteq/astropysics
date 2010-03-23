@@ -318,7 +318,7 @@ class CatalogNode(object):
             self._children = []
           
         try:
-            fpickle(file,self,**kwargs)
+            fpickle(self,file,**kwargs)
         finally:
             self._parent = oldpar
             self._children = oldchildren
@@ -504,12 +504,15 @@ class FieldNode(CatalogNode,Sequence):
         iserr = issrc = False
         if key not in self._fieldnames:
             try:
-                if key.endswith('_src'):
-                    key = key[:-4]
-                    issrc = True
-                elif key.endswith('_err'):
-                    key = key[:-4]
-                    iserr = True
+                if isinstance(key,basestring):
+                    if key.endswith('_src'):
+                        key = key[:-4]
+                        issrc = True
+                    elif key.endswith('_err'):
+                        key = key[:-4]
+                        iserr = True
+                    else:
+                        raise IndexError
                 else:
                     key = self._fieldnames[key]
             except (IndexError,TypeError):
