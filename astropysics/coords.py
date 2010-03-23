@@ -497,10 +497,9 @@ class AngularSeperation(AngularCoordinate):
     
     A constructor is available, but the most natural way to generate this object
     is to use the subtraction (-) operator on two :class:`AngularCoordinate`
-    objects.
+    objects or two :class:`LatLongPosition` objects.
     """
     
-    __slots__ = ('start',)
     def __init__(self,*args):
         """
         Input arguments can be either:
@@ -519,22 +518,18 @@ class AngularSeperation(AngularCoordinate):
             if a.__class__ == self.__class__:
                 self._decval = args[0]._decval
                 self._range = args[0]._range
-                self.start = args[0].start
                 return
             
             sep = a._decval if hasattr(a,'_decval') else a
-            start = None
         elif len(args) == 2:
             a0,a1 = args
             a0 = a0._decval if hasattr(a0,'_decval') else a0
             a1 = a1._decval if hasattr(a1,'_decval') else a1
             sep = a1 - a0
-            start = a0
         else:
             raise ValueError('inproper number of inputs to AngularSeperation')
         
         super(AngularSeperation,self).__init__(sep)
-        self.start = start
         
     def __add__(self,other):
         if isinstance(other,AngularCoordinate) and not self.__class__ == other.__class__:
@@ -696,15 +691,38 @@ class LatLongPosition(object):
     
     def __sub__(self,other):        
         if isinstance(other,self.__class__):
-            from math import cos,degrees
-            dcorrlong = self._long.radians * cos(self._lat.radians) \
-                 - other._long.radians * cos(other._lat.radians)
-            dlat = self._lat.radians-other._lat.radians
-            sep = AngularSeperation(degrees((dlat*dlat+dcorrlong*dcorrlong)**0.5))
-            sep.start = other
-            return sep
+            from math import cos,degrees,acos,asin,sin
+            
+            b1 = self._lat.radians
+            b2 = other._lat.radians
+            db = b2 - b1
+            dl = other._long.radians - self._long.radians
+            
+            #haversin(theta) = (1-cos(theta))/2
+            havsep = (1-cos(db))/2 + cos(b1)*cos(b2)*(1-cos(dl))/2
+            
+            #now get best numerical accuracy by using the identity 
+            #haversin(theta) = sin^2(theta/2) if the angle is near 0 or pi
+            
+            if 0.25 < havsep <= 0.75:
+                sep = acos(1 - 2*havsep)
+            else:
+                sep = 2*asin(havsep**0.5)
+                
+            #straightforward definition without the numerical tweaks - seems to 
+            #do fine anyway, so may want to switch to this for performance
+            #sep = acos(sin(b1)*sin(b2)+cos(b1)*cos(b2)*cos(dl))
+            
+            return AngularSeperation(degrees(sep))
+            
+            #small angle version
+#            dcorrlong = self._long.radians * cos(self._lat.radians) \
+#                 - other._long.radians * cos(other._lat.radians)
+#            dlat = self._lat.radians-other._lat.radians
+#            sep = AngularSeperation(degrees((dlat*dlat+dcorrlong*dcorrlong)**0.5))
+#            return sep
         else:
-            raise "unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__)
+            raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
         
     def transform(self,matrix,apply=True,unitarycheck=False):
         """
