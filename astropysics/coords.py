@@ -527,7 +527,7 @@ class AngularSeperation(AngularCoordinate):
             a1 = a1._decval if hasattr(a1,'_decval') else a1
             sep = a1 - a0
         else:
-            raise ValueError('inproper number of inputs to AngularSeperation')
+            raise ValueError('improper number of inputs to AngularSeperation')
         
         super(AngularSeperation,self).__init__(sep)
         
@@ -557,10 +557,36 @@ class AngularSeperation(AngularCoordinate):
         computes the physical projected seperation assuming a given distance.
         This method assumes small-angle approximation.
         
-        if `usez` is True, the input will be interpreted as a redshift, and
-        kwargs will be passed into the distance calculation.
+        If `usez` is True, the input will be interpreted as a redshift, and
+        kwargs will be passed into the distance calculation. The result will 
+        be in pc.  Otherwise, `zord1` and `zord2` will be interpreted as
+        distances.
         """
         return angular_to_physical_size(self.arcsec,zord,usez=usez,**kwargs)
+    
+    def seperation3d(self,zord1,zord2,usez=False,**kwargs):
+        """
+        computes the 3d seperation assuming the two objects at the ends of this
+        objects are at the distances `zord1` and `zord2`.  
+        
+        If `usez` is True, the input will be interpreted as a redshift, and
+        kwargs will be passed into the distance calculation. The result will 
+        be in pc.  Otherwise, `zord1` and `zord2` will be interpreted as
+        distances.
+        """
+        from math import sin,cos,sqrt
+        
+        if usez:
+            d1 = cosmo_z_to_dist(zord1,disttype=2,**kwargs)*1e6 #pc
+            d2 = cosmo_z_to_dist(zord1,disttype=2,**kwargs)*1e6 #pc
+        else:
+            if len(kwargs)>0:
+                raise TypeError('if not using redshift, kwargs should not be provided')
+            d1 = zord1
+            d2 = zord2
+    
+        costerm = 2*d1*d2*cos(self._decval)
+        return sqrt(d1*d1+d2*d2-costerm)
 
 class _LatLongMeta(type):
     def __init__(cls,name,bases,dct):
@@ -695,22 +721,23 @@ class LatLongPosition(object):
             
             b1 = self._lat.radians
             b2 = other._lat.radians
-            db = b2 - b1
-            dl = other._long.radians - self._long.radians
+            db = abs(b2 - b1)
+            dl = abs(other._long.radians - self._long.radians)
             
-            #haversin(theta) = (1-cos(theta))/2
-            havsep = (1-cos(db))/2 + cos(b1)*cos(b2)*(1-cos(dl))/2
+            #haversin(theta) = (1-cos(theta))/2 = sin^2(theta/2)
+            #has better numerical accuracy if sin for theta ~ 0, cos ~ pi/2
+            haversin = lambda t:(1-cos(t))/2 if pi/4 < (t%pi) < 3*pi/4 else sin(t/2)**2
             
-            #now get best numerical accuracy by using the identity 
-            #haversin(theta) = sin^2(theta/2) if the angle is near 0 or pi
+            hdb = haversin(db)
+            hdl = haversin(dl)
             
-            if 0.25 < havsep <= 0.75:
-                sep = acos(1 - 2*havsep)
-            else:
-                sep = 2*asin(havsep**0.5)
+            havsep = hdb + cos(b1)*cos(b2)*hdl
+            #archaversin
+            sep = acos(1 - 2*havsep) if 0.25 < havsep <= 0.75 else 2*asin(havsep**0.5)
                 
-            #straightforward definition without the numerical tweaks - seems to 
-            #do fine anyway, so may want to switch to this for performance
+            #straightforward definition without the tweaks using haversin - this
+            #is in principal faster, but in practice it ends up beeing about
+            #10% faster due to the other overhead
             #sep = acos(sin(b1)*sin(b2)+cos(b1)*cos(b2)*cos(dl))
             
             return AngularSeperation(degrees(sep))
@@ -2008,26 +2035,32 @@ def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
         sep = np.degrees(sep)
     return sep
 
-def seperation3d(d1,d2,pos1,pos2):
+def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     """
-    Compute the full 3d seperation between two objects at distances `d1` and 
-    `d2` and angular positions `pos1` and `pos2` (LatLongPositions, or an
-    argument to initialize a new EquatorialPosition)
-    """
-    from numpy import sin,cos
+    Compute the full 3D seperation between two objects at distances `d1` and
+    `d2` and angular positions `pos1` and `pos2` (:class:`LatLongPosition`
+    objects, or an argument that will be used to generate a
+    :class:`EquatorialPosition` object)
+    
+    .. testsetup::
+    
+        from astropysics.coords import sky_sep_to_3d_sep
+    
+    .. doctest::
+        >>> p1 = LatLongPosition(0,0)
+        >>> p2 = LatLongPosition(0,10)
+        >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
+        '6.3397355613'
+        >>> '%.10f'%sky_sep_to_3d_sep('0h0m0s +0:0:0','10:20:30 +0:0:0',1,2)
+        '2.9375007333'
+        
+    """    
     if not isinstance(pos1,LatLongPosition):
-        pos1=EquatorialPosition(pos1)
+        pos1 = EquatorialPosition(pos1)
     if not isinstance(pos2,LatLongPosition):
-        pos2=EquatorialPosition(pos2)
-    
-    theta1,phi1=(pi/2-pos1.lat.radians,pos1.long.radians)
-    theta2,phi2=(pi/2-pos2.lat.radians,pos2.long.radians)
-    
-    dx=d2*sin(theta2)*cos(phi2)-d1*sin(theta1)*cos(phi1)
-    dy=d2*sin(theta2)*sin(phi2)-d1*sin(theta1)*sin(phi1)
-    dz=d2*cos(theta2)-d1*cos(theta1)
-    
-    return (dx*dx+dy*dy+dz*dz)**0.5
+        pos2 = EquatorialPosition(pos2)
+        
+    return (pos1-pos2).seperation3d(d1,d2)
 
 def radec_str_to_decimal(ra,dec):
     if isinstance(ra,basestring):
