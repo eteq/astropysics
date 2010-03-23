@@ -501,9 +501,9 @@ class FieldNode(CatalogNode,Sequence):
         return key in self._fieldnames
         
     def __getitem__(self,key):
+        iserr = issrc = False
         if key not in self._fieldnames:
             try:
-                iserr = issrc = False
                 if key.endswith('_src'):
                     key = key[:-4]
                     issrc = True
