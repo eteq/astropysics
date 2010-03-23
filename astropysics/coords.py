@@ -46,16 +46,27 @@ Module API
 #useful references:
 #http://www.astro.rug.nl/software/kapteyn/index.html
 #"Astronomical Algorithms" by Jean Meeus 
-
 from __future__ import division,with_statement
-from abc import ABCMeta,abstractmethod
 
 from .constants import pi
 from .utils import DataObjectRegistry
-
 import numpy as np
-
 _twopi = 2*pi
+
+try:
+    #requires Python 2.6
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
+    from collections import Sequence,MutableSequence
+except ImportError: #support for earlier versions
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
+    class MutableSequence(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
+    class Sequence(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
 
 #<----------------coordinate classes and related functions------------------>
 
