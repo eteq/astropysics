@@ -53,6 +53,7 @@ except ImportError: #support for earlier versions
         __slots__=('__weakref__',) #support for weakrefs as necessary
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
+
         
 class CycleError(Exception):
     """
@@ -352,19 +353,23 @@ def save(node,file,savechildren=True):
     return node.save(file,savechildren)
 load = CatalogNode.load
 
-class BarrenNode(object):
+class ActionNode(object):
     """
-    This object is the superclass for all elements/nodes of a catalog that have
-    a parent but no children.  Typically reserved for nodes that are associated
-    with a particular type of node but do not have to be present (e.g. 
-    visualization or factory for constructing pipelines)
+    This object is the superclass for nodes of a catalog that perform an action
+    but do not store data and hence are not a part of the :class:`CatalogNode`
+    heirarchy. Thus, they have a parent, but no children.
     
-    Subclasses must call super(Subclass,self).__init__(parent,[name]) in their __init__
+    This class is typically used for nodes that are associated with a
+    :class:`Catalog` objects, as most other :class:`CatalogNode` objects cannot 
+    store an :class:`ActionNode`. 
+    
+    Subclasses must call ``super(Subclass,self).__init__(parent,[name])`` in
+    their :meth:`__init__` and override the :meth:`__call__` method.
     """
     
     __metaclass__ = ABCMeta
     
-    def __init__(self,parent,name='default barren node'):
+    def __init__(self,parent,name='default action node'):
         self._parent = None
         
         if parent is not None:
@@ -376,12 +381,17 @@ class BarrenNode(object):
         return self._parent 
     def _setParent(self,val):            
         if self._parent is not None:
-            self._parent._barrenchildren.remove(self)
-        if not hasattr(val,'barrenchildren'):
-            raise AttributeError('Attempted to assign to parent that does not support info children')
-        val._barrenchildren.append(self)
+            self._parent._actchildren.remove(self)
+        if not hasattr(val,'_actchildren'):
+            raise AttributeError('Attempted to assign to parent that does not support action nodes')
+        val._actchildren.append(self)
         self._parent = val
     parent=property(_getParent,_setParent)
+    
+    @abstractmethod
+    def __call__(self,*args,**kwargs):
+        raise NotImplementedError
+        
     
 class FieldNode(CatalogNode,Sequence):
     """
@@ -649,7 +659,7 @@ class FieldNode(CatalogNode,Sequence):
         else: #assume iterable
             vals = []
             for n in node:
-                vals.extend(setToSourceAtNode(n,src,missing,traversal,siblings))
+                vals.extend(FieldNode.setToSourceAtNode(n,src,missing,traversal,siblings))
             return vals
         
     def setToSourceAtSelf(self,*args,**kwargs):
@@ -659,7 +669,7 @@ class FieldNode(CatalogNode,Sequence):
         
         see :meth:`FieldNode.setToSourceAtNode` for details
         """
-        return setToSourceAtNode(self,*args,**kwarg)
+        return FieldNode.setToSourceAtNode(self,*args,**kwargs)
         
         
     def getFieldValueNodes(self,fieldname,value):
@@ -1744,7 +1754,7 @@ class Source(object):
         if adscode is None:
             Source._adsxmlcache.clear()
         else:
-            del Source._adsxmlcache[abscode]
+            del Source._adsxmlcache[adscode]
     
     @staticmethod
     def useADSCache(enable=True):
@@ -2468,7 +2478,7 @@ class Catalog(CatalogNode):
     def __init__(self,name='default Catalog',parent=None):
         super(Catalog,self).__init__(parent)
         self.name = name
-        self._barrenchildren = []
+        self._actchildren = []
         
     def __str__(self):
         return 'Catalog %s'%self.name  
@@ -2491,8 +2501,8 @@ class Catalog(CatalogNode):
         return self._parent is None
     
     @property
-    def barrenchildren(self):
-        return tuple(self._barrenchildren)
+    def actionchildren(self):
+        return tuple(self._actchildren)
     
     def mergeNode(self,node,skipdup=False,testfunc=None):
         """
@@ -2559,11 +2569,6 @@ class Catalog(CatalogNode):
         Searches the Catalog and finds all objects with the requested name
         """
         return FieldNode.getFieldValueNodesAtNode(self,'name',name,{'includeself':False})
-    
-class PlotInfoNode(BarrenNode):
-    """
-    A node conveying information about how a catalog should plot its contents.
-    """
     
     
 class _StructuredFieldNodeMeta(ABCMeta):
