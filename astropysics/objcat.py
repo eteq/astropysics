@@ -53,17 +53,6 @@ except ImportError: #support for earlier versions
         __slots__=('__weakref__',) #support for weakrefs as necessary
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
-        
-        
-#if ZODB is not installed, just treat everything as regularly objects and 
-#when the save/load functions are called they will raise ImportErrors 
-try:
-    import ZODB,transaction
-    from persistent import Persistent
-    del ZODB,transaction
-except ImportError:
-    Persistent = object
-Persistent = object
 
         
 class CycleError(Exception):
@@ -91,7 +80,7 @@ class SourceDataError(Exception):
 
 
 #<-------------------------Node/Graph objects and functions-------------------->
-class CatalogNode(Persistent):
+class CatalogNode(object):
     """
     This object is the superclass for all elements/nodes of a catalog with both
     parents and children.  
@@ -334,39 +323,6 @@ class CatalogNode(Persistent):
         finally:
             self._parent = oldpar
             self._children = oldchildren
-            
-    def zsave(self,fn):
-        from ZODB import FileStorage,DB
-        import transaction
-        
-        if not fn.endswith('.zocat'):
-            fn += '.zocat'
-        storage = FileStorage.FileStorage(fn)
-        try:
-            db = DB(storage)
-            connection = db.open()
-            root = connection.root()
-            root['ocat'] = self
-            transaction.commit()
-        finally:
-            storage.close()
-    
-    @staticmethod
-    def zload(fn):
-        from ZODB import FileStorage,DB
-        import transaction
-        
-        if not fn.endswith('.zocat'):
-            raise ValueError('incorrect file type requested')
-        
-        storage = FileStorage.FileStorage(fn)
-        try:
-            db = DB(storage)
-            connection = db.open()
-            root = connection.root()
-            return root['ocat']
-        finally:
-            storage.close()
         
     #this is a staticmethod to keep both save and load methods in the same 
     #place - they are also available at the package level
@@ -397,7 +353,7 @@ def save(node,file,savechildren=True):
     return node.save(file,savechildren)
 load = CatalogNode.load
 
-class ActionNode(Persistent):
+class ActionNode(object):
     """
     This object is the superclass for nodes of a catalog that perform an action
     but do not store data and hence are not a part of the :class:`CatalogNode`
@@ -1046,7 +1002,7 @@ def generate_pydot_graph(node,graphfields=True):
 
 #<----------------------------node attribute types----------------------------->    
  
-class Field(MutableSequence,Persistent):
+class Field(MutableSequence):
     """
     This class represents an attribute/characteristic/property of the
     FieldNode it is associated with.  It stores the current value
@@ -1701,7 +1657,7 @@ class _SourceMeta(type):
             
         return Source._singdict[obj._str]
 
-class Source(Persistent):
+class Source(object):
     """
     A source for an observation/measurement/value.  Note that there is always 
     only one instance if a source at a given time - any two Sources with the
@@ -1924,7 +1880,7 @@ class Source(Persistent):
             type = None
         return kws,type
     
-class FieldValue(Persistent):
+class FieldValue(object):
     """
     Superclass for values that belong to a field.
     """
