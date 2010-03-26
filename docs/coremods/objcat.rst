@@ -3,5 +3,5 @@
    :members:
    :undoc-members:
    :show-inheritance:
-   :exclude-members: EquatorialPosition
+   :exclude-members: EquatorialCoordinates
    

@@ -3084,7 +3084,7 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
 #<--------------------builtin catalog types------------------------------------>
 
 class AstronomicalObject(StructuredFieldNode):
-    from .coords import EquatorialPosition
+    from .coords import EquatorialCoordinates
     
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)

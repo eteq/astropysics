@@ -13,7 +13,10 @@ don't have a better place to live.
 Most implementations are for optical astronomy, as that is what the primary
 author does.
 
-Note that some of these functions require the
+Note that throughout this module it is assumed that UTC == UT1, so if leap
+seconds are abandoned, this will need to be reworked...
+
+Also note that some of these functions require the
 :mod:`dateutil <http://pypi.python.org/pypi/python-dateutil>` package (it is
 included with matplotlib)
 
@@ -39,32 +42,6 @@ from __future__ import division,with_statement
 from .constants import pi
 from .utils import PipelineElement,DataObjectRegistry
 import numpy as np
-
-
-#from .models import FunctionModel1DAuto as _FunctionModel1DAuto
-
-def test_jdc(jd):
-    jdp5= jd + .5
-    
-    Z = int(jd)
-    d = jdp5 - Z
-    if d == 1.0:
-        Z+=1
-        d = 0.0
-    if Z >= 2299161:
-        alpha = int((Z-1867216.25)//36524.25)
-        A = Z + 1 + alpha - alpha//4
-    else:
-        A = Z
-    B = A + 1524
-    C = int((B-122.1)//365.25) 
-    D = int(365.25*C)
-    E = int((B-D)//30.6001)  
-     
-    
-    d = B-D-int(30.6001*E)+d
-    m = E-1 if E<14 else E-13
-    return (C-4716 if m > 2 else C-4715),m,d
 
 def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
@@ -464,6 +441,32 @@ def epoch_to_jd(epoch,julian=True):
     else:
         return (epoch - 1900)*365.242198781 + 2415020.31352
     
+def greenwich_sidereal_time(jd,apparent=True):
+    """
+    Returns the sidereal time at the 0 degrees longitude on a given Julian Date
+    `jd` (or dates if `jd` is an array). If `apparent` is True, the apparent
+    sidereal time is returned, otherwise, it is the mean.
+    """    
+    #algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
+    jd0 = np.round(jd-.5)+.5
+    h = (jd - jd0) * 24.0
+    d = jd - 2451545.0
+    d0 = jd0 - 2451545.0
+    t = d/36525
+    
+    #mean sidereal time @ greenwich
+    gmst = 6.697374558 + 0.06570982441908*d0 + 0.000026*t**2 + 1.00273790935*h
+           #- 1.72e-9*t**3 #left off as precision to t^3 is unneeded
+   
+    if apparent:
+        eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
+        L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
+        omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
+        dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+        return (gmst + dpsi*np.cos(eps))%24.0
+    else:
+        return gmst%24.0 
+    
     
 
 class Site(object):
@@ -642,25 +645,7 @@ class Site(object):
         else:
             raise TypeError('invalid number of input arguments')
         
-        #algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
-        jd0 = np.round(jd-.5)+.5
-        h = (jd - jd0) * 24.0
-        d = jd - 2451545.0
-        d0 = jd0 - 2451545.0
-        t = d/36525
-        
-        #mean sidereal time @ greenwich
-        gmst = 6.697374558 + 0.06570982441908*d0 + 0.000026*t**2 + 1.00273790935*h
-               #- 1.72e-9*t**3 #left off as precision to t^3 is unneeded
-       
-        if apparent:
-            eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
-            L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
-            omega = np.radians(125.04 - 0.052954*d) #longitude ofascending node of moon
-            dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
-            lst = (gmst + dpsi*np.cos(eps) + self._long.d/15)%24.0
-        else:
-            lst = (gmst + self._long.d/15)%24.0 
+        lst = (greenwich_sidereal_time(jd,apparent) + self._long.d/15)%24.0 
         
 #        #from idl astro ct2lst.pro         
 #        jd2000 = 2451545.0
@@ -803,17 +788,17 @@ class Site(object):
         will be used to set the epoch in the equatorial system.
         
         Note that this generally should *not* be used to compute the observed 
-        horizontal coordinates directly - :meth:`apparentPosition` includes all 
+        horizontal coordinates directly - :meth:`apparentCoordinates` includes all 
         the corrections and formatting.  This method is purely for the 
         coordinate conversion.
         """
-        from .coords import EquatorialPosition,HorizontalPosition
+        from .coords import EquatorialCoordinates,HorizontalCoordinates
         
         latitude = self.latitude.d
         
         if epoch is not None:
             #make copy so as not to change the epoch of the input
-            eqpos = EquatorialPosition(eqpos)
+            eqpos = EquatorialCoordinates(eqpos)
             eqpos.epoch = epoch
             
         lsts = np.array(lsts,copy=False)
@@ -857,14 +842,14 @@ class Site(object):
                 
         if singleout:
             if dazs is None:
-                return HorizontalPosition(*np.degrees((alts[0],azs[0])))
+                return HorizontalCoordinates(*np.degrees((alts[0],azs[0])))
             else:
-                return HorizontalPosition(*np.degrees((alts[0],azs[0],dazs[0],dalts[0])))
+                return HorizontalCoordinates(*np.degrees((alts[0],azs[0],dazs[0],dalts[0])))
         else:
             if dazs is None:
-                return [HorizontalPosition(alt,az) for alt,az in np.degrees((alts,azs)).T]
+                return [HorizontalCoordinates(alt,az) for alt,az in np.degrees((alts,azs)).T]
             else:
-                return [HorizontalPosition(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
+                return [HorizontalCoordinates(alt,az,daz,dalt) for alt,az,daz,dalt in np.degrees((alts,azs,dazs,dalts)).T]
             
     def riseSetTransit(self,eqpos,date=None,alt=-.5667,timeobj=False,utc=False):
         """
@@ -927,7 +912,7 @@ class Site(object):
             return rise,set,transit
         
         
-    def apparentPosition(self,coords,datetime=None,precess=True,refraction=True):
+    def apparentCoordinates(self,coords,datetime=None,precess=True,refraction=True):
         """
         computes the positions in horizontal coordinates of an object with the 
         provided fixed coordinates at the requested time(s).
@@ -947,9 +932,9 @@ class Site(object):
         
         
         *returns*
-        a sequence of :class:`astropysics.coords.HorizontalPosition` objects
+        a sequence of :class:`astropysics.coords.HorizontalCoordinates` objects
         """
-        from .coords import HorizontalPosition
+        from .coords import HorizontalCoordinates
         from operator import isSequenceType
         
         if datetime is None:
@@ -1032,8 +1017,8 @@ class Site(object):
         import datetime
         
         #for objects that can get a position with no argument
-        if hasattr(coord,'equatorialPosition'):
-            coord = coord.equatorialPosition()
+        if hasattr(coord,'equatorialCoordinates'):
+            coord = coord.equatorialCoordinates()
         
         if date is None:
             jd = self.currentobsjd
@@ -1063,7 +1048,7 @@ class Site(object):
         timehr = (jds-np.round(np.mean(jds))+.5)*24+utcoffset #UTC hr
         
         
-        alt,az = coords.objects_to_coordinate_arrays(self.apparentPosition(coord,jds,precess=False))
+        alt,az = coords.objects_to_coordinate_arrays(self.apparentCoordinates(coord,jds,precess=False))
         
         z = 90 - alt
         airmass = 1/np.cos(np.radians(z))
@@ -1130,7 +1115,7 @@ class Site(object):
         Generates plots of important observability quantities for the provided
         coordinate objects for a single night.
         
-        `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
+        `coords` should be a :class:`astropysics.coords.LatLongCoordinates`, a
         sequence of such objects, or a dictionary mapping the name of an object
         to the object itself. These names will be used to label the plot.
         
@@ -1165,7 +1150,7 @@ class Site(object):
         """
         import matplotlib.pyplot as plt
         from operator import isMappingType,isSequenceType
-        from .coords import LatLongPosition,Sun,Moon
+        from .coords import LatLongCoordinates,Sun,Moon
         from .plotting import add_mapped_axis
         
         if isMappingType(coords):
@@ -1245,7 +1230,7 @@ class Site(object):
                     plt.legend(loc=0)
                     
                 if sun:
-                    seqp = Sun(ra.sitedate).equatorialPosition()
+                    seqp = Sun(ra.sitedate).equatorialCoordinates()
                     rise,set,t = self.riseSetTransit(seqp,date,0)
                     rise12,set12,t12 = self.riseSetTransit(seqp,date,-12)
                     rise18,set18,t18 = self.riseSetTransit(seqp,date,-18)
@@ -1378,7 +1363,7 @@ class Site(object):
         Plots the location transit and rise/set times of object(s) over ~year
         timescales.
         
-        `coords` should be a :class:`astropysics.coords.LatLongPosition`, a
+        `coords` should be a :class:`astropysics.coords.LatLongCoordinates`, a
         sequence of such objects, or a dictionary mapping the name of an object
         to the object itself. These names will be used to label the plot.
         
@@ -1462,9 +1447,9 @@ class Site(object):
                 rst18 = []
                 for jd in jdsun:
                     sun.jd = jd
-                    rst.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),0,utc=utc))
-                    rst12.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),-12,utc=utc))
-                    rst18.append(self.riseSetTransit(sun.equatorialPosition(),jd_to_calendar(jd),-18,utc=utc))
+                    rst.append(self.riseSetTransit(sun.equatorialCoordinates(),jd_to_calendar(jd),0,utc=utc))
+                    rst12.append(self.riseSetTransit(sun.equatorialCoordinates(),jd_to_calendar(jd),-12,utc=utc))
+                    rst18.append(self.riseSetTransit(sun.equatorialCoordinates(),jd_to_calendar(jd),-18,utc=utc))
                     
                 rise,set,t = np.array(rst).T
                 rise12,set12,t12 = np.array(rst12).T
@@ -1489,7 +1474,7 @@ class Site(object):
                 rst = []
                 for jd in jdmoon:
                     moon.jd = jd
-                    rst.append(self.riseSetTransit(moon.equatorialPosition(),jd_to_calendar(jd),0,utc=utc))
+                    rst.append(self.riseSetTransit(moon.equatorialCoordinates(),jd_to_calendar(jd),0,utc=utc))
                 rise,set,t = np.array(rst).T
                 
                 t[t>cp12] -= 24

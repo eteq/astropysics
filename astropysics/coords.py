@@ -40,12 +40,14 @@ Module API
 
 """
 
-#TODO: WCSlib or similar support - Kapteyn?
+#TODO: WCSlib or similar support a la Kapteyn?
 #TODO: JPL Ephemeris and default ephemeris setting functions
 
 #useful references:
-#http://www.astro.rug.nl/software/kapteyn/index.html
-#"Astronomical Algorithms" by Jean Meeus 
+#*http://www.astro.rug.nl/software/kapteyn/index.html
+#*"Astronomical Algorithms" by Jean Meeus 
+#*"The IAU Resolutions on Astronomical Reference Systems,Time Scales, and Earth 
+#  Rotation Models": http://aa.usno.navy.mil/publications/docs/Circular_179.pdf
 from __future__ import division,with_statement
 
 from .constants import pi
@@ -497,7 +499,7 @@ class AngularSeperation(AngularCoordinate):
     
     A constructor is available, but the most natural way to generate this object
     is to use the subtraction (-) operator on two :class:`AngularCoordinate`
-    objects or two :class:`LatLongPosition` objects.
+    objects or two :class:`LatLongCoordinates` objects.
     """
     
     def __init__(self,*args):
@@ -587,8 +589,58 @@ class AngularSeperation(AngularCoordinate):
     
         costerm = 2*d1*d2*cos(self._decval)
         return sqrt(d1*d1+d2*d2-costerm)
+    
+#<-----------------------------Coordinate systems------------------------------>
 
-class _LatLongMeta(type):
+class CoordinateSystem(object):
+    """
+    Base class of all coordinate systems.  Contains machinery for managing 
+    conversion between coordinate systems. Subclasses must override
+    :meth:`__init__`
+    """
+    __metaclass__ = ABCMeta
+    __slots__ = tuple()
+    
+    @abstractmethod
+    def __init__(self):
+        raise NotImplementedError
+    
+    def convert(self,tosys):
+        """
+        converts the coordinate system from it's current system to a new 
+        :class:`CoordinateSystem` object.
+        """
+        strf = 'cannot convert coordinate system {0} to {1}'
+        raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+
+class RectangularCoordinates(CoordinateSystem):
+    """
+    Rectangular/Cartesian Coordinates in three dimensions. Coordinates are
+    accessed via the attributes :attr:`x`,:attr:`y`,and :attr:`z` .The meaning
+    of the :attr:`origin` attribute is up to the user.
+    """
+    
+    __slots__ = ('x','y','z','origin')
+    
+    def __init__(self,x,y,z,origin=None):
+        self.x = x
+        self.y = y
+        self.z = z
+        self.origin = origin
+        
+    def __getstate__(self):
+        #TODO: watch if this creates probelms by not being a dict
+        return dict(x=self.x,y=self.y,z=self.z,origin=self.origin)
+    
+    def __setstate__(self,d):
+        self.x = d['x']
+        self.y = d['y']
+        self.z = d['z']
+        self.origin = d['origin']
+            
+CartesianCoordinates = RectangularCoordinates
+
+class _LatLongMeta(ABCMeta):
     def __init__(cls,name,bases,dct):
         super(_LatLongMeta,cls).__init__(name,bases,dct)
         if cls._latlongnames_[0] is not None:
@@ -602,7 +654,7 @@ class _LatLongMeta(type):
 #        obj = super(_LatLongMeta,_LatLongMeta).__call__(cls,**objkwargs) #object __init__ is called here
 #        return obj
 
-class LatLongPosition(object):
+class LatLongCoordinates(CoordinateSystem):
     """
     This object represents an angular location on a unit sphere as represented
     in spherical coordinates with a latitude and longitude.  Subclasses specify 
@@ -630,7 +682,7 @@ class LatLongPosition(object):
                 self.laterr = lat.laterr
                 self.longerr = lat.longerr
             else:
-                raise ValueError("can't provide a LatLongPosition as a constructor and set other values simultaneously")
+                raise ValueError("can't provide a LatLongCoordinates as a constructor and set other values simultaneously")
         else:
             self.lat = lat
             self.long = long
@@ -638,10 +690,10 @@ class LatLongPosition(object):
             self.longerr = longerr
         
     def __getstate__(self):
-        return dict([(k,getattr(k)) for k in LatLongPosition.__slots__])
+        return dict([(k,getattr(k)) for k in LatLongCoordinates.__slots__])
     
     def __setstate__(self,d):
-        for k in LatLongPosition.__slots__:
+        for k in LatLongCoordinates.__slots__:
             setattr(k,d[k])
         
     def _getLat(self):
@@ -795,7 +847,7 @@ class LatLongPosition(object):
         
         return latp,longp
 
-class HorizontalPosition(LatLongPosition):
+class HorizontalCoordinates(LatLongCoordinates):
     """
     This object represents an angular location on the unit sphere, with the 
     north pole of the coordinate position fixed to the local zenith
@@ -809,7 +861,7 @@ class HorizontalPosition(LatLongPosition):
     _longrange_ = (0,360)
     
 
-class EquatorialPosition(LatLongPosition):
+class EquatorialCoordinates(LatLongCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
     right ascension and declination.  Thus, the fundamental plane is given by 
@@ -821,38 +873,38 @@ class EquatorialPosition(LatLongPosition):
     _longrange_ = (0,360)
     
     def __getstate__(self):
-        d = super(EquatorialPosition,self).__getstate__
+        d = super(EquatorialCoordinates,self).__getstate__
         d['_epoch'] = self._epoch
         return d
     
     def __setstate__(self,d):
-        super(EquatorialPosition,self).__setstate__
+        super(EquatorialCoordinates,self).__setstate__
         self._epoch = d['_epoch']
         
     def __str__(self):
         rastr = self.ra.getHmsStr(canonical=True)
         decstr = self.dec.getDmsStr(canonical=True)
-        return 'Equatorial Position: {0} {1} ({2})'.format(rastr,decstr,self.epoch)
+        return 'Equatorial Coordinates: {0} {1} ({2})'.format(rastr,decstr,self.epoch)
     
     def __init__(self,*args,**kwargs):
         """
         input may be in the following forms:
         
-        * EquatorialPosition()
-        * EquatorialPosition(EquatorialPosition)
-        * EquatorialPosition('rastr decstr')
-        * EquatorialPosition(ra,dec)
-        * EquatorialPosition(ra,dec,raerr,decerr)
-        * EquatorialPosition(ra,dec,raerr,decerr,epoch)
-        * EquatorialPosition(ra,dec,raerr,decerr,epoch,refsys) 
+        * EquatorialCoordinates()
+        * EquatorialCoordinates(EquatorialCoordinates)
+        * EquatorialCoordinates('rastr decstr')
+        * EquatorialCoordinates(ra,dec)
+        * EquatorialCoordinates(ra,dec,raerr,decerr)
+        * EquatorialCoordinates(ra,dec,raerr,decerr,epoch)
+        * EquatorialCoordinates(ra,dec,raerr,decerr,epoch,refsys) 
         
         """
         posargs = {}
         if len(args) == 0:
             pass
         if len(args) == 1:
-            if isinstance(args[0],EquatorialPosition):
-                super(EquatorialPosition,self).__init__(args[0])
+            if isinstance(args[0],EquatorialCoordinates):
+                super(EquatorialCoordinates,self).__init__(args[0])
                 self.epoch = args[0].epoch
                 self.refsys = args[0].refsys
                 return
@@ -887,7 +939,7 @@ class EquatorialPosition(LatLongPosition):
         kwargs.setdefault('epoch','J2000')
         kwargs.setdefault('refsys','ICRS')
         
-        super(EquatorialPosition,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        super(EquatorialCoordinates,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         self.epoch = kwargs['epoch']
         self.refsys = kwargs['refsys']
             
@@ -915,20 +967,20 @@ class EquatorialPosition(LatLongPosition):
         """
         converts this position to Galactic coordinates
         """
-        newpos = EquatorialPosition(self)
+        newpos = EquatorialCoordinates(self)
         newpos.epoch = 'J2000'
         
-        latang = GalacticPosition._ngp_J2000.lat.d
-        longang = GalacticPosition._ngp_J2000.long.d
-        long0 = GalacticPosition._long0_J2000.d
+        latang = GalacticCoordinates._ngp_J2000.lat.d
+        longang = GalacticCoordinates._ngp_J2000.long.d
+        long0 = GalacticCoordinates._long0_J2000.d
         
         mrot = rotation_matrix(180-long0,'z') * \
                rotation_matrix(90-latang,'y') * \
                rotation_matrix(longang,'z')
         newpos.transform(mrot)
-        return GalacticPosition(newpos)
+        return GalacticCoordinates(newpos)
     
-class EclipticPosition(LatLongPosition):
+class EclipticCoordinates(LatLongCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
     through the ecliptic at the given epoch.
@@ -942,12 +994,12 @@ class EclipticPosition(LatLongPosition):
         raise NotImplementedError
     
     def __getstate__(self):
-        d = super(EquatorialPosition,self).__getstate__
+        d = super(EquatorialCoordinates,self).__getstate__
         d['_eclipticepoch'] = self._eclipticepoch
         return d
     
     def __setstate__(self,d):
-        super(EquatorialPosition,self).__setstate__
+        super(EquatorialCoordinates,self).__setstate__
         self._eclipticepoch = d['_eclipticepoch']
         
     def _getEclipticepoch(self):
@@ -970,34 +1022,34 @@ class EclipticPosition(LatLongPosition):
             warn('warning: refsys transforms not ready yet')
     refsys = property(_getRefsys,_setRefsys,doc=None)
     
-class GalacticPosition(LatLongPosition):
+class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
     _latlongnames_ = ('b','l')
     _longrange_ = (0,360)
     
-    _ngp_J2000 = EquatorialPosition(192.859508, 27.128336,epoch='J2000')
+    _ngp_J2000 = EquatorialCoordinates(192.859508, 27.128336,epoch='J2000')
     _long0_J2000 = AngularCoordinate(122.932)
     
     def toSGal(self):
         """
         converts this position to Supergalactic coordinates
         """
-        latang = SupergalacticPosition._nsgp_gal.lat.d
-        longang = SupergalacticPosition._nsgp_gal.long.d
+        latang = SupergalacticCoordinates._nsgp_gal.lat.d
+        longang = SupergalacticCoordinates._nsgp_gal.long.d
         mrot = rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
-        sgp = SupergalacticPosition(self)
+        sgp = SupergalacticCoordinates(self)
         sgp.transform(mrot)
         return sgp
     
     
-class SupergalacticPosition(LatLongPosition):   
+class SupergalacticCoordinates(LatLongCoordinates):   
     __slots__ = tuple()
     _latlongnames_ = ('sgb','sgl')
     _longrange_ = (0,360)
     
-    _nsgp_gal = GalacticPosition(6.32,47.37)
+    _nsgp_gal = GalacticCoordinates(6.32,47.37)
     _sglong0_gal = 137.37
-    _nsgp_J2000 = EquatorialPosition(283.75420420,15.70894043,epoch='J2000')
+    _nsgp_J2000 = EquatorialCoordinates(283.75420420,15.70894043,epoch='J2000')
     _sglong0_J2000 = 42.30997710
     
 
@@ -1020,7 +1072,7 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
     if degrees:
         for o in posobjs:
             if coordnames is None:
-                if isinstance(o,EquatorialPosition):
+                if isinstance(o,EquatorialCoordinates):
                     coords.append((o.ra.d,o.dec.d))
                 else:
                     coords.append((o.lat.d,o.long.d))
@@ -1029,7 +1081,7 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
     else:
         for o in posobjs:
             if coordnames is None:
-                if isinstance(o,EquatorialPosition):
+                if isinstance(o,EquatorialCoordinates):
                     coords.append((o.ra.r,o.dec.r))
                 else:
                     coords.append((o.lat.r,o.long.r))
@@ -1130,7 +1182,7 @@ class EphemerisObject(object):
     An object that can be used to generate positions on the sky for a given 
     date and time as dictated by the :attr:`jd` attribute.
     
-    :meth:`equatorialPosition` must be overridden.
+    :meth:`equatorialCoordinates` must be overridden.
     """
     
     __metaclass__ = ABCMeta
@@ -1229,10 +1281,10 @@ class EphemerisObject(object):
     """)
     
     @abstractmethod    
-    def equatorialPosition(self):
+    def equatorialCoordinates(self):
         """
         Returns the equatorial coordinates of this object at the current
-        date/time as a :class:`EquatorialPosition` object.
+        date/time as a :class:`EquatorialCoordinates` object.
         
         Must be overridden in subclasses.
         """
@@ -1260,7 +1312,7 @@ class EphemerisObject(object):
                 else:
                     self.d = d
                     
-                eqpos = self.equatorialPosition()
+                eqpos = self.equatorialCoordinates()
                 ra.append(eqpos.ra.d)
                 dec.append(eqpos.dec.d)
                 
@@ -1297,17 +1349,17 @@ class SolarSystemObject(EphemerisObject):
         """
         raise NotImplementedError
     
-    def equatorialPosition(self):
+    def equatorialCoordinates(self):
         """
         Returns the equatorial coordinates of this object at the current
-        date/time as a :class:`EquatorialPosition` object for the epoch at which
+        date/time as a :class:`EquatorialCoordinates` object for the epoch at which
         they are derived.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
         from .obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialPosition(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
+            return EquatorialCoordinates(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
         
         jd = self.jd
         
@@ -1336,7 +1388,7 @@ class SolarSystemObject(EphemerisObject):
         
         #cache for faster retrieval if JD is not changed
         self._eqcache = (self._jd,ra,dec)
-        return EquatorialPosition(ra,dec,epoch=jd_to_epoch(self._jd))
+        return EquatorialCoordinates(ra,dec,epoch=jd_to_epoch(self._jd))
     
     def phase(self,perc=False):
         """
@@ -1679,17 +1731,17 @@ class Sun(KeplerianOrbit):
         else:
             return 0,0,0
     
-    def equatorialPosition(self):
+    def equatorialCoordinates(self):
         """
         Returns the equatorial coordinates of the Sun at the current date/time
-        as a :class:`EquatorialPosition` object for the epoch at which they are
+        as a :class:`EquatorialCoordinates` object for the epoch at which they are
         derived.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
         from obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialPosition(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
+            return EquatorialCoordinates(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
         
         xs,ys,zs = self.cartesianCoordinates(True) #geocentric location
         
@@ -1704,7 +1756,7 @@ class Sun(KeplerianOrbit):
         
         #cache for faster retrieval if JD is not changed
         self._eqcache = (self._jd,ra,dec)
-        return EquatorialPosition(ra,dec,epoch=jd_to_epoch(self._jd))
+        return EquatorialCoordinates(ra,dec,epoch=jd_to_epoch(self._jd))
     
     
 
@@ -2038,27 +2090,27 @@ def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
 def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     """
     Compute the full 3D seperation between two objects at distances `d1` and
-    `d2` and angular positions `pos1` and `pos2` (:class:`LatLongPosition`
+    `d2` and angular positions `pos1` and `pos2` (:class:`LatLongCoordinates`
     objects, or an argument that will be used to generate a
-    :class:`EquatorialPosition` object)
+    :class:`EquatorialCoordinates` object)
     
     .. testsetup::
     
         from astropysics.coords import sky_sep_to_3d_sep
     
     .. doctest::
-        >>> p1 = LatLongPosition(0,0)
-        >>> p2 = LatLongPosition(0,10)
+        >>> p1 = LatLongCoordinates(0,0)
+        >>> p2 = LatLongCoordinates(0,10)
         >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
         '6.3397355613'
         >>> '%.10f'%sky_sep_to_3d_sep('0h0m0s +0:0:0','10:20:30 +0:0:0',1,2)
         '2.9375007333'
         
     """    
-    if not isinstance(pos1,LatLongPosition):
-        pos1 = EquatorialPosition(pos1)
-    if not isinstance(pos2,LatLongPosition):
-        pos2 = EquatorialPosition(pos2)
+    if not isinstance(pos1,LatLongCoordinates):
+        pos1 = EquatorialCoordinates(pos1)
+    if not isinstance(pos2,LatLongCoordinates):
+        pos2 = EquatorialCoordinates(pos2)
         
     return (pos1-pos2).seperation3d(d1,d2)
 
@@ -2366,8 +2418,8 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
 #<---------------------DEPRECATED transforms----------------------------------->
 
 #galactic coordate reference positions from IAU 1959 and wikipedia
-_galngpJ2000=EquatorialPosition('12h51m26.282s','+27d07m42.01s')
-_galngpB1950=EquatorialPosition('12h49m0s','27d24m0s')
+_galngpJ2000=EquatorialCoordinates('12h51m26.282s','+27d07m42.01s')
+_galngpB1950=EquatorialCoordinates('12h49m0s','27d24m0s')
 _gall0J2000=122.932
 _gall0B1950=123
 
