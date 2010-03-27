@@ -3095,7 +3095,7 @@ class AstronomicalObject(StructuredFieldNode):
         
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
-    loc = Field('loc',EquatorialPosition)
+    loc = Field('loc',EquatorialCoordinates)
     sed = SEDField('sed')
 
 class Test1(StructuredFieldNode):
