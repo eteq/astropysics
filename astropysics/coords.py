@@ -24,10 +24,12 @@ particularly strange cosmology is in use.
         `xephem <http://www.clearskyinstitute.com/xephem/>`_ ephemerides 
         algorithms. 
         
-   `Meeus, Jean H. "Astronomical Algorithms" ISBN  0943396352 <http://www.willbell.com/MATH/mc1.htm>`_
-        The authoritative reference on coordinates, ephemerides, and related transforms in astronomy
+   `Meeus, Jean H. "Astronomical Algorithms" ISBN 0943396352
+   <http://www.willbell.com/MATH/mc1.htm>`_ The authoritative reference on
+   coordinates, ephemerides, and related transforms in astronomy
 
-.. todo:: examples
+.. todo:: more examples
+
 
 Classes and Inheritance Structure
 ---------------------------------
@@ -80,7 +82,7 @@ class AngularCoordinate(object):
     Arithmetic operators can be applied to the coordinate, and will be applied 
     directly to the numerical value in radians.  For + and -, two angular 
     coordinates may be used, although for -, an AngularSeperation object will
-    be returned
+    be returned.
     """
     import re as _re
     __slots__=('_decval','_range')
@@ -90,11 +92,12 @@ class AngularCoordinate(object):
     
     def __init__(self,inpt=None,sghms=None,range=None,radians=False):
         """
-        `inpt` can be one of the following forms, controlled in part by the
-        `sghms` and `radians` parameters:
+        
+        The input parser is very adaptable, and can be in any of the following 
+        forms for `inpt`:
         
         * A float value
-            f `radians` is True, this will be interpreted as decimal radians,
+            if `radians` is True, this will be interpreted as decimal radians,
             otherwise, it is in degrees.
         * A :class:`AngularCoordinate` object
             A copy of the input object will be created.
@@ -116,16 +119,26 @@ class AngularCoordinate(object):
             The numerical parts will be treated as hours,minutes, and seconds.
         * A string of the form (+/-)##d##m##.##s or (+/-)##d##'##.##"
             The numerical parts will be treated as degrees,minutes, and seconds.
-        * A string of the form (+/-)##:##:##.##
-            Sexigesimal form: If `sghms` is None the presence of a a + or - sign
-            idicates that it should be interpreted as degreesminutes, and
-            seconds. If the sign is absent, the numerical portions will be
-            treated as hours,min,sec. thewise, if `sghms` evaluates to True, the
-            numerical parts will be treated as hours,minutes, and seconds, and
-            if `sghms` evaluates to False, degrees,minutes, and seconds.
+        * A string of the form (+/-)##:##:##.## Sexigesimal form
+            If `sghms` is None the presence of a a + or - sign idicates that it
+            should be interpreted as degreesminutes, and seconds. If the sign is
+            absent, the numerical portions will be treated as hours,min,sec.
+            thewise, if `sghms` evaluates to True, the numerical parts will be
+            treated as hours,minutes, and seconds, and if `sghms` evaluates to
+            False, degrees,minutes, and seconds.
         
-        `range` sets the valid range of coordinates either any value (if None)
-        or a 2-sequence (lowerdegrees,upperdegrees)
+        :param inpt: The coordinate value -- valid forms are described above.            
+        :param sghms: 
+            If True, ambiguous sexigesimal inputs should be hours, minutes, and
+            seconds instead of degrees,arcmin, and arcsec
+        :type sghms: boolean
+        :param range: 
+            Sets the valid range of coordinates.  Either a
+            2-sequence (lowerdegrees,upperdegrees) or None (for no limit)
+        :param radians:
+            If True, ambiguous inputs are treated as radians rather than
+            degrees.
+        :type radians: boolean
         
         **Examples**
         
@@ -387,17 +400,20 @@ class AngularCoordinate(object):
         
     def getDmsStr(self,secform='%05.2f',sep=(unichr(176),"'",'"'), sign=True, canonical=False):
         """
-        gets the string representation of this AngularCoordinate as degrees,
-        minutes, and seconds
+        Generates the string representation of this AngularCoordinate as
+        degrees, arcminutes, and arcseconds.
         
-        `secform` should be a string to use as a formatter for the seconds
+        :param secform: a formatter for the seconds
+        :type secform: string
+        :param sep:
+            The seperator between components - defaults to degree sign, ' and "
+            symbols.
+        :type sep: string or 3-tuple of strings
+        :param sign: Forces sign to be present before degree component.
+        :type sign: boolean
+        :param canonical: forces [+/-]dd:mm:ss.ss , overriding other arguments
         
-        `sep` is the seperator between components - defaults to degree sign,
-        ' and " symbols, can be a single string or a 3-tuple of strings
-        
-        `sign` forces sign to be present before degree component
-        
-        `canonical` forces [+/-]dd:mm:ss.ss , overriding other arguments
+        :returns: String representation of this object.
         """
         d,m,s = self.degminsec
         
@@ -443,6 +459,18 @@ class AngularCoordinate(object):
         sep is the seperator between components - defaults to h, m, and s
         
         canonical forces [+/-]dd:mm:ss.ss , overriding other arguments
+        
+        Generates the string representation of this AngularCoordinate as hours,
+        minutes, and seconds.
+        
+        :param secform: a formatter for the seconds component
+        :type secform: string
+        :param sep:
+            The seperator between components - defaults to 'h', 'm', and 's'.
+        :type sep: string or 3-tuple of strings
+        :param canonical: forces [+/-]dd:mm:ss.ss , overriding other arguments
+        
+        :returns: String representation of this object.
         """
         
         h,m,s = self.hrsminsec
@@ -480,11 +508,16 @@ def angular_string_to_dec(instr,hms=True,degrees=True):
     Convinience function to convert a angular coordinate string to a decimal
     value.
     
-    if `hms` is True, the coordinate will be assumed to be h:m:s, otherwise
-    d:m:s. This will be ignored if the coordinates are specified as ##h##m##s or
-    ##d##m##s, or if the input is not in sexigesimal form.
+    :param hms: 
+        If True, the coordinate will be assumed to be h:m:s, otherwise d:m:s.
+        This will be ignored if the coordinates are specified as ##h##m##s or
+        ##d##m##s, or if the input is not in sexigesimal form.
+    :type hms: boolean
+    :param degrees: 
+        If True, the output will be decimal degrees, otherwise radians.
+    :type degrees: boolean
     
-    If `degrees` is True, the output will be decimal degrees, otherwise radians.
+    :returns: Decimal value in radians or degrees
     """
     ac = AngularCoordinate(instr)
     if degrees:
@@ -556,25 +589,38 @@ class AngularSeperation(AngularCoordinate):
         
     def projectedSeperation(self,zord,usez=False,**kwargs):
         """
-        computes the physical projected seperation assuming a given distance.
-        This method assumes small-angle approximation.
+        Computes the physical projected seperation assuming a given distance.
         
-        If `usez` is True, the input will be interpreted as a redshift, and
-        kwargs will be passed into the distance calculation. The result will 
-        be in pc.  Otherwise, `zord1` and `zord2` will be interpreted as
-        distances.
+        kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
+        
+        :param zord: Redshift or distance
+        :type zord: scalar number
+        :param usez:
+            If True, the input will be interpreted as a redshift, and kwargs
+            will be passed into the distance calculation. The result will be in
+            pc. Otherwise, `zord` will be interpreted as a distance.
+        :type usez: boolean
+        
+        :returns: a float value for the seperation (in pc if redshift is used) 
         """
         return angular_to_physical_size(self.arcsec,zord,usez=usez,**kwargs)
     
     def seperation3d(self,zord1,zord2,usez=False,**kwargs):
         """
-        computes the 3d seperation assuming the two objects at the ends of this
-        objects are at the distances `zord1` and `zord2`.  
+        computes the 3d seperation assuming the two points at the ends of this
+        :class:`AngularSeperation` are at the distances `zord1` and `zord2`.  
         
-        If `usez` is True, the input will be interpreted as a redshift, and
-        kwargs will be passed into the distance calculation. The result will 
-        be in pc.  Otherwise, `zord1` and `zord2` will be interpreted as
-        distances.
+        :param zord1: Redshift or distance for start point
+        :type zord1: scalar number
+        :param zord2: Redshift or distance for end point
+        :type zord2: scalar number
+        :param usez:
+            If True, the inputs will be interpreted as a redshift, and kwargs
+            will be passed into the distance calculation. The result will be in
+            pc. Otherwise, `zord` will be interpreted as a distance.
+        :type usez: boolean
+        
+        :returns: a float value for the seperation (in pc if redshift is used) 
         """
         from math import sin,cos,sqrt
         
@@ -609,6 +655,9 @@ class CoordinateSystem(object):
         """
         converts the coordinate system from it's current system to a new 
         :class:`CoordinateSystem` object.
+        
+        :param tosys: The new coordinate system 
+        :type tosys: A subclass of :class:`CoordinateSystem`
         """
         strf = 'cannot convert coordinate system {0} to {1}'
         raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
@@ -616,29 +665,70 @@ class CoordinateSystem(object):
 class RectangularCoordinates(CoordinateSystem):
     """
     Rectangular/Cartesian Coordinates in three dimensions. Coordinates are
-    accessed via the attributes :attr:`x`,:attr:`y`,and :attr:`z` .The meaning
-    of the :attr:`origin` attribute is up to the user.
+    accessed via the attributes :attr:`x`, :attr:`y`, and :attr:`z`.
     """
     
-    __slots__ = ('x','y','z','origin')
+    __slots__ = ('x','y','z')
     
-    def __init__(self,x,y,z,origin=None):
+    def __init__(self,x,y,z):
         self.x = x
         self.y = y
+        #: description of z
         self.z = z
-        self.origin = origin
         
     def __getstate__(self):
         #TODO: watch if this creates probelms by not being a dict
-        return dict(x=self.x,y=self.y,z=self.z,origin=self.origin)
+        return dict(x=self.x,y=self.y,z=self.z)
     
     def __setstate__(self,d):
         self.x = d['x']
         self.y = d['y']
         self.z = d['z']
-        self.origin = d['origin']
-            
+    
 CartesianCoordinates = RectangularCoordinates
+
+class RectangularEclipticCoordinates(RectangularCoordinates):
+    """
+    Rectangular coordinates oriented so that the x-y plane lies in the plane of
+    the ecliptic at the specified epoch. Distances are in AU. Can be either
+    geocentric or heliocentric.
+    
+    Note that the epoch cannot be set directly - if precession is desired
+    desired, convert to some other coordinate system, set the epoch, and convert
+    back.
+    """
+    __slots__ = ('_geo','_epoch')
+    
+    def __init__(self,x,y,z,geocentric,epoch=None):
+        RectangularCoordinates.__init__(x,y,z)
+        self.geocentric = geocentric
+        self._epoch = epoch
+        
+    def _getGeocentric(self):
+        return self._geo
+    def _setGeocentric(self,val):
+        self._geo = bool(val)
+    geocentric = property(_getGeocentric,_setGeocentric,doc="""
+    True if the coordinate system origin is the Earth 
+    """)
+    
+    def _getHeliocentric(self):
+        return not self._geo
+    def _setHeliocentric(self,val):
+        self._geo = not bool(val)
+    heliocentric = property(_getHeliocentric,_setHeliocentric,doc="""
+    True if the coordinate system origin is the Sun 
+    """)
+    
+    @property
+    def epoch(self):
+        """
+        Epoch of observation
+        """
+        return self._epoch
+    
+    
+    
 
 class _LatLongMeta(ABCMeta):
     def __init__(cls,name,bases,dct):
@@ -649,10 +739,6 @@ class _LatLongMeta(ABCMeta):
         if cls._latlongnames_[1] is not None:
             setattr(cls,cls._latlongnames_[1],cls.long)
             setattr(cls,cls._latlongnames_[1]+'err',cls.longerr)
-            
-#    def __call__(cls,*args,**kwargs):
-#        obj = super(_LatLongMeta,_LatLongMeta).__call__(cls,**objkwargs) #object __init__ is called here
-#        return obj
 
 class LatLongCoordinates(CoordinateSystem):
     """
@@ -667,9 +753,8 @@ class LatLongCoordinates(CoordinateSystem):
     
     def __init__(self,lat=0,long=0,laterr=None,longerr=None):
         """
-        `lat` and `long` are latitude and longitude for the position, respectively,
-        and may be any valid input to AngularCoordinate (if a number, default
-        is in degrees)        
+        See :attr:`lat` , :attr:`long` , :attr:`laterr` , and :attr:`longerr` 
+        for the meaning of the inputs  
         """
         
         self._lat = AngularCoordinate(range=(-90,90))
@@ -709,7 +794,10 @@ class LatLongCoordinates(CoordinateSystem):
         elif rads > pi/2:
             rads = pi - rads
         self._lat.radians = rads
-    lat = property(_getLat,_setLat,doc=None)
+    lat = property(_getLat,_setLat,doc="""
+    Latitude of this object as a :class:`AngularCoordinate` object.  May be set
+    using any valid input form for :class:`AngularCoordinate`.
+    """)
     
     def _getLong(self):
         return self._long
@@ -718,7 +806,10 @@ class LatLongCoordinates(CoordinateSystem):
             self._long.radians = val.radians%_twopi
         else:
             self._long.radians = AngularCoordinate(val).radians%_twopi
-    long = property(_getLong,_setLong,doc=None)
+    long = property(_getLong,_setLong,doc="""
+    Longitude of this object as a :class:`AngularCoordinate` object.  May be set
+    using any valid input form for :class:`AngularCoordinate`.
+    """)
     
     def _getLaterr(self):
         return self._laterr
@@ -729,7 +820,10 @@ class LatLongCoordinates(CoordinateSystem):
             self._laterr = val
         else:
             self._laterr = AngularSeperation(val)
-    laterr = property(_getLaterr,_setLaterr,doc=None)
+    laterr = property(_getLaterr,_setLaterr,doc="""
+    Latitude error for this object as a :class:`AngularSeperation` object. May
+    be set using any valid input form for :class:`AngularSeperation`.
+    """)
     
     def _getLongerr(self):
         return self._longerr
@@ -740,7 +834,10 @@ class LatLongCoordinates(CoordinateSystem):
             self._longerr = val
         else:
             self._longerr = AngularSeperation(val)
-    longerr = property(_getLongerr,_setLongerr,doc=None)
+    longerr = property(_getLongerr,_setLongerr,doc="""
+    Longitude error for this object as a :class:`AngularSeperation` object. May
+    be set using any valid input form for :class:`AngularSeperation`.
+    """)
     
     def __str__(self):
         lat,long = self._lat.d,self._long.d
@@ -852,7 +949,7 @@ class HorizontalCoordinates(LatLongCoordinates):
     This object represents an angular location on the unit sphere, with the 
     north pole of the coordinate position fixed to the local zenith
     
-    To convert from other fixed position types to horizontal positions, see 
+    To convert from other :class:`Coordinate` types to horizontal positions, see 
     :class:`astropysics.obstools.Site`, as site information is required for
     these corrections
     """  
@@ -1147,11 +1244,17 @@ def rotation_matrix(angle,axis='z',degrees=True):
 def angle_axis(matrix,degrees=True):
     """
     Computes the angle of rotation and the rotation axis for a given rotation
-    matrix
+    matrix.
     
-    *returns*
-    angle,axis where angle is in degrees if `degrees` is True, otherwise in
-    radians
+    :param matrix: the rotation matrix
+    :type matrix: a 3x3 :class:`numpy.ndarray`
+    :param degrees: if True, output is in degrees
+    :type degrees: boolean
+    
+    :returns:
+        an (angle,axis) tuple where the angle is in degrees if `degrees` is
+        True, otherwise in radians
+        
     """
     from math import sin,cos,acos,degrees,sqrt
     
@@ -1939,14 +2042,20 @@ def _earth_coords(jd):
 #<--------------------canonical coordinate transforms-------------------------->
 def cartesian_to_polar(x,y,degrees=False):
     """
-    Converts two arrays in 2D rectangular Cartesian coordinates to
-    polar coordinates.
+    Converts arrays in 2D rectangular Cartesian coordinates to polar
+    coordinates.
     
-    if degrees is True, the output theta angle will be in degrees, 
-    otherwise radians
+    :param x: First cartesian coordinate
+    :type x: :class:`numpy.ndarray`
+    :param y: Second cartesian coordinate
+    :type y: :class:`numpy.ndarray`
+    :param degrees: 
+        If True, the output theta angle will be in degrees, otherwise radians.
+    :type degrees: boolean
     
-    returns (r,theta) where theta is measured from the +x axis increasing
-    towards the +y axis
+    :returns: 
+        (r,theta) where theta is measured from the +x axis increasing towards
+        the +y axis
     """
     r = (x*x+y*y)**0.5
     t = np.arctan2(y,x)
@@ -1957,16 +2066,21 @@ def cartesian_to_polar(x,y,degrees=False):
 
 def polar_to_cartesian(r,t,degrees=False):
     """
-    Converts two arrays in polar coordinates to
-    2D rectangular Cartesian coordinates.
+    Converts arrays in 2D polar coordinates to rectangular cartesian
+    coordinates.
     
-    if degrees is True, the input angle t will be interpreted as given
-    in degrees, otherwise radians
+    Note that the spherical coordinates are in *physicist* convention such that
+    (1,0,pi/2) is x-axis.
     
-    theta is measured from the +x axis increasing
-    towards the +y axis
+    :param r: Radial coordinate
+    :type r: :class:`numpy.ndarray`
+    :param t: Azimuthal angle from +x-axis increasing towards +y-axis
+    :type t: :class:`numpy.ndarray`
+    :param degrees: 
+        If True, the input angles will be in degrees, otherwise radians.
+    :type degrees: boolean
     
-    returns (x,y)
+    :returns: arrays (x,y)
     """
     if degrees:
         t=np.radians(t)
@@ -1978,7 +2092,20 @@ def cartesian_to_spherical(x,y,z,degrees=False):
     Converts three arrays in 3D rectangular cartesian coordinates to
     spherical polar coordinates.
     
-    returns r,theta,phi in PHYSICIST convention - (1,0,pi/2) is x-axis
+    Note that the spherical coordinates are in *physicist* convention such that
+    (1,0,pi/2) is x-axis.
+    
+    :param x: First cartesian coordinate
+    :type x: :class:`numpy.ndarray`
+    :param y: Second cartesian coordinate
+    :type y: :class:`numpy.ndarray`
+    :param z: Third cartesian coordinate
+    :type z: :class:`numpy.ndarray`
+    :param degrees: 
+        If True, the output theta angle will be in degrees, otherwise radians.
+    :type degrees: boolean
+    
+    :returns: arrays (r,theta,phi) 
     """
     xsq,ysq,zsq=x*x,y*y,z*z
     r=(xsq+ysq+zsq)**0.5
@@ -1991,11 +2118,23 @@ def cartesian_to_spherical(x,y,z,degrees=False):
 
 def spherical_to_cartesian(r,t,p,degrees=False):
     """
-    Converts three arrays in 3D spherical polar coordinates to
-    rectangular cartesian coordinates.
+    Converts arrays in 3D spherical polar coordinates to rectangular cartesian
+    coordinates.
     
-    if degrees is true, converts from degrees to radians for theta and phi
-    returns x,y,z in PHYSICIST convention - (1,0,pi/2) is x-axis
+    Note that the spherical coordinates are in *physicist* convention such that
+    (1,0,pi/2) is x-axis.
+    
+    :param r: Radial coordinate
+    :type r: :class:`numpy.ndarray`
+    :param t: Colatitude (angle from z-axis)
+    :type t: :class:`numpy.ndarray`
+    :param p: Azimuthal angle from +x-axis increasing towards +y-axis
+    :type p: :class:`numpy.ndarray`
+    :param degrees: 
+        If True, the input angles will be in degrees, otherwise radians.
+    :type degrees: boolean
+    
+    :returns: arrays (x,y,z)
     """
     if degrees:
         t,p=np.radians(t),np.radians(p)
@@ -2136,17 +2275,47 @@ def radec_str_to_decimal(ra,dec):
 
 def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     """
-    Match one set of coordinates to another within a tolerance eps
-    e.g. ra1,dec1,ra2,dec2
+    Match one coordinate array to another within a specified tolerance. Distance
+    is determined by the cartesian distance between the two arrays added in 
+    quadrature.
     
-    returns (mask of matches for array 1, mask of matches for array 2)
+    :param a1: the first coordinate for the first set of coordinates
+    :type a1: 1D :class:`numpy.ndarray`
+    :param a2: the second coordinate for the first set of coordinates
+    :type a2: 1D :class:`numpy.ndarray`
+    :param a1: the first coordinate for the second set of coordinates
+    :type a1: 1D :class:`numpy.ndarray`
+    :param a2: the second coordinate for the second set of coordinates
+    :type a2: 1D :class:`numpy.ndarray`
+    :param multi:
+        Determines behavior if more than one coordinate pair matches.  Can be:
+        
+        * True: raise an exception if more than one match is found
+        * 'warn': a warning will be issued if more than one match is found
+        * 'print': a statement will be printed  if more than one match is found
+        * 'full': the 2D array with matches as booleans along the axes will be returned
+        * 'count': a count of matches will be returned instead of a mask
+        * 'index': a list of match indecies will be returned instead of a mask
+        * False: do nothing - just return if something matched
     
-    if multi is 'warn', a arning will be issued if more than 1 match is found
-    if multi is 'print', a statement will be printed  if more than 1 match is found
-    if multi is 'full', the 2D array with matches as booleans along the axes will be returned
-    if multi is 'count', a count of matches will be returned instead of a mask
-    if multi is 'index', a list of match indecies will be returned instead of a mask
-    if it otherwise evaluates to True, an exception will be raised
+    :returns: 
+        (mask of matches for array 1, mask of matches for array 2) or as
+        described in the corresponding `multi` parameter value
+    
+    **Examples**
+    .. testsetup::
+    
+        from astropysics.coords import match_coords
+        from numpy import array
+    
+    .. doctest::
+        >>> ra1 = array([1,2,3,4])
+        >>> dec1 = array([0,0,0,0])
+        >>> ra2 = array([7,6,5,4])
+        >>> dec2 = array([.5,.5,.5,.5])
+        >>> match_coords(ra1,dec1,ra2,dec2,1)
+        (array([False, False, False,  True], dtype=bool), array([False, False, 
+        False,  True], dtype=bool))
     """
     def find_sep(A,B):
         At = np.tile(A,(len(B),1))
@@ -2215,22 +2384,41 @@ def seperation_matrix(v,w=None,tri=False):
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
     """
-    calculates the cosmolgical distance to some object given a redshift
-    note that this uses H0,omegaM,omegaL, and omegaR from the current cosmology
+    Calculates the cosmolgical distance to some object given a redshift.  Note
+    that this uses H0,omegaM,omegaL, and omegaR from the current
+    :class:`astropyscs.constants.Cosmology` -- if any of those do not exist in 
+    the current cosmology this will fail.
     
-    intkwargs are kwargs for the integration func (usually scipy.integrate.quad)
+    The distance type can be one of the following:
     
-    if z is None, returns the limit of z->inf to the requested tolerance (or at 
-    maximum if angular) - this may be infinite
+    * 'comoving'(0) : comoving distance (in Mpc)
+    * 'luminosity'(1) : luminosity distance (in Mpc)
+    * 'angular'(2) : angular diameter distance (in Mpc)
+    * 'lookback'(3) : lookback time (in Gyr)
+    * 'distmod'(4) : distance modulus
     
-    disttype can be 'comoving'(0),'luminosity'(1),'angular'(2),'lookback'(3),
-    or 
-    'distmod'(4)
-    for the angular diameter distance, a flat universe is assumed for simple 
-    dang=a*chi
+    :param z: The redshift at which to compute the distance
+    :type z: array, scalar, or None
+    :param zerr: Symmetric error in redshift
+    :type zerr: array, scalar, or None
+    :param disttype:
+        The type of distance to compute -- may be any of the types described
+        above.
+    :type disttype: A string or int
+    :param inttol: fractional precision of the output (used in integrals)
+    :type inttol: A float<1
+    :param normed: 
+        If True, normalize output by result for `z`==None.  If a scalar, 
+        normalize by the distance at that redshift. If False, no normalization.
+    :type normed: boolean
+    :param intkwargs: keywords for integrals (see :mod:`scipy.integrate`)
+    :type intkwargs: a dictionary   
     
-    output in Mpc or Gyr or if normed is True, normalized to value for z=None, 
-    or if normed is a number, normalized to z=normed
+    
+    :returns: 
+        Distance of type selected by `disttype` in above units or normalized as
+        controlled by `normed` parameter. If `zerr` is not None, the output is
+        (z,zupper,zlower), otherwise just z.
     """
     from operator import isSequenceType
     from scipy.integrate import quad as integrate
@@ -2246,6 +2434,10 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         except KeyError,e:
             e.message='invalid disttype string'
             raise
+    
+    flipsign = disttype < 0
+    disttype = abs(disttype)
+    
     if omegaL+omegaM+omegaR != 1:
         from warnings import warn
         warn('cosmological parameters do not sum to 1 - algorithm may not be correct for non-flat universe')
@@ -2254,12 +2446,13 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         if normed:
             return 1.0
         if disttype == 2:
-            #need to find maximum value for angular diam dist
-            from scipy.optimize import brent
-            #-1 on the H0 will make the function negative for purposes of minimizing
-            raise NotImplemetedError('need to fix -H0')
-            return -1*brent(cosmo_z_to_dist,(None,disttype,-1*H0,omegaM,omegaL,
-                            omegaR,inttol,False,intkwargs),tol=inttol,full_output=1)[1]
+            #find maximum value for angular diam dist
+            from scipy.optimize import fminbound
+            res = upper = 5
+            while abs(res-upper) < inttol:
+                #-2 flips sign so that we get a minimum instead of a maximum
+                res = fminbound(cosmo_z_to_dist,0,upper,(None,-2,inttol,normed,intkwargs),inttol)
+            return res
         else:
             #iterate towards large numbers until convergence achieved
             iterz=1e6
@@ -2327,14 +2520,21 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     else:
         nrm=1
         
+    if flipsign:
+        nrm *= -1
+        
     if zerr is None:
         return nrm*d
     else: 
         upper=cosmo_z_to_dist(z+zerr,None,disttype,inttol,intkwargs)
         lower=cosmo_z_to_dist(z-zerr,None,disttype,inttol,intkwargs)
-        return nrm*d,nrm*(upper-d),nrm*(lower-d)
+        return nrm*d,nrm*(upper-d),nrm*(d-lower)
     
 def cosmo_dist_to_z(d,derr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
+    """
+    Convert a distance to a redshift. See :func:`cosmo_z_to_dist` for meaning of
+    parameters.
+    """
     from scipy.optimize import brenth
     maxz=10000.0
     
@@ -2369,13 +2569,22 @@ def cosmo_z_to_H(z,zerr=None):
 
 def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     """
-    converts an observed angular size (in arcsec or as an AngularSeperation 
-    object) to a physical size (in pc)
+    Converts an observed angular size (in arcsec or as an AngularSeperation 
+    object) to a physical size.
     
-    if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
-    is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
-    otherwise, zord is taken directly as a angular diameter distance (in pc) 
-    and kwargs should be absent
+    kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
+    
+    :param angsize: 
+        Angular size in arcsecond or an :class:`AngularSeperation` object.
+    :param zord: Redshift or distance
+    :type zord: scalar number
+    :param usez:
+        If True, the input will be interpreted as a redshift, and kwargs
+        will be passed into the distance calculation. The result will be in
+        pc. Otherwise, `zord` will be interpreted as a distance.
+    :type usez: boolean
+    
+    :returns: a scalar value for the physical size (in pc if redshift is used) 
     """
     if usez:
         d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
