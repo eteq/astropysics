@@ -89,6 +89,10 @@ Bug Reports
 
 The best place to report bugs is via the `launchpad bug tracker <https://bugs.launchpad.net/astropysics>`_.  That way they won't be forgotten unless an asteroid impact destroys all of humanity (or all the launchpad servers...).
 
+Logo Image Credit
+=================
+
+The multiwavelength image of M81 was put together by the folks at Chandra (http://chandra.harvard.edu/photo/2008/m81/), and they credit: "X-ray: NASA/CXC/Wisconsin/D.Pooley & CfA/A.Zezas; Optical: NASA/ESA/CfA/A.Zezas; UV: NASA/JPL-Caltech/CfA/J.Huchra et al.; IR: NASA/JPL-Caltech/CfA"
 
 Indices and tables
 ==================
