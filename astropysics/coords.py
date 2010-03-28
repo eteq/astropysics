@@ -957,26 +957,66 @@ class HorizontalCoordinates(LatLongCoordinates):
     _latlongnames_ = ('alt','az')
     _longrange_ = (0,360)
     
+class EpochalCoordinates(LatLongCoordinates):
+    """
+    The origin and orientation of coordinate systems derived from this class are
+    tied to the motion of the Earth. Hence, a particular location of the equinox
+    as specified by the epoch and reference system is necessary.
+    """
+    __slots__ = ('_epoch','_refsys')
+    
+    def __init__(self,lat=0,long=0,laterr=None,longerr=None,epoch='J2000',
+                      refsys='ICRS'):
+        LatLongCoordinates.__init__(self,lat,long,laterr,longerr)
+        self.epoch = epoch
+        self.refsys = refsys
+        
+    
+    def __getstate__(self):
+        d = LatLongCoordinates.__getstate__(self)
+        d['_epoch'] = self._epoch
+        d['_refsys'] = self._refsys
+        return d
+    
+    def __setstate__(self,d):
+        LatLongCoordinates.__setstate__(self,d)
+        self._epoch = d['_epoch']
+        self._refsys = d['_refsys']
+    
+    def _getEpoch(self):
+        return self._epoch
+    def _setEpoch(self,val):
+        if hasattr(self,'_epoch') and self._epoch != val:
+            from warnings import warn
+            warn('epoch transforms not ready yet')
+        if not isinstance(val,basestring):
+            val = 'J'+str(float(val))
+        self._epoch = val
+    epoch = property(_getEpoch,_setEpoch,doc=None)
+    
+    def _getRefsys(self):
+        return self._refsys
+    def _setRefsys(self,val):
+        self._refsys = val
+        if hasattr(self,'_refsys') and self._refsys != val:
+            from warnings import warn
+            warn('refsys transforms not ready yet')
+    refsys = property(_getRefsys,_setRefsys,doc=None)
+    
+    def getEquinox(self):
+        raise NotImplementedError
 
-class EquatorialCoordinates(LatLongCoordinates):
+class EquatorialCoordinates(EpochalCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
     right ascension and declination.  Thus, the fundamental plane is given by 
     the projection of the equator in the sky.
     """
     
-    __slots__ = ('_epoch','_refsys')
+    __slots__ = tuple()
     _latlongnames_ = ('dec','ra')
     _longrange_ = (0,360)
     
-    def __getstate__(self):
-        d = super(EquatorialCoordinates,self).__getstate__
-        d['_epoch'] = self._epoch
-        return d
-    
-    def __setstate__(self,d):
-        super(EquatorialCoordinates,self).__setstate__
-        self._epoch = d['_epoch']
         
     def __str__(self):
         rastr = self.ra.getHmsStr(canonical=True)
@@ -1037,28 +1077,12 @@ class EquatorialCoordinates(LatLongCoordinates):
         kwargs.setdefault('refsys','ICRS')
         
         super(EquatorialCoordinates,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
-        self.epoch = kwargs['epoch']
-        self.refsys = kwargs['refsys']
+        if 'epoch' in kwargs:
+            self.epoch = kwargs['epoch']
+        if 'refsys' in kwargs:
+            self.refsys = kwargs['refsys']
             
-    def _getEpoch(self):
-        return self._epoch
-    def _setEpoch(self,val):
-        if hasattr(self,'_epoch') and self._epoch != val:
-            from warnings import warn
-            warn('epoch transforms not ready yet')
-        if not isinstance(val,basestring):
-            val = 'J'+str(float(val))
-        self._epoch = val
-    epoch = property(_getEpoch,_setEpoch,doc=None)
     
-    def _getRefsys(self):
-        return self._refsys
-    def _setRefsys(self,val):
-        self._refsys = val
-        if hasattr(self,'_refsys') and self._refsys != val:
-            from warnings import warn
-            warn('refsys transforms not ready yet')
-    refsys = property(_getRefsys,_setRefsys,doc=None)
     
     def toGal(self):
         """
@@ -1077,47 +1101,20 @@ class EquatorialCoordinates(LatLongCoordinates):
         newpos.transform(mrot)
         return GalacticCoordinates(newpos)
     
-class EclipticCoordinates(LatLongCoordinates):
+class EclipticCoordinates(EpochalCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
-    through the ecliptic at the given epoch.
+    through the ecliptic at the equinox for the specified epoch.
     """
     
-    __slots__ = ('_eclipticepoch','_refsys')
+    __slots__ = tuple()
     _latlongnames_ = ('beta','lamb')
     _longrange_ = (0,360)
     
-    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,eclipticepoch='J2000',refsys='ICRS'):
-        raise NotImplementedError
+    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch='J2000',refsys='ICRS'):
+        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch,refsys)
     
-    def __getstate__(self):
-        d = super(EquatorialCoordinates,self).__getstate__
-        d['_eclipticepoch'] = self._eclipticepoch
-        return d
-    
-    def __setstate__(self,d):
-        super(EquatorialCoordinates,self).__setstate__
-        self._eclipticepoch = d['_eclipticepoch']
         
-    def _getEclipticepoch(self):
-        return self._epoch
-    def _setEclipticepoch(self,val):
-        if hasattr(self,'_eclipticepoch') and self._eclipticepoch != val:
-            from warnings import warn
-            warn('warning: epoch transforms not ready yet')
-        if not isinstance(val,basestring):
-            val = 'J'+str(float(val))
-        self._eclipticepoch = val
-    eclipticepoch = property(_getEclipticepoch,_setEclipticepoch,doc=None)
-    
-    def _getRefsys(self):
-        return self._refsys
-    def _setRefsys(self,val):
-        self._refsys = val
-        if hasattr(self,'_refsys') and self._refsys != val:
-            from warnings import warn
-            warn('warning: refsys transforms not ready yet')
-    refsys = property(_getRefsys,_setRefsys,doc=None)
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
@@ -2408,7 +2405,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     :param inttol: fractional precision of the output (used in integrals)
     :type inttol: A float<1
     :param normed: 
-        If True, normalize output by result for `z`==None.  If a scalar, 
+        If True, normalize output by result for `z` == None.  If a scalar, 
         normalize by the distance at that redshift. If False, no normalization.
     :type normed: boolean
     :param intkwargs: keywords for integrals (see :mod:`scipy.integrate`)
@@ -2555,7 +2552,17 @@ def cosmo_dist_to_z(d,derr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     
 def cosmo_z_to_H(z,zerr=None):
     """
-    calculate the hubble constant as a function of redshift for the selected
+    Calculates the hubble constant as a function of redshift for the current
+    :class:`astropysics.constant.Cosmology` .  
+    
+    :param z: redshift
+    :type z: scalar or array-like
+    :param zerr: uncertainty in redshift 
+    :type zerr: scalar, array-like, or None
+    
+    :returns: 
+        Hubble constant for the given redshift, or (H,upper_error,lower_error)
+        if `zerr` is not None
     """
     from .constants import get_cosmology
     c = get_cosmology()
