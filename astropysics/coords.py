@@ -900,6 +900,26 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
         
+    def conversionMatrix(self,targetcoosys):
+        """
+        Generates and returns the transformation matrix from the current 
+        coordinate system into the requested coordinate system
+        
+        :param targetcoosys: The target coordinate system
+        :type targetcoosys: A subclass of :class:`LatLongCoordinates`
+        
+        :returns: a 3x3 transformation matrix, typically unitary/rotation matrix
+        """
+        from inspect import isclass
+        
+        if not isclass(targetcoosys) or not issubclass(targetcoosys,LatLongCoordinates):
+            raise ValueError('can only generate conversion matrix for a valid coordinate system')
+        
+        if targetcoosys is self.__class__:
+            return np.eye(3).view(np.matrix)
+        
+        raise NotImplementedError
+        
     def transform(self,matrix,apply=True,unitarycheck=False):
         """
         Applies the supplied transformation matrix (in cartesian coordinates) to
@@ -959,58 +979,91 @@ class HorizontalCoordinates(LatLongCoordinates):
     
 class EpochalCoordinates(LatLongCoordinates):
     """
-    The origin and orientation of coordinate systems derived from this class are
-    tied to the motion of the Earth. Hence, a particular location of the equinox
-    as specified by the epoch and reference system is necessary.
-    """
-    __slots__ = ('_epoch','_refsys')
+    The origin and orientation of some coordinate systems are tied to the motion
+    of the Earth. Hence, a particular location of the equinox as specified by
+    the epoch.
     
-    def __init__(self,lat=0,long=0,laterr=None,longerr=None,epoch='J2000',
-                      refsys='ICRS'):
+    Subclasses must implement the :meth:`transformToEpoch` method.
+    """
+    __slots__ = ('_epoch')
+    
+    #: If True, this coordinate system uses Julian Epochs.  Otherwise, Besselian
+    julianepoch = True 
+    
+    def __init__(self,lat=0,long=0,laterr=None,longerr=None,epoch=None):
         LatLongCoordinates.__init__(self,lat,long,laterr,longerr)
-        self.epoch = epoch
-        self.refsys = refsys
+        self._epoch = epoch
         
     
     def __getstate__(self):
         d = LatLongCoordinates.__getstate__(self)
         d['_epoch'] = self._epoch
-        d['_refsys'] = self._refsys
         return d
     
     def __setstate__(self,d):
         LatLongCoordinates.__setstate__(self,d)
         self._epoch = d['_epoch']
-        self._refsys = d['_refsys']
     
     def _getEpoch(self):
         return self._epoch
     def _setEpoch(self,val):
-        if hasattr(self,'_epoch') and self._epoch != val:
-            from warnings import warn
-            warn('epoch transforms not ready yet')
-        if not isinstance(val,basestring):
-            val = 'J'+str(float(val))
-        self._epoch = val
-    epoch = property(_getEpoch,_setEpoch,doc=None)
+        if val is None:
+            self._epoch = None
+        elif not hasattr(self,'_epoch') or self._epoch is None:
+            self._epoch = float(val)
+        else:
+            self.transformToEpoch(float(val))
+    epoch = property(_getEpoch,_setEpoch,doc="""
+    Epoch for this coordinate. If set, this coordinate will be transformed to
+    the new epoch.
+    """)
     
-    def _getRefsys(self):
-        return self._refsys
-    def _setRefsys(self,val):
-        self._refsys = val
-        if hasattr(self,'_refsys') and self._refsys != val:
-            from warnings import warn
-            warn('refsys transforms not ready yet')
-    refsys = property(_getRefsys,_setRefsys,doc=None)
+    def _getEpochstr(self):
+        return '{0}{1}'.format('J' if self.julianepoch else 'B',self._epoch)
+    def _setEpochstr(self,val):
+        self.epoch = val
+    epochstr = property(_getEpochstr,_setEpochstr,doc="""
+    A string representation of the current Epoch with a J or B prefixed for
+    julian or besselian epochs.
+    """)
+    
+    def _getJdepoch(self):
+        from .obstools import epoch_to_jd
+        return epoch_to_jd(self._epoch,self.julianepoch)
+    def _setJdepoch(self,val):
+        from .obstools import jd_to_epoch
+        self._epoch = jd_to_epoch(val,self.julianepoch)
+    jdepoch = property(_getJdepoch,_setJdepoch,doc="""
+    Julian Date of the current epoch.  If set, it is assumed to be a Julian
+    Epoch.
+    """)
+    
+    @abstractmethod
+    def transformToEpoch(self,newepoch):
+        raise NotImplementedError
+        
     
     def getEquinox(self):
-        raise NotImplementedError
+        """
+        Return the location of the equinox in this coordinate system.
+        """
+        eqc = EquatorialCoordinatesDynamical2000(0,0,epoch=self.epoch)
+        return eqc.convert(self.__class__)
 
 class EquatorialCoordinates(EpochalCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
     right ascension and declination.  Thus, the fundamental plane is given by 
     the projection of the equator in the sky.
+    
+    The implementation of this classes uses the dynamical J2000 system outlined
+    in IAU resolutions, and detailed in the USNO circular 179 as well as
+    Capitaine N. et al., IAU 2000 precession A&A 412, 567-586 (2003)
+    
+    Note that Nutation is *not* yet included in the epoch transform.
+    
+    This is a superclass for all other EquatorialCoordinate systems - particular
+    reference systems implement the :meth:`transformToEpoch` method.
     """
     
     __slots__ = tuple()
@@ -1033,7 +1086,6 @@ class EquatorialCoordinates(EpochalCoordinates):
         * EquatorialCoordinates(ra,dec)
         * EquatorialCoordinates(ra,dec,raerr,decerr)
         * EquatorialCoordinates(ra,dec,raerr,decerr,epoch)
-        * EquatorialCoordinates(ra,dec,raerr,decerr,epoch,refsys) 
         
         """
         posargs = {}
@@ -1043,7 +1095,6 @@ class EquatorialCoordinates(EpochalCoordinates):
             if isinstance(args[0],EquatorialCoordinates):
                 super(EquatorialCoordinates,self).__init__(args[0])
                 self.epoch = args[0].epoch
-                self.refsys = args[0].refsys
                 return
             elif isinstance(args[0],basestring):
                 sargs = args[0].split()
@@ -1073,47 +1124,195 @@ class EquatorialCoordinates(EpochalCoordinates):
         kwargs.setdefault('dec',0)
         kwargs.setdefault('raerr',None)
         kwargs.setdefault('decerr',None)
-        kwargs.setdefault('epoch','J2000')
-        kwargs.setdefault('refsys','ICRS')
+        kwargs.setdefault('epoch',2000)
         
         super(EquatorialCoordinates,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
-        if 'refsys' in kwargs:
-            self.refsys = kwargs['refsys']
             
-    
-    
-    def toGal(self):
+    def transformToEpoch(self,newepoch):
         """
-        converts this position to Galactic coordinates
+        Transforms these :class:`EquatorialCoordinates` to a new epoch using the
+        IAU 2000 precessions from Capitaine, N. et al. 2003.
         """
-        newpos = EquatorialCoordinates(self)
-        newpos.epoch = 'J2000'
+        #convert from current to J2000
+        B = self._precessionMatrixJ2000(self.epoch).I
+        #convert to new epoch
+        A = self._precessionMatrixJ2000(newepoch)
+        self.transform(A*B)
+    
+    @staticmethod
+    def _precessionMatrixJ2000(epoch):
+        """
+        computes the precession matrix from J2000 to the given Julian Epoch
+        """
+        T = (epoch-2000.0)/100.0
+#        pzeta = (-0.0000002,-0.0000327,0.0179663,0.3019015,2306.0809506,2.5976176)
+#        pz = (-0.0000003,0.0000470,0.0182273,1.0947790,2306.0803226,-2.5976176)
+#        ptheta = (-0.0000001,-0.0000601,-0.0418251,-0.4269353,2004.1917476,0.0)
+        #from USNO circular
+        pzeta = (-0.0000003173,-0.000005971,0.01801828,0.2988499,2306.083227,2.650545)
+        pz = (-0.0000002904,-0.000028596,0.01826837,1.0927348,2306.077181,-2.650545)
+        ptheta = (-0.0000001274,-0.000007089,-0.04182264,-0.4294934,2004.191903,0)
+        zeta = np.polyval(pzeta,T)/3600.0
+        z = np.polyval(pz,T)/3600.0
+        theta = np.polyval(theta,T)/3600.0
         
-        latang = GalacticCoordinates._ngp_J2000.lat.d
-        longang = GalacticCoordinates._ngp_J2000.long.d
-        long0 = GalacticCoordinates._long0_J2000.d
+        return rotation_matrix(-z,'z') *\
+               rotation_matrix(theta,'y') *\
+               rotation_matrix(-zeta,'z')
+            
+    @property
+    def refsys(self):
+        return None
+            
+            
+class EquatorialCoordinatesICRS(EquatorialCoordinates):
+    """
+    Equatorial Coordinates tied to the International Celestial Reference System
+    (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
+    inertial frame that only aligns with Earth's equator at J2000, but it is
+    conventional to treat it as such, but independent of Epoch.
+    """
+    def transformToEpoch(self,newepoch):
+        """
+        ICRS is an inertial frame, so no transformation occurs
+        """
+        pass
+    
+    @property
+    def refsys(self):
+        return 'ICRS'
+    
+class EquatorialCoordinatesFK5(EquatorialCoordinates):
+    """
+    Equatorial Coordinates fixed to the FK5 reference system. 
+    """
+    
+    def transformToEpoch(self,newepoch):
+        """
+        Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the 
+        algorithm resolved by the IAU in 1976 as written in Lieske,J.H. 1979 and
+        implemented in SOFA
+        """
+        self.transform(self._precessionMatrixJ(self.epoch,newepoch))
+    
+    @staticmethod
+    def _precessionMatrixJ(epoch1,epoch2):
+        """
+        computes the precession matrix from one Julian epoch to another
+        """
+        from .obstools import epoch_to_jd
         
-        mrot = rotation_matrix(180-long0,'z') * \
-               rotation_matrix(90-latang,'y') * \
-               rotation_matrix(longang,'z')
-        newpos.transform(mrot)
-        return GalacticCoordinates(newpos)
+        jd1 = epoch_to_jd(epoch1)
+        jd2 = epoch_to_jd(epoch2)
+        
+        T = (jd1 - 2451545.0)/36525
+        dt = (jd2 - jd1)/36525
+        
+        pzeta = (0.017998,0.000344,0.30188,-0.000139,1.39656,2306.2181)
+        temp = pzeta[5] + T*(pzeta[4]+T*pzeta[3])
+        zeta = dt*(temp + dt*((pzeta[2]+pzeta[1]*T) + dt*pzeta[0]))/3600
+        
+        pz = (0.018203,-0.000066,1.09468)
+        z = t*(temp + dt*((pz[2]+pz[1]*T) + dt*pz[0]))/3600
+        
+        ptheta = (-0.041833,-0.000217,-0.42665,-0.000217,-0.85330,2004.3109)
+        temp = ptheta[5] + T*(ptheta[4]+T*ptheta[3])
+        zeta = dt*(temp + dt*((ptheta[2]+ptheta[1]*T) + dt*ptheta[0]))/3600
+        
+        return rotation_matrix(-z,'z') *\
+               rotation_matrix(theta,'y') *\
+               rotation_matrix(-zeta,'z')
+    
+    @property
+    def refsys(self):
+        return 'FK5'
+    
+class EquatorialCoordinatesFK4(EquatorialCoordinates):
+    """
+    Equatorial Coordinates fixed to the FK4 reference system.  Note that this 
+    implementation does *not* correct for the elliptic terms of aberration
+    as of yet.
+    
+    Epoch is Besselian.
+    """
+    
+    julianepoch = False
+    
+    def transformToEpoch(self,newepoch):
+        """
+        Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
+        method of Newcomb to compute precession.
+        """
+        self.transform(self._precessionMatrixB(self.epoch,newepoch))
+    
+    @staticmethod
+    def _precessionMatrixB(epoch1,epoch2):
+        """
+        computes the precession matrix from one Besselian epoch to another using
+        Newcomb's method.
+        """
+        #tropical years
+        t1 = (epoch1-1850.0)/1000.0    
+        t2 = (epoch2-1850.0)/1000.0
+        dt = t2 - t1
+        
+        zeta1 = 23035.545 + t1*139.720+0.060*t1*t1
+        zeta2 = 30.240 - 0.27*t1
+        zeta3 = 17.995
+        pzeta = (zeta3,zeta2,zeta1,0)
+        zeta = np.polyval(pzeta,dt)
+        
+        z1 = 23035.545 + t1*139.720 + 0.060*t1*t1
+        z2 = 109.480 + 0.39*t1
+        z3 = 18.325
+        pz = (z3,z2,z1,0)
+        z = np.polyval(pz,dt)
+        
+        theta1 = 20051.12 - 85.29*t1 - 0.37*t1*t1
+        theta2 = -42.65 - 0.37*t1
+        theta3 = -41.8
+        ptheta = (theta3,theta2,theta1,0)
+        theta = np.polyval(ptheta,dt)
+        
+        return rotation_matrix(-z,'z') *\
+               rotation_matrix(theta,'y') *\
+               rotation_matrix(-zeta,'z')
+    
+    @property
+    def refsys(self):
+        return 'FK4'
     
 class EclipticCoordinates(EpochalCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
     through the ecliptic at the equinox for the specified epoch.
+    
+    This particular implementation is tied to
+    :class:`EquatorialCoordinatesDynamical2000` for epoch transforms.
     """
     
     __slots__ = tuple()
     _latlongnames_ = ('beta','lamb')
     _longrange_ = (0,360)
     
-    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch='J2000',refsys='ICRS'):
-        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch,refsys)
+    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
+        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
+        
+    def transformToEpoch(self,newepoch):
+        eqc = self.convert(EquatorialCoordinatesDynamical2000)
+        eqc.epoch = newepoch
+        newval = eqc.convert(self.__class__)
+        self._lat._decval = newval._lat._decval
+        self._long._decval = newval._long._decval
+        self._laterr._decval = newval._lat._decval
+        self._longerr._decval = newval._longerr._decval
+        self._epoch = newepoch
     
+    @property
+    def refsys(self):
+        return None
         
     
 class GalacticCoordinates(LatLongCoordinates):
@@ -1121,7 +1320,7 @@ class GalacticCoordinates(LatLongCoordinates):
     _latlongnames_ = ('b','l')
     _longrange_ = (0,360)
     
-    _ngp_J2000 = EquatorialCoordinates(192.859508, 27.128336,epoch='J2000')
+    _ngp_J2000 = EquatorialCoordinatesFK5(192.859508, 27.128336,epoch=2000)
     _long0_J2000 = AngularCoordinate(122.932)
     
     def toSGal(self):
@@ -1141,9 +1340,9 @@ class SupergalacticCoordinates(LatLongCoordinates):
     _latlongnames_ = ('sgb','sgl')
     _longrange_ = (0,360)
     
-    _nsgp_gal = GalacticCoordinates(6.32,47.37)
+    _nsgp_gal = EquatorialCoordinatesFK4(6.32,47.37,epoch=1950)
     _sglong0_gal = 137.37
-    _nsgp_J2000 = EquatorialCoordinates(283.75420420,15.70894043,epoch='J2000')
+    _nsgp_J2000 = EquatorialCoordinatesFK5(283.75420420,15.70894043,epoch=2000)
     _sglong0_J2000 = 42.30997710
     
 
@@ -1270,6 +1469,29 @@ def angle_axis(matrix,degrees=True):
         return degrees(angle),axis
     else:
         return angle,axis
+    
+def obliquity(jd,algorithm=2000):
+    """
+    Computes the obliquity of the Earth at the requested Julian Date.  
+    
+    :param jd: julian date at which to compute obliquity
+    :type jd: scalar or array-like
+    :param algorithm: year of IAU algorithm - can be 2000 (default) or 1980
+    :type algorithm: int
+    
+    :returns: mean obliquity in degrees (or array of obliquities)
+    """
+    T = (jd-2451545.0)/36525.0
+    
+    if algorithm==2000:
+        p = (-0.0000000434,-0.000000576,0.00200340,-0.0001831,-46.836769,84381.406)
+    elif algorithm==1980:
+        p = (0.001813,-0.00059,-46.8150,84381.448)
+    else:
+        raise ValueError('invalid algorithm year for computing obliquity')
+        
+    return np.polyval(p,T)/3600.
+    
     
 #<--------------------------- Ephemerides classes ----------------------------->
 class EphemerisAccuracyWarning(Warning):
@@ -2036,7 +2258,7 @@ def _earth_coords(jd):
     finally:
         sun.jd = oldsunjd
     
-#<--------------------canonical coordinate transforms-------------------------->
+#<--------------------functional coordinate transforms------------------------->
 def cartesian_to_polar(x,y,degrees=False):
     """
     Converts arrays in 2D rectangular Cartesian coordinates to polar
@@ -2183,7 +2405,7 @@ def cylindrical_to_cartesian(s,t,z,degrees=False):
     x,y = polar_to_cartesian(s,t,degrees)
     return x,y,z
     
-def proj_sep(rx,ty,pz,offset,spherical=False):
+def offset_proj_sep(rx,ty,pz,offset,spherical=False):
     """
     computes the projected seperation for a list of points in galacto-centric
     coordinates as seen from a point offset (an [[x,y,z]] 2-sequence)
@@ -2207,28 +2429,21 @@ def proj_sep(rx,ty,pz,offset,spherical=False):
     return np.array(np.matrix(np.c_[x,y,z])*np.matrix(ohat))
 
 
-
-
-def spherical_distance(ra1,dec1,ra2,dec2,degrees=True):
-    ra1,dec1 = np.array(ra1,copy=False),np.array(dec1,copy=False)
-    ra2,dec2 = np.array(ra2,copy=False),np.array(dec2,copy=False)
-    
-    x1,y1,z1 = spherical_to_cartesian(1.0,90-dec1 if degrees else dec1,ra1,degrees)
-    x2,y2,z2 = spherical_to_cartesian(1.0,90-dec2 if degrees else dec2,ra2,degrees)
-    
-    dp = x1*x2+y1*y2+z1*z2
-    
-    sep = np.arccos(dp)
-    if degrees:
-        sep = np.degrees(sep)
-    return sep
-
 def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     """
     Compute the full 3D seperation between two objects at distances `d1` and
     `d2` and angular positions `pos1` and `pos2` (:class:`LatLongCoordinates`
     objects, or an argument that will be used to generate a
     :class:`EquatorialCoordinates` object)
+    
+    :param pos1: on-sky position of first object
+    :type pos1: :class:`LatLongCoordinates` or initializer
+    :param pos2: on-sky position of second object
+    :type pos2: :class:`LatLongCoordinates` or initializer
+    :param d1: distance to first object
+    :type d1: scalar
+    :param d2: distance to second object
+    :type d2: scalar
     
     .. testsetup::
     
