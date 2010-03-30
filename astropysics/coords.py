@@ -724,7 +724,7 @@ class CoordinateSystem(object):
             return innertrans
         
         else:
-            if not issubclass(fromclass,CoordinateSystem) or 
+            if not issubclass(fromclass,CoordinateSystem) or \
                not issubclass(toclass,CoordinateSystem):
                raise TypeError('to/from classes for registerTransform must be CoordinateSystems')
            
