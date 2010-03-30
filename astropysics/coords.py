@@ -25,8 +25,11 @@ particularly strange cosmology is in use.
         algorithms. 
         
    `Meeus, Jean H. "Astronomical Algorithms" ISBN 0943396352
-   <http://www.willbell.com/MATH/mc1.htm>`_ The authoritative reference on
+   <http://www.willbell.com/MATH/mc1.htm>`_ An authoritative reference on
    coordinates, ephemerides, and related transforms in astronomy
+   
+   `Standards Of Fundamental Astronomy (SOFA) <http://www.iausofa.org/>`_ The
+   IAU reference implementations for coordinates and earth rotation.
 
 .. todo:: more examples
 
@@ -644,12 +647,105 @@ class CoordinateSystem(object):
     conversion between coordinate systems. Subclasses must override
     :meth:`__init__`
     """
+    from collections import defaultdict as _defaultdict
+    
     __metaclass__ = ABCMeta
     __slots__ = tuple()
     
     @abstractmethod
     def __init__(self):
         raise NotImplementedError
+    
+    _converters = _defaultdict(dict) #first index is from, second is to
+    
+    @staticmethod
+    def registerTransform(fromclass,toclass,func=None,overwrite=True):
+        """
+        Register a function to transform coordinates from one system to another.
+        The transformation function is called is func(fromobject) and should 
+        return a new object of type `toclass`.
+        
+        If the transformation function `func` is None, the function is taken to
+        be a decorator, and one of `fromclass` or `toclass` may be the string
+        'self' to indicate the function is a method (the class will be inferred
+        from the class in which it is placed)
+        
+        :param fromclass: The class to transform from.
+        :type fromclass: subclass of :class:`CoordinateSystem` or 'self'
+        :param toclass: The class to transform to.
+        :type toclass: subclass of :class:`CoordinateSystem` or 'self'
+        :param func: the function to perform the transform or None if decorator.
+        :type func: a callable or None
+        :param overwrite: 
+            If True, any already existing function will be silently overriden.
+            Otherwise, a ValueError is raised.
+        :type overwrite: boolean
+        
+        **Examples**::
+        
+            class MyCoordinates(CoordinateSystem):
+                ...
+            class YourCoordinates(CoordinateSystem):
+                ...
+            def transformer(mycooobj):
+                ...
+                return yourcoordobj
+            CoordinateSystem.registerTransform(MyCoordinates,YourCoordinates,f)
+            
+            class TheirCoordinates(CoordinateSystem):
+                @CoordinateSystem.registerTransform(MyCoordinates,'self')
+                def fromMy(self,mycoordinates):
+                    ...
+                    return theircoordobj
+        
+        """
+        if func is None:
+            if fromclass != 'self':
+                if not issubclass(fromclass,CoordinateSystem):
+                    raise TypeError('from class for registerTransform must be a CoordinateSystem')
+                
+            if toclass != 'self':
+                if not issubclass(toclass,CoordinateSystem):
+                    raise TypeError('to class for registerTransform must be a CoordinateSystem')
+            
+            def innertrans(f):
+                if fromclass == 'self':
+                    fromclass = f.im_self.__class__
+                    if not issubclass(fromclass,CoordinateSystem):
+                        raise TypeError('from class for registerTransform must be a CoordinateSystem')
+                    
+                if toclass == 'self':
+                    toclass = f.im_self.__class__
+                    if not issubclass(fromclass,CoordinateSystem):
+                        raise TypeError('to class for registerTransform must be a CoordinateSystem')
+                    
+                return CoordinateSystem.registerTransform(fromclass,toclass,f)
+            
+            return innertrans
+        
+        else:
+            if not issubclass(fromclass,CoordinateSystem) or 
+               not issubclass(toclass,CoordinateSystem):
+               raise TypeError('to/from classes for registerTransform must be CoordinateSystems')
+           
+            if not overwrite and (toclass in CoordinateSystem._converters[fromclass]):
+                raise ValueError('function already exists to convert {0} to {1}'.format(fromclass,toclass))
+            
+            CoordinateSystem._converters[fromclass][toclass] = func
+        
+    @staticmethod
+    def getTransform(fromclass,toclass):
+        """
+        Returns the transformation function to go from `fromclass` to `toclass`.
+        """
+        return CoordinateSystem._converters[fromclass][toclass]
+    
+    @staticmethod
+    def delTransform(fromclass,toclass):
+        """
+        Deletes the transformation function to go from `fromclass` to `toclass`.
+        """
+        del CoordinateSystem._converters[fromclass][toclass]
     
     def convert(self,tosys):
         """
@@ -658,9 +754,15 @@ class CoordinateSystem(object):
         
         :param tosys: The new coordinate system 
         :type tosys: A subclass of :class:`CoordinateSystem`
+        
+        :except: raises NotImplementedError if conversion is not present
         """
-        strf = 'cannot convert coordinate system {0} to {1}'
-        raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+        try:
+            return CoordinateSystem._converters[self.__class__][tosys](self)
+        except KeyError:
+            strf = 'cannot convert coordinate system {0} to {1}'
+            raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+    
 
 class RectangularCoordinates(CoordinateSystem):
     """
@@ -922,15 +1024,22 @@ class LatLongCoordinates(CoordinateSystem):
         
     def transform(self,matrix,apply=True,unitarycheck=False):
         """
-        Applies the supplied transformation matrix (in cartesian coordinates) to
-        these coordinates.  The transform matrix is assumed to be unitary, 
-        although this is not checked unless `unitarycheck` is True
+        Applies the supplied transformation matrix to these coordinates. The
+        transform matrix is assumed to be unitary, although this is not checked
+        unless `unitarycheck` is True.
         
-        if `apply` is True, the transform will be applied to this coordinate as
-        well as being returned
+        :param matrix: the transformation matrix in cartesian coordinates
+        :type matrix: a 3x3 :class:`numpy.matrix`
+        :param apply: 
+            If True, the transform will be applied inplace to the coordinates
+            for this object
+        :type apply: boolean
+        :param unitarycheck: 
+            If True and the matrix is not unitary, a ValueError will be raised.
+            Otherwise no check is performed.
+        :type unitarycheck: boolean
         
-        *returns*
-        lat,long after the supplied transform is applied
+        :returns: (lat,long) after the transformation matrix is applied
         """
         #for single values, math module is much faster than numpy 
         from math import sin,cos,atan2,sqrt
@@ -1053,17 +1162,18 @@ class EpochalCoordinates(LatLongCoordinates):
 class EquatorialCoordinates(EpochalCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
-    right ascension and declination.  Thus, the fundamental plane is given by 
-    the projection of the equator in the sky.
+    right ascension and declination.  Some of the subclasses are not strictly 
+    speaking equatorial, but they are close, or are tied to the equatorial 
+    position of a particular epoch.
     
     The implementation of this classes uses the dynamical J2000 system outlined
-    in IAU resolutions, and detailed in the USNO circular 179 as well as
+    in IAU2000 resolutions, and detailed in the USNO circular 179 as well as
     Capitaine N. et al., IAU 2000 precession A&A 412, 567-586 (2003)
     
     Note that Nutation is *not* yet included in the epoch transform.
     
     This is a superclass for all other EquatorialCoordinate systems - particular
-    reference systems implement the :meth:`transformToEpoch` method.
+    reference systems reimplement the :meth:`transformToEpoch` method.
     """
     
     __slots__ = tuple()
@@ -1176,7 +1286,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinates):
     """
     def transformToEpoch(self,newepoch):
         """
-        ICRS is an inertial frame, so no transformation occurs
+        ICRS is an inertial frame, so no transformation is necessary
         """
         pass
     
@@ -1192,8 +1302,8 @@ class EquatorialCoordinatesFK5(EquatorialCoordinates):
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the 
-        algorithm resolved by the IAU in 1976 as written in Lieske,J.H. 1979 and
-        implemented in SOFA
+        algorithm resolved by the IAU in 1976 as written in Meeus and 
+        Lieske,J.H. 1979
         """
         self.transform(self._precessionMatrixJ(self.epoch,newepoch))
     
@@ -1243,7 +1353,7 @@ class EquatorialCoordinatesFK4(EquatorialCoordinates):
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
-        method of Newcomb to compute precession.
+        method of Newcomb (pre-IAU1976) to compute precession.
         """
         self.transform(self._precessionMatrixB(self.epoch,newepoch))
     
