@@ -690,7 +690,7 @@ class CoordinateSystem(object):
             def transformer(mycooobj):
                 ...
                 return yourcoordobj
-            CoordinateSystem.registerTransform(MyCoordinates,YourCoordinates,f)
+            CoordinateSystem.registerTransform(MyCoordinates,YourCoordinates,transformer)
             
             class TheirCoordinates(CoordinateSystem):
                 @CoordinateSystem.registerTransform(MyCoordinates,'self')
