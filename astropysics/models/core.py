@@ -1317,29 +1317,41 @@ class FunctionModel1D(FunctionModel):
             
             return rh
         
-    def plot(self,lower=None,upper=None,n=100,integrate=None,clf=True,logplot='',
-              powerx=False,powery=False,deriv=None,data='auto',*args,**kwargs):
+    def plot(self,lower=None,upper=None,n=100,clf=True,logplot='',data='auto',
+                  *args,**kwargs):
         """
-        Plot the model function from lower to upper with n samples, and 
-        possibly any fitted data and error bars.
+        Plot the model function and possibly data and error bars with
+        :mod:`matplotlib.pyplot`. The plot will reflect any changes applied with
+        :meth:`setCall`.
         
-        integrate controls whether or not to plot the integral of the function -
-        if True, the base of the integral is taken to be lower, if False, upper,
-        no integration if None, and otherwise, the base is the argument value.
-        It can also be 's', 'spherical','c',or 'circular' for the 
-        appropriate types of integration
-        
-        extra args and kwargs go into the matplotlib plot function
-        
-        data is either an set of data points or a dictionary of kwargs into 
-        scatter. If it is 'auto', the last data input to fitData will be used
-        (if savedata was true).  If it evaluates to False, no data will be 
-        plotted and lower and upper must be set.  the data set can either
-        be of the form (x,y) or (x,y,(xerr,yerr))
-        
-        logplot determines whether or not to plot on a log scale, and powerx and
-        powery determine if the model points should be used as powers (base 10)
-        before plotting
+        :param lower: 
+            The starting x value for the plot. If None, the bound will be
+            inferred from the `data` argument to this function or the
+            :attr:`rangehint` attribute of the model.
+        :type lower: scalar or None
+        :param upper: 
+            The ending x value for the plot. If None, the bound will be inferred
+            from the `data` argument to this function or the :attr:`rangehint`
+            attribute of the model.
+        :type upper: scalar or None
+        :param n: The number of samples for the plot
+        :type n: int
+        :param clf: 
+            If True, the figure will be cleared before the plot is drawn. 
+        :type clf: boolean
+        :param logplot: Sets which axes are logarithmic
+        :type logplot: '','x','y', or 'xy' string
+        :param data: 
+            Determines what (if any) data to display. If None, no data is
+            displayed. If 'auto', data from the :attr:`data` attribute of the
+            :class:`FunctionModel1D` will be used if present, or nothing if the
+            :attr:`data` attribute is empty or None. Otherwise, the data to be
+            plotted (and possibly errors) can be provided as arrays or as a
+            dictionary of inputs to the :func:`matplotlib.pyplot.scatter`
+            function.
+        :type data: 
+            'auto', None, or array like of the form (x,y) or (x,y,(xerr,yerr))
+            
         """
         from matplotlib import pyplot as plt
         from operator import isMappingType
@@ -1376,36 +1388,7 @@ class FunctionModel1D(FunctionModel):
             else:
                 x = np.linspace(lower,upper,n)
             
-            if powerx:
-                x=10**x
-                
-            if integrate is None and not deriv:
-                y = self(x)
-            elif deriv:
-                if integrate is not None:
-                    raise ValueError("can't do derivative and integral simultaneously")
-                y=np.array([self.derivative(v,np.abs(upper-lower)/(10*n)) for v in x])
-            else: #integrate is not None
-                intfunc = self.integrate
-                if integrate is True:
-                    base = lower
-                elif integrate is False:
-                    base = upper
-                elif isinstance(integrate,basestring):
-                    if integrate.startswith('s'): #spherical
-                        intfunc = self.integrateSpherical
-                        base = 0
-                    elif integrate.startswith('c'): #circular
-                        intfunc = self.integrateCircular
-                        base = 0
-                    else:
-                        raise ValueError('unrecognized integrate string')
-                else:
-                    base = float(integrate)
-                y=np.array([intfunc(base,v) for v in x])
-                                
-            if powery:
-                y= 10**y
+            y = self(x)
             
             if clf:
                 plt.clf()
