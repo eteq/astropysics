@@ -1429,10 +1429,18 @@ class NFWModel(FunctionModel1DAuto):
     
 class AlphaBetaGammaModel(FunctionModel1DAuto):
     """
-    This is a model of the form 
-    A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha)
-    where gamma is the inner log slope, beta is the outer log slope, and 
-    alpha controls the transition region.
+    This is a model of the form
+    A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha) where gamma is the
+    inner log slope, beta is the outer log slope, and alpha controls the
+    transition region. 
+    
+    If a logarithmic version of the profile is desired, use::
+    
+    >>> m = AlphaBetaGammaModel()
+    >>> m.setCall(xtrans='pow',ytrans='log')
+    
+    In this case the offset is given by log10(A) and the logaritmhic scale
+    radius is log10(rs).
     """
     
     def f(self,r,rs=1,A=1,alpha=1,beta=2,gamma=1):
@@ -1443,54 +1451,7 @@ class AlphaBetaGammaModel(FunctionModel1DAuto):
     def rangehint(self):
         return self.rs/1000,1000*self.rs
     
-    def toLogAlphaBetaGamma(self,base=10):
-        """
-        generates a new :class:`LogAlphaBetaGammaModel` object based on this
-        object's parameter values with the specified base for the logarithm
-        """
-        logb = np.log(base)
-        
-        C = np.log(self.A)/logb
-        xs = np.log(self.rs)/logb
-        
-        mod = LogAlphaBetaGammaModel(C=C,xs=xs,alpha=alpha,beta=beta,gamma=gamma,base=base)
-        xd = np.log(self.fitData[0])/logb
-        yd = np.log(self.fitData[1])/logb
-        ws = None if self.fitData[2] is None else self.fitData[2].copy()
-        mod.fitData = (xd,yd,ws)
-        return mod
     
-class LogAlphaBetaGammaModel(FunctionModel1DAuto):
-    """
-    This is a model of the same form as the :class:`AlphaBetaGammaModel`, but
-    with logarithmic axes. e.g. LogAlphaBetaGammaModel(x) =
-    log_base(AlphaBetaGammaModel(r)), where x = log_base(r). Similarly, xs =
-    log_base(rs) and C = log_base(A)
-    """
-    
-    fixedpars = ('b',)
-    
-    def f(self,x,xs=0,C=0,alpha=1,beta=2,gamma=1,base=10):
-        xo = x - xs
-        return C - gamma*xo + (gamma-beta)/alpha*np.log((1+base**(alpha*xo)))/np.log(base)
-    
-    @property
-    def rangehint(self):
-        return self.xs - 3,self.xs + 3
-    
-    def toAlphaBetaGamma(self):
-        """
-        generates a new :class:`AlphaBetaGammaModel` object based on this
-        object's parameter values
-        """
-        A = self.b**self.C
-        rs = self.b**self.xs
-        mod = AlphaBetaGammaModel(A=A,rs=rs,alpha=alpha,beta=beta,gamma=gamma)
-        xd = self.b**self.fitData[0]
-        yd = self.b**self.fitData[1]
-        ws = None if self.fitData[2] is None else self.fitData[2].copy()
-        mod.fitData = (xd,yd,ws)
-        return mod
 
 class PlummerModel(FunctionModel1DAuto):
     xaxisname = 'r'
@@ -1561,11 +1522,17 @@ class SchecterLumModel(FunctionModel1DAuto):
         return self.Lstar/3,self.Lstar*3
         
 class EinastoModel(FunctionModel1DAuto):
+    """
+    Einasto profile ln(rho/A) = (-2/alpha)((r/rs)^alpha - 1) . :attr:`A` is the
+    density where the log-slope is -2, and :attr:`rs` is the corresponding
+    radius. The `alpha` parameter defaults to .17 as suggested in Navarro et al.
+    2010
+    """
     xaxisname = 'r'
     yaxisname = 'rho'
     
-    def f(self,r,A=1,rs=1,alpha=.2):
-        return A*np.exp(-(r/rs)**alpha)
+    def f(self,r,A=1,rs=1,alpha=.17):
+        return A*np.exp((-2/alpha)*((r/rs)**alpha - 1))
 
 class SersicModel(FunctionModel1DAuto):
     """
