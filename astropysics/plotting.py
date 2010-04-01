@@ -260,40 +260,6 @@ def add_mapped_axis(mapfunc,majorticks=5,minorticks=0,axis='x',label='',labelpro
     axes(oldax)
     draw_if_interactive()
     
-def multi_scatter(xs,ys,cs=None,ss=None,ms=None,ls=None,cb=True,**kwargs):
-    minc= np.inf
-    maxc= -np.inf
-    if cs is None:
-        cs=['b' for x in xs]
-    else:
-        for c in cs:
-            if type(c) is not str:
-                x,i=np.max(c),np.min(c)
-                maxc = x if x > maxc else maxc
-                minc = i if i < maxc else maxc
-    
-    if ss is None:
-        ss=[20 for x in xs]
-        
-    if ms is None:
-        ms=['o' for x in xs]
-        
-    if ls is None:
-        ls=[None for x in xs]
-            
-    if 'norm' not in kwargs:
-        kwargs['norm']=plt.Normalize(minc,maxc)
-    ori=kwargs.pop('orientation',None)
-    for x,y,c,s,m,l in zip(xs,ys,cs,ss,ms,ls):
-        plt.scatter(x,y,c=c,s=s,marker=m,label=l,**kwargs)
-    if cb and type(c) is not str:
-        if ori is None:
-            cbh=plt.colorbar()
-        else:
-            cbh=plt.colorbar(orientation=ori)
-        if type(cb) == str:
-            cbh.set_label(cb)
-            plt.draw()
 
 def scatter4d(x,y,c,s,xe=None,ye=None,logax=(False,False,False,False),scaling=(1,1,1,1),
               outlines=True,cb=True,errkwargs={},**kwargs):
@@ -614,26 +580,6 @@ def square_axes(axes=None):
             
     
     
-def branchedplot(xs,uppery,lowery,fmt='-o',yerrs=None,xerrs=None,xlabel='',ylabel='',logx=False,c='b',**kwargs):
-    """
-    generates a plot with vertical lines ranging from lowery to uppery at the
-    x-axis locations xs optionally with error bars
-    """
-    if len(xs) != len(uppery) != len(lowery):
-        raise ValueError('All arrays not same length')
-    if yerrs is None:
-        yerrs=[None for x in xs]
-    if xerrs is None:
-        xerrs=[None for x in xs]
-    if logx:
-        plt.semilogx()
-    for x,uz,lz,ze,xe in zip(xs,uppery,lowery,yerrs,xerrs):
-        plt.errorbar((x,x),(uz,lz),ze,xe,'o-',c=c,**kwargs)
-    plt.xlabel(xlabel)
-    plt.ylabel(ylabel)
-    if plt.isinteractive():
-        plt.draw()
-    
 def scatter_select(*args,**kwargs):
     """
     quick scatter plot to lasso objects and return an object that will be
@@ -822,38 +768,6 @@ def subplots_adjust_points(left=None, bottom=None, right=None, top=None, wspace=
     hs=hspace/dpi/h if hspace is not None else None
     plt.subplots_adjust(l,b,r,t,ws,hs)
     
-def multi_sepc_plot(fitsfile,plotsize=1,extnum=0):
-    import pyfits
-    f=pyfits.open(fitsfile)
-    try:
-        hd=dict(f[extnum].header.items)
-        d=f[extnum].data
-        
-        if d.shape[0] > d.shape[1]:
-            d=d.T
-            
-        x=arange(d.shape[1])
-        logx=hd['COEFF0']+x*hd['COEFF1']
-        x=10**logx
-        if plotsize is 1:
-            for spec in d:
-                plot(x,spec)
-        elif not plotsize or len(plotsize) == 2:
-            if not plotsize:
-                l=w=1
-                while l*w < len(d):
-                    l+=1
-                    if l*w < len(d): break
-                    w+=1
-                plotsize=(l,w)
-                for i,spec in enumerate(d):
-                    subplot(plotsize[0],plotsize[1],i)
-                    plot(x,spec)
-            pass
-        else:
-            raise ValueError("couldn't understand plotsize")
-    finally:
-        f.close()
         
         
 def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=False,
@@ -965,14 +879,77 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
         
     return tuple(reses)
 
-def scatter_1to1(x,y,**kwargs):
-    plt.scatter(x,y,**kwargs)
-    xls,yls=plt.xlim(),plt.ylim()
-    xl = np.linspace(np.min(np.min(x),np.min(y)),np.max(np.max(x),np.max(y)),10)
-    plt.plot(xl,xl,c='k')
+
+def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
+                    logx=False,logy=False,**kwargs):
+    """
+    Plots a 1d sequence of data points as a cumulative count less than (or 
+    greater than) a given value - i.e. the integrated histogram. 
     
-    plt.xlim(*xls)
-    plt.ylim(*yls)
+    :param data: input data for plot
+    :type data: array-like
+    :param Nlt: If True, produces N(<x) plot, otherwise N(>x).
+    :type Nlt: boolean
+    :param frac: 
+        If False, the raw N will be plotted. If True, the cumulative fraction
+        will be plotted(e.g. it will always terminate at 1), or if a scalar, the
+        fraction will be multiplied by that value.
+    :type frac: boolean or scalar
+    :param xlabel: Label for the data value.
+    :type xlabel: string
+    :param edges: 
+        Specifies the lower and upper limits for the plot. If not provided, the
+        lowest and highest of `data` will be used.
+    :type edges: tuple of scalars or Nones
+    :param logx: Logarithmic x-axis?
+    :type logx: boolean
+    :param logy: Logarithmic y-axis?
+    :type logy: boolean
+    
+    kwargs are passed into :func:`matplotlib.pyplot.plot`
+    
+    """
+    if 'ls' in kwargs or 'linestyle' in kwargs:
+        raise ValueError('cannot include ls or linestyle kwarg for cumulative plot')
+    kwargs['ls']='steps'
+    
+    x = np.array(data).ravel()
+    x.sort()
+    y = np.arange(x.size)
+    
+    if not Nlt:
+        x = x[::-1]
+        
+    if edges[0] is not None:
+        x = np.insert(x,0,edges[0] if Nlt else edges[1])
+        y = np.insert(y,0,0)# if Nlt else y[-1])
+    if edges[1] is not None:
+        x = np.append(x,edges[1] if Nlt else edges[0])
+        y = np.append(y,y[-1]+1)# if Nlt else 0)
+        
+    if frac:
+        y = y*float(frac)/y[-1]
+            
+    if logx and logy:
+        pltfunc = plt.loglog
+    elif logx:
+        pltfunc = plt.semilogx
+    elif logy:
+        pltfunc = plt.semilogy
+    else:
+        pltfunc = plt.plot
+    
+    preint = plt.isinteractive()
+    try:
+        pltfunc(x,y,**kwargs)
+        plt.xlabel(xlabel)
+        ltgt = '<' if Nlt else '>'
+        if '$' in xlabel:
+            plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
+        else:
+            plt.ylabel('N(%s%s)'%(ltgt,xlabel))
+    finally:
+        plt.interactive(preint)
 
 #<------------------------------------Maya VI---------------------------------->
 
@@ -1024,28 +1001,6 @@ def mlab_camera(fp=None,pos=None,angle=None):
         c.view_angle=angle
     return c
 
-def mlab_walk(distance):
-    """
-    move mayavi.mlab the requested distance along the view direction (can be 
-    negative)
-    """
-    f = get_engine().current_scene
-    if f is None:
-        return
-    scene = f.scene
-    if scene is None:
-        return
-    
-    ren = scene.renderer
-    cam = scene.camera
-    
-    v = cam.focal_point - cam.position
-    v = distance*v/np.linalg.norm(v)
-    cam.position = cam.position + v
-    cam.focal_point = cam.focal_point + v    
-    
-    ren.reset_camera_clipping_range()
-    scene.render()
 
 def mvi_texture_src(fn):
     from enthought.mayavi.sources.api import ImageReader
