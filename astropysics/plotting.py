@@ -899,7 +899,8 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     :type xlabel: string
     :param edges: 
         Specifies the lower and upper limits for the plot. If not provided, the
-        lowest and highest of `data` will be used.
+        lowest and highest of `data` will be used.  If data is below or above 
+        these edges, it will be ignored.
     :type edges: tuple of scalars or Nones
     :param logx: Logarithmic x-axis?
     :type logx: boolean
@@ -921,9 +922,15 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         x = x[::-1]
         
     if edges[0] is not None:
+        lmask = x>edges[0]
+        x = x[lmask]
+        y = y[lmask]
         x = np.insert(x,0,edges[0] if Nlt else edges[1])
         y = np.insert(y,0,0)# if Nlt else y[-1])
     if edges[1] is not None:
+        umask = x<edges[1]
+        x = x[umask]
+        y = y[umask]
         x = np.append(x,edges[1] if Nlt else edges[0])
         y = np.append(y,y[-1]+1)# if Nlt else 0)
         
