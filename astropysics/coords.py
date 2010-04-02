@@ -1150,30 +1150,19 @@ class EpochalCoordinates(LatLongCoordinates):
     @abstractmethod
     def transformToEpoch(self,newepoch):
         raise NotImplementedError
-        
     
-    def getEquinox(self):
-        """
-        Return the location of the equinox in this coordinate system.
-        """
-        eqc = EquatorialCoordinatesDynamical2000(0,0,epoch=self.epoch)
-        return eqc.convert(self.__class__)
 
-class EquatorialCoordinates(EpochalCoordinates):
+        
+
+class EquatorialCoordinatesBase(EpochalCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
     right ascension and declination.  Some of the subclasses are not strictly 
     speaking equatorial, but they are close, or are tied to the equatorial 
     position of a particular epoch.
     
-    The implementation of this classes uses the dynamical J2000 system outlined
-    in IAU2000 resolutions, and detailed in the USNO circular 179 as well as
-    Capitaine N. et al., IAU 2000 precession A&A 412, 567-586 (2003)
-    
-    Note that Nutation is *not* yet included in the epoch transform.
-    
-    This is a superclass for all other EquatorialCoordinate systems - particular
-    reference systems reimplement the :meth:`transformToEpoch` method.
+    This is a superclass for all other Equatorial Coordinate systems - particular
+    reference systems implement the :meth:`transformToEpoch` method.
     """
     
     __slots__ = tuple()
@@ -1236,10 +1225,15 @@ class EquatorialCoordinates(EpochalCoordinates):
         kwargs.setdefault('decerr',None)
         kwargs.setdefault('epoch',2000)
         
-        super(EquatorialCoordinates,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        super(EquatorialCoordinatesBase,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
             
+class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
+    """
+    TODO: document, clean up
+    """
+    
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch using the
@@ -1275,9 +1269,17 @@ class EquatorialCoordinates(EpochalCoordinates):
     @property
     def refsys(self):
         return None
+    
+class EquatorialCoordinatesCIO(EquatorialCoordinatesBase):
+    """
+    TODO: implement
+    """
+    
+    def __init__(self):
+        raise NotImplementedError
             
             
-class EquatorialCoordinatesICRS(EquatorialCoordinates):
+class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     """
     Equatorial Coordinates tied to the International Celestial Reference System
     (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
@@ -1294,7 +1296,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinates):
     def refsys(self):
         return 'ICRS'
     
-class EquatorialCoordinatesFK5(EquatorialCoordinates):
+class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
     """
     Equatorial Coordinates fixed to the FK5 reference system. 
     """
@@ -1339,7 +1341,7 @@ class EquatorialCoordinatesFK5(EquatorialCoordinates):
     def refsys(self):
         return 'FK5'
     
-class EquatorialCoordinatesFK4(EquatorialCoordinates):
+class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
     """
     Equatorial Coordinates fixed to the FK4 reference system.  Note that this 
     implementation does *not* correct for the elliptic terms of aberration
@@ -1393,6 +1395,11 @@ class EquatorialCoordinatesFK4(EquatorialCoordinates):
     @property
     def refsys(self):
         return 'FK4'
+    
+    
+#Default Equatorial Coordinate system is J2000 equinox... 
+#TODO:change default to CIO when CIO is ready
+EquatorialCoordinates = EquatorialCoordinatesEquinox
     
 class EclipticCoordinates(EpochalCoordinates):
     """
