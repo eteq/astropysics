@@ -662,8 +662,11 @@ class CoordinateSystem(object):
     def registerTransform(fromclass,toclass,func=None,overwrite=True):
         """
         Register a function to transform coordinates from one system to another.
+        
         The transformation function is called is func(fromobject) and should 
-        return a new object of type `toclass`.
+        return a new object of type `toclass`.  If called with no arguments, 
+        the function should raise a :exc:`NotImplementedError` or behave in a 
+        manner defined in subclasses (see e.g. :class:`LatLongCoordinates`)
         
         If the transformation function `func` is None, the function is taken to
         be a decorator, and one of `fromclass` or `toclass` may be the string
@@ -1010,17 +1013,18 @@ class LatLongCoordinates(CoordinateSystem):
         :param targetcoosys: The target coordinate system
         :type targetcoosys: A subclass of :class:`LatLongCoordinates`
         
-        :returns: a 3x3 transformation matrix, typically unitary/rotation matrix
+        :returns: a 3x3 rotation matrix
+        :except: 
+            Raises :exc:`NotImplementedError` if the conversion cannot be made.
         """
-        from inspect import isclass
-        
-        if not isclass(targetcoosys) or not issubclass(targetcoosys,LatLongCoordinates):
-            raise ValueError('can only generate conversion matrix for a valid coordinate system')
-        
         if targetcoosys is self.__class__:
             return np.eye(3).view(np.matrix)
-        
-        raise NotImplementedError
+        else:
+            try:
+                return CoordinateSystem._converters[self.__class__][targetcoosys]()
+            except (KeyError,TypeError),e:
+                strf = 'cannot generate matrix to transform from {0} to {1}'
+                raise NotImplementedError(strf.format(self.__class__.__name__,targetcoosys))
         
     def transform(self,matrix,apply=True,unitarycheck=False):
         """
@@ -1072,6 +1076,35 @@ class LatLongCoordinates(CoordinateSystem):
             self.long = longp
         
         return latp,longp
+    
+    def convert(self,tosys):
+        """
+        converts the coordinate system from it's current system to a new 
+        :class:`CoordinateSystem` object.  For :class:~LatLongCoordinate`
+        objects, if a converter is not available a conversion to 
+        :class:`EquatorialCoordinates` and then to the target system will be
+        attempted.
+        
+        :param tosys: The new coordinate system 
+        :type tosys: A subclass of :class:`CoordinateSystem`
+        
+        :except: raises NotImplementedError if converters are not present
+        """
+        try:
+            m = self.conversionMatrix(self,tosys)
+        except NotImplementedError:
+            m1 = self.conversionMatrix(self,EquatorialCoordinates)
+            try:
+                m2 = CoordinateSystem._converters[EquatorialCoordinates][targetcoosys]()
+            except (KeyError,TypeError),e:
+                str = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(targetcoosys)
+                raise NotImplementedError(str)
+            m = m2*m1
+            
+        #TODO: implement errors
+        1/0
+        lat,long = self.transform(m,False)
+        return tosys(lat,long)
 
 class HorizontalCoordinates(LatLongCoordinates):
     """
