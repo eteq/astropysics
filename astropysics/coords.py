@@ -850,6 +850,12 @@ class LatLongCoordinates(CoordinateSystem):
     This object represents an angular location on a unit sphere as represented
     in spherical coordinates with a latitude and longitude.  Subclasses specify 
     details such as transformations or epochs.
+    
+    Note that converter functions (described in
+    :meth:`CoordinateSystem.registerTranform`) for subclasses should return a
+    rotation matrix if called with no arguments. The matrix will be applied to
+    cartesian coordinates on the unit sphere to perform transformations.
+    
     """
     __slots__ = ('_lat','_long','_laterr','_longerr')
     __metaclass__ = _LatLongMeta
@@ -1005,28 +1011,30 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
         
-    def conversionMatrix(self,targetcoosys):
+    def conversionMatrix(self,tosys):
         """
-        Generates and returns the transformation matrix from the current 
+        Generates and returns the rotation matrix from the current 
         coordinate system into the requested coordinate system
         
-        :param targetcoosys: The target coordinate system
-        :type targetcoosys: A subclass of :class:`LatLongCoordinates`
+        :param tosys: The target coordinate system
+        :type tosys: A subclass of :class:`LatLongCoordinates`
         
         :returns: a 3x3 rotation matrix
         :except: 
             Raises :exc:`NotImplementedError` if the conversion cannot be made.
         """
-        if targetcoosys is self.__class__:
+        if not issubclass(tosys,LatLongCoordinates):
+            return CoordinateSystem.convert(self,tosys)
+        elif tosys is self.__class__:
             return np.eye(3).view(np.matrix)
         else:
             try:
-                return CoordinateSystem._converters[self.__class__][targetcoosys]()
+                return CoordinateSystem._converters[self.__class__][tosys]() #call w/no argument gives the rotation matrix
             except (KeyError,TypeError),e:
                 strf = 'cannot generate matrix to transform from {0} to {1}'
                 raise NotImplementedError(strf.format(self.__class__.__name__,targetcoosys))
         
-    def transform(self,matrix,apply=True,unitarycheck=False):
+    def matrixTransform(self,matrix,apply=True,unitarycheck=False):
         """
         Applies the supplied transformation matrix to these coordinates. The
         transform matrix is assumed to be unitary, although this is not checked
@@ -1057,12 +1065,21 @@ class LatLongCoordinates(CoordinateSystem):
                 raise ValueError('matrix not unitary')
         
         lat = self.lat.radians
-        long = self.long.radians    
+        long = self.long.radians
+        laterr = 0 if self.laterr is None else self.laterr.radians
+        longerr = 0 if self.longerr is None else self.longerr.radians    
         
         #spherical w/ r=1 > cartesian
         x = cos(lat)*cos(long)
         y = cos(lat)*sin(long) 
         z = sin(lat)
+        
+        if laterr != 0 or longerr != 0:
+            dx = sqrt((laterr*sin(lat)*cos(long))**2+(longerr*cos(lat)*sin(long))**2)
+            dy = sqrt((laterr*sin(lat)*sin(long))**2+(longerr*cos(lat)*cos(long))**2)
+            dz = abs(laterr*cos(lat))
+        
+        
         
         #do transform
         xp,yp,zp = m*np.matrix((x,y,z))
@@ -1101,7 +1118,7 @@ class LatLongCoordinates(CoordinateSystem):
                 raise NotImplementedError(str)
             m = m2*m1
             
-        #TODO: implement errors
+        #TODO: implement errors, epoch
         1/0
         lat,long = self.transform(m,False)
         return tosys(lat,long)
@@ -1180,11 +1197,18 @@ class EpochalCoordinates(LatLongCoordinates):
     Epoch.
     """)
     
+    def convert(self,tosys):
+        res = LatLongCoordinates.convert(self,tosys)
+        if issubclass(tosys,epochalCoordinates):
+            res._epoch = self._epoch
+        return res
+    convert.__doc__ = LatLongCoordinates.convert.__doc__
+    
     @abstractmethod
     def transformToEpoch(self,newepoch):
         raise NotImplementedError
     
-
+    
         
 
 class EquatorialCoordinatesBase(EpochalCoordinates):
