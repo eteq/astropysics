@@ -910,9 +910,16 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     kwargs are passed into :func:`matplotlib.pyplot.plot`
     
     """
-    if 'ls' in kwargs or 'linestyle' in kwargs:
-        raise ValueError('cannot include ls or linestyle kwarg for cumulative plot')
-    kwargs['ls']='steps'
+    
+    #both ls and linestyle can be used to set the style, so we don't 
+    #differentiate unless both are missing
+    if 'ls' in kwargs:
+        kwargs['ls'] = 'steps' + kwargs['ls']
+    if 'linestyle' in kwargs:
+        kwargs['linestyle'] = 'steps' + kwargs['linestyle']
+    if 'ls' not in kwargs and 'linestyle' not in kwargs:
+        kwargs['ls'] = 'steps'
+        
     
     x = np.array(data).ravel()
     x.sort()
