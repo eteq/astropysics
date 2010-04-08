@@ -670,13 +670,14 @@ class CoordinateSystem(object):
         
         If the transformation function `func` is None, the function is taken to
         be a decorator, and one of `fromclass` or `toclass` may be the string
-        'self' to indicate the function is a method (the class will be inferred
-        from the class in which it is placed)
+        'cls' to indicate the function is a method (the class will be inferred
+        from the class in which it is placed, but the method *must* be a class
+        method if 'cls' is used)
         
         :param fromclass: The class to transform from.
-        :type fromclass: subclass of :class:`CoordinateSystem` or 'self'
+        :type fromclass: subclass of :class:`CoordinateSystem` or 'cls'
         :param toclass: The class to transform to.
-        :type toclass: subclass of :class:`CoordinateSystem` or 'self'
+        :type toclass: subclass of :class:`CoordinateSystem` or 'cls'
         :param func: the function to perform the transform or None if decorator.
         :type func: a callable or None
         :param overwrite: 
@@ -696,39 +697,40 @@ class CoordinateSystem(object):
             CoordinateSystem.registerTransform(MyCoordinates,YourCoordinates,transformer)
             
             class TheirCoordinates(CoordinateSystem):
-                @CoordinateSystem.registerTransform(MyCoordinates,'self')
-                def fromMy(self,mycoordinates):
+                @CoordinateSystem.registerTransform(MyCoordinates,'cls')
+                @classmethod
+                def fromMy(cls,mycoordinates):
                     ...
                     return theircoordobj
         
         """
         if func is None:
-            if fromclass != 'self':
+            raise NotImplementedError('decorator form currently non-functional')
+            if fromclass != 'cls':
                 if not issubclass(fromclass,CoordinateSystem):
                     raise TypeError('from class for registerTransform must be a CoordinateSystem')
                 
-            if toclass != 'self':
+            if toclass != 'cls':
                 if not issubclass(toclass,CoordinateSystem):
                     raise TypeError('to class for registerTransform must be a CoordinateSystem')
             
-            def innertrans(f):
-                if fromclass == 'self':
-                    fromclass = f.im_self.__class__
+            def innertrans(f,fromclass=fromclass,toclass=toclass):
+                if fromclass == 'cls':
+                    fromclass = f.im_self
                     if not issubclass(fromclass,CoordinateSystem):
-                        raise TypeError('from class for registerTransform must be a CoordinateSystem')
+                        raise TypeError('from cls for registerTransform must be a CoordinateSystem and method must be a class method')
                     
-                if toclass == 'self':
-                    toclass = f.im_self.__class__
-                    if not issubclass(fromclass,CoordinateSystem):
-                        raise TypeError('to class for registerTransform must be a CoordinateSystem')
+                if toclass == 'cls':
+                    toclass = f.im_self
+                    if not issubclass(toclass,CoordinateSystem):
+                        raise TypeError('to cls for registerTransform must be a CoordinateSystem and method must be a class method')
                     
                 return CoordinateSystem.registerTransform(fromclass,toclass,f)
             
             return innertrans
         
         else:
-            if not issubclass(fromclass,CoordinateSystem) or \
-               not issubclass(toclass,CoordinateSystem):
+            if not issubclass(fromclass,CoordinateSystem) or not issubclass(toclass,CoordinateSystem):
                raise TypeError('to/from classes for registerTransform must be CoordinateSystems')
            
             if not overwrite and (toclass in CoordinateSystem._converters[fromclass]):
@@ -1052,8 +1054,8 @@ class LatLongCoordinates(CoordinateSystem):
         :type unitarycheck: boolean
         
         :returns: 
-            (lat,long) after the transformation matrix is applied or
-            (lat,long,laterr,longerr) if errors are nonzero
+            (lat,long) as decimal radians after the transformation matrix is
+            applied or (lat,long,laterr,longerr) if errors are nonzero
         """
         #for single values, math module is much faster than numpy 
         from math import sin,cos,atan2,sqrt
@@ -1082,8 +1084,8 @@ class LatLongCoordinates(CoordinateSystem):
         z = sb
         
         #do transform
-        v = np.matrix((x,y,z))
-        xp,yp,zp = m*v
+        v = np.matrix((x,y,z)).T
+        xp,yp,zp = (m*v).A1
         
         #cartesian > spherical
         sp = sqrt(xp*xp+yp*yp) #cylindrical radius
@@ -1116,11 +1118,11 @@ class LatLongCoordinates(CoordinateSystem):
             laterr = None
         
         if apply:
-            self.lat = latp
-            self.long = longp
+            self.lat.radians = latp
+            self.long.radians = longp
             if laterr is not None:
-                self.laterr = dlatp
-                self.longerr = dlongp
+                self.laterr.radians = dlatp
+                self.longerr.radians = dlongp
         
         if laterr is None:
             return latp,longp
@@ -1142,25 +1144,26 @@ class LatLongCoordinates(CoordinateSystem):
         """
         #TODO:test
         try:
-            m = self.conversionMatrix(self,tosys)
+            m = self.conversionMatrix(tosys)
+        #TODO:SPEEDUP: don't catch exception, instead use some more direct means, or cache catching somehow
         except NotImplementedError:
-            m1 = self.conversionMatrix(self,EquatorialCoordinates)
+            m1 = self.conversionMatrix(EquatorialCoordinates)
             try:
                 m2 = CoordinateSystem._converters[EquatorialCoordinates][targetcoosys]()
             except (KeyError,TypeError),e:
-                str = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(targetcoosys)
-                raise NotImplementedError(str)
+                errstr = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(targetcoosys)
+                raise NotImplementedError(errstr)
             m = m2*m1
-            
-        tres = self.transform(m,apply=False)
+        
+        tres = self.matrixTransform(m,apply=False)
         newcoords = tosys()
         
         #TODO:SPEEDUP: use _lat instead of lat and similar if workable?
-        newcoords.lat = tres[0]
-        newcoords.long = tres[1]
+        newcoords.lat.radians = tres[0]
+        newcoords.long.radians = tres[1]
         if len(tres)>3:
-            newcoords.laterr = tres[2]
-            newcoords.longerr = tres[3]
+            newcoords.laterr.radians = tres[2]
+            newcoords.longerr.radians = tres[3]
             
         if hasattr(newcoords,'_epoch'):
             newcoords._epoch = self._epoch
@@ -1243,7 +1246,7 @@ class EpochalCoordinates(LatLongCoordinates):
     
     def convert(self,tosys):
         res = LatLongCoordinates.convert(self,tosys)
-        if issubclass(tosys,epochalCoordinates):
+        if issubclass(tosys,EpochalCoordinates):
             res._epoch = self._epoch
         return res
     convert.__doc__ = LatLongCoordinates.convert.__doc__
@@ -1344,7 +1347,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
         B = self._precessionMatrixJ2000(self.epoch).I
         #convert to new epoch
         A = self._precessionMatrixJ2000(newepoch)
-        self.transform(A*B)
+        self.matrixTransform(A*B)
     
     @staticmethod
     def _precessionMatrixJ2000(epoch):
@@ -1380,22 +1383,6 @@ class EquatorialCoordinatesCIO(EquatorialCoordinatesBase):
         raise NotImplementedError
             
             
-class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
-    """
-    Equatorial Coordinates tied to the International Celestial Reference System
-    (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
-    inertial frame that only aligns with Earth's equator at J2000, but it is
-    conventional to treat it as such, but independent of Epoch.
-    """
-    def transformToEpoch(self,newepoch):
-        """
-        ICRS is an inertial frame, so no transformation is necessary
-        """
-        pass
-    
-    @property
-    def refsys(self):
-        return 'ICRS'
     
 class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
     """
@@ -1408,7 +1395,7 @@ class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
         algorithm resolved by the IAU in 1976 as written in Meeus and 
         Lieske,J.H. 1979
         """
-        self.transform(self._precessionMatrixJ(self.epoch,newepoch))
+        self.matrixTransform(self._precessionMatrixJ(self.epoch,newepoch))
     
     @staticmethod
     def _precessionMatrixJ(epoch1,epoch2):
@@ -1458,7 +1445,7 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
         method of Newcomb (pre-IAU1976) to compute precession.
         """
-        self.transform(self._precessionMatrixB(self.epoch,newepoch))
+        self.matrixTransform(self._precessionMatrixB(self.epoch,newepoch))
     
     @staticmethod
     def _precessionMatrixB(epoch1,epoch2):
@@ -1501,6 +1488,50 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
 #Default Equatorial Coordinate system is J2000 equinox... 
 #TODO:change default to CIO when CIO is ready
 EquatorialCoordinates = EquatorialCoordinatesEquinox
+
+class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
+    """
+    Equatorial Coordinates tied to the International Celestial Reference System
+    (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
+    inertial frame that only aligns with Earth's equator at J2000, but it is
+    conventional to treat it as such, but independent of Epoch.
+    """
+    def transformToEpoch(self,newepoch):
+        """
+        ICRS is an inertial frame, so no transformation is necessary
+        """
+        pass
+    
+    @property
+    def refsys(self):
+        return 'ICRS'
+    
+    @staticmethod
+    def _toEq(icrsc=None):
+        if icrsc is None:
+            #see USNO circular 179 for frame bias -- all in milliarcsec
+            da0 = -14.6
+            xi0 = -16.6170
+            eta0 = -6.8192
+            #mas->degrees
+            return rotation_matrix(-eta0/3600000,axis='x') *\
+                   rotation_matrix(xi0/3600000,axis='y') *\
+                   rotation_matrix(da0/3600000,axis='z')
+                   
+        else:
+            #calls the None-argument version to get the rotation matrix
+            return icrsc.convert(EquatorialCoordinates)
+        
+    @staticmethod
+    def _fromEq(eqc=None):
+        if eqc is None:
+            #really we want inverse, but rotations are unitary -> inv==transpose
+            return EquatorialCoordinatesICRS._toEq(None).T 
+        else:
+            #calls the None-argument version to get the rotation matrix
+            return eqc.convert(EquatorialCoordinatesICRS)
+CoordinateSystem.registerTransform(EquatorialCoordinates,EquatorialCoordinatesICRS,EquatorialCoordinatesICRS._fromEq)
+CoordinateSystem.registerTransform(EquatorialCoordinatesICRS,EquatorialCoordinates,EquatorialCoordinatesICRS._toEq)
     
 class EclipticCoordinates(EpochalCoordinates):
     """
@@ -1549,7 +1580,7 @@ class GalacticCoordinates(LatLongCoordinates):
         longang = SupergalacticCoordinates._nsgp_gal.long.d
         mrot = rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
         sgp = SupergalacticCoordinates(self)
-        sgp.transform(mrot)
+        sgp.matrixTransform(mrot)
         return sgp
     
     
@@ -1603,13 +1634,18 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
 
 def rotation_matrix(angle,axis='z',degrees=True):
     """
-    generates a 3x3 rotation matrix in cartesian coordinates for rotation about
+    Generate a 3x3 rotation matrix in cartesian coordinates for rotation about
     the requested axis.
     
-    `axis` can either be a string 'x','y', or 'z', or a 3-sequence specifying
-    an axis to rotate about.
+    :param axis:
+        Either 'x','y', 'z', or a (x,y,z) specifying an axis to rotate about. If
+        'x','y', or 'z', the rotation sense is counterclockwise looking down the
+        + axis (e.g. positive rotations obey left-hand-rule).
+    :type axis: string or 3-sequence
+    :param degrees: If True the input angle is degrees, otherwise radians.
+    :type degrees: boolean
     
-    if `degrees` is True the input angle is in degrees, otherwise it is radians
+    :returns: :class:`numpy.matrix` unitary rotation matrix.
     """
     from math import sin,cos,radians,sqrt
     if degrees:
@@ -1620,8 +1656,8 @@ def rotation_matrix(angle,axis='z',degrees=True):
     if axis == 'z':
         s = sin(angle)
         c = cos(angle)
-        return np.matrix((( c,-s, 0),
-                          ( s, c, 0),
+        return np.matrix((( c, s, 0),
+                          (-s, c, 0),
                           ( 0, 0, 1)))
     elif axis == 'y':
         s = sin(angle)
@@ -1633,8 +1669,8 @@ def rotation_matrix(angle,axis='z',degrees=True):
         s = sin(angle)
         c = cos(angle)
         return np.matrix((( 1, 0, 0),
-                          ( 0, c,-s),
-                          ( 0, s, c)))
+                          ( 0, c, s),
+                          ( 0,-s, c)))
     else:
         x,y,z = axis
         w = cos(angle/2)
