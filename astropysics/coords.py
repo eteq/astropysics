@@ -1034,7 +1034,7 @@ class LatLongCoordinates(CoordinateSystem):
                 return CoordinateSystem._converters[self.__class__][tosys]() #call w/no argument gives the rotation matrix
             except (KeyError,TypeError),e:
                 strf = 'cannot generate matrix to transform from {0} to {1}'
-                raise NotImplementedError(strf.format(self.__class__.__name__,targetcoosys))
+                raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
         
     def matrixTransform(self,matrix,apply=True,unitarycheck=False):
         """
@@ -1107,8 +1107,8 @@ class LatLongCoordinates(CoordinateSystem):
             #intermediate variables for dlatp - each of the partial derivatives
             chi = 1/(1+(zp/sp)**2) 
             #common factor chi not included below
-            dbdx = x*z*s**-3
-            dbdy = y*z*s**-3
+            dbdx = x*z*sp**-3
+            dbdy = y*z*sp**-3
             dbdz = 1/sp
             
             dlatp = chi*sqrt((dxp*dbdx)**2 + (dyp*dbdy)**2 + (dzp*dbdz)**2)
@@ -1149,9 +1149,9 @@ class LatLongCoordinates(CoordinateSystem):
         except NotImplementedError:
             m1 = self.conversionMatrix(EquatorialCoordinates)
             try:
-                m2 = CoordinateSystem._converters[EquatorialCoordinates][targetcoosys]()
+                m2 = CoordinateSystem._converters[EquatorialCoordinates][tosys]()
             except (KeyError,TypeError),e:
-                errstr = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(targetcoosys)
+                errstr = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(tosys)
                 raise NotImplementedError(errstr)
             m = m2*m1
         
@@ -1295,7 +1295,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         if len(args) == 0:
             pass
         if len(args) == 1:
-            if isinstance(args[0],EquatorialCoordinates):
+            if isinstance(args[0],EquatorialCoordinatesBase):
                 super(EquatorialCoordinates,self).__init__(args[0])
                 self.epoch = args[0].epoch
                 return
@@ -1329,7 +1329,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         kwargs.setdefault('decerr',None)
         kwargs.setdefault('epoch',2000)
         
-        super(EquatorialCoordinatesBase,self).__init__(kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        EpochalCoordinates.__init__(self,kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
             
@@ -1415,11 +1415,11 @@ class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
         zeta = dt*(temp + dt*((pzeta[2]+pzeta[1]*T) + dt*pzeta[0]))/3600
         
         pz = (0.018203,-0.000066,1.09468)
-        z = t*(temp + dt*((pz[2]+pz[1]*T) + dt*pz[0]))/3600
+        z = dt*(temp + dt*((pz[2]+pz[1]*T) + dt*pz[0]))/3600
         
         ptheta = (-0.041833,-0.000217,-0.42665,-0.000217,-0.85330,2004.3109)
         temp = ptheta[5] + T*(ptheta[4]+T*ptheta[3])
-        zeta = dt*(temp + dt*((ptheta[2]+ptheta[1]*T) + dt*ptheta[0]))/3600
+        theta = dt*(temp + dt*((ptheta[2]+ptheta[1]*T) + dt*ptheta[0]))/3600
         
         return rotation_matrix(-z,'z') *\
                rotation_matrix(theta,'y') *\
@@ -1550,7 +1550,7 @@ class EclipticCoordinates(EpochalCoordinates):
         EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
         
     def transformToEpoch(self,newepoch):
-        eqc = self.convert(EquatorialCoordinatesDynamical2000)
+        eqc = self.convert(EquatorialCoordinatesEquinox)
         eqc.epoch = newepoch
         newval = eqc.convert(self.__class__)
         self._lat._decval = newval._lat._decval
@@ -2402,7 +2402,7 @@ class Moon(KeplerianOrbit):
         
         if `perc` is True, returns percent illumination.
         """
-        from math import sqrt,atan2
+        from math import sqrt,atan2,cos
         
         xg,yg,zg = self.cartesianCoordinates(True)
         sun = solsysobj['sun']
@@ -2413,7 +2413,7 @@ class Moon(KeplerianOrbit):
         
         longsun = atan2(ys,xs)
         longmoon = atan2(yg,xg)
-        latmoon = atan2(zh,sqrt(xg*xg + yg*yg))
+        latmoon = atan2(zs,sqrt(xg*xg + yg*yg))
         
         phase = (1 + cos(longsun - longmoon)*cos(latmoon))/2
         
