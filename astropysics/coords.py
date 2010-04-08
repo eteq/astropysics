@@ -2850,9 +2850,9 @@ def seperation_matrix(v,w=None,tri=False):
 #<-----------------Cosmological distance and conversions ---------->
 def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
     """
-    Calculates the cosmolgical distance to some object given a redshift.  Note
+    Calculates the cosmolgical distance to some object given a redshift. Note
     that this uses H0,omegaM,omegaL, and omegaR from the current
-    :class:`astropyscs.constants.Cosmology` -- if any of those do not exist in 
+    :class:`astropyscs.constants.Cosmology` -- if any of those do not exist in
     the current cosmology this will fail.
     
     The distance type can be one of the following:
@@ -2863,7 +2863,10 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     * 'lookback'(3) : lookback time (in Gyr)
     * 'distmod'(4) : distance modulus
     
-    :param z: The redshift at which to compute the distance
+    :param z: 
+        The redshift at which to compute the distance, or None to compute the
+        maximum value for this distance (for luminosity and distmod this is
+        infinite)
     :type z: array, scalar, or None
     :param zerr: Symmetric error in redshift
     :type zerr: array, scalar, or None
@@ -2885,6 +2888,40 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         Distance of type selected by `disttype` in above units or normalized as
         controlled by `normed` parameter. If `zerr` is not None, the output is
         (z,zupper,zlower), otherwise just z.
+        
+    **Examples**
+    
+    In these examples we are assuming the WMAP7 BAOH0 cosmological parameters.    
+    .. testsetup::
+    
+        from astropysics.constants import choose_cosmology
+        choose_cosmology('wmap7baoh0')
+        from astropysics.coords import cosmo_z_to_dist
+    
+    .. doctest::
+        >>> '%.6f'%cosmo_z_to_dist(0.03)
+        '126.964723'
+        >>> '%.6f'%cosmo_z_to_dist(0.2)
+        '815.469170'
+        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype=1)
+        '978.563004'
+        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='luminosity')
+        '978.563004'
+        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular')
+        '679.557642'
+        >>> '%.3f'%cosmo_z_to_dist(1,disttype='lookback')
+        '7.789'
+        >>> '%.2f'%cosmo_z_to_dist(0.5,disttype='distmod')
+        '42.27'
+        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular',normed=True)
+        '0.382326'
+        >>> '%.6f'%cosmo_z_to_dist(0.8,disttype='angular',normed=True)
+        '0.879027'
+        >>> '%.6f'%cosmo_z_to_dist(1.64,disttype='angular',normed=True)
+        '1.000000'
+        >>> '%.6f'%cosmo_z_to_dist(2.5,disttype='angular',normed=True)
+        '0.956971'
+        
     """
     from operator import isSequenceType
     from scipy.integrate import quad as integrate
@@ -2917,7 +2954,8 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             res = upper = 5
             while abs(res-upper) < inttol:
                 #-2 flips sign so that we get a minimum instead of a maximum
-                res = fminbound(cosmo_z_to_dist,0,upper,(None,-2,inttol,normed,intkwargs),inttol)
+                res = fminbound(cosmo_z_to_dist,0,upper,(None,-2,inttol,normed,intkwargs),inttol,full_output=1)
+                res = -res[1] #this is the actual value -- res[0] is the redshift at which it occurs
             return res
         else:
             #iterate towards large numbers until convergence achieved
@@ -2999,13 +3037,26 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
 def cosmo_dist_to_z(d,derr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}):
     """
     Convert a distance to a redshift. See :func:`cosmo_z_to_dist` for meaning of
-    parameters.
+    parameters. Note that if `d` is None, the maximum distance will be returned.
     """
     from scipy.optimize import brenth
     maxz=10000.0
     
     if derr is not None:
         raise NotImplementedError
+    
+    if d is None:
+        if disttype==2:
+            #find maximum value for angular diam dist
+            from scipy.optimize import fminbound
+            res = upper = 5
+            while abs(res-upper) < inttol:
+                #-2 flips sign so that we get a minimum instead of a maximum
+                res = fminbound(cosmo_z_to_dist,0,upper,(None,-2,inttol,normed,intkwargs),inttol,full_output=1)
+                res = res[0] #this is the redshift, -res[1] is the distance value
+            return res
+        else:
+            d = cosmo_z_to_dist(None,None,disttype,inttol,normed,intkwargs)
     
     f=lambda z,dmin:dmin-cosmo_z_to_dist(z,None,disttype,inttol,normed,intkwargs)
     try:
