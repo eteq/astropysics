@@ -1051,7 +1051,9 @@ class LatLongCoordinates(CoordinateSystem):
             Otherwise no check is performed.
         :type unitarycheck: boolean
         
-        :returns: (lat,long) after the transformation matrix is applied
+        :returns: 
+            (lat,long) after the transformation matrix is applied or
+            (lat,long,laterr,longerr) if errors are nonzero
         """
         #for single values, math module is much faster than numpy 
         from math import sin,cos,atan2,sqrt
@@ -1069,30 +1071,61 @@ class LatLongCoordinates(CoordinateSystem):
         laterr = 0 if self.laterr is None else self.laterr.radians
         longerr = 0 if self.longerr is None else self.longerr.radians    
         
+        sb = sin(lat)
+        cb = cos(lat)
+        sl = sin(long)
+        cl = cos(long)
+        
         #spherical w/ r=1 > cartesian
-        x = cos(lat)*cos(long)
-        y = cos(lat)*sin(long) 
-        z = sin(lat)
-        
-        if laterr != 0 or longerr != 0:
-            dx = sqrt((laterr*sin(lat)*cos(long))**2+(longerr*cos(lat)*sin(long))**2)
-            dy = sqrt((laterr*sin(lat)*sin(long))**2+(longerr*cos(lat)*cos(long))**2)
-            dz = abs(laterr*cos(lat))
-        
-        
+        x = cb*cl
+        y = cb*sl
+        z = sb
         
         #do transform
-        xp,yp,zp = m*np.matrix((x,y,z))
+        v = np.matrix((x,y,z))
+        xp,yp,zp = m*v
         
         #cartesian > spherical
-        latp = atan2(zp,sqrt(xp*xp+yp*yp))
+        sp = sqrt(xp*xp+yp*yp) #cylindrical radius
+        latp = atan2(zp,sp)
         longp = atan2(yp,xp)
+        
+        #propogate errors if they are present
+        
+        if laterr != 0 or longerr != 0:
+            #TODO: check formulae
+            #all of these are first order taylor expansions about the value
+            dx = sqrt((laterr*sb*cl)**2+(longerr*cb*sl)**2)
+            dy = sqrt((laterr*sb*sl)**2+(longerr*cb*cl)**2)
+            dz = abs(laterr*cb)
+            
+            dv = np.matrix((dx,dy,dz))
+            dxp,dyp,dzp = np.sqrt(np.power(m,2)*np.power(dv,2))
+            
+            #intermediate variables for dlatp - each of the partial derivatives
+            chi = 1/(1+(zp/sp)**2) 
+            #common factor chi not included below
+            dbdx = x*z*s**-3
+            dbdy = y*z*s**-3
+            dbdz = 1/sp
+            
+            dlatp = chi*sqrt((dxp*dbdx)**2 + (dyp*dbdy)**2 + (dzp*dbdz)**2)
+            dlongp = sqrt((dxp*yp*xp**-2)**2 + (dyp/xp)**2)/(1 + (yp/xp)**2) #indep of z
+            
+        else:
+            laterr = None
         
         if apply:
             self.lat = latp
             self.long = longp
+            if laterr is not None:
+                self.laterr = dlatp
+                self.longerr = dlongp
         
-        return latp,longp
+        if laterr is None:
+            return latp,longp
+        else:
+            return latp,longp,dlatp,dlongp
     
     def convert(self,tosys):
         """
@@ -1118,10 +1151,10 @@ class LatLongCoordinates(CoordinateSystem):
                 raise NotImplementedError(str)
             m = m2*m1
             
-        #TODO: implement errors, epoch
+        #TODO: figure out how to make this work for (ra,dec) constructors
         1/0
-        lat,long = self.transform(m,False)
-        return tosys(lat,long)
+        tres = self.transform(m,False)
+        return tosys(*tres)
 
 class HorizontalCoordinates(LatLongCoordinates):
     """
