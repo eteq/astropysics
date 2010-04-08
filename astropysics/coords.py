@@ -1140,6 +1140,7 @@ class LatLongCoordinates(CoordinateSystem):
         
         :except: raises NotImplementedError if converters are not present
         """
+        #TODO:test
         try:
             m = self.conversionMatrix(self,tosys)
         except NotImplementedError:
@@ -1151,11 +1152,21 @@ class LatLongCoordinates(CoordinateSystem):
                 raise NotImplementedError(str)
             m = m2*m1
             
-        #TODO: figure out how to make this work for (ra,dec) constructors
-        1/0
-        tres = self.transform(m,False)
-        return tosys(*tres)
-
+        tres = self.transform(m,apply=False)
+        newcoords = tosys()
+        
+        #TODO:SPEEDUP: use _lat instead of lat and similar if workable?
+        newcoords.lat = tres[0]
+        newcoords.long = tres[1]
+        if len(tres)>3:
+            newcoords.laterr = tres[2]
+            newcoords.longerr = tres[3]
+            
+        if hasattr(newcoords,'_epoch'):
+            newcoords._epoch = self._epoch
+            
+        return newcoords
+        
 class HorizontalCoordinates(LatLongCoordinates):
     """
     This object represents an angular location on the unit sphere, with the 
