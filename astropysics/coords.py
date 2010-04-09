@@ -979,7 +979,7 @@ class LatLongCoordinates(CoordinateSystem):
     
     def __sub__(self,other):        
         if isinstance(other,self.__class__):
-            from math import cos,degrees,acos,asin,sin
+            from math import cos,degrees,acos,asin,sin,sqrt
             
             b1 = self._lat.radians
             b2 = other._lat.radians
@@ -998,17 +998,18 @@ class LatLongCoordinates(CoordinateSystem):
             sep = acos(1 - 2*havsep) if 0.25 < havsep <= 0.75 else 2*asin(havsep**0.5)
                 
             #straightforward definition without the tweaks using haversin - this
-            #is in principal faster, but in practice it ends up beeing about
+            #is in principal faster, but in practice it ends up only about
             #10% faster due to the other overhead
             #sep = acos(sin(b1)*sin(b2)+cos(b1)*cos(b2)*cos(dl))
             
             return AngularSeperation(degrees(sep))
             
-            #small angle version
-#            dcorrlong = self._long.radians * cos(self._lat.radians) \
-#                 - other._long.radians * cos(other._lat.radians)
+#            #small angle version
+#            from math import cos,degrees,sqrt
+#            clat = cos((self._lat.radians+other._lat.radians)/2)
+#            dcorrlong = (self._long.radians - other._long.radians)*clat
 #            dlat = self._lat.radians-other._lat.radians
-#            sep = AngularSeperation(degrees((dlat*dlat+dcorrlong*dcorrlong)**0.5))
+#            sep = AngularSeperation(degrees(sqrt(dlat*dlat+dcorrlong*dcorrlong)))
 #            return sep
         else:
             raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
