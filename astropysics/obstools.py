@@ -101,7 +101,7 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
     if jd is None:
         jd = calendar_to_jd(datetime.datetime.now(tz.tzlocal()))
     
-    jd = np.array(jd,copy=True)
+    jd = np.array(jd,copy=True,dtype=float)
     scalar = jd.shape == ()
     jd = jd.ravel()
     
