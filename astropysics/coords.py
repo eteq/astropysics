@@ -90,7 +90,7 @@ class AngularCoordinate(object):
     import re as _re
     __slots__=('_decval','_range')
     
-    __acregex = _re.compile(r'(?:([+-])?(\d+(?:[.]\d*)?)(hours|h|degrees|d|radians|rads|rad|r|:(?=\d+:\d+[.]?\d*$)))?(?:(\d+(?:[.]\d*)?)(m|\'|[:]))?(?:(\d+(?:[.]\d*)?)(s|"|$))?$')
+    __acregex = _re.compile(r'(?:([+-])?(\d+(?:[.]\d*)?)(hours|h|degrees|d|radians|rads|rad|r| |:(?=\d+:\d+[.]?\d*$)))?(?:(\d+(?:[.]\d*)?)(m|\'|[:]| ))?(?:(\d+(?:[.]\d*)?)(s|"|$))?$')
     __decregex = _re.compile(r'[+-]\d+([.]\d*)') 
     
     def __init__(self,inpt=None,sghms=None,range=None,radians=False):
@@ -118,17 +118,17 @@ class AngularCoordinate(object):
             The numerical part will be cast to a float and used as hours.
         * A string of the form ##.##radians,##.##rads, or ##.##r
             The numerical part will be cast to a float and used as radians.
-        * A string of the form (+/-)##h##m##.##s:
+        * A string of the form (+/-)##h##m##.##s
             The numerical parts will be treated as hours,minutes, and seconds.
         * A string of the form (+/-)##d##m##.##s or (+/-)##d##'##.##"
             The numerical parts will be treated as degrees,minutes, and seconds.
-        * A string of the form (+/-)##:##:##.## Sexigesimal form
-            If `sghms` is None the presence of a a + or - sign idicates that it
-            should be interpreted as degreesminutes, and seconds. If the sign is
-            absent, the numerical portions will be treated as hours,min,sec.
-            thewise, if `sghms` evaluates to True, the numerical parts will be
-            treated as hours,minutes, and seconds, and if `sghms` evaluates to
-            False, degrees,minutes, and seconds.
+        * A string of the form (+/-)##:##:##.## or (+/-)## ## ##.##
+            Sexigesimal form. If `sghms` is None the presence of a a + or - sign
+            idicates that it should be interpreted as degrees, minutes, and
+            seconds. If the sign is absent, the numerical portions will be
+            treated as hours,min,sec. thewise, if `sghms` evaluates to True, the
+            numerical parts will be treated as hours,minutes, and seconds, and
+            if `sghms` evaluates to False, degrees,minutes, and seconds.
         
         :param inpt: The coordinate value -- valid forms are described above.            
         :param sghms: 
@@ -193,7 +193,7 @@ class AngularCoordinate(object):
                       (0 if dec3 is None else float(dec3)/3600)
                 if sgn == '-':
                     val *= -1
-                if mark1 == ':':
+                if mark1 == ':' or mark1 == ' ':
                     if sghms is None:
                         if sgn is None:
                             self.hours = val
