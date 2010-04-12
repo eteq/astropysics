@@ -30,6 +30,11 @@ particularly strange cosmology is in use.
    
    `Standards Of Fundamental Astronomy (SOFA) <http://www.iausofa.org/>`_ The
    IAU reference implementations for coordinates and earth rotation.
+   
+   `USNO Circular 179
+   <http://aa.usno.navy.mil/publications/docs/Circular_179.pdf>`_ An excellent
+   description of the IAU 2000 resolutions and related background for defining
+   ICRS, CIO, and related standards.
 
 .. todo:: more examples
 
@@ -1739,7 +1744,9 @@ def angle_axis(matrix,degrees=True):
     
 def obliquity(jd,algorithm=2000):
     """
-    Computes the obliquity of the Earth at the requested Julian Date.  
+    Computes the obliquity of the Earth at the requested Julian Date. The 1980
+    algorithm description can be found in the Explanatory Supplement to the
+    Astronomical Almanac and the 2000 version is described in USNO circular 179.
     
     :param jd: julian date at which to compute obliquity
     :type jd: scalar or array-like
