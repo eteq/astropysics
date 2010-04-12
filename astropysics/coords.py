@@ -641,6 +641,33 @@ class AngularSeperation(AngularCoordinate):
     
 #<-----------------------------Coordinate systems------------------------------>
 
+class _CoosysMeta(ABCMeta):
+    """
+    Metaclass for CoordinateSystem class and subclasses - needed to support 
+    :class:`CoordinateSystem.registerTransform` decorator.
+    """
+    def __init__(cls,name,bases,dct):
+        ABCMeta.__init__(cls,name,bases,dct)
+        import inspect
+        
+        for k,v in inspect.getmembers(cls):
+            if isinstance(v,_TransformerMethodDeco):
+                fromclass = cls if v.fromclass == 'self' else v.fromclass
+                toclass = cls if v.toclass == 'self' else v.toclass
+                
+                CoordinateSystem.registerTransform(fromclass,toclass,v.f)
+                setattr(cls,k,staticmethod(v.f))
+                
+class _TransformerMethodDeco(object):
+    """
+    A class representing methods used for registering transforms  for the class
+    the are in.
+    """
+    def __init__(self,f,fromclass,toclass):
+        self.f = f
+        self.fromclass = fromclass
+        self.toclass = toclass
+                
 class CoordinateSystem(object):
     """
     Base class of all coordinate systems.  Contains machinery for managing 
@@ -669,15 +696,16 @@ class CoordinateSystem(object):
         manner defined in subclasses (see e.g. :class:`LatLongCoordinates`)
         
         If the transformation function `func` is None, the function is taken to
-        be a decorator, and one of `fromclass` or `toclass` may be the string
-        'cls' to indicate the function is a method (the class will be inferred
-        from the class in which it is placed, but the method *must* be a class
-        method if 'cls' is used)
+        be a decorator, and if it is a method of a subclass of
+        :class:`CoordinateSystem`, `fromclass` or `toclass` may be the string
+        'self' . In this case, the function will use the class itself as the
+        from or to class. The function will then be treated as a static method
+        (e.g. it should not have `self` as the first argument).
         
         :param fromclass: The class to transform from.
-        :type fromclass: subclass of :class:`CoordinateSystem` or 'cls'
+        :type fromclass: subclass of :class:`CoordinateSystem` or 'self'
         :param toclass: The class to transform to.
-        :type toclass: subclass of :class:`CoordinateSystem` or 'cls'
+        :type toclass: subclass of :class:`CoordinateSystem` or 'self'
         :param func: the function to perform the transform or None if decorator.
         :type func: a callable or None
         :param overwrite: 
@@ -697,7 +725,7 @@ class CoordinateSystem(object):
             CoordinateSystem.registerTransform(MyCoordinates,YourCoordinates,transformer)
             
             class TheirCoordinates(CoordinateSystem):
-                @CoordinateSystem.registerTransform(MyCoordinates,'cls')
+                @CoordinateSystem.registerTransform(MyCoordinates,'self')
                 @classmethod
                 def fromMy(cls,mycoordinates):
                     ...
@@ -705,29 +733,15 @@ class CoordinateSystem(object):
         
         """
         if func is None:
-            raise NotImplementedError('decorator form currently non-functional')
-            if fromclass != 'cls':
+            if fromclass != 'self':
                 if not issubclass(fromclass,CoordinateSystem):
                     raise TypeError('from class for registerTransform must be a CoordinateSystem')
                 
-            if toclass != 'cls':
+            if toclass != 'self':
                 if not issubclass(toclass,CoordinateSystem):
                     raise TypeError('to class for registerTransform must be a CoordinateSystem')
-            
-            def innertrans(f,fromclass=fromclass,toclass=toclass):
-                if fromclass == 'cls':
-                    fromclass = f.im_self
-                    if not issubclass(fromclass,CoordinateSystem):
-                        raise TypeError('from cls for registerTransform must be a CoordinateSystem and method must be a class method')
-                    
-                if toclass == 'cls':
-                    toclass = f.im_self
-                    if not issubclass(toclass,CoordinateSystem):
-                        raise TypeError('to cls for registerTransform must be a CoordinateSystem and method must be a class method')
-                    
-                return CoordinateSystem.registerTransform(fromclass,toclass,f)
-            
-            return innertrans
+                
+            return lambda f:_TransformerMethodDeco(f,fromclass,toclass)
         
         else:
             if not issubclass(fromclass,CoordinateSystem) or not issubclass(toclass,CoordinateSystem):
@@ -837,9 +851,9 @@ class RectangularEclipticCoordinates(RectangularCoordinates):
     
     
 
-class _LatLongMeta(ABCMeta):
+class _LatLongMeta(_CoosysMeta):
     def __init__(cls,name,bases,dct):
-        super(_LatLongMeta,cls).__init__(name,bases,dct)
+        _CoosysMeta.__init__(cls,name,bases,dct)
         if cls._latlongnames_[0] is not None:
             setattr(cls,cls._latlongnames_[0],cls.lat)
             setattr(cls,cls._latlongnames_[0]+'err',cls.laterr)
@@ -1192,7 +1206,7 @@ class EpochalCoordinates(LatLongCoordinates):
     
     Subclasses must implement the :meth:`transformToEpoch` method.
     """
-    __slots__ = ('_epoch')
+    __slots__ = ('_epoch',)
     
     #: If True, this coordinate system uses Julian Epochs.  Otherwise, Besselian
     julianepoch = True 
@@ -1507,7 +1521,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     def refsys(self):
         return 'ICRS'
     
-    @staticmethod
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinates)
     def _toEq(icrsc=None):
         if icrsc is None:
             #see USNO circular 179 for frame bias -- all in milliarcsec
@@ -1523,7 +1537,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
             #calls the None-argument version to get the rotation matrix
             return icrsc.convert(EquatorialCoordinates)
         
-    @staticmethod
+    @CoordinateSystem.registerTransform(EquatorialCoordinates,'self')
     def _fromEq(eqc=None):
         if eqc is None:
             #really we want inverse, but rotations are unitary -> inv==transpose
@@ -1531,8 +1545,6 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
         else:
             #calls the None-argument version to get the rotation matrix
             return eqc.convert(EquatorialCoordinatesICRS)
-CoordinateSystem.registerTransform(EquatorialCoordinates,EquatorialCoordinatesICRS,EquatorialCoordinatesICRS._fromEq)
-CoordinateSystem.registerTransform(EquatorialCoordinatesICRS,EquatorialCoordinates,EquatorialCoordinatesICRS._toEq)
     
 class EclipticCoordinates(EpochalCoordinates):
     """
