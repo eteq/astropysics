@@ -11,6 +11,17 @@ Astropysics is a library containing a variety of utilities and algorithms for re
 
 (And to that end, if you are running one of those other projects, I'd love to help integrate our projects into a common framework!)
 
+Documentation
+=============
+
+Astropysics is divided into two major subcomponents - the core modules that perform the calculation and contain a variety of useful classes for everyone's use, and the gui module that contains a number of useful applications.
+
+.. toctree::
+   :maxdepth: 2
+   
+   coremods/intro
+   gui/intro
+
 
 Installation
 ============
@@ -116,18 +127,6 @@ and re-install following the directions above.  If you plan on editing the astro
 
 possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
 
-
-
-Documentation
-=============
-
-Astropysics is divided into two major subcomponents - the core modules that perform the calculation and contain a variety of useful classes for everyone's use, and the gui module that contains a number of useful applications.
-
-.. toctree::
-   :maxdepth: 2
-   
-   coremods/intro
-   gui/intro
    
 
 Bug Reports
