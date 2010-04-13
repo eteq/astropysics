@@ -43,6 +43,35 @@ from .constants import pi
 from .utils import PipelineElement,DataObjectRegistry
 import numpy as np
 
+try: 
+    from dateutil import tz as tzmod
+    tzoffset = tzmod.tzoffset
+except ImportError:
+    import datetime
+    tzmod = None
+    class tzoffset(datetime.tzinfo):
+        """
+        Backup class to do basic fixed-offset time zones if :mod:`dateutil.tz` 
+        is missing.
+        """
+        
+        def __init__(self,name,offset):
+            if not isinstance(name,basestring):
+                raise TypeError('name must be a string')
+            self._name = name
+            
+            self._hoffset = offset
+            
+        def dst(self):
+            return False
+        
+        def tzname(self):
+            return self._name
+        
+        def utcoffset(self):
+            from datetime import timedelta
+            return timedelta(hours=self._hoffset)
+
 def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
     Convert a julian date to a calendar date and time.
@@ -491,14 +520,12 @@ class Site(object):
         self.altitude = alt
         if tz is None:
             self.tz = self._tzFromLong(self._long)
-        elif isinstance(tz,basestring):
-            from dateutil import tz  as tzmod
+        elif isinstance(tz,basestring) and tzmod is not None:
             self.tz = tzmod.gettz(tz)
             if self.tz is None:
                 raise ValueError('unrecognized time zone string '+tz)
         else:
-            from dateutil import tz as tzmod
-            self.tz = tzmod.tzoffset(str(tz),int(tz*60*60))
+            self.tz = tzoffset(str(tz),int(tz*60*60))
         if name is None:
             name = 'Default Site'
         self.name = name
@@ -506,9 +533,8 @@ class Site(object):
     
     @staticmethod
     def _tzFromLong(long):
-        from dateutil import tz
         offset =  int(np.round(long.degrees/15))
-        return tz.tzoffset(str(offset),offset*60*60)
+        return tzoffset(str(offset),offset*60*60)
     
     def _getLatitude(self):
         return self._lat

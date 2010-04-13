@@ -47,6 +47,8 @@ If you are installing from source code, instead, just do::
     
 where again, you may have to prefix the command with ``sudo`` if it doesn't work the first time.
 
+Devleopment/Advanced Install
+---------------------------
 
 If you want to be sure you have the most recent version (or want to help improve the code), you can pull the current development version from launchpad.  You must have `bazaar <http://bazaar.canonical.com/>`_ installed, and execute::
 
@@ -56,7 +58,11 @@ and this will create a branch with the requested directory name containing the l
 
     bzr update
     
-and re-install following the directions above.
+and re-install following the directions above.  If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
+
+    python setup.py develop
+
+possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
 
 
 Extra packages
