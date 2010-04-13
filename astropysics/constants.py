@@ -98,27 +98,29 @@ class Cosmology(object):
     Error bars for parameters can be specified as "<paramname>_err" as a tuple
     (lowererr,uppererr)
     """
-    #TODO:use ABCs in py 2.6
     _params_=('H0',)
+    _autoupdate = False
     
-    H0=0
+    H0 = 0
     
     def __init__(self,*args,**kwargs):
-        ps=self._params_
+        ps = self._params_
+        
     h = property(lambda self:self.H0/100.0)
     h7 = h70 = property(lambda self:self.H0/70.0)
+
     __params_cache=None
     def _getParams(self):
         if self.__params_cache is None:
             import inspect
-            pars= [cls._params_ for cls in inspect.getmro(self.__class__) if 
+            pars = [cls._params_ for cls in inspect.getmro(self.__class__) if 
                     hasattr(cls,'_params_')]
-            s=set()
+            s = set()
             for p in pars:
                 s.update(p)
             self.__params_cache = tuple(s)
         return self.__params_cache
-    params=property(_getParams)
+    params = property(_getParams)
     
     def getParamWithError(self,parname):
         """
@@ -155,7 +157,10 @@ class Cosmology(object):
             if out is None:
                 warn('Cosmological parameter %s not present despite being current cosmology'%p)
         
-    
+    def __setattr__(self,name,value):
+        object.__setattr__(self, name, value)
+        if self._autoupdate:
+            self._exportParams()
     
 class FRWCosmology(Cosmology):
     """
@@ -407,24 +412,36 @@ for o in locals().values():
     if type(o)==type and issubclass(o,Cosmology) and o != Cosmology:
         register_cosmology(o)
 
-def choose_cosmology(nameorobj,*args,**kwargs):
+def choose_cosmology(nameorobj,autoupdate=True,args=None,kwargs=None):
     """
-    Select the currently active cosmology and export its cosmological 
-    parameters into the package namespace
+    Change the currently active cosmology and export its cosmological parameters
+    into the package namespace.
     
-    nameorobj can be a string or a Cosmology object
+    :param nameorobj: the new cosmology to use
+    :type nameorobj: string or :class:`Cosmology` object
+    :param autoupdate: 
+        If True, the cosmology object will automatically propogate changes to
+        its parameters up to the module variables. Otherwise,
+        :func:`update_cosmology` must be called explicitly to have this behavior
+        occur.
+    :type autoupdate: bool
+    :param args: 
+        If `nameorobj` is a string, these are passed in as positional arguments
+        to the object initializer (if not None). Otherwise it is ignored.
+    :type args: sequence or None
+    :param args: 
+        If `nameorobj` is a string, these are passed in as keyword arguments to
+        the object initializer (if not None). Otherwise it is ignored.
+    :type args: dictionary or None
     
-    If string, a new instance corresponding to the type with the given name in 
-    the cosmology registry is generated with the args and kwargs going into the 
-    initializer.
-    
-    If nameorobj is an instance of Cosmology, the supplied object is selected as 
-    the current cosmology and the registry is updated to include its class, if 
-    it is not already present
-    
-    return value is the cosmology object
+    :returns: the :class:`Cosmology` object after being assigned as current.
     """
     global __current_cosmology
+    
+    if args is None:
+        args = []
+    if kwargs is None:
+        kwargs = {}
     
     if isinstance(nameorobj,basestring):
         c = __cosmo_registry[nameorobj.lower()](*args,**kwargs)
@@ -434,19 +451,23 @@ def choose_cosmology(nameorobj,*args,**kwargs):
             register_cosmology(c.__class__)
     
     __current_cosmology._removeParams()
+    __current_cosmology._autoupdate = False
     try:
         c._exportParams()
         __current_cosmology =  c
     except:
         __current_cosmology._exportParams()
         
+    c._autoupdate = bool(autoupdate)
+        
     return c
     
     
 def get_cosmology(name=None):
     """
-    if name is None, will retreive the currently in use Cosmology instance.
-    Otherwise, returns the Class object for the requested cosmology
+    If name is None, will retreive the currently in use Cosmology instance.
+    Otherwise, returns the subclass of :class:`Cosmology` with the provided
+    name.
     """
     if name is None:
         return __current_cosmology
