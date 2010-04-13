@@ -1577,7 +1577,10 @@ def __loadobsdb(sitereg):
 
 
 sites = DataObjectRegistry('sites',Site)
-sites['uciobs'] = Site(33.63614044191056,-117.83079922199249,80,'PST','UC Irvine Observatory')
+try:
+    sites['uciobs'] = Site(33.63614044191056,-117.83079922199249,80,'US/Pacific','UC Irvine Observatory')
+except ValueError: #in case US/Pacific is not present for some reason
+    sites['uciobs'] = Site(33.63614044191056,-117.83079922199249,80,-8,'UC Irvine Observatory')
 sites['greenwich'] = Site('51d28m38s',0,7,0,'Royal Observatory,Greenwich')
 __loadobsdb(sites)
 #<-----------------Attenuation/Reddening and dust-related---------------------->
