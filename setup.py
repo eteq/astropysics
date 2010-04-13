@@ -1,13 +1,17 @@
 #!/usr/bin/env python
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 
+
+
 from distribute_setup import use_setuptools
 use_setuptools()
 
 from setuptools import setup,find_packages
 
+from astropysics.version import version as versionstr
+
 setup(name='Astropysics',
-      version='0.1.dev',
+      version=versionstr,
       description='Astrophysics libraries for Python',
       
       packages=find_packages(),
