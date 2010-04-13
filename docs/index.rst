@@ -23,7 +23,7 @@ Before you touch astropysics, you'll need:
     * `numpy <http://numpy.scipy.org>`_ 
     * `scipy <http://www.scipy.org/>`_
     
-Follow the relevant instructions on those sites, or, far easier, install them as packages from your operating system (e.g. apt-get or synaptic on Ubuntu).  
+Follow the instructions on those sites, or, far easier, install them as packages from your operating system (e.g. apt-get or the synaptic GUI on Ubuntu, `Macports <http://www.macports.org/>`_ on OS X, etc.).  
 
 
 Install
@@ -39,7 +39,7 @@ or::
 
     easy_install astropysics
 
-If you are on Ubuntu or a similar linux distribution, you may need to prefix those commands with ``sudo``.
+If you are on Ubuntu or a similar linux distribution, you may need to prefix those commands with ``sudo`` e.g. ``sudo pip install astropysics``.
 
 If you are installing from source code, instead, just do::
 
@@ -47,14 +47,66 @@ If you are installing from source code, instead, just do::
     
 where again, you may have to prefix the command with ``sudo`` if it doesn't work the first time.
 
-Devleopment/Advanced Install
----------------------------
+
+
+Recommended packages
+--------------------
+
+A number of other packages are necessary for added functionality in astropysics (and all are recommended):
+    * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
+        *highly recommended*, as it is necessary for all plotting (aside from the GUI applications). Install with::
+        
+            pip install matplotlib
+            
+    * `Ipython <http://ipython.scipy.org/>`_
+        *highly recommended*, as it is a far better interactive shell than the python default and has many wonderful features. Install with::
+        
+            pip install ipython
+            
+        and if you have matplotlib, run as::
+            
+            ipython -pylab
+            
+    * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
+        Necessary for reading FITS files::
+        
+            pip install pyfits
+        
+            
+    * `Traits <http://code.enthought.com/projects/traits/>`_, `TraitsGUI <http://code.enthought.com/projects/traits_gui/>`_, `Chaco <http://code.enthought.com/projects/chaco/>`_, and `Mayavi <http://code.enthought.com/projects/mayavi/>`_.  Alternatively, `ETS <http://code.enthought.com/projects/index.php>`_ is all bundled in one.
+        Necessary for the interfaces in the :mod:`gui` modules::
+        
+            pip install ETS
+            
+        or::
+        
+            pip install traits
+            pip install traitsGUI
+            pip install chaco
+            pip install mayavi
+    
+    * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
+        Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://www.stsci.edu/trac/ssb/astrolib>`_ at the bottom of the page.
+        
+        
+    Note that you can install all of these at once if you install astropysics using the following command::
+    
+        easy_install "astropysics[all]"
+        
+    or if there are problems installing the ETS tools, use::
+    
+        easy_install "astropysics[allnogui]"
+        
+    and as with all of these, you may need to prefix with ``sudo``.
+
+Development/Advanced Install
+----------------------------
 
 If you want to be sure you have the most recent version (or want to help improve the code), you can pull the current development version from launchpad.  You must have `bazaar <http://bazaar.canonical.com/>`_ installed, and execute::
 
-    bzr branch lp:astropysics <dirname>
+    bzr branch lp:astropysics astropysics-dev
     
-and this will create a branch with the requested directory name containing the latest and greatest version of astropysics.  If at any time you want to update this version, go into the directory and do::
+and this will create a branch with the name 'astropysics-dev' containing the latest and greatest version of astropysics.  If at any time you want to update this version, go into the directory and do::
 
     bzr update
     
@@ -65,18 +117,6 @@ and re-install following the directions above.  If you plan on editing the astro
 possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
 
 
-Extra packages
---------------
-
-A number of other packages are necessary for added functionality in astropysics (and all are recommended):
-    * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
-        *highly recommended*, as it is necessary for all plotting (aside from the GUI applications).
-    * `Traits <http://code.enthought.com/projects/traits/>`_, `TraitsGUI <http://code.enthought.com/projects/traits_gui/>`_, `Chaco <http://code.enthought.com/projects/chaco/>`_, and `Mayavi <http://code.enthought.com/projects/mayavi/>`_.  Alternatively, `ETS <http://code.enthought.com/projects/index.php>`_ is all bundled in one.
-        Necessary for the interfaces in the :mod:`gui` modules.
-    * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
-        Necessary for reading FITS files.
-    * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
-        Necessary to write VOTable files, and makes reading them much better, as well.
 
 Documentation
 =============
@@ -98,7 +138,7 @@ The best place to report bugs is via the `launchpad bug tracker <https://bugs.la
 Logo Image Credit
 =================
 
-The multiwavelength image of M81 was put together by the folks at Chandra (http://chandra.harvard.edu/photo/2008/m81/), and they credit: "X-ray: NASA/CXC/Wisconsin/D.Pooley & CfA/A.Zezas; Optical: NASA/ESA/CfA/A.Zezas; UV: NASA/JPL-Caltech/CfA/J.Huchra et al.; IR: NASA/JPL-Caltech/CfA"
+The multiwavelength image of M81 was put together by the folks at the Chandra X-Ray Observatory (http://chandra.harvard.edu/photo/2008/m81/), and they credit: "X-ray: NASA/CXC/Wisconsin/D.Pooley & CfA/A.Zezas; Optical: NASA/ESA/CfA/A.Zezas; UV: NASA/JPL-Caltech/CfA/J.Huchra et al.; IR: NASA/JPL-Caltech/CfA"
 
 Indices and tables
 ==================

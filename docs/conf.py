@@ -20,13 +20,15 @@ import sys, os
 
 sys.path.insert(1,os.path.abspath('..')) #make sure it's on top except maybe local dirs
 
-with open(os.path.join('..','setup.py')) as f:
-    for l in f:
-        if 'version' in l:
-            break
-    else:
-        raise RuntimeError('could not locate setup.py to determine version')
-setup_version = l.split("'")[1]
+#with open(os.path.join('..','setup.py')) as f:
+#    for l in f:
+#        if 'version' in l:
+#            break
+#    else:
+#        raise RuntimeError('could not locate setup.py to determine version')
+#setup_version = l.split("'")[1]
+
+from astropysics.version import version as setup_version
 
 # -- General configuration -----------------------------------------------------
 
