@@ -17,7 +17,7 @@ class apy_build_py(du_build_py):
         res = du_build_py.run(self)
         
         versfile = path.join(self.build_lib,'astropysics','version.py')
-        print 'owing',versfile
+        print 'freezing version number to',versfile
         with open(versfile,'w') as f: #this overwrites the actual version.py
             f.write(self.get_version_py())
         
