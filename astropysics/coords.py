@@ -2961,10 +2961,6 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     flipsign = disttype < 0
     disttype = abs(disttype)
     
-    if omegaL+omegaM+omegaR != 1:
-        from warnings import warn
-        warn('cosmological parameters do not sum to 1 - algorithm may not be correct for non-flat universe')
-    
     if z is None:
         if normed:
             return 1.0
@@ -2979,18 +2975,18 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             return res
         else:
             #iterate towards large numbers until convergence achieved
-            iterz=1e6
-            currval=cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
-            lastval=currval+2*inttol
+            iterz = 1e6
+            currval = cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
+            lastval = currval + 2*inttol
             while(abs(lastval-currval)>inttol):
-                lastval=currval
-                iterz*=10
-                currval=cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
+                lastval = currval
+                iterz *= 10
+                currval = cosmo_z_to_dist(iterz,None,disttype,inttol,False,intkwargs)
             return currval
         
-    z=array(z)
-    a0=1/(z+1)
-    omegaK=1-omegaM-omegaL-omegaR
+    z = array(z)
+    a0 = 1/(z+1)
+    omegaK = 1 - omegaM - omegaL - omegaR
     
     if disttype != 3:
         #comoving distance out to scale factor a0: integral(da'/(a'^2 H(a')),a0,1)
@@ -3003,10 +2999,10 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
             return a*(R + M*a + L*a**4 + K*a**2)**-0.5/H0
         
     if isSequenceType(a0):
-        integratevec=vectorize(lambda x:integrate(integrand,x,1,args=(H0,omegaR,
+        integratevec = vectorize(lambda x:integrate(integrand,x,1,args=(H0,omegaR,
                                              omegaM,omegaL,omegaK),**intkwargs))
         res=integratevec(a0)
-        intres,interr=res[0],res[1]        
+        intres,interr = res[0],res[1]        
         try:
             if any(interr/intres > inttol):
                 raise Exception('Integral fractional error for one of the integrals is beyond tolerance')
@@ -3023,26 +3019,32 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         except ZeroDivisionError:
             pass
     
-    if disttype == 0:
-        d=c*intres
-    elif disttype == 1:
-        d=c*intres/a0
-    elif disttype == 2:
-        d=a0*c*intres
-    elif disttype == 3:
-        d=c*intres*3.26163626e-3
-        #d=chi*3.08568025e19/24/3600/365.25e9
-    elif disttype == 4:
-        from .phot import distance_modulus
-        d=distance_modulus(c*intres/a0*1e6,autocosmo=False)
+    if disttype == 3: #lookback integrand
+        d = c*intres*3.26163626e-3
+        #d = c*intres*3.08568025e19/24/3600/365.25e9
+    else: 
+        dc = c*intres #comoving distance 
         
-    else:
-        raise KeyError('unknown disttype')
-    
+        if disttype == 0:
+            d = dc
+        elif disttype == 1:
+            d = dc/a0
+        elif disttype == 2:
+            if omegaK == 0:
+                d = dc*a0
+            else:
+                angfactor = H0*complex(-omegaK)**0.5
+                d = c*(np.sin(angfactor*intres)/angfactor).real*a0
+        elif disttype == 4:
+            from .phot import distance_modulus
+            d = distance_modulus(c*intres/a0*1e6,autocosmo=False)
+        else:
+            raise KeyError('unknown disttype')
+        
     if normed:
-            nrm=1/cosmo_z_to_dist(None if normed is True else normed,None,disttype,inttol,intkwargs)
+        nrm = 1/cosmo_z_to_dist(None if normed is True else normed,None,disttype,inttol,intkwargs)
     else:
-        nrm=1
+        nrm = 1
         
     if flipsign:
         nrm *= -1
