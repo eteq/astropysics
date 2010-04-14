@@ -291,6 +291,14 @@ class FunctionModel(ParametricModel):
     """
     
     defaultparval = 1
+    """
+    The base default value if a parameter cannot get a default any other way.
+    """
+    
+    fixedpars = tuple()
+    """
+    A sequence of the parameter names that by default should be kept fixed.
+    """
     
     @abstractmethod
     def f(self,x,*params):
@@ -370,10 +378,18 @@ class FunctionModel(ParametricModel):
             setattr(self,p,self.defaultparval)
     
     fittype ='leastsq'
+    """
+    The currently selected fitting technique.
+    """
+    
     _optfittypes = ('leastsq','fmin','fmin_powell','fmin_cg','fmin_bfgs',
                  'fmin_ncg','anneal','global','brute')
     @property
     def fittypes(self):
+        """
+        A Sequence of the available valid values for the :data:`fittype`
+        attribute.  (Read-only)
+        """
         ls = list()
         for cls in self.__class__.__mro__:
             if hasattr(cls,'_fittypes'):
@@ -385,67 +401,81 @@ class FunctionModel(ParametricModel):
                  updatepars=True,fitf=False,contraction='sumsq',**kwargs):
         """
         Adjust the parameters of the FunctionModel to fit the provided data 
-        using algorithms from scipy.optimize
+        using algorithms from scipy.optimize.
         
-        The data to fit is provided by the first to arguments -  'x' is
-        the input array at which to evaluate the model, and 'y' gives 
-        the value the model should have at that point.  If the output of the
-        model does not match the shape of y, a ModelTypeError will be raised. 
+        The fitting technique is sepcified by the :data:`fittype` attribute of
+        the object, which by default can be any of the optimization types in the
+        `scipy.optimize` package (except for scalar minimizers)
         
-        the fitting technique is sepcified by the `fittype` attribute, which 
-        by default can be any of the optimization types in the `scipy.optimize`
-        package (except for scalar minimizers)
+        The full fitting output is available in :data:`lastfit` attribute after
+        this method completes.
         
-        fixedpars is a sequence of parameter names to leave fixed.  If it is
-        'auto', the fixed parameters are inferred from self.fixedpars (or 
-        all will be free parameters if self.fixedpars is absent).  If None,
-        all parameters will be free.
+        :param x: 
+            The input values at which to evaluate the model. Valid shapes are
+            those that this model will accept.
+        :type x: array-like
+        :param y: 
+            The expected output values for the model at the given `x` values.
+            Valid shapes are those that this model will output.
+        :type y: array-like
+        :param fixedpars: 
+            Parameter names to leave fixed. If 'auto' the fixed parameters are
+            inferred from self.fixedpars (or all will be free parameters if
+            self.fixedpars is absent). If None, all parameters will be free.
+        :type fixedpars: sequence of strings, 'auto' or None
+        :param weights: 
+            Weights to use for fitting, statistically interpreted as inverse
+            errors (*not* inverse variance). May be one of the following forms:
+            
+            * None for equal weights
+            * an array of points that must match the output
+            * a 2-sequence of arrays (xierr,yierr) such that xierr matches the
+              x-data and yierr matches the y-data
+            * a function called as f(params) that returns an array of weights 
+              that match one of the above two conditions
+
+        :param savedata: 
+            If True, `x`,`y`,and`weights` will be saved to self.data. Otherwise,
+            data will be discarded after fitting.
+        :type savedata: bool
+        :param updatepars:  
+            If True, sets the parameters on the object to the best-fit values.
+        :type updatepars: bool
+        :param fitf: 
+            If True, the fit is performed directly against the :meth:`f` method
+            instead of against the model as evaluated if called (as altered
+            using :meth:`setCall`).
+        :type fitf: bool
+        :param contraction: 
+            Only applies for optimize-based methods and is the technique used to
+            convert vectors to figures of merit. this is composed of multiple
+            string segments:
+            
+            #. these will be applied to each element of the vector first:
         
-        weights are statistically interpreted as inverse errors (NOT 
-        inverse variance) and can be:
+               - 'sq': square
+               - 'abs':absolute value
+               - '':raw value
+              
+            #. the contraction is performed after:
+            
+               - 'sum': sum of all the elements
+               - 'median': median of all the elements
+               - 'mean': mean of all the elements
+               - 'prod': product of all the elements 
+               
+            * optionally,the string can include 'frac' to use the fractional 
+              version of the differnce vector instead of raw values.  For the 
+              leastsq method, this is the only applicable value
         
-        * None for equal weights
-        * an array of points that must match the output
-        * a 2-sequence of arrays (xierr,yierr) such that xierr matches the
-          x-data and yierr matches the y-data
-        * a function called as f(params) that returns an array of weights 
-          that match one of the above two conditions
-          
-        if fitf is True, the fit is performed directly against the `f` 
-        function instead of against the model as evaluated if called
+        `kwargs` are passed into the fitting function.
         
-        contraction only applies for optimize-based methods
-        and is the technique used to convert vectors to
-        figures of merit.  this is composed of multiple string segments:
+        :returns: array of the best fit parameters
         
-        #. these will be applied to each element of the vector first:
+        :except ModelTypeError: 
+            If the output of the model does not match the shape of `y`.
         
-           - 'sq': square
-           - 'abs':absolute value
-           - '':raw value
-          
-        #. the contraction is performed after:
-        
-           - 'sum': sum of all the elements
-           - 'median': median of all the elements
-           - 'mean': mean of all the elements
-           - 'prod': product of all the elements 
-           
-        * optionally,the string can include 'frac' to use the fractional 
-          version of the differnce vector instead of raw values.  For the 
-          leastsq method, this is the only applicable value
-        
-        kwargs go into the fitting function
-        
-        returns the vector of the best fit parameters, and sets the parameters 
-        if updatepars is True
-        
-        the full output is available is self.lastfit
-        
-        if savedata is true, the input fit data will be available in 
-        self.data as an (x,y) tuple
-        
-        see also:getMCMC
+        .. seealso:: :meth:`getMCMC`
         """
         from scipy import optimize as opt
         from operator import isMappingType

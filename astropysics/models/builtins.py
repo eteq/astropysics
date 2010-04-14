@@ -1799,7 +1799,7 @@ class RoundBulgeModel(FunctionModel2DScalarSeperable):
     this behavior, set the fixedpars attribute to None)
     """
     
-    fixedpars = ('n')    
+    fixedpars = ('n',)    
     def __init__(self,Ae=1,re=1,n=4):
         super(RoundBulgeModel,self).__init__('sersic')
         self.Ae = Ae
