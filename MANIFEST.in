@@ -1,0 +1,4 @@
+include distribute_setup.py
+recursive-include astropysics/data *
+recursive-include docs *
+prune docs/_build
