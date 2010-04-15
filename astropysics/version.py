@@ -1,4 +1,5 @@
 #Copyright (c) 2010 Erik Tollerud (etolleru@uci.edu) 
+from __future__ import division,with_statement
 
 #Warning: this file is overwritten in the build_py stage of setup.py to freeze
 #the version number - this file is only used in dev mode or during build.

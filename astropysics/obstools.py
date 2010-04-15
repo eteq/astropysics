@@ -219,7 +219,7 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
             ts = (year,month,day,hr%24,min%60,sec%60)
         else:
             ts = (year,month,day,hr%24,min%60,sec%60,msec%1000000)
-        res = [datetime.datetime(*t,tzinfo=tzi) for t in zip(*ts)]
+        res = [datetime.datetime(*t,**dict(tzinfo=tzi)) for t in zip(*ts)]
     elif output == 'array':
         msec = np.zeros_like(sec) if msec is None else msec
         res = np.array([year,month,day,hr%24,min%60,sec%60,msec]).T
@@ -359,7 +359,7 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
         for t in zip(yr,month,day,hr,min,sec,msec):
             #microsecond from float component of seconds
             
-            dt = datetime(*[int(ti) for ti in t],tzinfo=tzi)
+            dt = datetime(*[int(ti) for ti in t],**dict(tzinfo=tzi))
             utcdt = dt.utcoffset()
             if utcdt is None:
                 utcoffset.append(0)

@@ -1955,7 +1955,7 @@ class SolarSystemObject(EphemerisObject):
         from .obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialCoordinates(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
+            return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
         
         jd = self.jd
         
@@ -2337,7 +2337,7 @@ class Sun(KeplerianOrbit):
         from obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialCoordinates(*self._eqcache[1:],epoch=jd_to_epoch(self._jd))
+            return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
         
         xs,ys,zs = self.cartesianCoordinates(True) #geocentric location
         

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
-from __future__ import with_statement
+from __future__ import division,with_statement
 
 from distribute_setup import use_setuptools
 use_setuptools()
