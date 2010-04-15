@@ -10,7 +10,7 @@ import numpy as np
 from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
                                  Event,Property,on_trait_change,Array,List, \
                                  Tuple,Str,Dict,cached_property,Color,Enum, \
-                                 TraitError
+                                 TraitError,Undefined
 from enthought.traits.ui.api import View,Handler,Item,Label,Group,VGroup, \
                                     HGroup, InstanceEditor,EnumEditor, \
                                     ListEditor, TupleEditor,spring
@@ -68,7 +68,7 @@ def _cmap(range, **traits):
 #    
     return ColorMapper.from_segment_map(_data, range=range, **traits)
 
-class _TraitedModel(HasTraits):
+class TraitedModel(HasTraits):
     from inspect import isclass
     
     model = Instance(FunctionModel1D,allow_none=True)
@@ -80,7 +80,7 @@ class _TraitedModel(HasTraits):
     fittypes = Property
     
     def __init__(self,model,**traits):
-        super(_TraitedModel,self).__init__(**traits)
+        super(TraitedModel,self).__init__(**traits)
         
         from inspect import isclass
         
@@ -259,12 +259,17 @@ class FGHandler(Handler):
         kind = info.ui.rebuild.__name__.replace('ui_','') #TODO:not hack!
         info.object.plot.plots['model'][0].edit_traits(parent=info.ui.control,
                                                        kind=kind)
-    
+                                                       
+
 class FitGui(HasTraits):
+    """
+    This class represents the fitgui application state.
+    """
+    
     plot = Instance(Plot)
     colorbar = Instance(ColorBar)
     plotcontainer = Instance(HPlotContainer)
-    tmodel = Instance(_TraitedModel,allow_none = False)
+    tmodel = Instance(TraitedModel,allow_none = False)
     nomodel = Property
     newmodel = Button('New Model...')
     fitmodel = Button('Fit Model')
@@ -296,8 +301,9 @@ class FitGui(HasTraits):
     _savedws = Array
     
     plotname = Property
-    chi2 = Property(Float,depends_on='fitmodel,model')
-    chi2r = Property(Float,depends_on='fitmodel,model')
+    updatestats = Event
+    chi2 = Property(Float,depends_on='updatestats')
+    chi2r = Property(Float,depends_on='updatestats')
     
     
     nmod = Int(1024)
@@ -380,31 +386,48 @@ class FitGui(HasTraits):
                     )
                     
     
-    
     def __init__(self,xdata=None,ydata=None,weights=None,model=None,
                  include_models=None,exclude_models=None,fittype=None,**traits):
         """
-        Intializes the FitGui object:
+
+        :param xdata: the first dimension of the data to be fit
+        :type xdata: array-like
+        :param ydata: the second dimension of the data to be fit
+        :type ydata: array-like
+        :param weights: 
+            The weights to apply to the data. Statistically interpreted as inverse
+            errors (*not* inverse variance). May be any of the following forms:
+            
+            * None for equal weights
+            * an array of points that must match `ydata`
+            * a 2-sequence of arrays (xierr,yierr) such that xierr matches the
+              `xdata` and yierr matches `ydata`
+            * a function called as f(params) that returns an array of weights 
+              that match one of the above two conditions
         
-        xdaya and ydata are the data to be fit - if not provided, a model
-        must be provided that has saved data
+        :param model: the initial model to use to fit this data
+        :type model:
+            None, string, or :class:`astropysics.models.core.FunctionModel1D`
+            instance. 
+        :param include_models: 
+            With `exclude_models`, specifies which models should be available in
+            the "new model" dialog (see `models.list_models` for syntax).
+        :param exclude_models:
+            With `include_models`, specifies which models should be available in
+            the "new model" dialog (see `models.list_models` for syntax).
+        :param fittype: 
+            The fitting technique for the initial fit (see
+            :class:`astropysics.models.core.FunctionModel`). 
+        :type fittype: string
         
-        model is a `models.FunctionModel`, a string specifying the name of a
-        model, or None.  
+        kwargs are passed in as any additional traits to apply to the
+        application.
         
-        wieghtsorerrs are either a sequence of weights of shape matching
-        the input data or (xerr,yerr) where xerr and yerr must match the 
-        inputs
-        
-        include_models and exclude_models can be used to specify which models
-        should be available (see `models.list_models` for syntax).
-        
-        fittype, if given, will allow explicitly setting the fittype 
-        for the initial model.
         """
+
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
-        self.tmodel = _TraitedModel(model)
+        self.tmodel = TraitedModel(model)
         if model is not None and fittype is not None:
             self.tmodel.model.fittype = fittype
             
@@ -583,28 +606,28 @@ class FitGui(HasTraits):
             self.autoupdate = preaup
             
         self.updatemodelplot = True
+        self.updatestats = True
+        
+        
+    def _tmodel_changed(self,new):
+        if new is not None and new.model is not None:
+            self.fitmodel = True
         
     def _newmodel_fired(self,newval):
-        if isinstance(newval,basestring):
-            self.tmodel = _TraitedModel(newval)
+        if isinstance(newval,basestring) or isinstance():
+            self.tmodel = TraitedModel(newval)
         else:
             if self.modelselector.edit_traits(kind='modal').result:
                 cls = self.modelselector.selectedmodelclass
                 if cls is None:
-                    self.tmodel = _TraitedModel(None)
+                    self.tmodel = TraitedModel(None)
                 elif self.modelselector.isvarargmodel:
-                    self.tmodel = _TraitedModel(cls(self.modelselector.modelargnum))
+                    self.tmodel = TraitedModel(cls(self.modelselector.modelargnum))
                 else:
-                    self.tmodel = _TraitedModel(cls())
+                    self.tmodel = TraitedModel(cls())
             else: #cancelled
                 return      
-            
-        #TODO:generalize this to a model auto-setting method?
-        from ..models import SmoothSplineModel
-        if isinstance(self.tmodel.model,SmoothSplineModel):
-                self.tmodel.model.s = len(self.data[0])
-        self.fitmodel = True
-        
+
     @cached_property
     def _get_chi2(self):
         try:
@@ -766,7 +789,12 @@ class FitGui(HasTraits):
     
     
     @on_trait_change('data,ytype',post_init=True)
-    def dataChanged(self):        
+    def dataChanged(self):
+        """
+        Updates the application state if the fit data are altered - the GUI will
+        know if you give it a new data array, but not if the data is changed
+        in-place.
+        """        
         pd = self.plot.data
         #TODO:make set_data apply to both simultaneously?
         pd.set_data('xdata',self.data[0])
@@ -776,6 +804,11 @@ class FitGui(HasTraits):
         
     @on_trait_change('weights',post_init=True)    
     def weightsChanged(self):
+        """
+        Updates the application state if the weights/error bars for this model
+        are changed - the GUI will automatically do this if you give it a new
+        set of weights array, but not if they are changed in-place.
+        """       
         weights = self.weights
         if 'errorplots' in self.trait_names():
             #TODO:switch this to updating error bar data/visibility changing
@@ -843,8 +876,11 @@ class FitGui(HasTraits):
         
     def getModelInitStr(self):
         """
-        returns a python code string that can be used to generate a 
-        model with parameters matching that of this FitGui
+        Generates a python code string that can be used to generate a model with
+        parameters matching the model in this :class:`FitGui`.
+        
+        :returns: initializer string
+        
         """
         mod = self.tmodel.model
         if mod is None:
@@ -859,14 +895,63 @@ class FitGui(HasTraits):
             return '%s(%s)'%(mod.__class__.__name__,','.join(parstrs))
     
     def getModelObject(self):
+        """
+        Gets the underlying object representing the model for this fit.
+        
+        :returns: The :class:`astropysics.models.core.FunctionModel1D` object.
+        """
         return self.tmodel.model
+    
             
 def fit_data(xdata,ydata,model=None,**kwargs):
     """
-    fit a 2d data set using the FitGui interface. A GUI application instance 
-    must already exist (e.g. interactive mode of ipython)      
+    Fit a 2d data set using the :class:`FitGui` interface. A GUI application
+    instance must already exist (e.g. interactive mode of ipython). This
+    function is modal and will block until the user hits "OK" or "Cancel" - if 
+    non-blocking behavior is desired, create a  :class:`FitGui` object and call
+    :meth:`FitGui.edit_traits`.
     
-    Returns the model or None if fitting is cancelled.
+    kwargs are passed into the fitgui initializer
+    
+    :param xdata: the first dimension of the data to be fit
+    :type xdata: array-like
+    :param ydata: the second dimension of the data to be fit
+    :type ydata: array-like
+    :param model: the initial model to use to fit this data
+    :type model: 
+        None, string, or :class:`astropysics.models.core.FunctionModel1D`
+        instance
+    
+    :returns: 
+        The model or None if fitting is cancelled or no model is assigned in the
+        GUI.
+        
+    **Examples**
+        
+    >>> from astropysics.gui.fitgui import fit_data
+    >>> from numpy.random import randn,rand
+    >>> fit_data(randn(100),randn(100))
+    
+    This will bring up 100 normally-distributed points with no initial fitting
+    model.
+    
+    >>> fit_data(randn(100),randn(100),'linear')
+    
+    This will bring up 100 normally-distributed points with a best-fit linear
+    model.
+    
+    >>> fit_data(randn(100),randn(100),'linear',weights=rand(100))
+    
+    This will bring up 100 normally-distributed points with a best-fit linear
+    model with the points weighted by uniform random values.
+    
+    >>> from numpy import tile
+    >>> fit_data(randn(100),randn(100),'linear',weights=tile(rand(100),2).reshape((2,10)),fittype='yerr')
+    
+    This will bring up 100 normally-distributed points with a linear model with
+    the points weighted by a uniform random number (interpreted as inverse
+    error) fit using the yerr algorithm instead of the default least-squares.
+    
     """
     kwargs['model'] = model
     fg = FitGui(xdata,ydata,**kwargs)
@@ -956,7 +1041,7 @@ try:
                     raise ValueError("models don't match data")
                 for i,m in enumerate(models):
                     fg = self.fgs[i]
-                    fg.tmodel = _TraitedModel(m)
+                    fg.tmodel = TraitedModel(m)
                     if not isinstance(m,FunctionModel1D):
                         fg.fitmodel = True
             

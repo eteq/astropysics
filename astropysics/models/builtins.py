@@ -914,9 +914,10 @@ class SmoothSplineModel(DatacentricModel1DAuto):
     def __init__(self):
         super(SmoothSplineModel,self).__init__()
         
-        self._oldd=self._olds=self._ws=None
+        self._oldd = self._olds = self._ws = self._inits = None
         self.data = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
         self.fitData(self.data[0],self.data[1])
+        self._inits = self.data[:2]
     
     _fittypes=['spline']
     fittype = 'spline'
@@ -928,6 +929,11 @@ class SmoothSplineModel(DatacentricModel1DAuto):
         """
         from scipy.interpolate import UnivariateSpline
         
+        #if the spline has never been fit to non-init data, set s appropriately
+        if self._inits is not None and not (np.all(self._inits[0] == x) and np.all(self._inits[1] == y)):
+            self.s = len(x)
+            self._inits = None
+        
         self.spline = UnivariateSpline(x,y,s=self.s,k=self.degree,w=kwargs['weights'] if 'weights' in kwargs else None)
         
         self._olds = self.s
@@ -936,7 +942,8 @@ class SmoothSplineModel(DatacentricModel1DAuto):
         return np.array([self.s,self.degree])
         
     def fitData(self,x,y,**kwargs):
-        self._oldd=self._olds=None
+        self._oldd = self._olds = None
+        
         if 'savedata' in kwargs and not kwargs['savedata']:
             raise ValueError('data must be saved for spline models')
         else:
