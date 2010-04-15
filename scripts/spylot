@@ -10,7 +10,7 @@ from glob import glob
 
 op = OptionParser()
 op.usage = '%prog [ops] [file(s)]'
-op.add_option('-t','--type',dest='type',default='wcs',help='Type of spectrum: "wcs" or "deimos"')
+op.add_option('-t','--type',dest='type',default='astropysics',help='file format of spectra: "wcs", "deimos", or "astropysics"(default)')
 op.add_option('-e','--extension',dest='ext',default=None,help='Fits extension number')
 op.add_option('-c','--config',dest='configfile',default=None,help='File to save Spylot configuration')
 
@@ -42,13 +42,21 @@ if ops.type == 'wcs':
     else:
         ext = ops.ext
     for fn in fns:
-        print 'loading spectrum file',fn
+        print 'loading wcs spectrum file',fn
         ss.append(spec.load_wcs_spectrum(fn,ext))    
 elif ops.type == 'deimos':
     for fn in fns:
         if 'spec1d' in fn.lower():
-            print 'loading spectrum file',fn
+            print 'loading deimos spectrum file',fn
             ss.append(spec.load_deimos_spectrum(fn,False))
+        else:
+            print 'deimos spectrum must be spec1d format'
+            sys.exit(1)
+elif ops.type == 'astropysics':
+    for fn in fns:
+        print 'loading astropysics spectrum file',fn
+        ss.append(spec.Spectrum.load(fn))
+            
 else:
     print 'Unrecognized spectrum type ',ops.type
     sys.exit(1)

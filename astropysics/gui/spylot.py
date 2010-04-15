@@ -348,7 +348,15 @@ spylotkeybindings = KeyBindings(
                     )
 
 class Spylot(HasTraits):
+    """
+    This class represents the fitgui application state.
+    """
+    
     defaultlines = 'galaxy' #can be 'galaxy' or 'stellar' or None
+    """
+    This class attribute sets the default line lists to use - 'galaxy' or
+    'stellar'
+    """
     
     plot = Instance(Plot)
     histplot = Bool(True)
@@ -513,6 +521,14 @@ class Spylot(HasTraits):
                        )
                       
     def __init__(self,specs,**traits):
+        """
+        :param specs: 
+            The spectra/um to be analyzed as a sequence or a single object.
+        :type specs: :class:`astropysics.spec.Spectrum`
+        
+        kwargs are passed in as additional traits.
+        """
+        
         #pd = ArrayPlotData(x=[1],x0=[1],flux=[1],err=[1]) #reset by spechanged event
         pd = ArrayPlotData(x=[1],flux=[1],err=[1]) #reset by spechanged event
         pd.set_data('majorx',[1,1])#reset by majorlines change
@@ -1080,11 +1096,11 @@ class Spylot(HasTraits):
         self.spechanged = True #doesn't always fire with the assignment above
         
     def _loadaddspec_fired(self):
-        if loadaddspec == 'wcs':
+        if self.loadaddspectype == 'wcs':
             spec = spec.load_wcs_spectrum(self.loadaddfile)
-        elif loadaddspec == 'deimos':
+        elif self.loadaddspectype == 'deimos':
             spec = spec.load_deimos_spectrum(self.loadaddfile)
-        elif loadaddspec == 'astropysics':
+        elif self.loadaddspectype == 'astropysics':
             spec = spec.Spectrum.load(self.loadaddfile)
             
         self.specs.append(spec)
@@ -1101,14 +1117,34 @@ def _get_default_lines(linetypes):
     else:
         return candidates,[],[]
     
-def spylot_specs(specs):
+def spylot_specs(specs,block=False,newapp=False):
     """
-    Generates a Spylot instance containing the supplied sequence of spectra and 
-    displays it.  A GUI application instance must already exist (e.g. 
-    interactive mode of ipython)
+    Generates a Spylot instance containing the supplied sequence of spectra and
+    displays it. 
     
-    returns the Spylot instance
+    :param specs: 
+        The spectra/um to be analyzed as a sequence or a single object.
+    :type specs: :class:`astropysics.spec.Spectrum`
+    :param block: 
+        If True, this function will block all execution until the spylot GUI is
+        closed. Otherwise, it will return if in a multi-threaded environment.
+    :type block: boolean    
+    :param newapp:
+        If True, a GUI application instance will be created. If one already
+        exist (e.g. interactive mode of ipython), this should be left False.
+    :type newapp: boolean
+        
+    :returns: the :class:`astropysics.gui.spylot.Spylot` instance
     """
     sp = Spylot(specs)
-    sp.edit_traits()
+    if newapp:
+        if block:
+            sp.configure_traits(kind='livemodal')
+        else:
+            sp.configure_traits()
+    else:
+        if block:
+            sp.edit_traits(kind='livemodal')
+        else:
+            sp.edit_traits()
     return sp
