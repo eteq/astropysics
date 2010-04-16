@@ -547,10 +547,14 @@ class FitGui(HasTraits):
         self.plot.request_redraw()
     
     def _updatemodelplot_fired(self,new):
+        #If the plot has not been generated yet, just skip the update
+        if self.plot is None:
+            return
+        
         #if False (e.g. button click), update regardless, otherwise check for autoupdate
         if new and not self.autoupdate:
             return
-
+        
         mod = self.tmodel.model
         if self.ytype == 'data and model':
             if mod:
