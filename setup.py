@@ -31,6 +31,12 @@ class apy_build_py(du_build_py):
         timestamp = str(datetime.datetime.now())
         t = (timestamp,version,major,minor,bugfix,dev)
         return _frozen_version_py_template%t
+    
+descrip = """
+`astropysics` contains a variety of utilities and algorithms for reducing, analyzing, and visualizing astronomical data.
+      
+See http://packages.python.org/Astropysics/ for detailed documentation.
+"""
 
 setup(name='Astropysics',
       version=versionstr,
@@ -39,6 +45,7 @@ setup(name='Astropysics',
       packages=find_packages(),
       package_data={'astropysics':['data/*']},
       scripts=['scripts/spylot','scripts/fitsinfo'],
+      requires=['numpy','scipy'],
       install_requires=['numpy','scipy'],
       provides=['astropysics'],
       extras_require={'plots':'matplotlib',
@@ -51,13 +58,6 @@ setup(name='Astropysics',
       author_email='etolleru@uci.edu',
       license = 'Apache License 2.0',
       url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
-      long_description="""
-      ``astropysics`` contains a variety of utilities and algorithms for 
-      reducing, analyzing, and visualizing astronomical data.
-      
-      while ``astropysics`` requres only ``numpy`` and ``scipy``, other 
-      packages are necessary for some of the functionality.  These include: 
-      ``matplotlib``,``Traits``, ``TraitsGUI``, ``chaco``.
-      """,
+      long_description=descrip,
       cmdclass = {'build_py' : apy_build_py}
      )
