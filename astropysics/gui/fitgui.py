@@ -137,18 +137,22 @@ class TraitedModel(HasTraits):
         if self.model is not None:
             if isSequenceType(new) and len(new) == 2:
                 kw={'x':new[0],'y':new[1]}
+            elif isSequenceType(new) and len(new) == 3:
+                kw={'x':new[0],'y':new[1],'weights':new[2]}
             elif isMappingType(new):
                 kw = dict(new)
-                for xy in ('x','y'):
-                    if xy not in new:
+                
+                #add any missing pieces
+                for i,k in enumerate(('x','y','weights')):
+                    if k not in new:
                         if self.model.fiteddata:
-                            new[xy] = self.model.fiteddata[0]
+                            new[k] = self.model.fiteddata[i]
                         else:
-                            raise ValueError('not pre-fitted data available')
+                            raise ValueError('no pre-fitted data available')
             elif new is True:
                 if self.model.fiteddata:
                     fd = self.model.fiteddata
-                    kw= {'x':fd[0],'y':fd[1]}
+                    kw= {'x':fd[0],'y':fd[1],'weights':fd[2]}
                 else:
                     raise ValueError('No data to fit')
             else:
@@ -428,18 +432,19 @@ class FitGui(HasTraits):
         self.modelpanel = View(Label('empty'),kind='subpanel',title='model editor')
         
         self.tmodel = TraitedModel(model)
+        
         if model is not None and fittype is not None:
             self.tmodel.model.fittype = fittype
             
         if xdata is None or ydata is None:
-            if not hasattr(self.tmodel.model,'fitteddata') or self.tmodel.model.fitteddata is None:
+            if not hasattr(self.tmodel.model,'data') or self.tmodel.model.data is None:
                 raise ValueError('data not provided and no data in model')
             if xdata is None:
-                xdata = self.tmodel.model.fitteddata[0]
+                xdata = self.tmodel.model.data[0]
             if ydata is None:
-                ydata = self.tmodel.model.fitteddata[1]
+                ydata = self.tmodel.model.data[1]
             if weights is None:
-                weights = self.tmodel.model.fitteddata[2]
+                weights = self.tmodel.model.data[2]
 
         self.on_trait_change(self._paramsChanged,'tmodel.paramchange')
         
@@ -613,8 +618,9 @@ class FitGui(HasTraits):
         self.updatestats = True
         
         
-    def _tmodel_changed(self,new):
-        if new is not None and new.model is not None:
+    def _tmodel_changed(self,old,new):
+        #old is only None before it is initialized
+        if new is not None and new.model is not None and old is not None:
             self.fitmodel = True
         
     def _newmodel_fired(self,newval):
@@ -910,7 +916,7 @@ class FitGui(HasTraits):
         return self.tmodel.model
     
             
-def fit_data(xdata,ydata,model=None,**kwargs):
+def fit_data(*args,**kwargs):
     """
     Fit a 2d data set using the :class:`FitGui` interface. A GUI application
     instance must already exist (e.g. interactive mode of ipython). This
@@ -918,7 +924,12 @@ def fit_data(xdata,ydata,model=None,**kwargs):
     non-blocking behavior is desired, create a  :class:`FitGui` object and call
     :meth:`FitGui.edit_traits`.
     
-    kwargs are passed into the fitgui initializer
+    The following forms for input arguments are accepted:
+    
+    * fit_data(xdata,ydata)
+    * fit_data(xdata,ydata,model)
+    * fit_data(model)
+        This form requires a :class:`FunctionModel1D` object that includes data
     
     :param xdata: the first dimension of the data to be fit
     :type xdata: array-like
@@ -928,6 +939,8 @@ def fit_data(xdata,ydata,model=None,**kwargs):
     :type model: 
         None, string, or :class:`astropysics.models.core.FunctionModel1D`
         instance
+        
+    kwargs are passed into the fitgui initializer
     
     :returns: 
         The model or None if fitting is cancelled or no model is assigned in the
@@ -960,7 +973,28 @@ def fit_data(xdata,ydata,model=None,**kwargs):
     error) fit using the yerr algorithm instead of the default least-squares.
     
     """
-    kwargs['model'] = model
+    kwargs = dict(kwargs) #copy
+    if len(args) == 2:
+        xdata = args[0]
+        ydata = args[1]
+        kwargs.setdefault('model',None)
+    elif len(args) == 3:
+        xdata = args[0]
+        ydata = args[1]
+        if 'model' in kwargs:
+            raise TypeError("got two values for 'model' argument")
+        kwargs['model'] = args[2]
+    elif len(args) == 1:
+        xdata = ydata = None
+        if 'model' in kwargs:
+            raise TypeError("got two values for 'model' argument")
+        kwargs['model'] = args[0]
+        if kwargs['model'].data is None:
+            raise ValueError('cannot fit_data for a model with no data')
+    else:
+        raise TypeError('fit_data takes 1,2, or 3 arguments (%i given)'%len(args))
+    model = kwargs['model']
+    
     fg = FitGui(xdata,ydata,**kwargs)
     if model is not None and not isinstance(model,FunctionModel1D):
         fg.fitmodel = True
