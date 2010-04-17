@@ -618,7 +618,10 @@ class FitGui(HasTraits):
             self.fitmodel = True
         
     def _newmodel_fired(self,newval):
-        if isinstance(newval,basestring) or isinstance():
+        from inspect import isclass
+        
+        if isinstance(newval,basestring) or isinstance(newval,FunctionModel1D) \
+           or (isclass(newval) and issubclass(newval,FunctionModel1D)):
             self.tmodel = TraitedModel(newval)
         else:
             if self.modelselector.edit_traits(kind='modal').result:
