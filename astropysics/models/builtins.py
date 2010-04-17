@@ -439,7 +439,8 @@ class DoubleGaussianModel(FunctionModel1DAuto):
     
 class LognormalModel(FunctionModel1DAuto):
     """
-    A Lognormal model, e.g. f = A e^(-(log_base(x)-mulog)^2/2 siglog^2)
+    A normalized Lognormal model, e.g.
+    f = A (sqrt(2pi)/siglog) e^(-(log_base(x)-mulog)^2/2 siglog^2)
     
     By default, the 'base' parameter does not vary when fitting, and defaults to
     e (e.g. a natural logarithm).
