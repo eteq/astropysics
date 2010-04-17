@@ -344,7 +344,7 @@ class GaussianModel(FunctionModel1DAuto):
         self.A = 1
         self.A = peakval/self._getPeak()
         
-    peak=property(_getPeak,_setPeak)
+    peak=property(_getPeak,_setPeak,doc='Value of the model at the peak')
     
     __fwhmfactor = 2*(2*np.log(2))**0.5
     def _getFWHM(self):
@@ -439,10 +439,21 @@ class DoubleGaussianModel(FunctionModel1DAuto):
     
 class LognormalModel(FunctionModel1DAuto):
     """
-    A Lognormal model, e.g. f = A e^(-(log10(x)-mulog)^2/2 siglog^2)
+    A Lognormal model, e.g. f = A e^(-(log_base(x)-mulog)^2/2 siglog^2)
+    
+    By default, the 'base' parameter does not vary when fitting, and defaults to
+    e (e.g. a natural logarithm).
+    
+    .. note::
+        
+        This model is effectively identical to a :class:`GaussianModel` with
+        gmodel.setCall(xtrans='log##') where ## is the base, but is included
+        because lognormals are often considered to be canonical.
     """
-    def f(self,x,A=1,mulog=0,siglog=1):
-        return A*np.exp(-0.5*((np.log(x)-mulog)/siglog)**2)
+    def f(self,x,A=1,siglog=1,mulog=0,base=e):
+        return A*np.exp(-0.5*((np.log(x)/np.log(base)-mulog)/siglog)**2)*(2*pi)**-0.5/siglog
+    
+    fixedpars = ('base',)
     
     @property
     def rangehint(self):
@@ -611,7 +622,9 @@ class TwoSlopeModel(FunctionModel1DAuto):
     This model smoothly transitions from linear with one slope to linear with
     a different slope. It is the linearized equivalent of TwoPowerModel.
     
-    specifically, a*(x-xs)+(b-a)*log_base(1+base^(x-xs))+C
+    Specifically, a*(x-xs)+(b-a)*log_base(1+base^(x-xs))+C
+    
+    By default, the 'base' parameter does not vary when fitting.
     """
     
     fixedpars = ('base',)
@@ -1804,6 +1817,8 @@ class RoundBulgeModel(FunctionModel2DScalarSeperable):
     A bulge modeled as a radially symmetric sersic profile
     (by default the sersic index is kept fixed - to remove
     this behavior, set the fixedpars attribute to None)
+    
+    By default, the 'n' parameter does not vary when fitting.
     """
     
     fixedpars = ('n',)    
