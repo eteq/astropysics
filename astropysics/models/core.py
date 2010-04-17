@@ -1648,6 +1648,8 @@ class FunctionModel1D(FunctionModel):
             base-10 logarithm
         * 'ln'
             base-e logarithm
+        * 'log##.##'
+            logarithm with base ##.##
         * 'pow'
             10**
         * 'exp'
@@ -1668,9 +1670,26 @@ class FunctionModel1D(FunctionModel):
         transmap={'log':np.log10,'ln':np.log,'pow':partial(np.power,10),'exp':np.exp}
         xts,yts = xtrans,ytrans
         if isinstance(xtrans,basestring):
-            xtrans = transmap[xtrans]
+            if 'log' in xtrans and xtrans!='log':
+                basex = float(xtrans.replace('log',''))
+                if basex==10:
+                    xtrans = transmap['log']
+                else:
+                    sclx = np.log(basex)
+                    xtrans = lambda v:np.log(v)/sclx
+            else:
+                xtrans = transmap[xtrans]
         if isinstance(ytrans,basestring):
-            ytrans = transmap[ytrans]
+            if 'log' in ytrans and ytrans!='log':
+                basey = float(ytrans.replace('log',''))
+                scly = np.log(basey)
+                if basey==10:
+                    ytrans = transmap['log']
+                else:
+                    scly = np.log(base)
+                    ytrans = lambda v:np.log(v)/scly
+            else:
+                ytrans = transmap[ytrans]
             
         if calltype is None:
             if xtrans and ytrans: 
