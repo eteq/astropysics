@@ -885,8 +885,7 @@ class LatLongCoordinates(CoordinateSystem):
     
     def __init__(self,lat=0,long=0,laterr=None,longerr=None):
         """
-        See :attr:`lat` , :attr:`long` , :attr:`laterr` , and :attr:`longerr` 
-        for the meaning of the inputs  
+        See the associated attribute docstrings for the meaning of the inputs.  
         """
         
         self._lat = AngularCoordinate(range=(-90,90))
@@ -1355,7 +1354,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
-    TODO: document, clean up
+    .. todo:: document, clean up
     """
     
     def transformToEpoch(self,newepoch):
@@ -1396,7 +1395,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     
 class EquatorialCoordinatesCIO(EquatorialCoordinatesBase):
     """
-    TODO: implement
+    .. todo:: implement
     """
     
     def __init__(self):
@@ -2649,8 +2648,17 @@ def latitude_to_colatitude(lat,degrees=False):
 
 def colatitude_to_latitude(theta,degrees=False):
     """
-    converts from colatitude/inclination (i.e. "theta" in physicist convention) 
+    Converts from colatitude/inclination (i.e. "theta" in physicist convention) 
     to latitude (i.e. 0 at the equator).
+    
+    :param theta: input colatitude
+    :type theta: float or array-like
+    :param degrees: 
+        If True, the input is interpreted as degrees, otherwise radians.
+    :type degrees: bool
+    
+    :returns: latitude
+    
     """
     if degrees:
         return 90 - theta
@@ -2659,22 +2667,42 @@ def colatitude_to_latitude(theta,degrees=False):
 
 def cartesian_to_cylindrical(x,y,z,degrees=False):
     """
-    Converts three arrays in 3D rectangular Cartesian coordinates
-    to cylindrical polar coordinates. 
+    Converts three arrays in 3D rectangular Cartesian coordinates to cylindrical
+    polar coordinates.
     
-    if degrees is true, outputtheta is in degrees, otherwise radians
-    returns s,theta,z (theta increasing from +x to +y, 0 at x-axis)
+    :param x: x cartesian coordinate
+    :type x: float or array-like
+    :param y: y cartesian coordinate
+    :type y: float or array-like
+    :param z: z cartesian coordinate
+    :type z: float or array-like
+    :param degrees: 
+        If True, the output angles will be in degrees, otherwise radians.
+    :type degrees: bool
+    
+    :returns: 
+        Cylindrical coordinates as a (rho,theta,z) tuple (theta increasing from
+        +x to +y, 0 at x-axis).
     """
     s,t = cartesian_to_polar(x,y)
     return s,t,z
     
 def cylindrical_to_cartesian(s,t,z,degrees=False):
     """
-    Converts three arrays in cylindrical polar coordinates to
-    3D rectangular Cartesian coordinates. 
+    Converts three arrays in cylindrical polar coordinates to 3D rectangular
+    Cartesian coordinates.
     
-    if degrees is true, converts from degrees to radians for theta
-    returns x,y,z (theta increasing from +x to +y, 0 at x-axis)
+    :param s: radial polar coordinate
+    :type s: float or array-like
+    :param t: polar angle (increasing from +x to +y, 0 at x-axis)
+    :type t: float or array-like
+    :param z: z coordinate
+    :type z: float or array-like
+    :param degrees: 
+        If True, the output angles will be in degrees, otherwise radians.
+    :type degrees: bool
+    
+    :returns: Cartesian coordinates as an (x,y,z) tuple.
     """
     x,y = polar_to_cartesian(s,t,degrees)
     return x,y,z
@@ -2724,6 +2752,7 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
         from astropysics.coords import sky_sep_to_3d_sep
     
     .. doctest::
+    
         >>> p1 = LatLongCoordinates(0,0)
         >>> p2 = LatLongCoordinates(0,10)
         >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
@@ -2785,16 +2814,18 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
         * False: do nothing - just return if something matched
     
     :returns: 
-        (mask of matches for array 1, mask of matches for array 2) or as
-        described in the corresponding `multi` parameter value
+        Tuple (mask of matches for array 1, mask of matches for array 2) or as
+        described in the corresponding `multi` parameter value.
     
     **Examples**
+    
     .. testsetup::
     
         from astropysics.coords import match_coords
         from numpy import array
     
     .. doctest::
+    
         >>> ra1 = array([1,2,3,4])
         >>> dec1 = array([0,0,0,0])
         >>> ra2 = array([7,6,5,4])
@@ -2911,7 +2942,8 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         
     **Examples**
     
-    In these examples we are assuming the WMAP7 BAOH0 cosmological parameters.    
+    In these examples we are assuming the WMAP7 BAOH0 cosmological parameters.   
+     
     .. testsetup::
     
         from astropysics.constants import choose_cosmology
@@ -2919,6 +2951,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         from astropysics.coords import cosmo_z_to_dist
     
     .. doctest::
+    
         >>> '%.6f'%cosmo_z_to_dist(0.03)
         '126.964723'
         >>> '%.6f'%cosmo_z_to_dist(0.2)
@@ -3121,10 +3154,8 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     Converts an observed angular size (in arcsec or as an AngularSeperation 
     object) to a physical size.
     
-    kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
-    
-    :param angsize: 
-        Angular size in arcsecond or an :class:`AngularSeperation` object.
+    :param angsize: Angular size in arcsecond.
+    :type angsize: float or an :class:`AngularSeperation` object
     :param zord: Redshift or distance
     :type zord: scalar number
     :param usez:
@@ -3132,6 +3163,8 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
         will be passed into the distance calculation. The result will be in
         pc. Otherwise, `zord` will be interpreted as a distance.
     :type usez: boolean
+    
+    kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
     
     :returns: a scalar value for the physical size (in pc if redshift is used) 
     """
@@ -3150,13 +3183,34 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
 
 def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     """
-    converts a physical size (in pc) to an observed angular size (in arcsec or 
+    Converts a physical size (in pc) to an observed angular size (in arcsec or 
     as an AngularSeperation object if objout is True)
     
     if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
     is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
     otherwise, zord is taken directly as a angular diameter distance (in pc) 
     and kwargs should be absent
+    
+    :param physize: Physical size in pc
+    :type physize: float
+    :param zord: Redshift or distance
+    :type zord: scalar number
+    :param usez:
+        If True, the input will be interpreted as a redshift, and kwargs
+        will be passed into the distance calculation. The result will be in
+        pc. Otherwise, `zord` will be interpreted as a distance.
+    :type usez: boolean
+    :param objout: 
+        If True, return value is an :class:`AngularSeperation` object,
+        otherwise, angular size in arcsec.
+    :type: bool
+    
+    kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
+    
+    :returns: 
+        The angular size in acsec, or an :class:`AngularSeperation` object if
+        `objout` is True.
+        
     """
     if usez:
         d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
@@ -3167,6 +3221,7 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
         
     r=physize
     res = 206265*np.arcsin(r*(d*d+r*r)**-0.5)
+    
     if objout:
         return AngularSeperation(res/3600)
     else:
@@ -3183,10 +3238,13 @@ _gall0B1950=123
 
 def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True):
     """
+    :deprecated:
+    
     Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
     
     transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
     'cg','cq','qc'
+    
     transtype   From           To       |  transtype    From         To
         1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
         2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
@@ -3264,6 +3322,9 @@ _B1950toJ2000xyz=np.matrix([[0.999926,  -0.011179,  -0.004859],
                             [0.004859,   0.000027,   0.999988]])
 
 def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
+    """
+    :deprecated:
+    """
     from warnings import warn
     warn('epoch_transform function is deprecated - use general coordinate transform framework',DeprecationWarning)
     
@@ -3299,6 +3360,8 @@ def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
 
 def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
     """
+    :deprecated:
+    
     convinience function for celestial_transforms
     if strout is None, will automatically decide based on inputs
     """
@@ -3333,6 +3396,8 @@ def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
     
 def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
     """
+    :deprecated:
+    
     convinience function for celestial_transforms
     if strout is None, will automatically decide based on inputs
     """

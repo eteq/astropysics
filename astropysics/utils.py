@@ -6,7 +6,7 @@
 utils
 =====
 
-The ``utils`` module contains classes and funtions of general utility used in
+The :mod:`utils` module contains classes and funtions of general utility used in
 multiple places throughout `astropysics`. Some of these are
 astropyhysics-specific algorithms while others are more python tricks.
 
@@ -45,17 +45,20 @@ except ImportError: #support for earlier versions
 
 def funpickle(fileorname,number=0,usecPickle=True):
     """
-    Unpickle a file specified by ``filename``, which can be either a
-    file name string or a file object, and return the pickled contents.
+    Unpickle a file specified by  and return the pickled contents.
     
-    ``number`` specifies the number of objects to return -- if greater than 0,
-    a list of length equal to number is returned.  If exactly 0, just a single 
-    call to pickle.load is performed and the result is returned (e.g. the first 
-    object in the file).  If <0, all objects in the file are retreived and a 
-    list of all of them is returned.
+    :param fileorname: The file from which to unpickle objects
+    :type fileorname: a file name string or a :class:`file` object
+    :param number: 
+        The number of objects to unpickle - if <1, returns a single object.
+    :type number: int
+    :param usecPickle: 
+        If True, the :mod:`cPickle` module is to be used in place of
+        :mod:`pickle` (cPickle is faster).
+    :type usecPickle: bool 
     
-    ``usecPickle`` determines if the cPickle module is to be used in place of
-    pickle (generally cPickle is faster)
+    :returns: A list of length given by `number` or a single object if number<1
+    
     """
     if Pickle:
         import cPickle as pickle
@@ -92,19 +95,25 @@ def funpickle(fileorname,number=0,usecPickle=True):
 
 def fpickle(object,fileorname,usecPickle=True,protocol=None,append=False):
     """
-    Pickle the ``object`` into the file given by ``fileorname``, which can be
-    either a file name string or a file object
+    Pickle an object to a specified file.
     
-    if ``append`` is True, the object is appended to the end of the file, 
-    otherwise the file will be replaced with a new one that the object will be
-    pickled into.
+    :param object: the python object to pickle
+    :param fileorname: The file from which to unpickle objects
+    :type fileorname: a file name string or a :class:`file` object
+    :param usecPickle: 
+        If True, the :mod:`cPickle` module is to be used in place of
+        :mod:`pickle` (cPickle is faster).
+    :type usecPickle: bool 
+    :param protocol: 
+        Pickle protocol to use - see the :mod:`pickle` module for details on
+        these options. If None, the most recent protocol will be used.
+    :type protocol: int or None
+    :param append:
+        If True, the object is appended to the end of the file, otherwise the
+        file will be overwritten (if a file object is given instead of a 
+        file name, this has no effect).
+    :type append: bool
     
-    ``protocol`` determines which pickle protocol to use - see the pickle module
-    for details on these options.  If None, the most recent protocol will be 
-    used.
-    
-    ``usecPickle`` determines if the cPickle module is to be used in place of
-    pickle (generally cPickle is faster)
     """
     
     if usecPickle:
@@ -132,14 +141,21 @@ def check_type(types,val,acceptnone=True):
     """
     Call this function to check if the value matches the provided types.
     
-    note that None will always be accepted if acceptnone is True
+    :param types:  
+        A single type, a sequence of types, or a callable that accepts one
+        argument and will be called with the value - if it returns True, the
+        value is the correct type.
+    :param val: The value to type-check.
+    :param acceptnone: Always accept the value None regardless of types
+    :type acceptnone: bool
     
-    types can be a single type, a sequence of types, or a callable that 
-    accepts one argument and will be called with the value - if it 
-    returns True, the value is the correct type. Otherwise, a TypeError
-    will be raised.
+    :except TypeError: if the type-checking fails
+    :except ValueError: if the `types` are invalid
     
-    if the type is a numpy dtype, the input array type is also checked
+    .. note::
+        If any of the types are a :class:`numpy.dtype`, and the value is an 
+        :class:`numpy.array`, the data type will also be checked.
+    
     """
     if val is None:
         if acceptnone:
@@ -290,8 +306,8 @@ class _LinkedDict(dict):
         
 class DataObjectRegistry(dict):
     """
-    A class to register data sets used throughout a module  (e.g. photometric 
-    bands)
+    A class to register data sets used throughout a module and enable easy 
+    access using string names.
     """
     def __init__(self,dataname='data',datatype=None):
         dict.__init__(self)
@@ -320,11 +336,14 @@ class DataObjectRegistry(dict):
     
     def register(self,objects,groupname=None):
         """
-        register a set of objects, possibly in a group
+        Register a set of objects, possibly in a group
         
-        `objects` is a dictionary mapping the datum name to the object
+        :param objects: map of the datum name to the associated objects to store
+        :type objects: 
+            dictionary mapping strings to objects with type matching :attr:`datatype` 
+        :param groupname: A common name that applies to all of the objects
+        :type groupname: string or None
         
-        `groupname` is the name of the group to apply to the dictionary
         """
         from operator import isMappingType,isSequenceType
         
@@ -350,8 +369,13 @@ class DataObjectRegistry(dict):
     
     def addToGroup(self,key,group):
         """
-        adds the registered object with the provided name to a group with the 
-        given name
+        Adds the registered object with the provided name to a group with the 
+        given name.
+        
+        :param key: The object to register
+        :type key: string
+        :param group: The group name to apply
+        :type group: string
         """
         obj = self[key] 
         group = self._groupdict.setdefault(group,[])
@@ -360,7 +384,10 @@ class DataObjectRegistry(dict):
             
     def removeGroup(group):
         """
-        removes the selected group
+        Removes the provided group
+        
+        :param group: name of group to remove
+        :type group: string
         """
         del self._groupdict[group]
         
@@ -369,13 +396,21 @@ class DataObjectRegistry(dict):
     
     def getObjects(self,objectstrs,addmissing=False):
         """
-        this translates a string, sequence of strings, or mixed sequence of data 
-        objects and strings into a sequence of data objects 
+        Translates a string, sequence of strings, or mixed sequence of data 
+        objects and strings into a sequence of data objects.
         
-        if addmissing is True, new objects will be added to the registry -- if the
-        object has a `name` attribute, it will be used as the name, otherwise a name
-        will be generated of the form "dataname##".  if addmissing is False, the 
-        object will be returned but not added to the registry
+        :param objectstrs: 
+            The requested object names, mixed with objects if desired.
+        :type: 
+            String, sequence of strings, or mixed sequence of strings and data objects.
+        :param addmissing: 
+            If True, data objects in `objectstrs` will be added to the registry.
+            If the object has a `name` attribute, it will be used as the name,
+            otherwise a name will be generated of the form "dataname##".
+        :type addmissing: bool
+        
+        :returns: A sequence of data objects.
+        
         """
         from operator import isMappingType,isSequenceType
         
@@ -425,13 +460,16 @@ class DataObjectRegistry(dict):
     
     def getObjectNames(self,retdict=False):
         """
-        generates and returns  list of names of the objects in this registry, 
+        Generates and returns  list of names of the objects in this registry, 
         extracted from the `name` attribute of the object if present, otherwise 
         from the registry key.  The order is the same as that generated by
         keys() or values()
         
-        if retdict is True, the return value is a dictionary mapping keys from
-        the registry to the object names
+        :param retdicy: 
+            If True, the return value is a dictionary mapping keys from the
+            registry to object names.
+            
+        :returns: List of names.
         """
         ns = []
         ks = []
@@ -462,17 +500,28 @@ class PipelineError(Exception):
 
 class Pipeline(object):
     """
-    This class represents a pipeline, composed of PipelineElements joined
-    together as a data analysis or reduction pipeline
+    This class represents a pipeline, composed of :class:`PipelineElements
+    <PipelineElement>` joined together as a data analysis or reduction pipeline.
     
-    joins should be a sequence of 3-tuples of the form 
-    (elementindex,attribute,Pipelineobject) that are used to populate the 
-    specified element's attribute by extracting the output of the 
-    supplied pipeline
+    Note that whenever stage numbers are used, they are 0-indexed 
+    (e.g. the 1st stage is stage 0)
     
-    dochecks validates the inputs as the correct type
     """
     def __init__(self,elements,joins=None,dochecks=True):
+        """
+        :param elements: Pipeline elements for this pipeline.
+        :type elements: :class:`PipelineElement` objects
+        
+        :param joins:
+            Used to populate the specified element's attribute by extracting
+            the output of the supplied pipeline.
+        :type joins: 
+            Sequence of 3-tuples (elementindex,attribute,Pipelineobject) 
+        
+        :param dochecks: If True, validates the inputs as the correct type.
+        :type dochecks: bool
+        """
+        
         from collections import deque
         
         if dochecks:
@@ -499,15 +548,15 @@ class Pipeline(object):
                 
     def feed(self,data):
         """
-        feed an initial datum into the first stage of the pipeline.
+        Feed an initial datum into the first stage of the pipeline.
         """
         self.datadeques[0].appendleft(data)
     
     def feedIter(self,dataiter):
         """
-        feed initial data into the first stage of the pipeline.  The input
+        Feed initial data into the first stage of the pipeline.  The input
         will be treated as an iterator and each item will be added to
-        the pipeline
+        the pipeline.
         """
         for dat in dataiter:
             self.datadeques[0].appendleft(dat)
@@ -515,16 +564,19 @@ class Pipeline(object):
     
     def extract(self,extractall=False,autoprocess=False):
         """
-        extract from the last stage of the pipeline.  
+        Extract from the last stage of the pipeline.
         
-        If autoprocess is True, the stages will be processed 
-        so that at least one item is in the final stage
+        :param extractall:
+            If True, a sequence of objects will be extracted from the final
+            stage (combined with `autoprocess`, this will clear the pipeline).
+        :type extractall: bool
+        :param autoprocess:
+            If True, the stages will be repeatedly processed so that at least
+            one item is in the final stage. (combined with `extractall`, this
+            will clear the pipeline).
+        :type autoprocess: bool
         
-        if extractall is true, a sequence of objects will be extracted
-        from the final stage (combined with autoprocess, this will
-        clear the pipeline)
-        
-        raises an IndexError if there is no data left to extract
+        :raises IndexError: If there is no data left to extract
         """              
         d = self.datadeques[-1]
           
@@ -542,6 +594,13 @@ class Pipeline(object):
             return d.pop()
         
     def processStage(self,stagenum):
+        """
+        Process a particular stage once, possibly processing earlier stages
+        if there is nothing in the request stage's input.
+        
+        :param stagenum: Stage number index to process
+        :type stagenum: int
+        """
         st = self.elements[stagenum]
         
         #process the items to join into the stage if necessary
@@ -579,48 +638,71 @@ class Pipeline(object):
     
     def process(self,repeat=False):
         """
-        process the pipeline to the end
+        Process the pipeline to the end.
         
-        if repeat is True, the pipeline will by processed continually, 
-        otherwise, only one step through the pipeline will be run
+        :param repeat: 
+            If True, the pipeline will by processed continually. Otherwise, only
+            one step through the pipeline will be run.
+        :type repeat: bool
+        
         """
         return self.processToStage(-1,repeat)
     
-    def processSingle(self,input,processinglimit=10):
+    def processSingle(self,input,processinglimit=10,removefailed=True):
         """
-        processes the input value through the pipeline, skipping over anything
-        in the queue and repeating a processing stage until complete
+        Processes the input value through the pipeline, skipping over anything
+        in the queue and repeating a processing stage until complete.
         
-        processinglimit is the maximum number of times to run the 
-        processing of any given stage - if the processing is still 
-        incomplete, a PipelineError will be raised.  If it is 0,
-        no limit will be used (e.g. processing continues until 
-        completion)
+        :param input: The input value to be feed into the 1st stage
+        :param processinglimit: 
+            The maximum number of times to attempt to process any stage. If 0,
+            processing continues indefinitely (or until completion).
+        :type processinglimit: int
+        :param removefailed: 
+            If True and a stage reaches the `processinglimit`, the data object
+            will be removed from the pipeline.  Otherwise, the object will be
+            left in place where it got stuck.
+        :type removefailed: bool
         
-        return value is the result of the full pipeline (automatically 
-        extracted)
+        :except PipelineError: 
+            If `processinglimit` is reached and the object has still not been
+            processed.  The data will be left in the front of the failed stage's
+            queue unless `removefailed` is True.  
+        
+        :returns:
+            The result of the full pipeline (it will *not* be left in the final
+            stage).
         """
         self.datadeques[0].append(input)
         for stage in range(len(self.elements)):
-            self._processStage(stage)
+            self.processStage(stage)
             while self.cycles[stage]:
                 if processinglimit and self.cycles[stage] >= processinglimit:
+                    if removefailed:
+                        raise NotImplementedError
                     raise PipelineError('hit processing limit at stage %i'%stage)
-                self._processStage(stage)
+                self.processStage(stage)
             self.datadeques[stage+1].append(self.datadeques[stage].popleft())
                 
         return self.datadeques[-1].pop()
         
     def processToStage(self,stagenum,repeat=False):
         """
-        stage numbers are 0-indexed or can be negative to go from end
+        Processes the pipeline from the beginning up to the requested stage.
         
-        if repeat is True, processing will continue until all earlier
-        stages are empty.  If it is an integer, it will be taken as a 
-        maximum number of times to attempt any given stage before
-        a PipelineError is raised
+        :param stagenum: The stage to process to.
+        :type stagenum: int
+        :param repeat:
+            If True, processing will continue until all earlier stages are
+            empty. If it is an integer, it will be taken as a maximum number of
+            times to attempt any given stage before a PipelineError is raised
+        :type repeat: bool or int
         
-        returns the number of times all of the stages were fed and processed
+        :returns: The number of times all of the stages were fed and processed.
+        
+        :except PipelineError: 
+            If an element has not completed after `repeat` processing cycles
+            have been run.
         """
         if stagenum >= 0:
             stages = range(stagenum+1)
@@ -632,15 +714,15 @@ class Pipeline(object):
             count=0
             if repeat:
                 while len(dd)>0:
-                    self._processStage(st)
+                    self.processStage(st)
                     while self.cycles[st]:
                         if repeat is not True and self.cycles[st] >= repeat:
                             raise PipelineError('hit processing limit at stage %i'%st)
-                        self._processStage(st)
+                        self.processStage(st)
                     count+=1   
             else:
                 if len(dd)>0:
-                    self._processStage(st)
+                    self.processStage(st)
                     if not self.cycles[st]:
                         count=1
             counts.append(count)
@@ -648,8 +730,15 @@ class Pipeline(object):
     
     def clear(self,stages=None):
         """
-        clears the inputs of the stage(s) requested (all of them if None)
+        Clears the inputs of the stage(s) requested.
+        
+        :param stages: 
+            The stage(s) to be cleared.  If None, all will be cleared.
+        :type stages: integer, sequence of integers or None
         """
+        if isinstance(stages,int):
+            stages=(stages,)
+        
         if stages is None:
             stages = range(len(self.elements)+1)
         for st in stages:
@@ -664,6 +753,7 @@ class PipelineElement(object):
         Process the data in whatever manner is appropriate.
     
     This method may be overridden: 
+    
     * :meth:`plInteract`    
         Performs interactive stage. The :attr:`_plintype` attribute may be set
         (on classes or instances) as a processing indicator. See
@@ -917,12 +1007,13 @@ def nd_grid(*vecs):
     corresponding to its input order
     
     
-    Example:
-    x = linspace(-1,1,10)
-    y = x**2+3
-    z = randn(13)
-    result = nd_grid(x,y,z)
-    xg,yg,zg = result
+    **Examples**::
+    
+        x = linspace(-1,1,10)
+        y = x**2+3
+        z = randn(13)
+        result = nd_grid(x,y,z)
+        xg,yg,zg = result
     
     result will be a (3,10,10,13) array, and each of xg,yg, and zg are 
     (10,10,13)

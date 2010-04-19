@@ -51,8 +51,8 @@ models.core
    :members:
    :undoc-members:
    :show-inheritance:
-   
-   
+
+
 models.builtins
 ---------------
 
@@ -60,7 +60,7 @@ models.builtins
    :members:
    :undoc-members:
    :show-inheritance:
-   
+
 models.pca
 ----------
 

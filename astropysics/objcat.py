@@ -1896,7 +1896,10 @@ class FieldValue(object):
     def __setstate__(self,d):
         self._source = d['_source']
     
-    value = abstractproperty()
+    value = abstractproperty(doc='The value stored by this :class:`FieldValue`')
+    """
+    The value stored by this :class:`FieldValue`
+    """
     
     def _getSource(self):
         return self._source
@@ -1907,7 +1910,7 @@ class FieldValue(object):
             except: 
                 raise TypeError('Input source is not convertable to a Source object')
         self._source = val 
-    source=property(_getSource,_setSource)
+    source=property(_getSource,_setSource,doc='The :class:`Source` for this :class:`FieldValue`')
     
     def checkType(self,typetocheck):
         """

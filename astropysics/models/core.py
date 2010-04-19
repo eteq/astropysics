@@ -75,13 +75,13 @@ class ParametricModel(object):
     
     def _getPardict(self):
         """
-        a dictionary of the parameter names and values
+        A dictionary of the parameter names and values.
         """
         return dict([t for t in zip(self.params,self.parvals)]) 
     def _setPardict(self,val):
         self.parvals = [val[p] for p in self.params]
     pardict = property(_getPardict,_setPardict,doc="""
-        a dictionary of the parameter names and values
+        A dictionary of the parameter names and values.
         """)
         
     def _getData(self):
@@ -121,7 +121,7 @@ class ParametricModel(object):
 class _AutoParameter(object):
     """
     Parameter representation used for objects instantiated with the
-    AutoParamsMeta magic
+    AutoParamsMeta magic.
     """
     def __init__(self,name,defaultvalue):
         self.name = name
@@ -276,18 +276,22 @@ class FunctionModel(ParametricModel):
     
     The following attributes *must* be defined:
     
-    * 'f': a method that takes an array as the first argument and 
-         returns another array
-    * '_pars': a sequence of strings that define the names of attributes 
-      that are to be treated as the parameters for the model. If these are
-      not defined, they will be initialized to the "defaultparval" value
+    * :meth:`f`
+        A method that takes an array as the first argument and returns another
+        array.
+    * :attr:`_pars`
+        A sequence of strings that define the names of attributes that are to be
+        treated as the parameters for the model. If these are not defined, they
+        will be initialized to the :attr:`defaultparval` value
     
-    * '_filterfunc': a function that performs any processing of inputs and 
-      outputs.  Should call f and return f's return value.
+    * :meth:`_filterfunc`
+        A function that performs any processing of inputs and outputs. Should
+        call :meth:`f` and have the same type of return value.
       
-    If type-checking is to be performed on the input, it should be performed
-    in __call__ (see docstring for __call__), but any mandatory input 
-    conversion should be done in _filterfunc, instead
+    If type-checking is to be performed on the input, it should be performed in
+    :meth:`__call__` (see docstring for :meth:`__call__` for syntax), generally
+    using :func:`astropysics.utils.check_type`, but any mandatory input
+    *conversion* should be done in :meth:`_filterfunc`.
     """
     
     defaultparval = 1
@@ -303,10 +307,10 @@ class FunctionModel(ParametricModel):
     @abstractmethod
     def f(self,x,*params):
         """
-        This function MUST be overriden in subclasses.  It is
-        interpreted as the function that takes an array (or array-castable)
-        as the first argument and returns an array of output values 
-        appropriate for the model.
+        This abstract method *must* be overriden in subclasses. It is
+        interpreted as the function that takes an array (or array-like) as the
+        first argument and returns an array of output values appropriate for the
+        model.
         
         model parameters are passed in as the rest of the arguments, in the 
         order they are given in the _pars sequence.
@@ -316,21 +320,27 @@ class FunctionModel(ParametricModel):
     
     def _filterfunc(self,*args,**kwargs):
         """
-        this single-use function is in place to not need an __init__ method 
-        to initially set the calling function
+        This single-use function is present to avoid need for setting the filter
+        function in an initializer.
         """
         self._filterfunc = self.f
         return self.f(*args,**kwargs)
     
     def __call__(self,x):
         """
-        call the function on the input x with the current parameters and return
-        the result.
+        Call the model function on the input x with the current parameters and
+        return the result.
+    
+        :except ModelTypeError:
+            If the input or output are incorrect type or dimensionality for this
+            model.
         
-        if subclassing is to do type-checking, the function should return the
-        result of self._filterfunc(input,*self.parvals) or raise a 
-        ModelTypeError
+        ..note ::
+            If a subclass overrides this method to do type-checking, it should 
+            either call this method or call :meth:`_filterfunc` with an array
+            input and raise a ModelTypeError if there is a type problem 
         """
+        
         arr = np.array(x,copy=False,dtype=float)
         return self._filterfunc(arr,*self.parvals)
     
@@ -339,7 +349,7 @@ class FunctionModel(ParametricModel):
     @property
     def params(self):
         """
-        a tuple of the parameter names
+        A tuple of the parameter names. (read-only)
         """
         return self._pars
     
@@ -354,7 +364,9 @@ class FunctionModel(ParametricModel):
             raise ValueError('too many new parameters')
         for a,v in zip(self._pars,newpars):
             setattr(self,a,v)        
-    parvals = property(_getParvals,_setParvals,doc='a list of the values in the parameters') 
+    parvals = property(_getParvals,_setParvals,doc="""
+    The values of the parameters in the same order as :attr:`params`
+    """)
     
     def _getPardict(self):
         try:
@@ -368,11 +380,12 @@ class FunctionModel(ParametricModel):
                 raise KeyError('No parameter %s found'%k)
         for k,v in newpardict.iteritems():
             setattr(self,k,v)
-    pardict = property(_getPardict,_setPardict,doc='a dictionary of the parameter names and values')
-    
+    pardict = property(_getPardict,_setPardict,doc="""
+    A dictionary mapping parameter names to the associated values.
+    """)
     def _autoInitPars(self):
         """
-        called to generate parameters if they are missing
+        Called to generate parameters if they are missing.
         """
         for p in self._pars:
             setattr(self,p,self.defaultparval)
@@ -387,7 +400,7 @@ class FunctionModel(ParametricModel):
     @property
     def fittypes(self):
         """
-        A Sequence of the available valid values for the :data:`fittype`
+        A Sequence of the available valid values for the :attr:`fittype`
         attribute.  (Read-only)
         """
         ls = list()
@@ -400,14 +413,14 @@ class FunctionModel(ParametricModel):
     def fitData(self,x=None,y=None,fixedpars='auto',weights=None,savedata=True,
                  updatepars=True,fitf=False,contraction='sumsq',**kwargs):
         """
-        Adjust the parameters of the FunctionModel to fit the provided data 
-        using algorithms from scipy.optimize.
+        Fit the provided data using algorithms from scipy.optimize, and adjust
+        the model parameters to match.
         
-        The fitting technique is sepcified by the :data:`fittype` attribute of
+        The fitting technique is sepcified by the :attr:`fittype` attribute of
         the object, which by default can be any of the optimization types in the
-        `scipy.optimize` package (except for scalar minimizers)
+        :mod:`scipy.optimize` module (except for scalar minimizers)
         
-        The full fitting output is available in :data:`lastfit` attribute after
+        The full fitting output is available in :attr:`lastfit` attribute after
         this method completes.
         
         :param x: 
@@ -667,9 +680,17 @@ class FunctionModel(ParametricModel):
     
     def stdData(self,x=None,y=None):
         """
-        determines the standard deviation of the model from the supplied data
+        Determines the standard deviation of the model from the supplied data
         
-        if x or y are None, they are determined from the pre-fitted data
+        :param x: Input data value or None to use stored :attr:`data`
+        :type x: array-like or None
+        :param y: Output data value or None to use stored :attr:`data`
+        :type y: array-like or None
+        
+        
+        :returns: standard deviation of model from `y`
+        
+        
         """
         if x is None or y is None:
             if self.data is None:
@@ -683,12 +704,21 @@ class FunctionModel(ParametricModel):
     
     def residuals(self,x=None,y=None,retdata=False):
         """
-        returns residuals of the provided data against the model (e.g.
-        y-model(x) ).  
+        Compute residuals of the provided data against the model, e.g.
+        :math:`y-{\\rm model}(x)`.  
         
-        If x or y are None, data are determined from the already-fit data
+        :param x: Input data value or None to use stored :attr:`data`
+        :type x: array-like or None
+        :param y: Output data value or None to use stored :attr:`data`
+        :type y: array-like or None
+        :param retdata: If True, returns the data along with the model.
+        :type retdata: bool
         
-        returns x,y,residuals if retdata is True, otherwise just residuals
+        :returns: 
+            Residuals of model from `y` or if `retdata` is True, a tuple
+            (x,y,residuals).
+        :rtype: array-like
+        
         """
         if x is None or y is None:
             if self.data is None:
@@ -705,10 +735,23 @@ class FunctionModel(ParametricModel):
     _fitchi2 = None #option to save so that fitData can store a chi2 if desired
     def chi2Data(self,x=None,y=None,weights=None):
         """
-        Determines the chi-squared statistic for the data assuming this 
-        model.  If both are None, the internal data is used.  In some
-        cases the chi-squared statistic may be pre-computed in the fitting
-        step rather than in this method.
+        Computes the chi-squared statistic for the data assuming this model.
+        
+        :param x: Input data value or None to use stored :attr:`data`
+        :type x: array-like or None
+        :param y: Output data value or None to use stored :attr:`data`
+        :type y: array-like or None
+        :param weights: 
+            Weights to adjust chi-squared, typically for error bars.
+            Statistically interpreted as the inverse error (*not* inverse
+            variance). If None, any stored :attr:`data` will be used.
+        :type weights: array-like or None
+        
+        :returns: tuple of floats (chi2,reducedchi2,p-value)
+        
+        If both are None, the internal data is used. In some cases the
+        chi-squared statistic may be pre-computed in the fitting step rather
+        than in this method.
         
         weights are taken here to be inverse-error
         
@@ -749,7 +792,7 @@ class FunctionModel(ParametricModel):
                           modely=False,n=250,prefit=True, medianpars=False,
                           plothist=False,**kwargs):
         """
-        uses the fitData function to fit the function many times while 
+        Uses the fitData function to fit the function many times while 
         either using the  "bootstrap" technique (resampling w/replacement),
         monte carlo estimates for the error, or both to estimate the error
         in the fit.
@@ -877,33 +920,51 @@ class FunctionModel(ParametricModel):
     
     def getMCMC(self,x,y,priors={},datamodel=None):
         """
-        Generate an object to fit the data using Markov Chain Monte 
-        Carlo sampling.  
+        Generate an object to fit the data using Markov Chain Monte Carlo
+        sampling. This function requires the `PyMC
+        <http://code.google.com/p/pymc/>`_ package for the MCMC internals and
+        sampling.
         
-        The data to be fit is provided in the x and y arguments.
+        :param x: Input data value
+        :type x: array-like
+        :param y: Output data value
+        :type y: array-like
+        :param priors: 
+            Maps parameter names to the priors to assume for that parameter.
+            There *must* be an entry for every parameter in the model. The prior
+            specification can be in any of the following forms:
+            
+            * A :class:`pymc.Stochastric` object
+            * A 2-tuple (lower,upper) for a uniform prior
+            * A scalar > 0 to use a gaussian prior of the provided width 
+              centered at the current value of the parameter
+            * 0 for a poisson prior with k set by the current value of the 
+              parameter
+            
+        :type priors: dictionary
+        :param datamodel:
+            Specifies the model to assume for the fitting data points.  May
+            be any of the following:
+            
+            * None
+                A normal distribution with sigma given by the data's standard
+                deviation.
+            * A tuple (dist,dataname,kwargs)
+                The first element is the pymc.distribution to be used as the
+                distribution representing the data and the second is the name of
+                the argument to be associated with the FunctionModel1D's output,
+                and the third is kwargs for the distribution ("observed" and
+                "data" will be ignored, as will the data argument)
+            * A sequence
+                A normal distribution is used with sigma for each data point
+                specified by the sequence. The length must match the model.
+            * A scalar
+                A normal distribution with the given standard deviation.
         
-        To specify the priors, either supply pymc.Stochastric objects, a 2-tuple 
-        (uniform lower and upper), a scalar > 0 (gaussian w/ the center given by 
-        the current value and sigma provided by the scalar), or 0 (poisson with 
-        k set by the current value)
+        :except ValueError: If a prior is not provided for any parameter.
         
-        Any missing priors will raise a ValueError
+        :returns: A :class:`pymc.MCMC` object ready to sample for this model.
         
-        datamodel can be:
-        
-        * None: a normal distribution with sigma given by the data's standard 
-          deviation is used as the data model
-        * a tuple: (dist,dataname,kwargs)the first element is the 
-          pymc.distribution to be used as the distribution representing the data
-          and the second is the name of the argument to be associated with the 
-          FunctionModel1D's output, and the third is kwargs for the distribution 
-          ("observed" and "data" will be ignored, as will the data argument)
-        * a scalar or sequence of length == data: a normal distribution is used 
-          with sigma specified by the scalar/sequence
-        
-        returns a pymc.MCMC object
-        
-        *Note that this function requires PyMC (http://code.google.com/p/pymc/)*
         """
         import pymc
         from operator import isSequenceType
@@ -961,36 +1022,58 @@ class FunctionModel(ParametricModel):
     
 class CompositeModel(FunctionModel):
     """
-    This model contains a group of FunctionModel objects and evaluates them
-    as a single model.  The models themselves are called, rather than the `f` 
+    This model contains a group of :class:`FunctionModel` objects joined by
+    standard arithmetic operations, and evaluates them as a single model. The
+    models themselves are called, rather than the :meth:`f` function (and hence
+    will be influenced by anything like :meth:`FunctionModel1D.setCall` calls).
     
-    The models can either be FunctionModel objects, FunctionModel1classes,
-    or a string (in the later two cases, new instances will be generated).
+    Generated parameter names are of the form 'A0' and 'A1' where A is the
+    parameter name and the number is the sequential number of the model with
+    that parameter. If `autoshorten` is True, the suffix will be removed if
+    there is only one of that parameter.
     
-    parameter names are of the form 'A0' and 'A1' where A is the parameter
-    name and the number is the sequential number of the model with that
-    parameter.  If autoshorten is True, the suffix will be removed if there
-    is only one of that parameter
+    Note that no checking is performed here to ensure the model outputs are
+    compatible - this can be done in subclasses for specific types of
+    :class:`FunctionModels <FunctionModel>`.
     
-    parnames is a dictionary that maps from names of the form 'A0' to a 
-    different name for the parameter.  If a parameter with the name already
-    exists, a ValueError will be raised.
-    
-    the operations can be any valid python operator, or a sequence of operators
-    to apply (e.g. ['+','*','+'] will do mod1+mod2*mod3+mod4), or a string
-    giving the expression to be evaluated, with  'm' in places where
-    the evaluated models (in order) should go (e.g. 'm + m * m + m' will do
-    mod1+mod2*mod3+mod4)    
-    
-    any extra kwargs will be used to specify default values of the parameters
-    
-    Note that no checking is performed here to ensure the model outputs are 
-    compatible - this should be done in subclasses 
     """
     
     #TODO:initial vals
     def __init__(self,models=[],operation='+',parnames={},autoshorten=True,
                   **parvals):
+        """
+        :param models: 
+            The models objects to combine, or model types (in which case new
+            models will be created)
+        :type models: 
+            sequence of :class:`FunctionModel` objects, :class:`FunctionModel`
+            classes, or strings.
+            
+        :param operation: 
+            The arithmetic operation(s) to join the models. (e.g. ['+','*','+']
+            will do mod1+mod2*mod3+mod4). A single operator string will join all
+            models with the same operator. Alternatively, a string of the form
+            'm + m * m + m ...' may be used, where the 'm' will be filled in
+            with the models in order.
+        :type operation: 
+            String or a sequence of strings
+            
+        :param parnames:
+            Assigns new names for parameters based on their default names. The
+            default parameter names are of the form 'A0' and 'A1' where A is the
+            parameter name and the number is the sequential number of the model
+            with that parameter.
+        :type parnames: 
+            Dictionary map of default parameter name string to new name string
+        
+        :param autoshorten: 
+            If True, the numerical suffix for paraemeter names will be removed
+            if there is only one of that parameter (parnames overrides this)
+        :type autoshorten: bool
+        
+        Any additional arguments should be "parname=parval" form, setting the 
+        initial values for the parameters.
+        """
         from inspect import isclass
         from collections import defaultdict
         
@@ -1099,6 +1182,9 @@ class CompositeModel(FunctionModel):
         return self._ops  
     
     def f(self,x,*args):
+        """
+        The composite model function. 
+        """
         #TODO: switch back to this system if the mapping technique is too confusing
 #        for p,a in zip(self.params,args):
 #            setattr(self,p,a)
@@ -1120,13 +1206,28 @@ class CompositeModel(FunctionModel):
     
     def fitDataFixed(self,*args,**kwargs):
         """
-        Calls fitData with kwargs and args, but ignores fixedpars 
-        argument and uses 'fixedmods' or 'freemods' kwarg to 
-        determine which parameters should be fixed
+        Fits data using :meth:`FunctionModel.fitData`, but allows this
+        :class:`CompositeModel` to hold all parameters of one of the sub-models
+        fixed instead of fixing a list of parameters.
         
-        freemods or fixedmods should be a sequence of indecies of 
-        models for which the parameters should be left free or held
-        fixed
+        The provided arguments will be passed into
+        :meth:`FunctionModel.fitData`, except for `fixedpars`. Instead the
+        `fixedmods` or `freemods` kwargs are used to determine which parameters
+        should be fixed. Either can be specified, but not both.
+        
+        :param freemods: 
+            The indecies of the models (0-based) for which the parameters should
+            be treated as fitting parameters.  All other models' parameters will
+            be held fixed.
+        :type freemods: sequence of ints
+        :param fixedmods:
+            The indecies of the models (0-based) for which the parameters should
+            be held constant. All other models' parameters will be treated as
+            free fitting parameters.
+        :type fixedmods: sequence of ints
+        
+        :returns: same return value as :meth:`FunctionModel.fitData`
+        
         """
         fps = []
         if 'fixedmods' in kwargs and 'freemods' in kwargs:
@@ -1176,30 +1277,47 @@ class FunctionModel1D(FunctionModel):
     This class is the base for 1-dimensional models that are implemented
     as python functions.
     
-    Subclassing:
-    The following method MUST be overridden in a subclass:
+    **Subclassing**
+    The following method *must* be overridden in a subclass:
     
     * f(self,x,...)
     
     The following methods may be overridden for speed of some operations - pars
-    should be accessed with self.pardict, self.parvals, or by properties/name :
+    should be accessed with self.pardict, self.parvals, or by properties/name:
     
-    * integrate(self,lower,upper): integrate the model from lower to upper
-    * derivative(self,x,dx): derivative of the model at x, optinally using 
-      spacing dx
-    * inv(yval,*args,**kwargs): inverse of the model at the requested yvalue
+    * integrate(self,lower,upper)
+        integrate the model from lower to upper
+    * derivative(self,x,dx)
+        derivative of the model at x, optinally using spacing dx
+    * inv(yval,*args,**kwargs)
+        inverse of the model at the requested yvalue
     
     The following attributes may be set for additional information:
-    * xaxisname: name of the input axis for this model
-    * yaxisname: name of the output axis for this model
-    * rangehint: a hint for the relevant range for this model as 
-    a (lower,upper) tuple (or None if no particular range is relevant)
+    
+    * :attr:`xaxisname`
+        name of the input axis for this model
+    * :attr:`yaxisname`
+        name of the output axis for this model
+    * :attr:`rangehint`
+        a hint for the relevant range for this model as a (lower,upper) tuple
+        (or None if no particular range is relevant)
+        
     """    
     defaultIntMethod = 'quad'
     defaultInvMethod = 'brentq'
     xaxisname = None
+    """
+    Name of the input axis for this model.
+    """
     yaxisname = None
+    """
+    Name of the output axis for this model.
+    """
     rangehint = None
+    """
+    A hint for the relevant range for this model as a (lower,upper) tuple (or
+    None if no particular range is relevant)
+    """
     
     def __call__(self,x):
         """
@@ -1212,17 +1330,48 @@ class FunctionModel1D(FunctionModel):
     
     def inv(self,yval,*args,**kwargs):
         """
-        Find the x value matching the requested y-value. (note that `yval` must
-        be a scalar)
+        Find the x value matching the requested y-value. The inverse is computed
+        using root finders from the :mod:`scipy.optimize` module.
         
-        typical usage is inv(yval,a,b,method='brentq')
+        :param yval: the output y-value at which to compute the inverse
+        :type yval: float
         
-        the kwarg `method` can be a name of any of the root finders from
-        :mod:`scipy.optimize`. Scalar solvers are recommended (default is
-        'brentq' or 'newton'). `method` can also be a function that should take
-        f(g(x),*args,**kwargs) and return where g(x) is 0
+        Other args and kwargs are those appropriate for the chosen root-finder,
+        except for the keyword `method` which can be a name of any of the root
+        finders from :mod:`scipy.optimize`. `method` can also be a function that
+        should take f(g(x),*args,**kwargs) and return the x value at which g(x)
+        is 0.
         
-        args and kwargs are passed into the minimizer
+        The default method depends on the input arguments as follows:
+        
+        * inv(yval)
+            Uses :func:`scipy.optimize.newton`
+        * inv(yval,x0)
+            Uses :func:`scipy.optimize.newton`, starting the search at x0
+        * inv(yval,a,b)
+            Uses :func:`scipy.optimize.brentq`, searching the bracketing
+            interval [a,b] for the lower and upper edges of the search range.
+            
+        :returns: the x-value at which the model equals the given `yval`
+        
+        **Examples**
+        
+        These examples use Newton's, Brent's, and Ridder's method, respectively.
+        
+        .. testsetup::
+            
+            from astropysics.models.builtins import QuadraticModel
+        
+        .. doctest::
+        
+            >>> m = QuadraticModel()
+            >>> '%.2f'%m.inv(2)
+            '1.41'
+            >>> '%.2f'%m.inv(9,2,4)
+            '3.00'
+            >>> '%.2f'%m.inv(16,3,5,method='ridder')
+            '4.00'
+        
         """    
         import scipy.optimize
         
@@ -1251,21 +1400,35 @@ class FunctionModel1D(FunctionModel):
     
     def minimize(self,x0,method='fmin',**kwargs):
         """
-        Finds a local minimum for the model
+        Finds a local minimum for the model.
         
-        x0 is the location to start the search
-        method can be 'fmin' or 'fmin_powell' (from scipy.optimize)
-        kwargs are passed into the scipy.optimize function
+        :param x0: The location to start the search
+        :type x0: float
+        :param method: 
+            Can be 'fmin' or 'fmin_powell', to use `scipy.optimize.fmin` and
+            `scipy.optimize.fmin_powell`.
+        :type method: string
+        
+        kwargs are passed into the `method` function
+        
+        :returns: a x value where the model is a local minimum
         """
         return self._optimize(x0,'min',method,**kwargs)
     
     def maximize(self,x0,method='fmin',**kwargs):
         """
-        Finds a local maximum for the model
+        Finds a local maximum for the model.
         
-        x0 is the location to start the search
-        method can be 'fmin' or 'fmin_powell' (from scipy.optimize)
-        kwargs are passed into the scipy.optimize function
+        :param x0: The location to start the search
+        :type x0: float
+        :param method: 
+            Can be 'fmin' or 'fmin_powell', to use `scipy.optimize.fmin` and
+            `scipy.optimize.fmin_powell`.
+        :type method: string
+        
+        kwargs are passed into the `method` function
+        
+        :returns: a x value where the model is a local maximum
         """
         return self._optimize(x0,'max',method,**kwargs)
     
@@ -1273,9 +1436,16 @@ class FunctionModel1D(FunctionModel):
         """
         Finds a root for the model (i.e. location where the model is 0)
         
-        x0 is the location to start the search
-        method can be 'fmin' or 'fmin_powell' (from scipy.optimize)
-        kwargs are passed into the scipy.optimize function
+        :param x0: The location to start the search
+        :type x0: float
+        :param method: 
+            Can be 'fmin' or 'fmin_powell', to use `scipy.optimize.fmin` and
+            `scipy.optimize.fmin_powell`.
+        :type method: string
+        
+        kwargs are passed into the `method` function
+        
+        :returns: the x value where the model is 0
         """
         return self._optimize(x0,'root',method,**kwargs)
     
@@ -1457,25 +1627,48 @@ class FunctionModel1D(FunctionModel):
             plt.interactive(isinter)
     
     #Can Override:
-    def integrate(self,lower,upper,method=None,n=None,jac=None,**kwargs):
+    def integrate(self,lower,upper,method=None,n=100,jac=None,**kwargs):
         """
-        This will numerically integrate the model function from lower to upper
-        using scipy.integrate techniques
+        Numerically compute the definite integral of the model using
+        :mod:`scipy.integrate` functions. The integral computed is:
         
-        method can be specified (a function from scipy.integrate) or if None,
-        self.defaultIntMethod will be used
+        .. math::
+            \\int_l^u \\! f(x) \\, j(x) \\, dx
         
-        n is either the number of data values or the order for ordered methods,
-        or if sequence,will be used as the integration x-values (and lower/upper
-        are ignored)
+        where :math:`j(x)` is the jacobian set from the `jac` argument.
         
-        jac is the jacobian factor as a function f(x,*params)
         
-        returns value
-        most methods will also store their result to "lastintegrate"
         
-        if subclassing, this should be overwritten with a function of the form
-        integrate(lower,upper,[args])
+        :param lower: the lower limit of the integral
+        :type lower: float
+        :param upper: the upper limit of the integral
+        :type upper: float
+        :param method: 
+            The name of a function from :mod:`scipy.integrate`, or if None,
+            the class attribute :attr:`defaultIntMethod` will be used.
+        :type method: string or None
+        :param n: 
+            Only has an effect for integration techniques that use samples. If
+            an integer, it specifies the number of evenly spaced samples. If it
+            as a sequence, it is an array of samples to use for the integral
+            (this renders `lower` and `upper` meaningless and their values have
+            no effect)
+        :type n: int
+        :param jac: The jacobian factor to include in the integrand.
+        :typ jac: a callable f(x,*params) or None
+            
+        :returns: The value of the computed definite integral.
+        
+
+        .. note::
+            Integration methods will store their full output to the attribute
+            :attr:`lastintegrate` upon completion.
+            
+        .. note::
+            If overridden in a subclass, the signature should be
+            integrate(self,lower,upper,*args,**kwargs), but the args and kwargs
+            will typically be ignored where an analytic solution is available.
+            
         """
         
         #TODO:vectorize when needed
@@ -1536,8 +1729,14 @@ class FunctionModel1D(FunctionModel):
     
     def integrateCircular(self,lower,upper,*args,**kwargs):
         """
-        This is an alias for self.integrate with jacobian set for a azimuthally
-        symmetric 2D radial profile
+        This is a convinience for self.integrate with jacobian set for a
+        azimuthally symmetric 2D radial profile.  
+        
+        .. math::
+            \\int_l^u \\! f(x) \\, 2 \\pi x \\, dx
+        
+        If a `jac` keyword is provided, it is taken as an additional factor to
+        multiply the circular jacobian.
         """
         if 'jac' in kwargs:
             kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*2.0*pi
@@ -1547,8 +1746,14 @@ class FunctionModel1D(FunctionModel):
     
     def integrateSpherical(self,lower,upper,*args,**kwargs):
         """
-        This is an alias for self.integrate with jacobian set for a spherically
-        symmetric 3D radial profile
+        This is a convinience for self.integrate with jacobian set for a
+        spherically symmetric 3D radial profile.  
+        
+        .. math::
+            \\int_l^u \\! f(x) \\, 4 \\pi x^2 \\, dx
+        
+        If a `jac` keyword is provided, it is taken as an additional factor to
+        multiply the circular jacobian.
         """
         if 'jac' in kwargs:
             kwargs['jac'] = lambda x,*params:kwargs['jac'](x,*params)*x*x*4.0*pi
@@ -1558,12 +1763,23 @@ class FunctionModel1D(FunctionModel):
         
     def derivative(self,x,dx=None):
         """
-        the derivative at x
+        The numerically estimated derivative at x of the form:
         
-        if overridden in a subclass, the signature should be
-        derivative(self,x,dx=1) , but dx may be ignored.  if dx is None, it
-        will either be assumed to be 1 or if the input is an array, it will be 
-        inferred from the spacing of the array
+        .. math::
+            \\frac{df}{dx} \\approx \\frac{f(x+\\Delta x)-f(x)}{\\Delta x}
+        
+        :param x: the value at which to compute the derivative
+        :type x: float or array-like
+        :param dx: 
+            The spacing to assume for the numerically-computed derivative
+            (:math:`\\Delta x` above). If None, and an array is provided for
+            `x`, spacing will be inferred from the spacing between the `x`
+            values. Otherwise, it defaults to 1.
+        
+        .. note::
+            If overridden in a subclass, the signature should be
+            derivative(self,x,dx=1) , but dx will typically be ignored if an
+            analytic solution is available. 
         """
         if dx is None:
             x = np.array(x,copy=False)
@@ -1576,18 +1792,34 @@ class FunctionModel1D(FunctionModel):
     
     def pixelize(self,xorxl,xu=None,n=None,edge=False,sampling=None):
         """
-        this method integrates over the model for a number of ranges
-        to get a 1D pixelized version of the model.  
+        This method integrates over the model for a number of ranges
+        to get a 1D "pixelized" version of the model.  
         
-        if xorxl is an array and xu and n are None, it specifies the center
-        of each of the pixels if edge is False (assumes even spacing) or 
-        the edges of the pixels if edge is True.  Otherwise, xorxl and xu
-        specify the centers of the lower and upper pixels (if edge is False),
-        or the lower and upper edges (if edge is True). 
-          
+        :param xoroxl: 
+            If array, specifies the location of each of the pixels. If float,
+            specifies the lower edge of the pixelized section.
+        :type xorxl: array-like or float
         
-        sampling can be None to integrate, or an integer to specify the 
-        number of sub-samples.
+        :param xu: 
+            Specifies the upper edge of the pixelized section. Ignored if
+            `xorxl` is array-like.
+        :type xu: float
+        :param n:
+            Specifies the number of pixels. Ignored if `xorxl` is array-like.
+        :type n: int
+        :param edge: 
+            If True, pixel locations are for the edges (xorxl lower edges, xu
+            upper edge), or if False, they are pixel centers.
+        :type edge: bool  
+        :param sampling: 
+            If None, each pixel will be computed by integrating. Otherwise, 
+            the number of samples to use in each pixel.
+        :type sampling: int or None
+        
+        :returns: 
+            Integrated values for the function as an array of size `n` or
+            matching `xorxl`.
+        
         """
         if xu is None and n is not None or xu is not None and n is None:
             raise TypeError('must specify both xu and n')
@@ -1623,44 +1855,62 @@ class FunctionModel1D(FunctionModel):
     #TODO:move this up into FunctionModel
     def setCall(self,calltype=None,xtrans=None,ytrans=None,**kwargs):
         """
-        sets the type of function evaluation to occur when the model is called
+        Sets the type of function evaluation to occur when the model is called.
+        Changes the output of a function call to be :math:`t_y(g(f(t_x(x))))`,
+        where :math:`g(x)` is set by `calltype`, :math:`t_x` is given by the
+        `xtrans` argument, and :math:`t_y` is given by `ytrans`.
         
-        `calltype` can be:
+        :param calltype:  
+            Specifies what should be output when the model is called. Can be:
         
-        * None
-            basic function evaluation
-        * 'derivative'
-            derivative at the location
-        * 'integrate'
-            integral - specify `upper` or `lower` kwargs and the evaluation
-            location will be treated as the other bound. If neither is given,
-            lower = 0 is assumed
-        * 'integrateCircular'
-            same as 'integrate', but using polar jacobian
-        * 'integrateSpherical'
-            same as 'integrate', but using spherical jacobian
-        * any other string that is the name of a method on this object
+            * None
+                basic function evaluation
+            * 'derivative'
+                derivative at the location (see :meth:`derivative`)
+            * 'integrate'
+                integral - specify `upper` or `lower` kwargs and the evaluation
+                location will be treated as the other bound. If neither is
+                given, lower = 0 is assumed. (see :meth:`integrate`)
+            * 'integrateCircular'
+                Polar integration -- see :meth:`integrateCircular`
+            * 'integrateSpherical'
+                Spherical integration -- see :meth:`integrateSpherical`
+            * Any other string that is the name of a method on this object.  It
+              will be called with the function value as its first argument.
+              
+        :param xtrans: 
+            Transformations applied to the input value before being passed into
+            the model.  See below for valid forms.
+        :type xtrans: string or None
+        :param ytrans:
+            Transformations applied to the output value. See below for valid
+            forms.
+        :type ytrans: string or None
         
-        `xtrans` and `ytrans` are functions applied to either the input call
-        (for x) or the output (for y) - they can also be strings:
+        Any kwargs are passed into the function specified in `calltype`.
         
-        * 'log'
-            base-10 logarithm
-        * 'ln'
-            base-e logarithm
-        * 'log##.##'
-            logarithm with base ##.##
-        * 'pow'
-            10**
-        * 'exp'
-            e**
-        
-        kwargs are passed into the function requested
+        `xtrans` and `ytrans` transformation functions can accept the following
+        values:
+            
+            * None
+                :math:`t(x) = x`
+            * 'log'
+                :math:`t(x) = \\log_{10}(x)`
+            * 'ln'
+                :math:`t(x) = \\ln(x)`
+            * 'log##.#'
+                :math:`t(x) = \\log_{\\#\\#.\\#}(x)`
+            * 'pow'
+                :math:`t(x) = 10^x`
+            * 'exp'
+                :math:`t(x) = e^x`
+            * 'pow##.#'
+                :math:`t(x) = (\\#\\#.\\#)^x`
         
         .. warning:: 
-            There may be unintended consequences of this method due to
-            methods using the call value instead of the default function evaluation
-            result.  You have been warned...
+            There may be unintended consequences of this method due to methods
+            using the call value instead of the default function evaluation
+            result. You have been warned...
         
         """
         from types import MethodType
@@ -1677,6 +1927,9 @@ class FunctionModel1D(FunctionModel):
                 else:
                     sclx = np.log(basex)
                     xtrans = lambda v:np.log(v)/sclx
+            elif 'pow' in xtrans and xtrans!='pow':
+                basex = float(xtrans.replace('log',''))
+                xtrans = lambda v:basex**np.log(v)
             else:
                 xtrans = transmap[xtrans]
         if isinstance(ytrans,basestring):
@@ -1688,6 +1941,9 @@ class FunctionModel1D(FunctionModel):
                 else:
                     scly = np.log(base)
                     ytrans = lambda v:np.log(v)/scly
+            elif 'pow' in ytrans and ytrans!='pow':
+                basey = float(ytrans.replace('log',''))
+                ytrans = lambda v:basey**np.log(v)
             else:
                 ytrans = transmap[ytrans]
             
@@ -1786,9 +2042,12 @@ class FunctionModel1D(FunctionModel):
         
     def getCall(self):
         """
-        returns the type of evaluation to perform when this model is called - 
-        a string like that of the type passed into :meth:`setCall`, or None if
-        the model function itself is to be called.
+        Retreives infromation about the calling function.
+        
+        :returns:
+            The type of evaluation to perform when this model is called - a
+            string like that of the type passed into :meth:`setCall`, or None if
+            the model function itself is to be called.
         """
         if hasattr(self,'_filterfunctype'):
             return self._filterfunctype
@@ -1798,9 +2057,10 @@ class FunctionModel1D(FunctionModel):
 
 class FunctionModel1DAuto(FunctionModel1D):
     """
-    A FunctionModel1D that infers the parameters from the f-function
+    A :class:`FunctionModel1D` that infers the parameters from the :meth:`f`
+    function.
     
-    equivalent to simply setting the metaclass to AutoParamsMeta
+    Equivalent to simply setting the metaclass to :class:`AutoParamsMeta`.
     """
     __metaclass__ = AutoParamsMeta
 
@@ -1830,6 +2090,7 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
                 res = filter(res)
             return res
     
+    #TODO: make sure this is not used and remove
     def addFilter(self,filter):
         """
         This adds a function to be applied after the model is evaluated
@@ -1856,7 +2117,7 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
         
 class DatacentricModel1D(FunctionModel1D):
     """
-    A FunctionModel1D that *requires* data to compute its value
+    A FunctionModel1D that *requires* data to compute its value.
     """
     def __call__(self,x):
         if self.data is None:
@@ -1868,9 +2129,10 @@ class DatacentricModel1D(FunctionModel1D):
 
 class DatacentricModel1DAuto(DatacentricModel1D):
     """
-    A DatacentricModel1D that infers the parameters from the f-function
+    A :class:`DatacentricModel1D` that infers the parameters from the :meth:`f`
+    function.
     
-    equivalent to simply setting the metaclass to AutoParamsMeta
+    Equivalent to simply setting the metaclass to :class:`AutoParamsMeta`.
     """
     __metaclass__ = AutoParamsMeta
         
@@ -2253,10 +2515,19 @@ class InputCoordinateTransformer(object):
     
     def transformCoordinates(self,x,incoordsys=None,outcoordsys=None):
         """
-        transform from the input coordinate system into that defined for 
-        the model function
+        Transform from the input coordinate system into that defined for the
+        model function.
         
-        if incoordsys is None, self.incoordsys will be used
+        :param incoordsys: 
+            The input coordinate system name to use for this model. If None,
+            :attr:`incoordsys` will be used.
+        :type incoordsys: string or None
+        :param outcoordsys: 
+            The output coordinate system name to use for this model. If None, 
+            the standard for this model will be used.
+        :type outcoordsys: string 
+        
+        if incoordsys is None, self.`incoordsys will be used
         """
         if incoordsys is None:
             incoordsys = self.incoordsys
@@ -2269,10 +2540,18 @@ class InputCoordinateTransformer(object):
         
     def addTransform(self,input,output,func):
         """
-        add a new transform for this coordinate system with the given 
-        input and ouput names and the specified function.  Functions
-        are expected to take oen argument - an arrays with at least 2 
-        dimensions with the first dimension defining the coordinate system
+        Register a function as a transform from one coordinate system to
+        another.
+        
+        :param input: The name for the input system of this function.
+        :type input: string 
+        :param output: The name for the output system of this function.
+        :type output: string
+        :param func: 
+            The function to perform the transform. It should take one argument,
+            an array with at least 2 dimensions where the first dimension is defined
+            by the coordinate system.
+        :type func: callable
         """
         import inspect
         from collections import defaultdict
@@ -2332,12 +2611,17 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     
     def integrateCircular(self,outr,inr=0,theta=(0,2*pi),**kwargs):
         """
-        Integrates the function circularly from inr to outr 
-        (default is for inr to be 0)
+        Integrates using a circular jacobian from `inr` to `outr`
         
-        theta is a tuple of the form (lowertheta,uppertheta)
+        :param outr: outer limit of integration
+        :type outr: float 
+        :param inr: inner limit of integration
+        :type inr: float
+        :param theta: 
+            The angular range of the integral in radians as (lower,upper).
+        :type theta: a tuple of floats
         
-        kwargs are passed into scipy.integrate.dblquad
+        kwargs are passed into :func:`scipy.integrate.dblquad`
         """
         import scipy.integrate as itg
         oldcoordsys = self.incoordsys
@@ -2354,11 +2638,19 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     
     def integrateCartesian(self,xl,xu,yl,yu,**kwargs):
         """
-        Integrates the function in a rectangular area
-        bounded to the left by xl, to the right by xu,
-        on the bottom by yl, and the top by yu
+        Integrates the function in a rectangular area defined in rectangular
+        coordinates.
         
-        kwargs are passed into scipy.integrate.dblquad
+        :param xl: left bound of integral
+        :type xl: float
+        :param xu: right bound of integral
+        :type xu: float
+        :param yl: lower bound of integral
+        :type yl: float
+        :param yu: upper bound of integral
+        :type yu: float
+        
+        kwargs are passed into :func:`scipy.integrate.dblquad`
         """
         import scipy.integrate as itg
         
@@ -2379,17 +2671,36 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     
     def pixelize(self,xl,xu,yl,yu,nx=100,ny=100,sampling=None):
         """
-        generates a 2D array of the model covering the range given by
-        xl,xu,yl, and yu (same form as `integrateCartesian`), with
-        nx horizontal pixels and ny vertical pixels
+        Generates a 2D array of the model smoothed/integrated over a certain
+        pixel size.
         
-        if sampling is None, each pixel will be computed by integrating the
-        model over the area of the pixel, and the resulting array will be set
-        to self.lastintegrate and returned
-        otherwise, sampling gives the factor to multiply nx and ny by to get
-        the total number of "virtual pixels" that will be averaged to get
-        the actual result at the given grid point.  If <=1, this is equivalent
-        to directly sampling the model.
+        :param xl: left edge of pixelized region
+        :type xl: float
+        :param xu: right edge of pixelized region
+        :type xu: float
+        :param yl: lower edge of pixelized region
+        :type yl: float
+        :param yu: upper edge of pixelized region
+        :type yu: float
+        :param nx: number of horizontal pixels
+        :type nx: int
+        :param ny: number of vertical pixels
+        :type ny: int
+        :param sampling: 
+            If None, each pixel will be computed by integrating the model over
+            the area of the pixel. Otherwise, sampling gives the factor to
+            multiply nx and ny by to get the total number of "virtual pixels"
+            that will be averaged to get the actual result at the given grid
+            point. If <=1, this is equivalent to directly sampling the model.
+        :type sampling: None or int
+            
+        :returns: An nx X ny array with the pixelized model.
+        
+        .. note::
+            The attribute :attr:`lastintegrate` stores the result of the
+            integrations if sampling is None, with lastintegrate[0] storing the
+            result and lasteintegrate[1] storing the error on the integral for
+            each pixel.
         """
         import scipy.integrate as itg
         
@@ -2430,35 +2741,48 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         finally:
             self.incoordsys = oldcoordsys
             
-    def getFluxSize(self,val=0.5,frac=True,mode='radial',cen=(0,0),v0=1,
+    def getFluxSize(self,flux=0.5,frac=True,mode='radial',cen=(0,0),v0=1,
                     minfunc='fmin',intkwargs=None,**kwargs):
         """
         Compute the radius/area enclosing a specified amount of flux.
         
-        val specifies the flux in model units, or if frac is True, 
-        a fraction of the total flux (computed with infinite integrals)
+        :param flux:
+            Specifies the flux value at which to compute the size (in model
+            units if `frac` is False).
+        :type flux: float
+        :param frac: 
+            If True, interprets `flux` as a fraction of the total flux instead
+            of an absolute model flux value.
+        :type frac: bool
+        :param mode: Specifies the way to compute flux.  Can be:
         
-        the mode parameter can be:
-        
-        * 'radial' : computes the radius enclosing the specified flux - 
-          return value in this case is a single scalar
-        * 'square' : computes the square enclosing the specified flux - 
-          return value in this case is a single scalar with the box length
-        * 'rectangular' : computes the box enclosing the specified flux - 
-          return value in this case is a 2-tuple (xsize,ysize)
+            * 'radial' : computes the radius enclosing the specified flux - 
+              return value in this case is a single scalar
+            * 'square' : computes the square enclosing the specified flux - 
+              return value in this case is a single scalar with the box length
+            * 'rectangular' : computes the box enclosing the specified flux - 
+              return value in this case is a 2-tuple (xsize,ysize)
       
-        cen specifies the center to assume.  Currently this must be (0,0) for
-        radial profiles
-        
-        v0 is the initial guess at which to start (for methods that require it)
-        
-        minfunc is the name of a function in scipy.optimize that should 
-        do the minimizing
-        
-        intkwargs can be a dict that is passed as kwargs into the integrate
-        method.
+        :param cen: 
+            Specifies the center to assume. Currently this must be (0,0) for
+            'radial' profiles.
+        :type cen: 2-tuple (x,y)
+        :param v0: 
+            The initial guess at which to start (for methods that require it).
+        :type v0: float
+        :param minfunc: 
+            The name of a function in :mod:`scipy.optimize` that should do the
+            minimizing.
+        :type minfunc: string
+        :param intkwargs: Keyword arguments for the integrate method.
+        :type intkwargs: dictionary
         
         kwargs are passed into the minimization function
+        
+        :returns: 
+            The location at which the flux enclosed is given by `flux` as
+            specified by the `mode` argument.
+        
         """
         import scipy.optimize
         
@@ -2472,9 +2796,9 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 raise NotImplementedError('radial profiles must be centered on (0,0)')
             if frac:
                 total = self.integrateCircular(np.inf,**intkwargs)
-                val = val * total
+                flux = flux * total
             def f(r):
-                intres = self.integrateCircular(r,**intkwargs)-val
+                intres = self.integrateCircular(r,**intkwargs)-flux
                 return intres*intres
             
             if np.isscalar(v0):
@@ -2483,9 +2807,9 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             x0,y0 = cen
             if frac:
                 total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf,**intkwargs)
-                val = val * total
+                flux = flux * total
             def f(l):
-                intres = self.integrateCartesian(x0-l,x0+l,x0-l,x0+l,**intkwargs)-val
+                intres = self.integrateCartesian(x0-l,x0+l,x0-l,x0+l,**intkwargs)-flux
                 return intres*intres
             
             if np.isscalar(v0):
@@ -2494,10 +2818,10 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             x0,y0 = cen
             if frac:
                 total = self.integrateCartesian(-np.inf,np.inf,-np.inf,np.inf,**intkwargs)
-                val = val * total
+                flux = flux * total
             def f(ls):
                 lx,ly = ls
-                intres = self.integrateCartesian(x0-lx,x0+lx,y0-ly,y0+ly,**intkwargs)-val
+                intres = self.integrateCartesian(x0-lx,x0+lx,y0-ly,y0+ly,**intkwargs)-flux
                 return intres*intres
             
             if np.isscalar(v0):
@@ -2517,17 +2841,33 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     def plot(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',
                   log=False,**kwargs):
         """
-        Plots the model over the range requested using the matplotlib 
-        imshow function.
+        Plots the model over the range requested using the
+        :func:`matplotlib.pyplot.imshow` function.
         
-        datarange should be in the form (xl,xu,yl,yu) or None.  If None, it 
-        will be inferred from the data, or a ValueError will be raised
-        if data is not present
+        :param datarange: 
+            Specifies the range to plot in the form (xl,xu,yl,yu). If None, it
+            will be inferred from the data.
+        :type datarange: 4-tuple or None
+        :param nx: determines the number of pixels in the x-direction
+        :type nx: int
+        :param ny: determines the number of pixels in the y-direction
+        :type ny: int
+        :param clf: If True, the figure will be cleared before plotting.
+        :type clf: bool
+        :param data: 
+            Data to be plotted along with the model.  If None, no data will be
+            plotted, or if 'auto', it will be taken from :attr:`model.data` if 
+            present.
+        :type data: array-like, None, or 'auto'
+        :param log:  
+            Can be False, True (natural log), '10' (base-10), 'mag', or 'mag##'
+            (pogson magnitudes with ## as zeropoint)
+        :type log: bool or string
         
-        log can be False, True (natural log), '10' (base-10), 'mag', or 
-        'mag##' (pogson magnitudes with ## as zeropoint)
+        kwargs are passed into :func:`matplotlib.pyplot.imshow`
         
-        kwargs are passed into imshow
+        :except ValueError: if data is not present and `datarange` is None
+        
         """
         from matplotlib import pyplot as plt
         from operator import isMappingType
@@ -2606,9 +2946,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         """
         Generate a 3D plot of the model using mayavi.
         
-        See `plot` function for meaning of the arguments
-        
-        #TODO:test
+        See :meth:`plot` for meaning of the arguments
         """
         from enthought.mayavi import mlab as M
         from operator import isMappingType
@@ -2660,13 +2998,26 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             
     def plotResiduals(self,x=None,y=None,fmt='or',xaxis='r',clf=True,relative=False):
         """
-        Plots residuals between data and the model.  If x and y are None,
-        the residuals will be inferred from the last-fit data.
+        Plots residuals between data and the model for a variety of projections.
+        If x and y are None, the residuals will be inferred from the last-fit
+        data. For details on how residuals are computed see
+        :meth:`FunctionModel.residuals`
         
-        if relative is true, the plot will be relative residuals 
-        (e.g. residual/model) instead of the absolute residuals
+        :param x: input data
+        :type x: array-like
+        :param y: output data
+        :type y: array-like
+        :param fmt: fmt argmument for :func:`matplotlib.pyplot.ploy`
+        :param xaxis: 
+            Sets the plane in which to plot residuals. Can be
+            'r','theta','x', or 'y'.
+        :type xaxis: string
+        :param clf: If True, the plot will be cleared before plotting.
+        :type clf: bool
+        :param relative:
+            If true, the plot will be relative residuals (e.g. residual/model)
+            instead of the absolute residuals.
         
-        xaxis can be 'r','theta','x', or 'y'
         """
         from matplotlib import pyplot as plt
         
@@ -2705,18 +3056,20 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     
 class FunctionModel2DScalarAuto(FunctionModel2DScalar):
     """
-    A `FunctionModel2DScalar` that has its parameters set by the 'f' 
-    function following the method of `AutoParamsMeta`
+    A :class:`FunctionModel2DScalar` that has its parameters automatically 
+    determined by the :meth:`f` method.
+    
+    Equivalent to setting the metaclass to :class:`AutoParamsMeta`.
     """
     __metaclass__ = AutoParamsMeta
     
 class CompositeModel2DScalar(FunctionModel2DScalar,CompositeModel):
     """
-    This model is a composite model of FunctionModel2DScalar models.
+    This model is a composite model of :class:`FunctionModel2DScalar` models.
     """
     def __init__(self,*args,**kwargs):
         """
-        see `CompositeModel.__init__` for arguments
+        See :class:`CompositeModel` for initializer arguments
         """
         super(CompositeModel2DScalar,self).__init__(*args,**kwargs)
         for m in self._models:
@@ -2737,12 +3090,18 @@ class CompositeModel2DScalar(FunctionModel2DScalar,CompositeModel):
     
 class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
     """
-    A `FunctionModel2DScalar` that is seperable and follows a radial and 
-    polar function that are seperable - e.g. F(r,theta) = R(r)*T(theta)
+    A :class:`FunctionModel2DScalar` that is seperable and follows a radial and 
+    polar function that are seperable - e.g. 
+    :math:`F(r,\\theta) = R(r)*T(\\theta)`
     """
     def __init__(self,rmodel,thetamodel=None):
         """
-        rmodel is the name of a FunctionModel1D that 
+        :param rmodel: 
+            A FunctionModel1D that is to be used as the radial function.
+        :type rmodel: A valid input to :func:`get_model_instance`
+        :param rmodel: 
+            A FunctionModel1D that is to be used as the polar function.
+        :type rmodel: A valid input to :func:`get_model_instance`
         """
         if rmodel is None:
             self.__dict__['_rmodel'] = None
@@ -2927,17 +3286,45 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
     """
-    register a model at the module package level for get_model and list_model
+    Registers a model at the module package level for :func:`get_model` and
+    :func`list_model`.
     
-    model is the class object
+    :param model: The model to register
+    :type model: a class object that is a subclass of class:`ParametricModel`
+    :param name: 
+        The name to assign to this model (lower case class name will be used if
+        this is None)
+    :type name: string or None
+    :param overwrite:
+        If True, if a model already exists with the provided name, it will be
+        silently overwritten. Otherwise a KeyError will be raised.
+    :type overwrite: bool
+    :param stripmodel:
+        If True, the characters 'model' will be stripped from the name before
+        the model is assigned.
+    :type stripmodel: bool
     
-    name is the name to assign (lower case class name will be used if this is None)
+    :except KeyError: 
+        If `overwrite` is False and a model already exists with the name
+        provided.
+        
+    **Example**
     
-    if overwrite is True, if a model already exists with the provided name, it
-    will be silently overwritten, otherwise a KeyError will be raised
+    .. testsetup::
     
-    if stripmodel is true, the characters 'model' will be stripped from
-    the name before the model is assigned
+        from astropysics.models.core import register_model,list_models
+    
+    .. doctest::
+    
+        >>> register_model(MyFavoriteModel,name='mymodel',stripmode=True)
+        >>> list_models(include=[MyFavoriteModel])
+        ['mymodel']
+        >>> register_model(MyOtherFavoriteModel,name=None,stripmode=True)
+        >>> list_models(include=[MyFavoriteModel])
+        ['myotherfavorite']
+        >>> register_model(MyMostFavoriteModel,name=None,stripmode=False)
+        >>> list_models(include=[MyFavoriteModel])
+        ['mymostfavoritemodel']
     """
     if not issubclass(model,ParametricModel):
         raise TypeError('Supplied model is not a Model')
@@ -2954,16 +3341,17 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     
 def get_model(model,baseclass=None):
     """
-    returns the class object for the requested model in the model registry
+    Returns the class object for the requested model in the model registry
     
-    the model can be a name, instance, or class object
+    :param model: can be a name, instance, or class object
+    :param baseclass:
+        If not None, specifies that the requested model me a subclass of the
+        provided base class. If not, a TypeError will be raised.
     
-    if baseclass is not None, it can specify that the requested model 
-    me a subclass of the provided base class.  If not, a TypeError
-    will be raised.
+    :returns: A class object for the requested model.
     
-    KeyError is raise if a name is provided and it is incorrect, all other 
-    invalid inputs raise a TypeError
+    :except KeyError: If a model name is not present in the registry
+    :except TypeError: For all other invalid inputs
     """
     from inspect import isclass
     
@@ -2991,7 +3379,18 @@ def get_model_instance(model,baseclass=None,**kwargs):
     instance of a model, the same instance will be passed in - otherwise, 
     a new instance will be created.
     
-    kwargs will either be passed into the new model or applied as attributes
+    :param model: A model name, model class, or model object.
+    :param baseclass: 
+        If not None, ensures that the instance is a subclass of the provided
+        base class.
+    :type baseclass: class or None
+    
+    kwargs will either be passed into the new model constructor or applied as
+    attributes to an already-existing model object.
+    
+    :returns: An instance of the request model type
+    
+    :except ValueError: if the model is not a subclass of the `baseclass`
     """
     if isinstance(model,ParametricModel if baseclass is None else baseclass):
         for k,v in kwargs.iteritems():
@@ -3003,17 +3402,28 @@ def get_model_instance(model,baseclass=None,**kwargs):
 
 def list_models(include=None,exclude=None,baseclass=None):
     """
-    lists the registered model objects in the package
+    Lists the registered model objects in the package, possibly subject to
+    constraints.
     
-    include is a sequence of model names to include in the list (e.g. the 
-    function will just validate that they are valid models and return the
-    strings) - if not in the registry, a ValueError will be raised
+    :param include:
+        A sequence of model names to include in the list (e.g. the function will
+        just validate that they are valid models and return the strings)
+    :type include: sequence of strings or None
+    :param exclude:
+        A sequence of model names that should be excluded.
+    :type exclude: sequence of strings or None
+    :param baseclass:  
+        If not None, all models that are not subclasses of this class will be
+        filtered out of the results.
+    :type baseclass: a class or None
     
-    exclude is a sequence of model names that should be excluded (if any 
-    are not in the registry, a ValueError will be raised)
+    :returns: 
+        A list of strings for the models that can be used with :func:`get_model`
+        or :func:`get_model_instance`.
     
-    providing a class to the baseclass argument will filter out all models that
-    are not subclasses of the provided class.  
+    :except ValueError: if any provided model strings are not in the registry
+    :except TypeError: if both include and exclude are not None
+    
     """
     from operator import isSequenceType
     
@@ -3048,17 +3458,25 @@ def list_models(include=None,exclude=None,baseclass=None):
 
 def intersect_models(m1,m2,bounds=None,nsample=1024,full_output=False,**kwargs):
     """
-    determine the points where two models intersect
+    Determine the points where two models intersect.
     
-    if bounds is None, the bounds will be determined from the model data if
-    any is saved.  Otherwise, it should be (min,max) for the region to look
-    for points
+    :param m1: the first model
+    :type m1: a :class:`FunctionModel1D` object
+    :param m2: the second model
+    :type m2: a :class:`FunctionModel1D` object
+    :param bounds:
+        If None, the bounds will be determined from the model data if any is
+        saved. Otherwise, a 2-tuple (min,max) defining the region to search for
+        intersections.
+    :type bound: tuple or None
+    :param nsample: number of points within the bounds to sample for intersections.
+        
+    :returns:
+        A sorted array of points where the two models intersect on the interval
+        (up to a resolution of (max-min)/nsample), or if full_output is True, returns
+        (array,scipy.optimize.zeros.RootResults)
     
-    returns a sorted array of points where the two models intersect on the 
-    interval (up to a resolution in nsample), or if full_output is True,
-    returns array,scipy.optimize.zeros.RootResults
-    
-    kwargs are passed into scipy.optimize.brentq
+    kwargs are passed into :func:`scipy.optimize.brentq`
     """
     from scipy.optimize import brentq
     
@@ -3106,6 +3524,17 @@ def scale_model(model,scaleparname='A'):
     """
     A convinience function to generate a CompositeModel with a scaling 
     factor multiplying the wrapped model.
+    
+    A convinience to generate a CompositeModel with a scaling factor multiplying
+    the wrapped model (e.g. :math:`A m(x)`).
+    
+    :param model: the model to wrap (or a name of a model that will be created)
+    :type model: :class`FunctionModel` object or string
+    :param scaleparname:
+        name for the parameter controlling the scaling factor
+    :type scaleparname: string
+    
+    :returns: a :class:`CompositeModel` (or subclass) object
     """
     model = get_model_instance(model)
     if scaleparname in model.params:
@@ -3120,7 +3549,15 @@ def scale_model(model,scaleparname='A'):
 def offset_model(model,offsetparname='C'):
     """
     A convinience to generate a CompositeModel with an additive offset 
-    on the wrapped model.
+    on the wrapped model (e.g. :math:`m(x)+C`). 
+    
+    :param model: the model to wrap (or a name of a model that will be created)
+    :type model: :class`FunctionModel` object or string
+    :param offsetparname:
+        name for the parameter controlling the additive offset value
+    :type offsetparname: string
+    
+    :returns: a :class:`CompositeModel` (or subclass) object
     """
     model = get_model_instance(model)
     if offsetparname in model.params:
@@ -3134,8 +3571,19 @@ def offset_model(model,offsetparname='C'):
                      
 def scale_and_offset_model(model,scaleparname='A',offsetparname='C'):
     """
-    A convinience to generate a CompositeModel with a multiplicative scale
-    and an additive offset on the wrapped model. (e.g. scale*mod+off)
+    A convinience function to generate a CompositeModel with a multiplicative
+    scale and an additive offset on the wrapped model. (e.g. :math:`A m(x)+C`)
+    
+    :param model: the model to wrap (or a name of a model that will be created)
+    :type model: :class`FunctionModel` object or string
+    :param scaleparname:
+        name for the parameter controlling the scaling factor
+    :type scaleparname: string
+    :param offsetparname:
+        name for the parameter controlling the additive offset value
+    :type offsetparname: string
+    
+    :returns: a :class:`CompositeModel` (or subclass) object
     """
     model = get_model_instance(model)
     if scaleparname in model.params:
@@ -3151,13 +3599,21 @@ def scale_and_offset_model(model,scaleparname='A',offsetparname='C'):
     
 def binned_weights(values,n,log=False):
     """
-    Produces an array of values of the same size as values that is generated
-    by subdividing the values into n bins such that each bin has an equal share
-    of the total number of values.
+    Produces an array of weights that are generated by subdividing the values
+    into n bins such that each bin has an equal share of the total number of
+    values.
     
-    Returns an array of values on [0,1]
+    :param values: the input values
+    :type values: array-like
+    :param n: number of bins
+    :type n: int
+    :param log: 
+        If True, the values are evenly-spaced on logarithmic intervals,
+        otherwise, linear.
+    :type log: bool
     
-    if log is True, the values are evenly-spaced on logarithmic intervals
+    :returns: An array of weights on [0,1] with shape matching `values`
+    
     """
     
     if log:
@@ -3180,9 +3636,15 @@ def binned_weights(values,n,log=False):
 
 def intrinsic_to_observed_ellipticity(ei,i,degrees=True):
     """
-    converts intrinsic ellipticity to observed where e^2 = 1-(b/a)^2
+    Converts intrinsic ellipticity to observed where :math:`e^2 = 1-(b/a)^2`
     
-    if `degrees` is True, the input inclination `i` is assumed to be in degrees
+    :param ei: intrinsic ellipticity
+    :type ei: float or array-like
+    :param i: inclination angle
+    :type i: float or array-like
+    :param degrees: if True, the inclination is assumed to be in degrees
+    
+    :returns: observed ellipticity
     """
     if degrees:
         i = np.radians(i)
@@ -3191,9 +3653,15 @@ def intrinsic_to_observed_ellipticity(ei,i,degrees=True):
     
 def observed_to_intrinsic_ellipticity(eo,i,degrees=True):
     """
-    converts observed ellipticity to intrinsic where e^2 = 1-(b/a)^2
+    Converts observed ellipticity to intrinsic where :math:`e^2 = 1-(b/a)^2`
     
-    if `degrees` is True, the input inclination `i` is assumed to be in degrees
+    :param eo: observed ellipticity
+    :type eo: float or array-like
+    :param i: inclination angle
+    :type i: float or array-like
+    :param degrees: if True, the inclination is assumed to be in degrees
+    
+    :returns: intrinsic ellipticity
     """
     if degrees:
         i = np.radians(i)
