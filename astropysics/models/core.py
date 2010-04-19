@@ -1254,21 +1254,7 @@ class CompositeModel(FunctionModel):
             kwargs['fixedpars'] = fps
         return self.fitData(*args,**kwargs)
     
-    @property
-    def rangehint(self):
-        rhints = []
-        for m in self._models:
-            if not hasattr(m,'rangehint'):
-                return None
-            else:
-                rhint = m.rangehint
-                if rhint is None:
-                    return None
-                else:
-                    rhints.append(rhint)
-        rhints = np.array(rhints)
-        mx,mi = np.max(rhints,0),np.min(rhints,0)
-        return mi[0],mx[1],mi[2],mx[3]
+    
                 
 
 class FunctionModel1D(FunctionModel):
@@ -2089,12 +2075,33 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
             for filter in self._filters:
                 res = filter(res)
             return res
+        
+    @property
+    def rangehint(self):
+        rhints = []
+        for m in self._models:
+            if not hasattr(m,'rangehint'):
+                return None
+            else:
+                rhint = m.rangehint
+                if rhint is None:
+                    return None
+                else:
+                    rhints.append(rhint)
+        rhints = np.array(rhints)
+        return np.min(rhints[:,0]),np.max(rhints[:,1])
+#        mx,mi = np.max(rhints,0),np.min(rhints,0)
+#        return mi[0],mx[1],mi[2],mx[3]
     
-    #TODO: make sure this is not used and remove
+    #TODO: remove
     def addFilter(self,filter):
         """
+        :deprecated:
         This adds a function to be applied after the model is evaluated
         """
+        from warnings import warn
+        warn('addFilter/clearFilters is deprecated in favor of setCall',DeprecationWarning)
+        
         if self._filters is None:
             self._filters = []
         
@@ -2105,11 +2112,18 @@ class CompositeModel1D(FunctionModel1D,CompositeModel):
         
     def clearFilters(self):
         """
+        :deprecated:
         this clears all previously added filters
         """
+        from warnings import warn
+        warn('addFilter/clearFilters is deprecated in favor of setCall',DeprecationWarning)
+
         self._filters = None
         
     def addLowerBoundFilter(self,bound):
+        """
+        :deprecated:
+        """
         def bndfunc(x):
             x[x<bound] = bound
             return x
