@@ -24,7 +24,7 @@ from math import e
 
 class ConstantModel(FunctionModel1DAuto):
     """
-    the simplest model imaginable - just a constant value
+    The simplest model imaginable - just a constant value.
     """
     def f(self,x,C=0):
         return C*np.ones_like(x)
@@ -42,18 +42,22 @@ class LinearModel(FunctionModel1DAuto):
     """
     :math:`y = mx+b` linear model.
     
-    A number of different fitting options are available - the `fittype`
-    attribute determines which type should be used on calls to
-    fitData.  It can be:
+    A number of different fitting options are available - the :attr:`fittype`
+    attribute determines which type should be used on calls to fitData. It can
+    be:
     
-    * 'basic': analytically compute the parameters from simple least-squares
-       form.  If `weights` are provided they will be interpreted as
-       1/yerr or sqrt((x/xerr)^2+(y/yerr)^2) if a 2-tuple
-    * 'yerr': same as weighted version of basic, but `weights`
-      are interpreted as y-error instead of inverse
-    * 'fiterrxy': allows errors in both x and y using the chi^2
-      from the fitexy algorithm from numerical recipes.  `weights`
-      must be a 2-tuple (xerr,yerr)
+    * 'basic' 
+        Analytically compute the parameters from simple least-squares form. If
+        `weights` are provided they will be interpreted as :math:`1/y_{\\rm
+        err}` or :math:`\\sqrt{(x/x_{\\rm err})^2+(y/y_{\\rm err})^2}` if a
+        2-tuple.
+    * 'yerr': 
+        Same as weighted version of basic, but `weights` are interpreted as
+        y-error instead of inverse.
+    * 'fiterrxy': 
+        Allows errors in both x and y using the chi^2 from the fitexy algorithm
+        from numerical recipes. `weights` must be a 2-tuple (xerr,yerr).
+        
     """
     
     def f(self,x,m=1,b=0):
@@ -61,7 +65,7 @@ class LinearModel(FunctionModel1DAuto):
     
     def _linearFit(self,x,y,fixedpars=(),weights=None,**kwargs):
         """
-        does least-squares fit on the x,y data
+        Does least-squares fit on the x,y data
         
         fixint and fixslope can be used to specify the intercept or slope of the 
         fit or leave them free by having fixint or fixslope be False or None
@@ -185,6 +189,7 @@ class LinearModel(FunctionModel1DAuto):
         :type sigmay: array-like or None
         
         :returns: tuple (m,b,sigma_m,sigma_b)
+        
         """
 #        raise NotImplementedError('needs to be adapted to astro.models')
         from numpy import array,ones,sum
@@ -219,8 +224,10 @@ class LinearModel(FunctionModel1DAuto):
     def fitErrxy(self,x,y,xerr,yerr,**kwargs):
         """
         Uses the chi^2 statistic
+        
         .. math::
            \\frac{(y_{\\rm data}-y_{\\rm model})^2}{(y_{\\rm err}^2+m^2 x_{\\rm err}^2)}`
+
         to fit the data with errors in both x and y.
         
         :param x: x data for the fit
@@ -238,6 +245,7 @@ class LinearModel(FunctionModel1DAuto):
         
         .. note::
             Fitting results are saved to :attr:`lastfit`
+            
         """
         from scipy.optimize import leastsq
         if xerr is None and yerr is None:
@@ -494,7 +502,7 @@ class LognormalModel(FunctionModel1DAuto):
     A normalized Lognormal model
     
     .. math::
-        f(x) = A (\\sqrt{2\\pi}/\\sigma_{\\rm log}) e^(-(\\log_{\\rm base}(x)-\\mu_{\\rm log})^2/2 \\sigma_{\\rm log}^2)
+        f(x) = A (\\sqrt{2\\pi}/\\sigma_{\\rm log}) e^{-(\\log_{\\rm base}(x)-\\mu_{\\rm log})^2/2 \\sigma_{\\rm log}^2}
     
     By default, the 'base' parameter does not vary when fitting, and defaults to
     e (e.g. a natural logarithm).
@@ -533,7 +541,8 @@ class LorentzianModel(FunctionModel1DAuto):
     
 class VoigtModel(GaussianModel,LorentzianModel):
     """
-    Convolution of a Gaussian and Lorentzian profile
+    A Voigt model constructed as the convolution of a :class:`GaussianModel` and
+    a :class:`LorentzianModel` -- commonly used for spectral line fitting.
     """
     def f(self,x,A=1,sig=0.5,gamma=0.5,mu=0):
         from scipy.special import wofz
@@ -551,7 +560,9 @@ class VoigtModel(GaussianModel,LorentzianModel):
 class MoffatModel(FunctionModel1DAuto):
     """
     Moffat function given by:
-    A*(beta-1)/(pi alpha^2) [1+(r/alpha)^2]^-beta
+    
+    .. math::
+        A \\frac{(\\beta-1}{\\pi \\alpha^2} \\left(1+\\left(\\frac{r}{\\alpha}\\right)^2\\right)^{-\\beta}
     """
     def f(self,r,A=1,alpha=1,beta=4.765):
         roa=r/alpha
@@ -582,7 +593,7 @@ class ExponentialModel(FunctionModel1DAuto):
     
 class PowerLawModel(FunctionModel1DAuto):
     """
-    A single power law model Ax^p 
+    A single power law model :math:`Ax^p` 
     """
     def f(self,x,A=1,p=1):
         return A*x**p
@@ -614,9 +625,10 @@ class PowerLawModel(FunctionModel1DAuto):
     def fromLinear(lmod,base=10):
         """
         Takes a LinearModel and converts it to a power law model assuming 
-        ylinear = log_base(ypowerlaw) and xlinear = log_base(xpowerlaw) 
+        :math:`y_{\\rm linear} = \\log_{\\rm base}(y_{\\rm powerlaw})` and 
+        :math:`x_{\\rm linear} = \\log_{\\rm base}(x_{\\rm powerlaw})` 
         
-        returns the new PowerLawModel instance
+        :returns: the new :class:`PowerLawModel` instance
         """
         if base == 'e' or base == 'ln':
             base = np.exp(1)
@@ -638,7 +650,7 @@ class PowerLawModel(FunctionModel1DAuto):
     
 class SinModel(FunctionModel1DAuto):
     """
-    A trigonometric model A*sin(k*x+p)
+    A trigonometric model :math:`A \\sin(kx+p)`
     """
     def f(self,x,A=1,k=2*pi,p=0):
         return A*np.sin(k*x+p)
@@ -675,9 +687,10 @@ class TwoPowerModel(FunctionModel1DAuto):
 class TwoSlopeModel(FunctionModel1DAuto):
     """
     This model smoothly transitions from linear with one slope to linear with
-    a different slope. It is the linearized equivalent of TwoPowerModel.
+    a different slope. It is the linearized equivalent of TwoPowerModel:
     
-    Specifically, a*(x-xs)+(b-a)*log_base(1+base^(x-xs))+C
+    .. math::
+        a (x-xs)+(b-a) log_{\\rm base}(1+{\\rm base}^{x-xs})+C
     
     By default, the 'base' parameter does not vary when fitting.
     """
@@ -694,10 +707,11 @@ class TwoSlopeModel(FunctionModel1DAuto):
     
 class TwoSlopeDiscontinuousModel(FunctionModel1DAuto):
     """
-    This model sharply transitions between two slopes
+    This model discontinuously transitions between two slopes and is linear
+    everywhere else.
     
-    a is the slope for small x and b for large x, with xs the transition
-    point.  The intercept C is for the a-slope
+    `a` is the slope for small x and `b` for large x, with `xs` the transition point.
+    The intercept `C` is the intercept for :math:`y_a=ax+C`.
     """
     def f(self,x,a=1,b=2,C=0,xs=0):
         xl = x.copy()
@@ -712,14 +726,16 @@ class TwoSlopeDiscontinuousModel(FunctionModel1DAuto):
         
 class TwoSlopeATanModel(FunctionModel1DAuto):
     """
-    This model transitions between two asymptotic slopes with
-    an additional parameter that allows for a variable transition region 
-    size.  The functional form is:
+    This model transitions between two asymptotic slopes with an additional
+    parameter that allows for a variable transition region size. The functional
+    form is
     
-    y = ax arctan(-(x-x0)/w) + bx arctan((x-x0)/w) + c
+    .. math::
+        y = ax \\arctan(-\\frac{x-x0}{w}) + bx \\arctan(\\frac{x-x0}{w}) + c
     
-    a is the slope for small x, b for large x, c is the value at x=x0, 
-    x0 is the location of the transition, and w is the width of the transition
+    `a` is the slope for small x, `b` for large x, `c` is the value at x=x0,
+    `x0` is the location of the transition, and `w` is the width of the
+    transition
     
     """
     def f(self,x,a=1,b=2,c=0,x0=0,w=1):
@@ -730,7 +746,8 @@ class TwoSlopeATanModel(FunctionModel1DAuto):
     
     def criticalPoint(self):
         """
-        computes the critical point where this model inflects or has a max/min
+        Computes and returns the critical point where this model inflects or has
+        a max/min.
         
         if a = b, returns 0 (undefined critical point)
         """
@@ -750,9 +767,9 @@ class TwoSlopeATanModel(FunctionModel1DAuto):
     
 class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     """
-    a Planck blackbody radiation model.  
+    A Planck blackbody radiation model.  
 
-    y-axis is assumed to be specific intensity
+    Output/y-axis is taken to to be specific intensity.
     """
     from ..constants import h,c,kb
     
@@ -813,19 +830,38 @@ class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     
     def setIntensity(self):
         """
-        sets A so that the output is specific intensity/surface brightness
+        Sets A so that the output is specific intensity/surface brightness.
         """
         self.A = 1
     
     def setFlux(self,radius,distance):
         """
-        sets A so that the output is the flux at the specified distance from
-        a spherical blackbody with the specified radius
+        Sets A so that the output is the flux at the specified distance from
+        a spherical blackbody with the specified radius.
+        
+        :param radius: Radius of the blackbody in cm
+        :type radius: float
+        :param distance: distance to the blackbody in cm
+        :type distance: float
         """
         from .phot import intensity_to_flux
         self.A = intensity_to_flux(radius,distance)
         
     def getFlux(self,x,radius=None,distance=None):
+        """
+        Returns the flux density at the requested wavelength for a blackbody 
+        of the given radius at a specified distance.
+        
+        :param x: x-value of the model
+        :type x: float
+        :param radius: radius of the blackbody in cm
+        :type radius: float
+        :param distance: distance to the blackbody in cm
+        :type distance: float
+        
+        :returns: flux/wl at the specified distance from the blackbody
+        
+        """
         if distance is None:
             if radius is None:
                 pass
@@ -844,15 +880,15 @@ class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
         
     def getFluxRadius(self,distance):
         """
-        determines the radius of a spherical blackbody at the specified distance
-        assuming the flux is given by the model at the given temperature
+        Determines the radius of a spherical blackbody at the specified distance
+        assuming the flux is given by the model at the given temperature.
         """
         return (self.A*distance*distance/pi)**0.5
      
     def getFluxDistance(self,radius):
         """
-        determines the distance to a spherical blackbody of the specified radius
-        assuming the flux is given by the model at the given temperature
+        Determines the distance to a spherical blackbody of the specified radius
+        assuming the flux is given by the model at the given temperature.
         """
         return (pi*radius*radius/self.A)**0.5
     
@@ -878,11 +914,17 @@ class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     
     def wienDisplacementLaw(self,peakval):
         """
-        uses the Wien Displacement Law to calculate the temperature given a
-        peak wavelength or peak temperature
+        Uses the Wien Displacement Law to calculate the temperature given a peak
+        *input* location (wavelength, frequency, etc) or compute the peak
+        location given the current temperature.
         
-        if input is None, the peak location corresponding to the current 
-        temperature is returned
+        :param peakval: 
+            The peak value of the model to use to compute the new temperature.
+        :type peakval: float or None
+        
+        :returns: 
+            The temperature for the provided peak location or the peak location
+            for the current temperature if `peakval` is None.
         """
         h,k = self.h,self.kb
         if self._phystype == 'wavelength':
@@ -930,9 +972,15 @@ class _InterpolatedModel(DatacentricModel1DAuto):
     _fittypes=['interp']
     fittype = 'interp'
     
-    def __init__(self):
+    def __init__(self,**kwargs):
+        """
+        Generate a new interpolated model.
+        """
         super(_InterpolatedModel,self).__init__()
         self.i1d = lambda x:x #default should never be externally seen
+        
+        for k,v in kwargs.iteritems():
+            setattr(self,k,v)
     
     def f(self,x):
         if self.data is not None:
@@ -972,28 +1020,31 @@ class NearestInterpolatedModel(_InterpolatedModel):
    
 class SmoothSplineModel(DatacentricModel1DAuto):
     """
-    this uses a B-spline as a model for the function.  Note that by
-    default the parameters are not tuned - the input smoothing and 
-    degree are left alone when fitting
+    This model uses a B-spline as a model for the function. Note that by default
+    the parameters are not tuned - the input smoothing and degree are left alone
+    when fitting.
     
-    the scipy.interpolate.UnivariateSpline class is used to
-    do the calculation (in the "spline" attribute) 
+    The :class:`scipy.interpolate.UnivariateSpline` class is used to do the
+    calculation (in the :attr:`spline` attribute).
     """
-    def __init__(self):
+    def __init__(self,**kwargs):
         super(SmoothSplineModel,self).__init__()
         
         self._oldd = self._olds = self._ws = self._inits = None
         self.data = (np.arange(self.degree+1),np.arange(self.degree+1),self._ws)
         self.fitData(self.data[0],self.data[1])
         self._inits = self.data[:2]
+        
+        for k,v in kwargs.iteritems():
+            setattr(self,k,v)
     
     _fittypes=['spline']
     fittype = 'spline'
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         """
-        just fits the spline with the current s-value - if s is not changed,
-        it will execute very quickly after
+        Fits the spline with the current s-value - if :attr:`s` is not changed,
+        it will execute very quickly after, as the spline is saved.
         """
         from scipy.interpolate import UnivariateSpline
         
@@ -1010,6 +1061,10 @@ class SmoothSplineModel(DatacentricModel1DAuto):
         return np.array([self.s,self.degree])
         
     def fitData(self,x,y,**kwargs):
+        """
+        Custom spline data-fitting method.  Kwargs are ignored except 
+        `weights` and `savedata` (see :meth:`FunctionModel.fitData` for meaning)
+        """
         self._oldd = self._olds = None
         
         if 'savedata' in kwargs and not kwargs['savedata']:
@@ -1040,12 +1095,12 @@ class SmoothSplineModel(DatacentricModel1DAuto):
     
 class InterpolatedSplineModel(DatacentricModel1DAuto):
     """
-    this uses a B-spline as a model for the function.  Note that by
-    default the degree is left alone when fitting, as this model
-    always fits the points perfectly.
+    This uses a B-spline as a model for the function. Note that by default the
+    degree is left alone when fitting, as this model always fits the points
+    exactly.
     
-    the scipy.interpolate.InterpolatedUnivariateSpline class is used to
-    do the calculation (in the "spline" attribute) 
+    the :class:`scipy.interpolate.InterpolatedUnivariateSpline` class is used to
+    do the calculation (in the :attr:`spline` attribute).
     """
     def __init__(self):
         super(InterpolatedSplineModel,self).__init__()
@@ -1060,8 +1115,8 @@ class InterpolatedSplineModel(DatacentricModel1DAuto):
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
         """
-        just fits the spline with the current s-value - if s is not changed,
-        it will execute very quickly after
+        Fits the spline with the current s-value - if :attr:`s` is not changed,
+        it will execute very quickly after, as the spline is saved.
         """
         from scipy.interpolate import InterpolatedUnivariateSpline
         
@@ -1072,6 +1127,10 @@ class InterpolatedSplineModel(DatacentricModel1DAuto):
         return np.array([self.degree])
         
     def fitData(self,x,y,**kwargs):
+        """
+        Custom spline data-fitting method.  Kwargs are ignored except 
+        `weights` and `savedata` (see :meth:`FunctionModel.fitData` for meaning)
+        """
         self._oldd=None
         if 'savedata' in kwargs and not kwargs['savedata']:
             raise ValueError('data must be saved for spline models')
@@ -1100,17 +1159,19 @@ class InterpolatedSplineModel(DatacentricModel1DAuto):
     
 class _KnotSplineModel(DatacentricModel1DAuto):
     """
-    this uses a B-spline as a model for the function.  The knots
-    parameter specifies the number of INTERIOR knots to use for the
-    fit 
+    this uses a B-spline as a model for the function. The knots parameter
+    specifies the number of INTERIOR knots to use for the fit.
     
-    locmethod can be:
-    'cdf':the locations of the knots will be determined 
-    by evenly sampling the cdf of the x-points
-    'even':the knots are evenly spaced in x
+    The :attr:`locmethod` determines how to locate the knots and can be:
     
-    the scipy.interpolate.UnivariateSpline class is used to
-    do the calculation (in the "spline" attribute) 
+    * 'cdf'
+        The locations of the knots will be determined by evenly sampling the cdf
+        of the x-points.
+    * 'even'
+        The knots are evenly spaced in x.
+    
+    The :class:`scipy.interpolate.UnivariateSpline` class is used to do the
+    calculation (in the "spline" attribute).
     """
     def __init__(self):
         super(_KnotSplineModel,self).__init__()
@@ -1127,12 +1188,20 @@ class _KnotSplineModel(DatacentricModel1DAuto):
     fittype = 'spline'
     
     @abstractmethod    
-    def fitSpline(self,x,y,fixedpars=(),**kwargs):        
+    def fitSpline(self,x,y,fixedpars=(),**kwargs):  
+        """
+        Fits the spline with the current s-value - if :attr:`s` is not changed,
+        it will execute very quickly after, as the spline is saved.
+        """
         from scipy.interpolate import LSQUnivariateSpline
         
         self.spline = LSQUnivariateSpline(x,y,t=self.iknots,k=int(self.degree),w=kwargs['weights'] if 'weights' in kwargs else None)
         
     def fitData(self,x,y,**kwargs):
+        """
+        Custom spline data-fitting method.  Kwargs are ignored except 
+        `weights` and `savedata` (see :meth:`FunctionModel.fitData` for meaning)
+        """
         self._oldd=self._olds=None
         if 'savedata' in kwargs and not kwargs['savedata']:
             raise ValueError('data must be saved for spline models')
@@ -1153,12 +1222,21 @@ class _KnotSplineModel(DatacentricModel1DAuto):
         return np.min(xd),np.max(xd)
 
 class UniformKnotSplineModel(_KnotSplineModel):
+    """
+    A spline model with a uniform seperation between the internal knots, with
+    their number set by the :attr:`nknots` parameter.
+    """
+    
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformKnotSplineModel,self).__init__()
         self.fitData(self.data[0],self.data[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
+        """
+        Fits the spline with the current s-value - if :attr:`s` is not changed,
+        it will execute very quickly after, as the spline is saved.
+        """
         self.iknots = np.linspace(x[0],x[-1],self.nknots+2)[1:-1]
         
         super(UniformKnotSplineModel,self).fitSpline(x,y,fixedpars,**kwargs)
@@ -1178,12 +1256,23 @@ class UniformKnotSplineModel(_KnotSplineModel):
     
 
 class UniformCDFKnotSplineModel(_KnotSplineModel):
+    """
+    A spline model with a seperation between the internal knots set uniformly on
+    the CDF (e.g. knots at the locations that place them unifomly on the
+    histogram of x-values), with their number set by the :attr:`nknots`
+    parameter.
+    """
+    
     def __init__(self):
         self._oldk = self._oldd = None
         super(UniformCDFKnotSplineModel,self).__init__()
         self.fitData(self.data[0],self.data[1])
     
     def fitSpline(self,x,y,fixedpars=(),**kwargs):
+        """
+        Fits the spline with the current s-value - if :attr:`s` is not changed,
+        it will execute very quickly after, as the spline is saved.
+        """
         cdf,xcdf = np.histogram(x,bins=max(10,max(2*self.nknots,int(len(x)/10))))
         mask = cdf!=0
         cdf,xcdf = cdf[mask],xcdf[np.hstack((True,mask))]
@@ -1256,10 +1345,11 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
     
 class NFWModel(FunctionModel1DAuto):
     """
-    A Navarro, Frenk, and White 1996 profile. Equivalent to
-    :class:`AlphaBetaGammaModel` with alpha,beta,gamma = (1,3,1)
+    A Navarro, Frenk, and White 1996 profile -- the canonical dark matter halo
+    profile. Equivalent to :class:`AlphaBetaGammaModel` with alpha,beta,gamma =
+    (1,3,1)
     
-    where relevant, units have r in kpc and rho in Msun kpc^-3
+    Where relevant, units are r in kpc and rho in Msun kpc^-3
     """
     xaxisname = 'r'
     yaxisname = 'rho'
@@ -1299,7 +1389,7 @@ class NFWModel(FunctionModel1DAuto):
         
     def setC(self,c,Rvir=None,Mvir=None):
         """
-        sets the model parameters to match a given concentration given
+        Sets the model parameters to match a given concentration given
         virial radius and mass.
         
         If Rvir or Mvir is None, the other will be set using the z=0  
@@ -1504,18 +1594,21 @@ class NFWModel(FunctionModel1DAuto):
     
 class AlphaBetaGammaModel(FunctionModel1DAuto):
     """
-    This is a model of the form
-    A*(r/rs)**-gamma*(1+(r/rs)**alpha)**((gamma-beta)/alpha) where gamma is the
-    inner log slope, beta is the outer log slope, and alpha controls the
-    transition region. 
+    This model is a generic power-law-like model of the form
+    
+    .. math::
+        \\rho(r) = A (r/rs)^{-\\gamma} (1+(r/r_s)^{\\alpha})^{(\\gamma-\\beta)/\\alpha}.
+    
+    Thus in this model, `gamma` is the inner log slope, `beta` is the outer log
+    slope, and `alpha` controls the transition region.
     
     If a logarithmic version of the profile is desired, use::
     
     >>> m = AlphaBetaGammaModel()
     >>> m.setCall(xtrans='pow',ytrans='log')
     
-    In this case the offset is given by log10(A) and the logaritmhic scale
-    radius is log10(rs).
+    In this case the offset is given by :math:`\\log_{10}(A)` and the logaritmhic scale
+    radius is :math:`\\log_{10}(r_s)`.
     """
     
     def f(self,r,rs=1,A=1,alpha=1,beta=2,gamma=1):
@@ -1529,6 +1622,14 @@ class AlphaBetaGammaModel(FunctionModel1DAuto):
     
 
 class PlummerModel(FunctionModel1DAuto):
+    """
+    Plummer model of the form
+    
+    .. math::
+        \\frac{3M}{4 \\pi r_p^3} (1+(r/r_p)^2)^{-5/2}
+    
+    """
+    
     xaxisname = 'r'
     
     def f(self,r,rp=1.,M=1.):
@@ -1538,7 +1639,16 @@ class PlummerModel(FunctionModel1DAuto):
     def rangehint(self):
         return 0,self.rp*2
 
-class King2DrModel(FunctionModel1DAuto):    
+class King2DrModel(FunctionModel1DAuto):  
+    """
+    2D (projected/surface brightness) King model of the form:
+    
+    .. math::
+        f(r) = A r_c^2 (\\frac{1}{\\sqrt{r^2+r_c^2}} - \\frac{1}{\\sqrt{r_t^2+r_c^2}})^2
+    
+    .. seealso:: King (1966) AJ Vol. 71, p. 64
+    """
+      
     xaxisname = 'r'
     
     def f(self,r,rc=1,rt=2,A=1):
@@ -1550,6 +1660,14 @@ class King2DrModel(FunctionModel1DAuto):
         return 0,self.rt
     
 class King3DrModel(FunctionModel1DAuto):
+    """
+    3D (deprojected) King model of the form:
+    
+    .. math::
+        f(r) = A/(z^2 \\pi r_c) ((1+(r_t/r_c)^2)^{-3/2}) \\arccos(z)/(z-\\sqrt{1-z^2})
+    
+    """
+    
     xaxisname = 'r'
     
     def f(self,r,rc=1,rt=2,A=1):
@@ -1564,6 +1682,9 @@ class King3DrModel(FunctionModel1DAuto):
         return 0,self.rt
 
 class SchecterMagModel(FunctionModel1DAuto):
+    """
+    """
+    
     xaxisname = 'M'
     yaxisname = 'phi'
     
@@ -1598,10 +1719,14 @@ class SchecterLumModel(FunctionModel1DAuto):
         
 class EinastoModel(FunctionModel1DAuto):
     """
-    Einasto profile ln(rho/A) = (-2/alpha)((r/rs)^alpha - 1) . :attr:`A` is the
-    density where the log-slope is -2, and :attr:`rs` is the corresponding
-    radius. The `alpha` parameter defaults to .17 as suggested in Navarro et al.
-    2010
+    Einasto profile given by
+    
+    .. math::
+        \\ln(\\rho(r)/A) = (-2/\\alpha)((r/r_s)^{\\alpha} - 1) . 
+        
+    :attr:`A` is the density where the log-slope is -2, and :attr:`rs` is the
+    corresponding radius. The `alpha` parameter defaults to .17 as suggested by
+    Navarro et al. 2010 
     """
     xaxisname = 'r'
     yaxisname = 'rho'
@@ -1612,7 +1737,9 @@ class EinastoModel(FunctionModel1DAuto):
 class SersicModel(FunctionModel1DAuto):
     """
     Sersic surface brightness profile:
-    Ae*exp(-b_n[(R/Re)^(1/n)-1])
+    
+    .. math::
+        A_e e^{-b_n[(R/R_e)^{1/n}-1]}
     
     Ae is the value at the effective radius re
     """
@@ -1635,7 +1762,7 @@ class SersicModel(FunctionModel1DAuto):
     
     def getBn(self,usecache=True):
         """
-        Calls `bn` function on the current sersic index.
+        Computes :math:`b_n` for the current sersic index.
         """
         return self.bn(self.n,usecache)
     
@@ -1648,11 +1775,13 @@ class SersicModel(FunctionModel1DAuto):
         bn is used to get the half-light radius.  If n is 
         None, the current n parameter will be used
         
-        the form is a fit from MacArthur, Courteau, and Holtzman 2003 
+        The form is a fit from MacArthur, Courteau, and Holtzman 2003 
         and is claimed to be good to ~O(10^-5)
         
-        if usecache is True, the cache will be searched, if False it will
-        be saved but not used, if None, ignored
+        :param usecache: 
+            If True, the cache will be searched, if False it will be saved but
+            not used, if None, ignored.
+        :type usecache: bool or None
         """
         n = float(n) #sometimes 0d array gets passed in
         
@@ -1702,18 +1831,25 @@ class SersicModel(FunctionModel1DAuto):
         plt.xlim(lower,upper)
     
 class DeVaucouleursModel(SersicModel):
+    """
+    Sersic model with n=4.
+    """
+    
     def f(self,r,Ae=1,re=1):
         return SersicModel.f(self,r,Ae,re,4)
     
 class JaffeModel(FunctionModel1DAuto):
     """
-    Jaffe (1983) profile as defined in Binney & Tremain as
-    (A/4pirj^3)(rj^4/(r^2(r+rj)^2))
-    where A is the total mass enclosed 
+    Jaffe (1983) profile as defined in Binney & Tremain as:
+    
+    .. math::
+        \\frac{A}{4 \\pi r_j^3} \\frac{r_j^4}{r^2 (r+r_j)^2)}
+    
+    where :attr:`A` is the total mass enclosed. 
     
     """
     def f(self,r,A=1,rj=1):
-        return (A/4/pi*rj**-3)*rj**4*r**-2*(r+rj)**-2
+        return (A/4/pi)*rj*r**-2*(r+rj)**-2
     
     @property
     def rangehint(self):
@@ -1721,9 +1857,12 @@ class JaffeModel(FunctionModel1DAuto):
     
 class HernquistModel(FunctionModel1DAuto):
     """
-    Hernquist (1990) profile described as
-    (A/2pi)(r0/r)(1/((r+r0)^3))
-    where A is the total mass enclosed
+    Hernquist (1990) profile defined as:
+    
+    .. math::
+        \\frac{A r_0}{2 \\pi r (r+r_0)^3}
+    
+    where :attr:`A` is the total mass enclosed
     """
     def f(self,r,A=1,r0=1):
         return (A/2/pi)*(r0/r)*(r+r0)**-3
@@ -1735,6 +1874,14 @@ class HernquistModel(FunctionModel1DAuto):
 
 
 class MaxwellBoltzmannModel(FunctionModel1DAuto):
+    """
+    A Maxwell-Boltzmann distribution for 1D velocity:
+    
+    .. math::
+        \\sqrt{\\frac{m}{2 \\pi k_b T}} e^{-m v^2/(2 k_b T)}
+    
+    """
+    
     xaxisname = 'v'
     
     from ..constants import me #electron
@@ -1748,6 +1895,14 @@ class MaxwellBoltzmannModel(FunctionModel1DAuto):
         return 0,min(3*(2*kb*self.T/self.m)**0.5,c)
     
 class MaxwellBoltzmannSpeedModel(MaxwellBoltzmannModel):
+    """
+    A Maxwell-Boltzmann distribution for 3D average speed:
+    
+    .. math::
+        4 \\pi v^2 (\\frac{m}{2 \\pi k_b T})^{3/2} e^{-m v^2/(2 k_b T)}
+    
+    """
+    
     from ..constants import me #electron
     xaxisname = 'v'
     
@@ -1824,6 +1979,14 @@ class GaussHermiteModel(FunctionModel1DAuto):
 
 #<-------------------------------------- 2D models ---------------------------->
 class Gaussian2DModel(FunctionModel2DScalarAuto):
+    """
+    Two dimensional Gaussian model
+    
+    .. math::
+        A e^{\\frac{-(x-\\mu_x)^2}{2 \\sigma_x^2}} e^{\\frac{-(y-\\mu_y)^2}{2 \\sigma_y^2}}
+    
+    """
+    
     _fcoordsys='cartesian'
     def f(self,inarr,A=1,sigx=1,sigy=1,mux=0,muy=0):
         x,y = inarr
@@ -1855,6 +2018,13 @@ class EdgeOnDiskModel(FunctionModel2DScalarAuto):
         return (-2*bigscale,2*bigscale,-2*bigscale,2*bigscale)
     
 class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
+    """
+    Inclined Disk model -- identical to
+    :class:`FunctionModel2DScalarDeformedRadial` but with inclination
+    (:attr:`inc` and :attr:`incdeg`) and position angle (:attr:`pa` and
+    :attr:`padeg`) in place of axis-ratios.
+    """
+    
     def __init__(self,inc=0,pa=0,degrees=True,**kwargs):
         super(InclinedDiskModel,self).__init__('sersic',**kwargs)
         
@@ -1869,9 +2039,9 @@ class InclinedDiskModel(FunctionModel2DScalarDeformedRadial):
         
 class RoundBulgeModel(FunctionModel2DScalarSeperable):
     """
-    A bulge modeled as a radially symmetric sersic profile
-    (by default the sersic index is kept fixed - to remove
-    this behavior, set the fixedpars attribute to None)
+    A bulge modeled as a radially symmetric sersic profile (by default the
+    sersic index is kept fixed - to remove this behavior, set the fixedpars
+    attribute to None)
     
     By default, the 'n' parameter does not vary when fitting.
     """
@@ -1887,9 +2057,12 @@ class RoundBulgeModel(FunctionModel2DScalarSeperable):
     
 class Plane(FunctionModel):
     """
-    Generates a plane that follows the form
-    d = a*x+b*y+c*z (e.g. (a,b,c) is the normal vector and 
-    d/a, b ,or c are the intercepts
+    Models a plane of the form 
+    
+    .. math:
+        d = ax+by+cz 
+        
+    i.e. (a,b,c) is the normal vector and d/a, b ,or c are the intercepts.
     """    
     def __init__(self,varorder='xyz',vn=(1,0,0),wn=(0,1,0),origin=(0,0,0)):
         self.varorder = varorder
@@ -1995,7 +2168,7 @@ class Plane(FunctionModel):
     
     def fitData(self,x,y,z,w=None):
         """
-        least squares fit using the output variable as the dependent
+        Least squares fit using the output variable as the dependent variable.
         """
         from scipy.optimize import leastsq
         #reorder vars to get the right fitter
@@ -2028,9 +2201,16 @@ class Plane(FunctionModel):
     
     def proj(self,x,y,z):
         """
-        project points onto the plane from the 3D space
+        Project points onto the plane from the 3D space
         
-        returns a 2 x N aray 
+        :param x: first cartesian coordinate.
+        :type x: array-like length N
+        :param y: second cartesian coordinate.
+        :type y: array-like length N
+        :param z: third cartesian coordinate.
+        :type z: array-like length N
+        
+        :returns: A 2 x N array in the plane for each of the input points. 
         """
         n = self.nhat
         
@@ -2048,9 +2228,14 @@ class Plane(FunctionModel):
     
     def unproj(self,v,w):
         """
-        extract points from the plane back into the 3D space
+        Extract points from the plane back into the 3D space
         
-        returns a 3 x N array
+        :param x: first in-plane coordinate.
+        :type x: array-like length N
+        :param y: second in-plane coordinate.
+        :type y: array-like length N
+        
+        :returns: a 3 x N (x,y,z) array
         """
         n = self.nhat
         
