@@ -60,13 +60,13 @@ def funpickle(fileorname,number=0,usecPickle=True):
     :returns: A list of length given by `number` or a single object if number<1
     
     """
-    if Pickle:
+    if usecPickle:
         import cPickle as pickle
     else:
         import pickle
         
     if isinstance(fileorname,basestring):
-        f = open(filename,'r')
+        f = open(fileorname,'r')
         close = True
     else:
         f = fileorname
