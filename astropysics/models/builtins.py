@@ -40,7 +40,7 @@ class ConstantModel(FunctionModel1DAuto):
     
 class LinearModel(FunctionModel1DAuto):
     """
-    y=mx+b linear fit
+    :math:`y = mx+b` linear model.
     
     A number of different fitting options are available - the `fittype`
     attribute determines which type should be used on calls to
@@ -111,9 +111,23 @@ class LinearModel(FunctionModel1DAuto):
         m,b = self.m,self.b
         return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
     
-    def fitBasic(self,x,y,fixslope=False,fixint=False):
+    @staticmethod
+    def fitBasic(x,y,fixslope=False,fixint=False):
         """
-        Does the traditional fit based on simple least-squares
+        Does the traditional fit based on simple least-squares regression for
+        a linear model :math:`y=mx+b`.
+        
+        :param x: x data for the fit
+        :type x: array-like
+        :param y: y data for the fit
+        :type y: array-like
+        :param fixslope: If True, only fits the intercept
+        :type fixslope: bool
+        :param fixint: If True, only fits the slope
+        :type fixint: bool
+        
+        :returns: ((m,b)),dm,db,dy)
+        
         """
         N=len(x) 
         if not fixint and not fixslope:
@@ -154,34 +168,23 @@ class LinearModel(FunctionModel1DAuto):
             raise ValueError("can't fix both slope and intercept")
         
         return np.array((m,b)),dm,db,dy
-#        if weights is not None:
-#            if fixedpars or len(kwargs)>0:
-#                from warnings import warn
-#                warn("customized exact linear fit not yet available for fixed pars")
-#                kwargs=kwargs.copy()
-#                kwargs['x']=x
-#                kwargs['y']=y
-#                kwargs['method']='leastsq'
-#                kwargs['fixedpars']=fixedpars
-#                kwargs['weights']=weights
-#                return FunctionModel1D.fitData(self,**kwargs)
-#            m,b,dm,db = self.weightedFit(x,y,1/weights,False)
-#            dy = (y-m*x-b).std(ddof=1)
-#            return (np.array((m,b)),dm,db,dy)
         
         
-    
-    def fitWeighted(self,x,y,sigmay=None,doplot=False):
+    @staticmethod
+    def fitWeighted(x,y,sigmay=None,doplot=False):
         """
-        does a linear weighted least squares fit and computes the coefficients 
-        and errors
+        Does a linear weighted least squares fit and computes the coefficients 
+        and errors.
         
-        fit is y=B*x+A
+        :param x: x data for the fit
+        :type x: array-like
+        :param y: y data for the fit
+        :type y: array-like
+        :param sigmay: 
+            Error/standard deviation on y.  If None, weights are equal.
+        :type sigmay: array-like or None
         
-        if sigma is None, the weights are all equal - otherwise, it's the stddev 
-        of the y values
-        
-        returns B,A,sigmaB,sigmaA
+        :returns: tuple (m,b,sigma_m,sigma_b)
         """
 #        raise NotImplementedError('needs to be adapted to astro.models')
         from numpy import array,ones,sum
@@ -215,12 +218,26 @@ class LinearModel(FunctionModel1DAuto):
     
     def fitErrxy(self,x,y,xerr,yerr,**kwargs):
         """
-        Uses the chi^2 statistic (ydata-ymodel)^2/(yerr^2+m^2*xerr^2)
-        to fit the data for errors in both x and y
+        Uses the chi^2 statistic
+        .. math::
+           \\frac{(y_{\\rm data}-y_{\\rm model})^2}{(y_{\\rm err}^2+m^2 x_{\\rm err}^2)}`
+        to fit the data with errors in both x and y.
         
-        kwargs are passed into scipy.optimize.leastsq
+        :param x: x data for the fit
+        :type x: array-like
+        :param y: y data for the fit
+        :type y: array-like
+        :param xerr: Error/standard deviation on x.
+        :type xerr: array-like
+        :param yerr: Error/standard deviation on y.
+        :type yerr: array-like
         
-        fitting results are saved to `lastfit`
+        kwargs are passed into :mod:`scipy.optimize.leastsq`
+        
+        :returns: best-fit (m,b)
+        
+        .. note::
+            Fitting results are saved to :attr:`lastfit`
         """
         from scipy.optimize import leastsq
         if xerr is None and yerr is None:
@@ -249,15 +266,32 @@ class LinearModel(FunctionModel1DAuto):
     
     def pointSlope(self,m,x0,y0):
         """
-        sets model parameters for the given slope that passes through the point
+        Sets model parameters for the given slope that passes through the point.
+        
+        :param m: slope for the model
+        :type m: float
+        :param x0: x-value of the point
+        :type x0: float
+        :param y0: y-value of the point
+        :type y0: float
+        
         """
         self.m = m
         self.b = y0-m*x0
         
     def twoPoint(self,x0,y0,x1,y1):
         """
-        sets model parameters to pass through two lines (identical behavior
-        in fitData)
+        Sets model parameters to pass through two lines (identical behavior
+        in fitData).
+        
+        :param x0: x-value of the first point
+        :type x0: float
+        :param y0: y-value of the first point
+        :type y0: float
+        :param x1: x-value of the second point
+        :type x1: float
+        :param y1: y-value of the second point
+        :type y1: float
         """
         self.pointSlope((y0-y1)/(x0-x1),x0,y0)
         
@@ -289,14 +323,14 @@ class LinearModel(FunctionModel1DAuto):
     
 class QuadraticModel(FunctionModel1DAuto):
     """
-    2-degree polynomial
+    2-degree polynomial :math:`f(x)=c_2 x^2 + c_1 x + c_0`
     """
     def f(self,x,c2=1,c1=0,c0=0):
         return c2*x*x+c1*x+c0
 
 class PolynomialModel(FunctionModel1DAuto):
     """
-    arbitrary-degree polynomial
+    Arbitrary-degree polynomial
     """
     
     paramnames = 'c'
@@ -313,8 +347,16 @@ class PolynomialModel(FunctionModel1DAuto):
         return p(upper)-p(lower)
     
 class FourierModel(FunctionModel1DAuto):
+    """
+    A Fourier model composed of sines and cosines:
+    
+    .. math::
+        f(x) = \displaystyle\sum\limits_{k=0}^n A_k sin(kx) + B_k cos(kx)
+    
+    The number of parameters must be even so as to include both terms.
+    """
     paramnames = ('A','B')
-    #note that B0 has no effect
+    #note that A0 has no effect
     
     def f(self,x,*args):
         xr = x.ravel()
@@ -331,7 +373,10 @@ class FourierModel(FunctionModel1DAuto):
 
 class GaussianModel(FunctionModel1DAuto):
     """
-    Normalized 1D gaussian function
+    Normalized 1D gaussian function:
+    
+    .. math::
+        f(x) = e^{\\frac{-(x-\\mu)^2}{2 \\sigma^2}}
     """
     def f(self,x,A=1,sig=1,mu=0):
         tsq=(x-mu)*2**-0.5/sig
@@ -371,37 +416,34 @@ class GaussianModel(FunctionModel1DAuto):
         
     @property
     def rangehint(self):
-        return (self.mu-self.sig*4,self.mu+self.sig*4)
+        asig = abs(self.sig) #can't guarantee sigma is positive right now
+        return (self.mu-asig*4,self.mu+asig*4)
     
 class DoubleGaussianModel(FunctionModel1DAuto):
     """
-    Two Normalized 1D gaussian functions, fixed to be of opposite sign
-    A is the positive gaussian, while B is negative
-    note that fitting often requires the initial condition to have the 
-    upper and lower approximately correct
+    Sum of two normalized 1D gaussian functions. Note that fitting often can be
+    tricky with this model, as it's easy to find lots of false minima.
     """
     def f(self,x,A=1,B=1,sig1=1,sig2=1,mu1=-0.5,mu2=0.5):
-        A,B=abs(A),-abs(B) #TOdO:see if we should also force self.A and self.B
-        tsq1=(x-mu1)*2**-0.5/sig1
-        tsq2=(x-mu2)*2**-0.5/sig2
+        tsq1=(x-mu1)*2**-0.5/abs(sig1)
+        tsq2=(x-mu2)*2**-0.5/abs(sig2)
         return (A*np.exp(-tsq1*tsq1)/sig1+B*np.exp(-tsq2*tsq2)/sig2)*(2*pi)**-0.5
     
     @property
     def rangehint(self):
-        lower1 = self.mu1-self.sig1*4
-        lower2 = self.mu2-self.sig2*4
-        upper1 = self.mu1+self.sig1*4
-        upper2 = self.mu2+self.sig2*4
+        asig1,asig2 = abs(self.sig1),abs(self.sig2)
+        lower1 = self.mu1-asig1*4
+        lower2 = self.mu2-asig2*4
+        upper1 = self.mu1+asig1*4
+        upper2 = self.mu2+asig2*4
         return(min(lower1,lower2),max(upper1,upper2))
     
     @staticmethod
     def autoDualModel(x,y,taller='A',wider='B',**kwargs):
         """
-        generates and fits a double-gaussian model where one of the peaks is
-        on top of the other and much stronger.
-        the taller and wider argument must be either 'A' or 'B' for the positive
-        and negative components, respectively
-        kwargs go into the fitData calls
+        Generates and fits a double-gaussian model where one of the peaks is on
+        top of the other and much stronger. the taller and wider argument must
+        be either 'A' or 'B' for the two components.
         """
         gm=GaussianModel()
         gm.fitData(x,y,**kwargs)
@@ -437,10 +479,22 @@ class DoubleGaussianModel(FunctionModel1DAuto):
         dgm.fitData(x,y,fixedpars=(),**kwargs)
         return dgm
     
+class DoubleOpposedGaussianModel(DoubleGaussianModel):
+    """
+    This model is a DoubleGaussianModel that *forces* one of the gaussians to
+    have negative amplitude and the other positive. A is the amplitude of the
+    positive gaussian, while B is always taken to be negative.
+    """
+    def f(self,x,A=1,B=1,sig1=1,sig2=1,mu1=-0.5,mu2=0.5):
+        A,B=abs(A),-abs(B) #TODO:see if we should also force self.A and self.B
+        return DoubleGaussianModel.f(self,x,A,B,sig1,sig2,mu1,mu2)
+    
 class LognormalModel(FunctionModel1DAuto):
     """
-    A normalized Lognormal model, e.g.
-    f = A (sqrt(2pi)/siglog) e^(-(log_base(x)-mulog)^2/2 siglog^2)
+    A normalized Lognormal model
+    
+    .. math::
+        f(x) = A (\\sqrt{2\\pi}/\\sigma_{\\rm log}) e^(-(\\log_{\\rm base}(x)-\\mu_{\\rm log})^2/2 \\sigma_{\\rm log}^2)
     
     By default, the 'base' parameter does not vary when fitting, and defaults to
     e (e.g. a natural logarithm).
