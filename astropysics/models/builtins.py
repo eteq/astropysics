@@ -1681,37 +1681,115 @@ class King3DrModel(FunctionModel1DAuto):
     def rangehint(self):
         return 0,self.rt
 
-class SchecterMagModel(FunctionModel1DAuto):
+class SchechterMagModel(FunctionModel1DAuto):
     """
+    The Schechter Function, commonly used to fit the luminosity function of
+    galaxies, in magnitude form:
+    
+    .. math::
+        \\Phi(M) = \\phi^* \\frac{2}{5} \\ln(10) \\left[10^{\\frac{2}{5} (M_*-M)}\\right]^{\\alpha+1} e^{-10^{\\frac{2}{5} (M_*-M)}}
+    
+    .. seealso:: :class:`SchechterLumModel`, Schechter 1976, ApJ 203, 297 
     """
     
     xaxisname = 'M'
     yaxisname = 'phi'
     
     def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
-        from numpy import log,exp
+        from math import log #single-variable version
+        log10 = log(10)
+        
         x=10**(0.4*(Mstar-M))
-        return 0.4*log(10)*phistar*(x**(1+alpha))*exp(-x)
+        return 0.4*log10*phistar*(x**(1+alpha))*np.exp(-x)
+
+    def derivative(self,M,dx=None):
+        """
+        Analytically compute Schechter derivative for magnitude form.
+        """
+        a = self.alpha
+        Mstar = self.Mstar
+        phistar = self.phistar
+        
+        x = 10**(0.4*(Mstar-M))
+        return -phistar*(x**(a-1)-x**a)*np.exp(-x)
+    
+    def integrate(self,lower,upper,*args,**kwargs):
+        """
+        Analytically compute Schechter integral for magnitude form using
+        incomplete gamma functions.
+        
+        Set lower = None to compute down to L = 0
+        
+        .. todo:: Test!
+        """
+        from scipy.special import gammainc,gammaincc
+            
+        s = self.alpha+1
+        u = 10**(0.4*(Mstar-upper))
+        l = 10**(0.4*(Mstar-lower))
+        
+        if u == np.inf:
+            I = gammaincc(s,l)
+        elif lower is None:
+            I = gammainc(s,u)
+        else:
+            I = gammainc(s,u) - gammainc(s,l)
+
+        return -self.phistar*I
     
     @property
     def rangehint(self):
         return self.Mstar-3,self.Mstar+3
     
-class SchecterLumModel(FunctionModel1DAuto):
+class SchechterLumModel(FunctionModel1DAuto):
+    """
+    The Schechter Function, commonly used to fit the luminosity function of 
+    galaxies, in luminosity form:
+    
+    .. math::
+        \\phi(L) = \\frac{\\phi^*}{L_*} \\left(\\frac{L}{L_*}\\right)^\\alpha e^{-L/L_*}   
+    
+    .. seealso:: :class:`SchechterMagModel`, Schechter 1976, ApJ 203, 297 
+
+    """
     xaxisname = 'L'
     yaxisname = 'phi'
     
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
         #from .phot import lum_to_mag as l2m
         #M,Mstar=l2m(L),l2m(Lstar)
-        #return SchecterModel.f(self,M,Mstar,alpha,phistar)
+        #return SchechterModel.f(self,M,Mstar,alpha,phistar)
         x = L/Lstar
         return phistar*(x**alpha)*np.exp(-x)/Lstar
-    #TODO:check to make sure this is actually the right way
     
-    @property
-    def rangehint(self):
-        return self.Lstar/10,self.Lstar*10
+    def derivative(self,L,dx=None):
+        """
+        Analytically Compute Schechter derivative
+        """
+        a = self.alpha
+        Lstar = self.Lstar
+        phistar = self.phistar
+        x = L/Lstar
+        return phistar*(x**(a-1)-x**a)*np.exp(-x)/Lstar
+    
+    def integrate(self,lower,upper,*args,**kwargs):
+        """
+        Analytically Compute Schechter integral using incomplete gamma functions
+        """
+        from scipy.special import gammainc,gammaincc
+            
+        s = self.alpha+1
+        u = upper/self.Lstar
+        l = lower/self.Lstar
+        
+        if upper == np.inf:
+            I = gammaincc(s,l)
+        elif lower == 0:
+            I = gammainc(s,u)
+        else:
+            I = gammainc(s,u) - gammainc(s,l)
+
+        return self.phistar*I
     
     @property
     def rangehint(self):
