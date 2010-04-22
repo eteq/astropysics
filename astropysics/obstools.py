@@ -71,6 +71,11 @@ except ImportError:
         def utcoffset(self):
             from datetime import timedelta
             return timedelta(hours=self._hoffset)
+        
+mjdoffset = 2400000.5
+"""
+Offset between Julian Date and Modified Julian Date - e.g. mjd = jd - mjdoffset
+"""
 
 def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
@@ -135,7 +140,7 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
     jd = jd.ravel()
     
     if mjd:
-        jd += 2400000.5
+        jd += mjdoffset
     
     if rounding > 1000000:
         raise ValueError('rounding cannot exceed a second')
@@ -400,7 +405,7 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
     res = jdn + hr/24.0 + min/1440.0 + sec/86400.0
     
     if mjd:
-        res -= 2400000.5
+        res -= mjdoffset
     
     if np.any(utcoffset):
         res -= np.array(utcoffset)/24.0
@@ -496,6 +501,117 @@ def greenwich_sidereal_time(jd,apparent=True):
     else:
         return gmst%24.0 
     
+    
+
+def delta_AT(jdutc):
+    """
+    Computes the difference between International Atomic Time (TAI) and 
+    UTC delta(AT).  
+    
+    Note that this is not valid before UTC (Jan 1,1960) beganand it is not
+    correct for future dates, as leap seconds are not predictable. Hence,
+    warnings are issued if before UTC or >5 years from the date of the
+    algorithm.
+    
+    Implementation adapted from the matching `SOFA <http://www.iausofa.org/>`_
+    algorithm (dat.c).
+    
+    :param utc: 
+        UTC time as a Julian Date (use :func:`calendar_to_jd` for calendar form
+        inputs.)
+    :type utc: float
+    
+    :returns: TAI - UTC in seconds as a float
+    
+    """
+    from warnings import warn
+    
+    
+    dt = jd_to_calendar(jdutc)
+    
+    #get data from arrays defined below
+    drift = __dat_drift
+    cyear,cmonth,cdelat = __dat_changes
+    
+    if dt.year > __dat_valid_year+5:
+        warn('delta(AT) requested for more than 5 years after current leap seconds (%i)'%dt.year)
+        
+    m = 12*dt.year + dt.month
+    i = np.sum(__dat_m<m)-1
+    if i < 0:
+        warn('delta(AT) requested before 1960 (%i)'%dt.year)
+        i = 0
+    delat = cdelat[i]
+    
+    #if pre leap seconds, account for drift
+    if i < drift.shape[0]:
+        fd = dt.hour/24+dt.minute/24/60+dt.second/24/3.6e3+dt.microsecond/24/3.6e9 #fraction of day
+        delat += (jdutc - mjdoffset + fd - drift[i,0]) * drift[i,1]
+    
+    return delat
+
+#fixed arrays/values for delta_AT:
+__dat_valid_year = 2009
+#Reference dates (MJD) and drift rates (s/day), pre leap seconds
+__dat_drift = np.array([
+    [ 37300.0, 0.0012960 ],
+    [ 37300.0, 0.0012960 ],
+    [ 37300.0, 0.0012960 ],
+    [ 37665.0, 0.0011232 ],
+    [ 37665.0, 0.0011232 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 38761.0, 0.0012960 ],
+    [ 39126.0, 0.0025920 ],
+    [ 39126.0, 0.0025920 ]
+    ])
+#year,month,delat
+__dat_changes = np.array([
+    [ 1960,  1,  1.4178180 ],
+    [ 1961,  1,  1.4228180 ],
+    [ 1961,  8,  1.3728180 ],
+    [ 1962,  1,  1.8458580 ],
+    [ 1963, 11,  1.9458580 ],
+    [ 1964,  1,  3.2401300 ],
+    [ 1964,  4,  3.3401300 ],
+    [ 1964,  9,  3.4401300 ],
+    [ 1965,  1,  3.5401300 ],
+    [ 1965,  3,  3.6401300 ],
+    [ 1965,  7,  3.7401300 ],
+    [ 1965,  9,  3.8401300 ],
+    [ 1966,  1,  4.3131700 ],
+    [ 1968,  2,  4.2131700 ],
+    [ 1972,  1, 10.0       ],
+    [ 1972,  7, 11.0       ],
+    [ 1973,  1, 12.0       ],
+    [ 1974,  1, 13.0       ],
+    [ 1975,  1, 14.0       ],
+    [ 1976,  1, 15.0       ],
+    [ 1977,  1, 16.0       ],
+    [ 1978,  1, 17.0       ],
+    [ 1979,  1, 18.0       ],
+    [ 1980,  1, 19.0       ],
+    [ 1981,  7, 20.0       ],
+    [ 1982,  7, 21.0       ],
+    [ 1983,  7, 22.0       ],
+    [ 1985,  7, 23.0       ],
+    [ 1988,  1, 24.0       ],
+    [ 1990,  1, 25.0       ],
+    [ 1991,  1, 26.0       ],
+    [ 1992,  7, 27.0       ],
+    [ 1993,  7, 28.0       ],
+    [ 1994,  7, 29.0       ],
+    [ 1996,  1, 30.0       ],
+    [ 1997,  7, 31.0       ],
+    [ 1999,  1, 32.0       ],
+    [ 2006,  1, 33.0       ],
+    [ 2009,  1, 34.0       ]
+]).T
+__dat_m = 12*__dat_changes[0] + __dat_changes[1]
     
 
 class Site(object):
