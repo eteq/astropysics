@@ -61,7 +61,7 @@ Module API
 from __future__ import division,with_statement
 
 from .constants import pi
-from .utils import DataObjectRegistry
+from .utils import DataObjectRegistry,rotation_matrix
 import numpy as np
 _twopi = 2*pi
 
@@ -81,6 +81,8 @@ except ImportError: #support for earlier versions
         __slots__=('__weakref__',) #support for weakrefs as necessary
 
 #<----------------coordinate classes and related functions------------------>
+
+
 
 
 class AngularCoordinate(object):
@@ -853,8 +855,6 @@ class RectangularEclipticCoordinates(RectangularCoordinates):
         """
         return self._epoch
     
-    
-    
 
 class _LatLongMeta(_CoosysMeta):
     def __init__(cls,name,bases,dct):
@@ -874,8 +874,9 @@ class LatLongCoordinates(CoordinateSystem):
     
     Note that converter functions (described in
     :meth:`CoordinateSystem.registerTranform`) for subclasses should return a
-    rotation matrix if called with no arguments. The matrix will be applied to
-    cartesian coordinates on the unit sphere to perform transformations.
+    rotation matrix if called with no arguments (or None as argument). The
+    matrix will be applied to cartesian coordinates on the unit sphere to
+    perform transformations.
     
     """
     __slots__ = ('_lat','_long','_laterr','_longerr')
@@ -1041,11 +1042,14 @@ class LatLongCoordinates(CoordinateSystem):
         :type tosys: A subclass of :class:`LatLongCoordinates`
         
         :returns: a 3x3 rotation matrix
-        :except: 
-            Raises :exc:`NotImplementedError` if the conversion cannot be made.
+        
+        :except NotImplementedError: If the conversion cannot be made.
+        :except TypeError: 
+            If the target system is a subclass of LatLongCoordinates.
         """
         if not issubclass(tosys,LatLongCoordinates):
-            return CoordinateSystem.convert(self,tosys)
+            raise TypeError('attempted to get a conversion matrix for conversion to a non-LatLongCoordinates system')
+            #return CoordinateSystem.convert(self,tosys)
         elif tosys is self.__class__:
             return np.eye(3).view(np.matrix)
         else:
@@ -1512,9 +1516,10 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     """
     Equatorial Coordinates tied to the International Celestial Reference System
     (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
-    inertial frame that only aligns with Earth's equator at J2000, but it is
-    conventional to treat it as such, but independent of Epoch.
+    inertial frame that only aligns with Earth's equator at J2000, but it is nearly an
+    equatorial system at J2000.
     """
+    
     def transformToEpoch(self,newepoch):
         """
         ICRS is an inertial frame, so no transformation is necessary
@@ -1525,18 +1530,56 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     def refsys(self):
         return 'ICRS'
     
+    _dpc = None #default distance should be infinity
+    
+    def _getDistanceau(self):
+        from .constants import aupercm,cmperpc
+        return self._dpc * cmperpc * aupercm
+    def _setDistanceau(self,val):
+        if val is None:
+            self._dpc = None
+        else:
+            from .constants import cmperau,pcpercm
+            self._dpc = float(val)* cmperau * pcpercm
+    distanceau = property(_getDistanceau,_setDistanceau,doc="""
+    Parallax distance to object in AU, or None to assume infinity.
+    """)
+    
+    def _getDistancepc(self):
+        return self._dpc
+    def _setDistancepc(self,val):
+        if val is None:
+            self._dpc = None
+        else:
+            self._dpc = float(val)
+    distancepc = property(_getDistancepc,_setDistancepc,doc="""
+    Parallax distance to object in parsecs, or None to assume infinity.
+    """)
+    
+    
+    #conversion methods and attributes are below
+    
+    
+    def __makeFrameBias():
+        #see USNO circular 179 for frame bias -- all in milliarcsec
+        da0 = -14.6
+        xi0 = -16.6170
+        eta0 = -6.8192
+        #mas->degrees
+        return rotation_matrix(-eta0/3600000,axis='x') *\
+               rotation_matrix(xi0/3600000,axis='y') *\
+               rotation_matrix(da0/3600000,axis='z')
+    frameBiasJ2000 = __makeFrameBias()
+    """
+    Frame bias matrix such that vJ2000 = B*vICRS . 
+    """
+    #make it a static method just for safety even though it isn't really visible
+    __makeFrameBias = staticmethod(__makeFrameBias)
+    
     @CoordinateSystem.registerTransform('self',EquatorialCoordinates)
     def _toEq(icrsc=None):
         if icrsc is None:
-            #see USNO circular 179 for frame bias -- all in milliarcsec
-            da0 = -14.6
-            xi0 = -16.6170
-            eta0 = -6.8192
-            #mas->degrees
-            return rotation_matrix(-eta0/3600000,axis='x') *\
-                   rotation_matrix(xi0/3600000,axis='y') *\
-                   rotation_matrix(da0/3600000,axis='z')
-                   
+            return self.frameBiasJ2000
         else:
             #calls the None-argument version to get the rotation matrix
             return icrsc.convert(EquatorialCoordinates)
@@ -1649,97 +1692,9 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
 
     return np.array(coords).T
 
-def rotation_matrix(angle,axis='z',degrees=True):
-    """
-    Generate a 3x3 rotation matrix in cartesian coordinates for rotation about
-    the requested axis.
-    
-    :param axis:
-        Either 'x','y', 'z', or a (x,y,z) specifying an axis to rotate about. If
-        'x','y', or 'z', the rotation sense is counterclockwise looking down the
-        + axis (e.g. positive rotations obey left-hand-rule).
-    :type axis: string or 3-sequence
-    :param degrees: If True the input angle is degrees, otherwise radians.
-    :type degrees: boolean
-    
-    :returns: :class:`numpy.matrix` unitary rotation matrix.
-    """
-    from math import sin,cos,radians,sqrt
-    if degrees:
-        angle = radians(angle)
-        
-    
-    
-    if axis == 'z':
-        s = sin(angle)
-        c = cos(angle)
-        return np.matrix((( c, s, 0),
-                          (-s, c, 0),
-                          ( 0, 0, 1)))
-    elif axis == 'y':
-        s = sin(angle)
-        c = cos(angle)
-        return np.matrix((( c, 0,-s),
-                          ( 0, 1, 0),
-                          ( s, 0, c)))
-    elif axis == 'x':
-        s = sin(angle)
-        c = cos(angle)
-        return np.matrix((( 1, 0, 0),
-                          ( 0, c, s),
-                          ( 0,-s, c)))
-    else:
-        x,y,z = axis
-        w = cos(angle/2)
-        
-        #normalize
-        if w == 1:
-            x=y=z=0
-        else:
-            l = sqrt((x*x + y*y + z*z)/(1-w*w))
-            x /= l
-            y /= l
-            z /= l
-        
-        wsq = w*w
-        xsq = x*x
-        ysq = y*y
-        zsq = z*z
-        return np.matrix((( wsq+xsq-ysq-zsq, 2*x*y-2*w*z, 2*x*z+2*w*y),
-                          ( 2*x*y+2*w*z, wsq-xsq+ysq-zsq,2*y*z-2*w*x),
-                          ( 2*x*z-2*w*y, 2*y*z+2*w*x, wsq-xsq-ysq+zsq)))
-def angle_axis(matrix,degrees=True):
-    """
-    Computes the angle of rotation and the rotation axis for a given rotation
-    matrix.
-    
-    :param matrix: the rotation matrix
-    :type matrix: a 3x3 :class:`numpy.ndarray`
-    :param degrees: if True, output is in degrees
-    :type degrees: boolean
-    
-    :returns:
-        an (angle,axis) tuple where the angle is in degrees if `degrees` is
-        True, otherwise in radians
-        
-    """
-    from math import sin,cos,acos,degrees,sqrt
-    
-    m = np.asmatrix(matrix)
-    if m.shape != (3,3):
-        raise ValueError('matrix is not 3x3')
-    
-    
-    
-    angle = acos((m[0,0] + m[1,1] + m[2,2] - 1)/2)
-    denom = sqrt(2*((m[2,1]-m[1,2])+(m[0,2]-m[2,0])+(m[1,0]-m[0,1])))
-    axis = np.array((m[2,1]-m[1,2],m[0,2]-m[2,0],m[1,0]-m[0,1]))/denom
-    axis /= sqrt(np.sum(axis**2)) 
-    
-    if degrees:
-        return degrees(angle),axis
-    else:
-        return angle,axis
+#rotation_matrix function should really be defined here, but it is above 
+#because of it's use for generating class/module variables
+
     
 def obliquity(jd,algorithm=2000):
     """
