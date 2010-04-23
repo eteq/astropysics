@@ -291,8 +291,61 @@ class FixedColumnData(object):
         recarr = np.rec.fromarrays(alist,names=','.join(sortnames))
         
         return recarr,dict(masks)
-                        
+    
+    def writeFile(self,fn,data,masks=None,colstart='# '):
+        """
+        Writes a data array out to a data file using this format.  
+        
+        :param fn: The file to write to.
+        :type fn: string
+        :param data: 
+            The data array to write. Must match this objects column names and
+            formats.
+        :type data: 
+            Structured :class:`numpy.array` or
+            :class:`numpy.core.records.recarray`.
+        :param masks: 
+            If supplied, maps field names to boolean arrays where True indicates
+            the data value *should* be written. If None, all data is written.
+        :type masks: None or dict 
+        :param colstart: the string to use to indicate a column specifier
+        :type colstart: string
+        
+        :except TypeError: If the data dtype doesn't match the columns.
+        """
+        for n,(l,u,f) in self.cols.iteritems():
+            for k,(dt,c) in data.dtype.fields.iteritems():
+                if k==n:
+                    if dt != f:
+                        raise TypeError('Data dtype %s does not match column type %s'%(dt,f)) 
+                    break
+            else:
+                raise TypeError('Data field %s not a column'%n)
+        
+        sortedcols = sorted([(l,n) for n,(l,u,f) in self.cols.iteritems()])
+        sortedcols = [e[1] for e in sortedcols]
+        
+        
+        with open(fn,'w') as f:
+            for n in sortedcols:
+                l,u,f = self.cols[n]
+                f.write(colstart+' '.join((n,l,u,f))+'\n')
+            f.write('\n')
+            
+            for rec in data:
+                oldu=0
+                for n in sortedcols:
+                    l,u,f = self.cols[n]
+                    spaces = l-oldu-1
+                    chrs = u-l+1
+                    if spaces>0:
+                        f.write(' '*spaces)
+                    f.write(str(rec[n])[:(u-l+1)])
+                f.write('\n')
                     
+                    
+                
+         
 def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
                                 columnsep=None,maxcols=None,oneindexed=True):
     """
