@@ -117,13 +117,27 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
     return arr
 
 
-class FixedColumnParser:
+class FixedColumnData(object):
     """
     Parses a data file composed of lines with a fixed set of columns
     with the same number of bytes in each
     
     """
+    
+    
     def __init__(self,skiprows=0,oneindexed=True,commentchars='#'):
+        """
+        :param skiprows: The number of rows to skip initially
+        :type skiprows: int
+        :param oneindexed: 
+            If True, the column numbers will be treated such that the first
+            column is column #"1" - otherwise, the first column is #"0".
+        :type oneindexed: bool
+        :param commentchars: 
+            The comment character - any lines that start with these characters
+            will be ignored.
+        :type commentchars: string (interpreted as sequence of characters)
+        """ 
         self.cols = {}
         self.skiprows = skiprows
         self.commentchars = list(commentchars)
@@ -138,41 +152,109 @@ class FixedColumnParser:
     
     def addColumn(self,name,lower,upper,format=None):
         """
-        lower and upper are the highest and lowest byte INCLUSIVE
+        :param name: Name of the column
+        :type name: string
+        :param lower: 
+            lowest character index for this column *including* this one.
+        :type lower: int
+        :param upper:
+            highest character index for this column *including* this one.
+        :type upper: int
+        :param format: 
+            Format for this column, or None to infer from the contents.
+        :type format: input to :class:`numpy.dtype` or None
+        
         """
         if format is not None: #check that its a valid format specifier
             format = np.dtype(format)
         self._overlapcheck(lower,upper,name)
         self.cols[name] = (lower,upper,format)
         
-    def addColumnsFromFile(self,fn,linestart=None,comments='#',sep=None):
+    def addColumnsFromFile(self,fn,linestart=None,sep=None,useskiprows=True,
+                                maxcols=None):
         """
-        adds columns from a data file that has lines that can be
-        split into three or four columns in order name,lower,upper,format
-
-        linestart specifies the first 
+        Adds columns parsed from a data file itself.
+        
+        The parsed file is expected to have lines that begins with the
+        `linestart` argument and the rest should be able to be split into three
+        or four columns in order name,lower,upper,format .
+        
+        :param fn: File name of the file to parse
+        :type fn: string
+        :param linestart: String that indicates the line is a column line.
+        :type linestart: 
+        :param sep: 
+            The seperator string to split the line or None for whitespace.
+        :type sep: string or None
+        :param useskiprows: 
+            If True, the :attr:`skiprows` attribute of this object will be used
+            to determine how many rows to skip.
+        :type useskiprows: bool
+        :param maxcols: 
+            Maximum number of columns to parse before quitting (or None to be
+            unlimited).
+        :type maxcols: int or None
+        
+        :returns: number of columns added
         """
+        #used below to properly re-adjust string dtypes
+        def maybe_convert_string(linesplit):
+            if linesplit[3] in ('a','S','string','str'):
+                chrs = linesplit[2]-linesplit[1]+1
+                return 'S'+str(chrs)
+            else:
+                return linesplit[3]
+        
         with open(fn) as f:
+            if useskiprows:
+                for i in range(self.skiprows):
+                    f.readline()
+            icols = 0
             for l in f:
                 ls = l.strip()
-                if not (comments is not None and ls.startswith(comments)):
-                    if linestart is None:
-                        linesplit = ls.split(sep) if sep else ls.split()
-                        linesplit[1] = int(linesplit[1])
-                        linesplit[2] = int(linesplit[2])
-                        self.addColumn(*linesplit)
-                    elif ls.startswith(linestart):
-                        lsr = ls.replace(linestart,'')
-                        linesplit = (lsr.split(sep) if sep else lsr.split())
-                        linesplit[1] = int(linesplit[1])
-                        linesplit[2] = int(linesplit[2])
-                        self.addColumn(*linesplit)
-                
+                if linestart is None:
+                    linesplit = ls.split(sep) if sep else ls.split()
+                    linesplit[1] = int(linesplit[1])
+                    linesplit[2] = int(linesplit[2])
+                    if len(linesplit)>=4:
+                        linesplit[3] = maybe_convert_string(linesplit)
+                    self.addColumn(*linesplit)
+                    icols += 1
+                elif ls.startswith(linestart):
+                    lsr = ls.replace(linestart,'')
+                    linesplit = (lsr.split(sep) if sep else lsr.split())
+                    linesplit[1] = int(linesplit[1])
+                    linesplit[2] = int(linesplit[2])
+                    if len(linesplit)>=4:
+                        linesplit[3] = maybe_convert_string(linesplit)
+                    self.addColumn(*linesplit)
+                    icols += 1
+                if maxcols is not None and icols >= maxcols:
+                    break
+        return icols
         
     def delColumn(self,name):
+        """
+        Removes a column by name
+        
+        :param name: name of the column to remove
+        :type name: string
+        """
         del self.cols[name]
         
     def parseFile(self,fn):
+        """
+        Parse a file that follows this object's format.
+        
+        :param fn: File name of the file to parse
+        :type fn: string
+        
+        :returns: 
+            A tuple (recarr,masks) where recarr is the data and masks is a 
+            dictionary mapping column names to masks.  The masks are True if
+            the value is valid, and False if not.
+        :rtype: a :class:`numpy.core.records.recarray` and a dict
+        """
         lists = dict([(k,list()) for k in self.cols])
         addi = -int(self.oneindexed)
         
@@ -211,7 +293,24 @@ class FixedColumnParser:
         return recarr,dict(masks)
                         
                     
-
+def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
+                                columnsep=None,maxcols=None,oneindexed=True):
+    """
+    Loads a fixed column data file using :class:`FixedColumnData`. 
+    
+    If `fncol` is None, it will assumed to be the same as `fn`.
+    
+    For details on arguments controlling how columns are inferred, See
+    :meth:`FixedColumnData.addColumnsFromFile`. For other arguments see
+    :class:`FixedColumnData`.
+    
+    See :meth:`FixedColumnData.parseFile` for return type
+    """
+    if fncol is None:
+        fncol = fn
+    fcp = FixedColumnData(skiprows,oneindexed,comments)
+    fcp.addColumnsFromFile(fncol,columnlinestart,columnsep,True,maxcols)
+    return fcp.parseFile(fn)
 
 def load_tipsy_format(fn):
     """
