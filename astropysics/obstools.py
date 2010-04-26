@@ -13,8 +13,12 @@ don't have a better place to live.
 Most implementations are for optical astronomy, as that is what the primary
 author does.
 
-Note that throughout this module it is assumed that UTC == UT1, so if leap
-seconds are abandoned, this will need to be reworked...
+Note that throughout this module it is assumed that UTC as used in
+:mod:`datetime` is the same as UT1 (the UT used for calculations). This is only
+an issue if leapseconds stop being updated or if something such as daylight
+savings time calculations in :mod:`datetime` are important to be correct to less
+than DUT1 - otherwise, the "UTC" in :mod:`datetime` can simply by replaced with
+UT1 values when precision better than DUT1 is needed.
 
 Also note that some of these functions require the
 :mod:`dateutil <http://pypi.python.org/pypi/python-dateutil>` package (it is
@@ -503,10 +507,10 @@ def greenwich_sidereal_time(jd,apparent=True):
     
     
 
-def delta_AT(jdutc):
+def delta_AT(jdutc,usett=False):
     """
     Computes the difference between International Atomic Time (TAI) and 
-    UTC delta(AT).  
+    UTC, known as delta(AT).  
     
     Note that this is not valid before UTC (Jan 1,1960) beganand it is not
     correct for future dates, as leap seconds are not predictable. Hence,
@@ -520,8 +524,12 @@ def delta_AT(jdutc):
         UTC time as a Julian Date (use :func:`calendar_to_jd` for calendar form
         inputs.)
     :type utc: float
+    :param usett: 
+        If True, the return value will be the difference between UTC and
+        Terrestrial Time (TT) instead of TAI (TT - TAI = 32.184 s).
+    :type usett: bool
     
-    :returns: TAI - UTC in seconds as a float
+    :returns: TAI - UTC in seconds as a float (or TT - UTC if `usett` is True)
     
     """
     from warnings import warn
@@ -547,8 +555,10 @@ def delta_AT(jdutc):
     if i < drift.shape[0]:
         fd = dt.hour/24+dt.minute/24/60+dt.second/24/3.6e3+dt.microsecond/24/3.6e9 #fraction of day
         delat += (jdutc - mjdoffset + fd - drift[i,0]) * drift[i,1]
-    
-    return delat
+    if usett:
+        return delat - 32.184
+    else:
+        return delat
 
 #fixed arrays/values for delta_AT:
 __dat_valid_year = 2009
