@@ -665,10 +665,10 @@ class _CoosysMeta(ABCMeta):
         
         for k,v in inspect.getmembers(cls):
             if isinstance(v,_TransformerMethodDeco):
-                fromclass = cls if v.fromclass == 'self' else v.fromclass
-                toclass = cls if v.toclass == 'self' else v.toclass
-                
-                CoordinateSystem.registerTransform(fromclass,toclass,v.f)
+                for vfc,vtc in zip(v.fromclasses,v.toclasses):
+                    fromclass = cls if vfc == 'self' else vfc
+                    toclass = cls if vtc == 'self' else vtc
+                    CoordinateSystem.registerTransform(fromclass,toclass,v.f)
                 setattr(cls,k,staticmethod(v.f))
                 
 class _TransformerMethodDeco(object):
@@ -678,9 +678,9 @@ class _TransformerMethodDeco(object):
     """
     def __init__(self,f,fromclass,toclass):
         self.f = f
-        self.fromclass = fromclass
-        self.toclass = toclass
-                
+        self.fromclasses = [fromclass]
+        self.toclasses = [toclass]
+                        
 class CoordinateSystem(object):
     """
     Base class of all coordinate systems.  Contains machinery for managing 
@@ -753,8 +753,17 @@ class CoordinateSystem(object):
             if toclass != 'self':
                 if not issubclass(toclass,CoordinateSystem):
                     raise TypeError('to class for registerTransform must be a CoordinateSystem')
+            
+            def make_or_extend_trans_meth_deco(f):
+                if isinstance(f,_TransformerMethodDeco):
+                    f.fromclasses.append(fromclass)
+                    f.toclasses.append(toclass)
+                elif callable(f):
+                    return _TransformerMethodDeco(f,fromclass,toclass)
+                else:
+                    raise TypeError('Tried to apply registerTransform to a non-callable')
                 
-            return lambda f:_TransformerMethodDeco(f,fromclass,toclass)
+            return make_or_extend_trans_meth_deco
         
         else:
             if not issubclass(fromclass,CoordinateSystem) or not issubclass(toclass,CoordinateSystem):
@@ -879,8 +888,9 @@ class LatLongCoordinates(CoordinateSystem):
     details such as transformations or epochs.
     
     Note that converter functions (described in
-    :meth:`CoordinateSystem.registerTranform`) for subclasses should return a
-    rotation matrix if called with no arguments (or None as argument). The
+    :meth:`CoordinateSystem.registerTranform`) for LatLongCoordinates 
+    subclasses are epected to have the signature f(inobj,matrix=False). They
+    should return a rotation matrix if called with the second argument True. The
     matrix will be applied to cartesian coordinates on the unit sphere to
     perform transformations.
     
@@ -1060,7 +1070,8 @@ class LatLongCoordinates(CoordinateSystem):
             return np.eye(3).view(np.matrix)
         else:
             try:
-                return CoordinateSystem._converters[self.__class__][tosys]() #call w/no argument gives the rotation matrix
+                #call w/ second argument True to get matrix
+                return CoordinateSystem._converters[self.__class__][tosys](self,True) 
             except (KeyError,TypeError),e:
                 strf = 'cannot generate matrix to transform from {0} to {1}'
                 raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
@@ -1160,11 +1171,11 @@ class LatLongCoordinates(CoordinateSystem):
     
     def convert(self,tosys):
         """
-        converts the coordinate system from it's current system to a new 
+        Converts the coordinate system from it's current system to a new 
         :class:`CoordinateSystem` object.  For :class:~LatLongCoordinate`
-        objects, if a converter is not available a conversion to 
+        objects, if a converter is not available a conversion matrix to 
         :class:`EquatorialCoordinates` and then to the target system will be
-        attempted.
+        generated and applied.
         
         :param tosys: The new coordinate system 
         :type tosys: A subclass of :class:`CoordinateSystem`
@@ -1178,7 +1189,8 @@ class LatLongCoordinates(CoordinateSystem):
         except NotImplementedError:
             m1 = self.conversionMatrix(EquatorialCoordinates)
             try:
-                m2 = CoordinateSystem._converters[EquatorialCoordinates][tosys]()
+                #TODO: determine if passing in potential the wrong type for conversion here is a problem
+                m2 = CoordinateSystem._converters[EquatorialCoordinates][tosys](self,True)
             except (KeyError,TypeError),e:
                 errstr = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(tosys)
                 raise NotImplementedError(errstr)
@@ -1198,19 +1210,6 @@ class LatLongCoordinates(CoordinateSystem):
             newcoords._epoch = self._epoch
             
         return newcoords
-        
-class HorizontalCoordinates(LatLongCoordinates):
-    """
-    This object represents an angular location on the unit sphere, with the 
-    north pole of the coordinate position fixed to the local zenith
-    
-    To convert from other :class:`Coordinate` types to horizontal positions, see 
-    :class:`astropysics.obstools.Site`, as site information is required for
-    these corrections
-    """  
-    __slots__ = tuple()
-    _latlongnames_ = ('alt','az')
-    _longrange_ = (0,360)
     
 class EpochalCoordinates(LatLongCoordinates):
     """
@@ -1309,7 +1308,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
     reference systems implement the :meth:`transformToEpoch` method.
     """
     
-    __slots__ = tuple()
+    __slots__ = ('_dpc',)
     _latlongnames_ = ('dec','ra')
     _longrange_ = (0,360)
     
@@ -1319,16 +1318,76 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         decstr = self.dec.getDmsStr(canonical=True)
         return 'Equatorial Coordinates: {0} {1} ({2})'.format(rastr,decstr,self.epoch)
     
+    _dpc = None #default distance should be infinity
+    def _getDistancepc(self):
+        if callable(self._dpc):
+            return self._dpc()
+        else:
+            return self._dpc
+    def _setDistancepc(self,val):
+        if val is None:
+            self._dpc = None
+        elif callable(val):
+            self._dpc = val
+        else:
+            try:
+                self._dpc = (float(val[0]),float(val[1]))
+            except TypeError:
+                self._dpc = (float(val),0)
+    distancepc = property(_getDistancepc,_setDistancepc,doc="""
+    Parallax distance to object in parsecs, or None to assume infinity. Set as
+    either a float, a 2-tuple (distance,distance_error), or a no-argument
+    callable that returns such a tuple. Getter always returns 2-tuple or None.
+    """)
+    
+    def _getDistanceau(self):
+        from .constants import aupercm,cmperpc
+        auperpc = cmperpc * aupercm
+        if self._dpcs is None:
+            return None
+        elif callable(self._dpc):
+            return self._dpc() * auperpc
+        else:
+            return self._dpc * auperpc
+    def _setDistanceau(self,val):
+        from .constants import cmperau,pcpercm
+        pcperau = cmperau * pcpercm
+            
+        if val is None:
+            self._dpc = None
+        elif callable(val):
+            self._dpc = lambda: val()*pcperau
+        else:
+            try:
+                self._dpc = (float(val[0])*pcperau,float(val[1])*pcperau)
+            except TypeError:
+                self._dpc = (float(val)*pcperau,0)
+    distanceau = property(_getDistanceau,_setDistanceau,doc="""
+    Parallax distance to object in AU, or None to assume infinity. Set as either
+    a float, a 2-tuple (distance,distance_error), or a no-argument callable that
+    returns such a tuple. Getter always returns 2-tuple or None.
+    """)
+    
+    def __getstate__(self):
+        d = EpochalCoordinates.__getstate__(self)
+        d['_dpc'] = self._dpc
+        return d
+    
+    def __setstate__(self,d):
+        EpochalCoordinates.__setstate__(self,d)
+        self._dpc = d['_dpc']
+    
     def __init__(self,*args,**kwargs):
         """
-        input may be in the following forms:
+        Input for equatorial coordinates
         
-        * EquatorialCoordinates()
-        * EquatorialCoordinates(EquatorialCoordinates)
-        * EquatorialCoordinates('rastr decstr')
-        * EquatorialCoordinates(ra,dec)
-        * EquatorialCoordinates(ra,dec,raerr,decerr)
-        * EquatorialCoordinates(ra,dec,raerr,decerr,epoch)
+        * EquatorialCoordinatesBase()
+        * EquatorialCoordinatesBase(:class:`EquatorialCoordinatesBase`)
+        * EquatorialCoordinatesBase('rastr decstr')
+        * EquatorialCoordinatesBase(ra,dec)
+        * EquatorialCoordinatesBase(ra,fdec,raerr,decerr)
+        * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch)
+        * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch,distancepc)
         
         """
         posargs = {}
@@ -1357,6 +1416,13 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
             posargs['raerr'] = args[2]
             posargs['decerr'] = args[3]
             posargs['epoch'] = args[4]
+        elif len(args) == 6:
+            posargs['ra'] = args[0]
+            posargs['dec'] = args[1]
+            posargs['raerr'] = args[2]
+            posargs['decerr'] = args[3]
+            posargs['epoch'] = args[4]
+            posargs['distancepc'] = args[5]
         
         for k,v in posargs.iteritems():
             if k in kwargs:
@@ -1372,6 +1438,94 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         EpochalCoordinates.__init__(self,kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
+        if 'distancepc' in kwargs:
+            self.distancepc = kwargs['distancepc']
+            
+    def convert(self,tosys):
+        res = EpochalCoordinates.convert(self,tosys)
+        if self._dpc is not None:
+            res._dpc = self._dpc
+        return res
+    convert.__doc__ = EpochalCoordinates.convert.__doc__
+            
+            
+            
+def _precessionMatrixJ2000Capitaine(epoch):
+        """
+        Computes the precession matrix from J2000 to the given Julian Epoch.
+        Expression from from Capitaine, N. et al. 2003 as written in the USNO
+        Circular 179.  This should match the IAU 2006 standard from SOFA 
+        (although this has not yet been tested)
+        """
+        T = (epoch-2000.0)/100.0
+        #from USNO circular
+        pzeta = (-0.0000003173,-0.000005971,0.01801828,0.2988499,2306.083227,2.650545)
+        pz = (-0.0000002904,-0.000028596,0.01826837,1.0927348,2306.077181,-2.650545)
+        ptheta = (-0.0000001274,-0.000007089,-0.04182264,-0.4294934,2004.191903,0)
+        zeta = np.polyval(pzeta,T)/3600.0
+        z = np.polyval(pz,T)/3600.0
+        theta = np.polyval(ptheta,T)/3600.0
+        
+        return rotation_matrix(-z,'z') *\
+               rotation_matrix(theta,'y') *\
+               rotation_matrix(-zeta,'z')
+               
+def _nutationMatrix200062000A(epoch):
+    """
+    Nutation matrix adapted from SOFA IAU 2006/2000A model.
+    
+    Matrix converts from mean coordinate to true coordinate as
+    r_true = M * r_mean
+    """
+    from warnings import warn
+    warn('nutation model not fully implemented yet - for now no nutation performed')
+    
+    epsa = dpsi = deps = 0
+    
+    return rotation_matrix(epsa,'x') *\
+           rotation_matrix(-dpsi,'z') *\
+           rotation_matrix(-(epsa + deps),'x')
+
+class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
+    """
+    Represents an object as equatorial coordinates in the Celestial Intermediate
+    Reference System. This is the post-2000 IAU system for equatorial
+    coordinates that seperates the coordinate system from the dynamically
+    complicated and somewhat imprecisely-defined ideas of the equinox and
+    ecliptic. This system's fundamental plane is the equator of the Celestial
+    Intermediate Pole (CIP) and the origin of RA is at the Celestial
+    Intermediate Origin (CIO).
+    
+    Changes to the :attr:`epoch` will result in the coordinates being
+    updated for precession nutation. If abberation or annual parallax
+    corrections are necessary, convert to :class:`EquatorialCoordinatesICRS`,
+    change the epoch, and then convert back to
+    :class:`EquatorialCoordinatesCIRS`.
+    
+    To convert from these coordinates to :class:`HorizontalCoordinates`
+    appropriate for observed coordinates, site information is necessary. Hence,
+    the transformations from equatorial to horizontal coordinates are performed
+    by the :class:`Site <astropysics.obstools.Site>` class in the
+    :mod:`astropysics.obstools` module, and attempting to directly convert will
+    raise an :exc:`TypeError`.
+    """
+    
+    
+    
+    def transformToEpoch(self,newepoch):
+        """
+        Transforms these :class:`EquatorialCoordinates` to a new epoch using the
+        IAU 2000 precessions from Capitaine, N. et al. 2003 as written in the
+        USNO Circular 179.
+        """
+        #convert from current to J2000
+        B = _precessionMatrixJ2000Capitaine(self.epoch).T #T==inv; real unitary
+        Bn = _nutationMatrix2000A2006(self.epoch).T 
+        #convert to new epoch
+        A = _precessionMatrixJ2000Capitaine(newepoch)
+        An = _nutationMatrix2000A2006(newepoch) 
+        self.matrixTransform(An*A*B*Bn)
+        EpochalCoordinates.transformToEpoch(self,newepoch)
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -1394,92 +1548,127 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     raise a :exc:`TypeError`.
     """
     
+    __slots__ = tuple()
+    
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch using the
-        IAU 2000 precessions from Capitaine, N. et al. 2003.
+        IAU 2000 precessions from Capitaine, N. et al. 2003 as written in the
+        USNO Circular 179.
         """
         #convert from current to J2000
-        B = self._precessionMatrixJ2000(self.epoch).I
+        B = _precessionMatrixJ2000Capitaine(self.epoch).T #T==inv; real unitary
         #convert to new epoch
-        A = self._precessionMatrixJ2000(newepoch)
+        A = _precessionMatrixJ2000Capitaine(newepoch)
         self.matrixTransform(A*B)
         EpochalCoordinates.transformToEpoch(self,newepoch)
-    
-    @staticmethod
-    def _precessionMatrixJ2000(epoch):
-        """
-        computes the precession matrix from J2000 to the given Julian Epoch
-        """
-        T = (epoch-2000.0)/100.0
-#        pzeta = (-0.0000002,-0.0000327,0.0179663,0.3019015,2306.0809506,2.5976176)
-#        pz = (-0.0000003,0.0000470,0.0182273,1.0947790,2306.0803226,-2.5976176)
-#        ptheta = (-0.0000001,-0.0000601,-0.0418251,-0.4269353,2004.1917476,0.0)
-        #from USNO circular
-        pzeta = (-0.0000003173,-0.000005971,0.01801828,0.2988499,2306.083227,2.650545)
-        pz = (-0.0000002904,-0.000028596,0.01826837,1.0927348,2306.077181,-2.650545)
-        ptheta = (-0.0000001274,-0.000007089,-0.04182264,-0.4294934,2004.191903,0)
-        zeta = np.polyval(pzeta,T)/3600.0
-        z = np.polyval(pz,T)/3600.0
-        theta = np.polyval(ptheta,T)/3600.0
-        
-        return rotation_matrix(-z,'z') *\
-               rotation_matrix(theta,'y') *\
-               rotation_matrix(-zeta,'z')
-    
-    @CoordinateSystem.registerTransform('self',HorizontalCoordinates)
-    def _toHoriz(incoosys=None):
-        raise TypeError('use astropysics.obstools.Site methods to transform celestial to terrestrial coordinates')
-        
-    @CoordinateSystem.registerTransform(HorizontalCoordinates,'self')
-    def _fromHoriz(incoosys=None):
-        raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
-    
-class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
-    """
-    Represents an object as equatorial coordinates in the Celestial Intermediate
-    Reference System. This is the post-2000 IAU system for equatorial
-    coordinates that seperates the coordinate system from the dynamically
-    complicated and somewhat imprecisely-defined ideas of the equinox and
-    ecliptic. This system's fundamental plane is the equator of the Celestial
-    Intermediate Pole (CIP) and the origin of RA is at the Celestial
-    Intermediate Origin (CIO).
-    
-    Changes to the :attr:`epoch` will result in the coordinates being updated
-    for precession, but not nutation.  
-    
-    .. todo:: implement nutation
-    
-    To convert from these coordinates to :class:`HorizontalCoordinates`
-    appropriate for observed coordinates, site information is necessary. Hence,
-    the transformations from equatorial to horizontal coordinates are performed
-    by the :class:`Site <astropysics.obstools.Site>` class in the
-    :mod:`astropysics.obstools` module, and attempting to directly convert will
-    raise an :exc:`TypeError`.
-    """
-    
-    def __init__(self):
-        raise NotImplementedError
-    
-    @CoordinateSystem.registerTransform('self',HorizontalCoordinates)
-    def _toHoriz(incoosys=None):
-        raise TypeError('use astropysics.obstools.Site methods to transform celestial to terrestrial coordinates')
-        
-    @CoordinateSystem.registerTransform(HorizontalCoordinates,'self')
-    def _fromHoriz(incoosys=None):
-        raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
             
+            
+
+class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
+    """
+    Equatorial Coordinates tied to the International Celestial Reference System
+    (ICRS). Strictly speaking this is not an Equatorial system, as it is an
+    inertial frame that only aligns with Earth's equator at J2000, but it is
+    nearly an equatorial system at J2000.
+    
+    .. warning:: 
+        Abberation and annual parralax are not yet included in transformations!
+        
+    """
+    
+    __slots__ = tuple()
+    
+    def transformToEpoch(self,newepoch):
+        """
+        ICRS is an inertial frame, so no transformation is necessary
+        """
+        EpochalCoordinates.transformToEpoch(self,newepoch)
+    
+    
+    #conversion methods and attributes are below
+    
+    
+    def __makeFrameBias():
+        #see USNO circular 179 for frame bias -- all in milliarcsec
+        da0 = -14.6
+        xi0 = -16.6170
+        eta0 = -6.8192
+        #mas->degrees
+        return rotation_matrix(-eta0/3600000,axis='x') *\
+               rotation_matrix(xi0/3600000,axis='y') *\
+               rotation_matrix(da0/3600000,axis='z')
+    frameBiasJ2000 = __makeFrameBias()
+    """
+    Frame bias matrix such that vJ2000 = B*vICRS . 
+    """
+    #make it a static method just for safety even though it isn't really visible
+    __makeFrameBias = staticmethod(__makeFrameBias)
+    
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
+    def _toEqE(icrsc,getmatrix=False):
+        if getmatrix:
+            B = self.frameBiasJ2000
+            P = _precessionMatrixJ2000Capitaine(icrsc.epoch)
+            return P*B #no nutation for equinox-based
+        else:
+            #calls the getmatrix=True version
+            return icrsc.convert(EquatorialCoordinates)
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
+    def _toEqC(icrsc,getmatrix=False):
+        if getmatrix:
+            B = self.frameBiasJ2000
+            P = _precessionMatrixJ2000Capitaine(icrsc.epoch)
+            N = _nutationMatrix200062000A(icrsc.epoch)
+            return N*P*B
+        else:
+            #calls the getmatrix=True version
+            return icrsc.convert(EquatorialCoordinates)
+    
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')    
+    def _fromEqE(eqc,getmatrix=False):
+        if getmatrix:
+            #really we want inverse, but rotations are unitary -> inv==transpose
+            return EquatorialCoordinatesICRS._toEqE(None).T 
+        else:
+            #calls the getmatrix=True version
+            return eqc.convert(EquatorialCoordinatesICRS)
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
+    def _fromEqC(eqc,getmatrix=False):
+        if getmatrix:
+            #really we want inverse, but rotations are unitary -> inv==transpose
+            return EquatorialCoordinatesICRS._toEqC(None).T 
+        else:
+            #calls the getmatrix=True version
+            return eqc.convert(EquatorialCoordinatesICRS)
             
 class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
     """
     Equatorial Coordinates fixed to the FK5 reference system. 
     """
     
+    __slots__ = tuple()
+    
     def transformToEpoch(self,newepoch):
         """
-        Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the 
-        algorithm resolved by the IAU in 1976 as written in Meeus and 
-        Lieske,J.H. 1979
+        Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
+        algorithm resolved by the IAU in 1976 as written in Meeus, as well as
+        Lieske, J.H. 1979.
+        
+        According to SOFA, this for becomes less valid at the following levels:
+        
+        * 1960 CE  to 2040 CE
+            < 0.1"
+        * 1640 CE to 2360 CE
+            < 1"
+        * 500 BCE to 3000 CE
+            < 3"
+        * 1200 BCE to 3900 CE
+            > 10"
+        * 4200 BCE to 5600 CE
+            > 100"
+        * 6800 BCE to 8200 CE
+            > 1000"
         """
         self.matrixTransform(self._precessionMatrixJ(self.epoch,newepoch))
         EpochalCoordinates.transformToEpoch(self,newepoch)
@@ -1487,7 +1676,7 @@ class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
     @staticmethod
     def _precessionMatrixJ(epoch1,epoch2):
         """
-        computes the precession matrix from one Julian epoch to another
+        Computes the precession matrix from one Julian epoch to another
         """
         from .obstools import epoch_to_jd
         
@@ -1520,6 +1709,8 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
     
     Epoch is Besselian.
     """
+    
+    __slots__ = tuple()
     
     julianepoch = False
     
@@ -1563,106 +1754,95 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
         return rotation_matrix(-z,'z') *\
                rotation_matrix(theta,'y') *\
                rotation_matrix(-zeta,'z')
-    
-    
-    
-#Default Equatorial Coordinate system is J2000 equinox... 
-#TODO:change default to CIO when CIO is ready
-EquatorialCoordinates = EquatorialCoordinatesEquinox
-
-class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
-    """
-    Equatorial Coordinates tied to the International Celestial Reference System
-    (ICRS).  Strictly speaking this is not an Equatorial system, as it is an
-    inertial frame that only aligns with Earth's equator at J2000, but it is nearly an
-    equatorial system at J2000.
-    """
-    
-    def transformToEpoch(self,newepoch):
-        """
-        ICRS is an inertial frame, so no transformation is necessary
-        """
-        EpochalCoordinates.transformToEpoch(self,newepoch)
-
-    
-    _dpc = None #default distance should be infinity
-    
-    def _getDistanceau(self):
-        from .constants import aupercm,cmperpc
-        return self._dpc * cmperpc * aupercm
-    def _setDistanceau(self,val):
-        if val is None:
-            self._dpc = None
-        else:
-            from .constants import cmperau,pcpercm
-            self._dpc = float(val)* cmperau * pcpercm
-    distanceau = property(_getDistanceau,_setDistanceau,doc="""
-    Parallax distance to object in AU, or None to assume infinity.
-    """)
-    
-    def _getDistancepc(self):
-        return self._dpc
-    def _setDistancepc(self,val):
-        if val is None:
-            self._dpc = None
-        else:
-            self._dpc = float(val)
-    distancepc = property(_getDistancepc,_setDistancepc,doc="""
-    Parallax distance to object in parsecs, or None to assume infinity.
-    """)
-    
-    
-    #conversion methods and attributes are below
-    
-    
-    def __makeFrameBias():
-        #see USNO circular 179 for frame bias -- all in milliarcsec
-        da0 = -14.6
-        xi0 = -16.6170
-        eta0 = -6.8192
-        #mas->degrees
-        return rotation_matrix(-eta0/3600000,axis='x') *\
-               rotation_matrix(xi0/3600000,axis='y') *\
-               rotation_matrix(da0/3600000,axis='z')
-    frameBiasJ2000 = __makeFrameBias()
-    """
-    Frame bias matrix such that vJ2000 = B*vICRS . 
-    """
-    #make it a static method just for safety even though it isn't really visible
-    __makeFrameBias = staticmethod(__makeFrameBias)
-    
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinates)
-    def _toEq(icrsc=None):
-        if icrsc is None:
-            return self.frameBiasJ2000
-        else:
-            #calls the None-argument version to get the rotation matrix
-            return icrsc.convert(EquatorialCoordinates)
         
-    @CoordinateSystem.registerTransform(EquatorialCoordinates,'self')
-    def _fromEq(eqc=None):
-        if eqc is None:
-            #really we want inverse, but rotations are unitary -> inv==transpose
-            return EquatorialCoordinatesICRS._toEq(None).T 
-        else:
-            #calls the None-argument version to get the rotation matrix
-            return eqc.convert(EquatorialCoordinatesICRS)
-    
-class EclipticCoordinates(EpochalCoordinates):
+        
+class EclipticCoordinatesCIRS(EpochalCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
-    through the ecliptic at the equinox for the specified epoch.
+    through the ecliptic at the current epoch.
     
-    This particular implementation is tied to
-    :class:`EquatorialCoordinatesDynamical2000` for epoch transforms.
+    Note that because the concept of the ecliptic can be complicated or even
+    ill-defined, ecliptic coordinates is astropysics are simply defined as
+    tied to a particular set of equatorial coordinates with a given obliquity
+    model.  For :class:`EclipticCoordinatesCIRS`, the equatorial 
+    coordinates are :class:`EquatorialCoordinatesCIRS` with obliquity
+    given by the IAU 2006 obliquity model (see :func:`obliquity`)
     """
     
-    __slots__ = tuple()
+    __slots__ = ()
     _latlongnames_ = ('beta','lamb')
     _longrange_ = (0,360)
     
+    obliqyear = 2006
+    
     def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
         EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
+        
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
+    def _toEq(eclsc,getmatrix=False):
+        if getmatrix:
+            return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
+        else:
+            #calls the getmatrix=True version
+            return icrsc.convert(EquatorialCoordinatesCIRS)
+        
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
+    def _fromEq(eqc,getmatrix=False):
+        if getmatrix:
+            return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
+        else:
+            #calls the getmatrix=True version
+            return eqc.convert(EclipticCoordinatesCIRS)
+        
+    def transformToEpoch(self,newepoch):
+        eqc = self.convert(EquatorialCoordinatesCIRS)
+        eqc.epoch = newepoch
+        newval = eqc.convert(self.__class__)
+        self._lat._decval = newval._lat._decval
+        self._long._decval = newval._long._decval
+        self._laterr._decval = newval._lat._decval
+        self._longerr._decval = newval._longerr._decval
+        EpochalCoordinates.transformToEpoch(self,newepoch)
+        
+        
+            
+class EclipticCoordinatesEquinox(EpochalCoordinates):
+    """
+    Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
+    through the ecliptic at the current epoch.
+    
+    Note that because the concept of the ecliptic can be complicated or even
+    ill-defined, ecliptic coordinates is astropysics are simply defined as
+    tied to a particular set of equatorial coordinates with a given obliquity
+    model.  For :class:`EclipticCoordinatesEquinox`, the equatorial 
+    coordinates are :class:`EquatorialCoordinatesEquinox` with obliquity
+    given by the IAU 1980 obliquity model (see :func:`obliquity`)
+    """
+    
+    __slots__ = ()
+    _latlongnames_ = ('beta','lamb')
+    _longrange_ = (0,360)
+    
+    obliqyear = 1980
+    
+    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
+        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
+        
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
+    def _toEq(eclsc,getmatrix=False):
+        if getmatrix:
+            return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
+        else:
+            #calls the getmatrix=True version
+            return icrsc.convert(EquatorialCoordinatesEquinox)
+        
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
+    def _fromEq(eqc,getmatrix=False):
+        if getmatrix:
+            return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
+        else:
+            #calls the getmatrix=True version
+            return eqc.convert(EclipticCoordinatesEquinox)
         
     def transformToEpoch(self,newepoch):
         eqc = self.convert(EquatorialCoordinatesEquinox)
@@ -1673,7 +1853,6 @@ class EclipticCoordinates(EpochalCoordinates):
         self._laterr._decval = newval._lat._decval
         self._longerr._decval = newval._longerr._decval
         EpochalCoordinates.transformToEpoch(self,newepoch)
-        
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
@@ -1705,6 +1884,31 @@ class SupergalacticCoordinates(LatLongCoordinates):
     _nsgp_J2000 = EquatorialCoordinatesFK5(283.75420420,15.70894043,epoch=2000)
     _sglong0_J2000 = 42.30997710
     
+class HorizontalCoordinates(LatLongCoordinates):
+    """
+    This object represents an angular location on the unit sphere, with the 
+    north pole of the coordinate position fixed to the local zenith
+    
+    To convert from other :class:`Coordinate` types to horizontal positions, see 
+    :class:`astropysics.obstools.Site`, as site information is required for
+    these corrections
+    """  
+    __slots__ = tuple()
+    _latlongnames_ = ('alt','az')
+    _longrange_ = (0,360)
+    
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
+    def _toHoriz(incoosys=None):
+        raise TypeError('use astropysics.obstools.Site methods to transform celestial to terrestrial coordinates')
+    
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
+    def _fromHoriz(incoosys=None):
+        raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
+    
+EquatorialCoordinates = EquatorialCoordinatesEquinox
+EclipticCoordinates = EclipticCoordinatesEquinox
 
 def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
     """
@@ -1747,7 +1951,7 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
 #because of it's use for generating class/module variables
 
     
-def obliquity(jd,algorithm=2000):
+def obliquity(jd,algorithm=2006):
     """
     Computes the obliquity of the Earth at the requested Julian Date. The 1980
     algorithm description can be found in the Explanatory Supplement to the
@@ -1755,14 +1959,17 @@ def obliquity(jd,algorithm=2000):
     
     :param jd: julian date at which to compute obliquity
     :type jd: scalar or array-like
-    :param algorithm: year of IAU algorithm - can be 2000 (default) or 1980
+    :param algorithm: 
+        Year of IAU algorithm - can be 2006, 2000 or 1980.  2006 appears to
+        be identical to 2000 based on the SOFA obl06.c
+    
     :type algorithm: int
     
     :returns: mean obliquity in degrees (or array of obliquities)
     """
     T = (jd-2451545.0)/36525.0
     
-    if algorithm==2000:
+    if algorithm==2006 or algorithm==2000:
         p = (-0.0000000434,-0.000000576,0.00200340,-0.0001831,-46.836769,84381.406)
     elif algorithm==1980:
         p = (0.001813,-0.00059,-46.8150,84381.448)
