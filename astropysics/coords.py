@@ -1450,7 +1450,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
             
             
             
-def _precessionMatrixJ2000Capitaine(epoch):
+def _precession_matrix_J2000_Capitaine(epoch):
         """
         Computes the precession matrix from J2000 to the given Julian Epoch.
         Expression from from Capitaine, N. et al. 2003 as written in the USNO
@@ -1470,17 +1470,36 @@ def _precessionMatrixJ2000Capitaine(epoch):
                rotation_matrix(theta,'y') *\
                rotation_matrix(-zeta,'z')
                
-def _nutationMatrix200062000A(epoch):
+               
+def _nutation_components20062000A(epoch):
+    from obstools import epoch_to_jd
+    
+    epsa = obliquity(epoch_to_jd(epoch),2006)
+    
+    raise NotImplementedError('2006/2000A nutation model not yet implemented')
+
+    return epsa,dpsi,deps
+
+def _nutation_components2000B(epoch):
+    from obstools import epoch_to_jd
+    
+    epsa = obliquity(epoch_to_jd(epoch),2000)
+    
+    from warnings import warn
+    warn('2000B nutation model not yet working')
+    dpsi = deps = 0
+    
+    return epsa,dpsi,deps
+               
+def _nutation_matrix(epoch):
     """
-    Nutation matrix adapted from SOFA IAU 2006/2000A model.
+    Nutation matrix generated from nutation components.
     
     Matrix converts from mean coordinate to true coordinate as
     r_true = M * r_mean
     """
-    from warnings import warn
-    warn('nutation model not fully implemented yet - for now no nutation performed')
-    
-    epsa = dpsi = deps = 0
+    #TODO: implement higher precsiion 2006/2000A model if requested/needed
+    epsa,dpsi,deps = _nutation_components2000B(epoch)
     
     return rotation_matrix(epsa,'x') *\
            rotation_matrix(-dpsi,'z') *\
@@ -1496,11 +1515,11 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     Intermediate Pole (CIP) and the origin of RA is at the Celestial
     Intermediate Origin (CIO).
     
-    Changes to the :attr:`epoch` will result in the coordinates being
-    updated for precession nutation. If abberation or annual parallax
-    corrections are necessary, convert to :class:`EquatorialCoordinatesICRS`,
-    change the epoch, and then convert back to
-    :class:`EquatorialCoordinatesCIRS`.
+    Changes to the :attr:`epoch` will result in the coordinates being updated
+    for precession nutation. Nutation currently uses the IAU 2000B model that
+    should be good to ~1 mas. If abberration or annual parallax corrections are
+    necessary, convert to :class:`EquatorialCoordinatesICRS`, change the epoch,
+    and then convert back to :class:`EquatorialCoordinatesCIRS`.
     
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
@@ -1510,7 +1529,8 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     raise an :exc:`TypeError`.
     """
     
-    
+    #if True, nutation will be used, if False, it will be ignored
+    _nuton = True
     
     def transformToEpoch(self,newepoch):
         """
@@ -1518,13 +1538,22 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         IAU 2000 precessions from Capitaine, N. et al. 2003 as written in the
         USNO Circular 179.
         """
-        #convert from current to J2000
-        B = _precessionMatrixJ2000Capitaine(self.epoch).T #T==inv; real unitary
-        Bn = _nutationMatrix2000A2006(self.epoch).T 
-        #convert to new epoch
-        A = _precessionMatrixJ2000Capitaine(newepoch)
-        An = _nutationMatrix2000A2006(newepoch) 
-        self.matrixTransform(An*A*B*Bn)
+        if EquatorialCoordinatesCIRS._nuton:
+            #convert from current to J2000
+            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+            Bn = _nutation_matrix(self.epoch).T 
+            #convert to new epoch
+            A = _precession_matrix_J2000_Capitaine(newepoch)
+            An = _nutation_matrix(newepoch) 
+            M = An*A*B*Bn
+        else:
+            #convert from current to J2000
+            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+            #convert to new epoch
+            A = _precession_matrix_J2000_Capitaine(newepoch)
+            M = A*B
+            
+        self.matrixTransform(M)
         EpochalCoordinates.transformToEpoch(self,newepoch)
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
@@ -1557,9 +1586,9 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
         USNO Circular 179.
         """
         #convert from current to J2000
-        B = _precessionMatrixJ2000Capitaine(self.epoch).T #T==inv; real unitary
+        B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
         #convert to new epoch
-        A = _precessionMatrixJ2000Capitaine(newepoch)
+        A = _precession_matrix_J2000_Capitaine(newepoch)
         self.matrixTransform(A*B)
         EpochalCoordinates.transformToEpoch(self,newepoch)
             
@@ -1609,7 +1638,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     def _toEqE(icrsc,getmatrix=False):
         if getmatrix:
             B = self.frameBiasJ2000
-            P = _precessionMatrixJ2000Capitaine(icrsc.epoch)
+            P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
             return P*B #no nutation for equinox-based
         else:
             #calls the getmatrix=True version
@@ -1618,9 +1647,12 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     def _toEqC(icrsc,getmatrix=False):
         if getmatrix:
             B = self.frameBiasJ2000
-            P = _precessionMatrixJ2000Capitaine(icrsc.epoch)
-            N = _nutationMatrix200062000A(icrsc.epoch)
-            return N*P*B
+            P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
+            if EquatorialCoordinatesCIRS._nuton:
+                N = _nutation_matrix(icrsc.epoch)
+                return N*P*B
+            else:
+                return P*B
         else:
             #calls the getmatrix=True version
             return icrsc.convert(EquatorialCoordinates)
