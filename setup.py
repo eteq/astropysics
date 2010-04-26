@@ -31,12 +31,34 @@ class apy_build_py(du_build_py):
         timestamp = str(datetime.datetime.now())
         t = (timestamp,version,major,minor,bugfix,dev)
         return _frozen_version_py_template%t
+        
+#custom sphinx builder just makes the directory to build if it hasn't already been made
+try:
+    from sphinx.setup_command import BuildDoc
+    
+    class apy_build_sphinx(BuildDoc):
+        def finalize_options(self):
+            from os.path import isfile    
+            from distutils.cmd import DistutilsOptionError
+            
+            if self.build_dir is not None:
+                if isfile(self.build_dir):
+                    raise DistutilsOptionError('Attempted to build_sphinx into a file '+self.build_dir)
+                self.mkpath(self.build_dir)
+            return BuildDoc.finalize_options(self)
+            
+except ImportError: #sphinx not present
+    apy_build_sphinx = None
     
 descrip = """
 `astropysics` contains a variety of utilities and algorithms for reducing, analyzing, and visualizing astronomical data.
       
 See http://packages.python.org/Astropysics/ for detailed documentation.
 """
+
+cmdclassd = {'build_py' : apy_build_py}
+if apy_build_sphinx is not None:
+    cmdclassd['build_sphinx'] = apy_build_sphinx
 
 setup(name='Astropysics',
       version=versionstr,
@@ -59,5 +81,5 @@ setup(name='Astropysics',
       license = 'Apache License 2.0',
       url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
       long_description=descrip,
-      cmdclass = {'build_py' : apy_build_py}
+      cmdclass = cmdclassd
      )
