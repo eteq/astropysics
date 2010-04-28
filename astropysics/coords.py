@@ -235,7 +235,10 @@ class AngularCoordinate(object):
                     raise ValueError('Invalid string input for AngularCoordinate: '+inpt)
             
         elif isSequenceType(inpt) and len(inpt)==3:
-            self.degminsec = inpt
+            if sghms:
+                self.hrsminsec = inpt
+            else:
+                self.degminsec = inpt
         elif radians:
             self._decval = float(inpt)
         else:
