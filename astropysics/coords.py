@@ -66,8 +66,9 @@ Module API
 #  Rotation Models": http://aa.usno.navy.mil/publications/docs/Circular_179.pdf
 from __future__ import division,with_statement
 
-from .constants import pi
+from .constants import pi,asecperrad
 from .utils import DataObjectRegistry,rotation_matrix
+from .io import _get_package_data
 import numpy as np
 _twopi = 2*pi
 
@@ -1474,25 +1475,101 @@ def _precession_matrix_J2000_Capitaine(epoch):
                rotation_matrix(-zeta,'z')
                
                
+def _load_nutation_data(datafn,seriestype):
+    """
+    Loads nutation series from saved data files.
+    
+    Seriestype can be 'lunisolar' or 'planetary'
+    """
+    if seriestype == 'lunisolar':
+        dtypes = [('nl',int),
+                  ('nlp',int),
+                  ('nF',int),
+                  ('nD',int),
+                  ('nOm',int),
+                  ('ps',float),
+                  ('pst',float),
+                  ('pc',float),
+                  ('ec',float),
+                  ('ect',float),
+                  ('es',float)]
+    elif seriestype == 'planetary':
+        dtypes = [('nl',int),
+                  ('nF',int),
+                  ('nD',int),
+                  ('nOm',int),
+                  ('nme',int),
+                  ('nve',int),
+                  ('nea',int),
+                  ('nma',int),
+                  ('nju',int),
+                  ('nsa',int),
+                  ('nur',int),
+                  ('nne',int),
+                  ('npa',int),  
+                  ('sp',int),
+                  ('cp',int),
+                  ('se',int),
+                  ('ce',int)]
+    else:
+        raise ValueError('requested invalid nutation series type')
+    
+    lines = [l for l in _get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    
+    lists = [[] for n in dtypes]
+    for l in lines:
+        for i,e in enumerate(l.split(' ')):
+            lists[i].append(dtypes[i][1](e))
+    return np.rec.fromarrays(lists,names=[e[0] for e in dtypes])
+
+_nut_data_00a_ls = _load_nutation_data('iau00a_nutation_ls.tab','lunisolar')
+_nut_data_00a_pl = _load_nutation_data('iau00a_nutation_pl.tab','planetary')
 def _nutation_components20062000A(epoch):
     from obstools import epoch_to_jd
     
     epsa = obliquity(epoch_to_jd(epoch),2006)
     
-    raise NotImplementedError('2006/2000A nutation model not yet implemented')
+    raise NotImplementedError('2006/2000A nutation model not implemented')
 
     return epsa,dpsi,deps
 
+
+    
+_nut_data_00b = _load_nutation_data('iau00b_nutation.tab','lunisolar')
 def _nutation_components2000B(epoch):
     from obstools import epoch_to_jd
+    jd = epoch_to_jd(epoch)
+    epsa = obliquity(jd,2000)
+    t = (jd-epoch_to_jd(2000))/36525
     
-    epsa = obliquity(epoch_to_jd(epoch),2000)
+    #Fundamental (Delaunay) arguments from Simon et al. (1994) via SOFA
+    #Mean anomaly of moon
+    el = ((485868.249036 + 1717915923.2178*t)%1296000)/asecperrad
+    #Mean anomaly of sun
+    elp = ((1287104.79305 + 129596581.0481*t)%1296000)/asecperrad
+    #Mean argument of the latitude of Moon
+    F = ((335779.526232 + 1739527262.8478*t)%1296000)/asecperrad
+    #Mean elongation of the Moon from Sun
+    D = ((1072260.70369 + 1602961601.2090*t)%1296000)/asecperrad
+    #Mean longitude of the ascending node of Moon
+    Om = ((450160.398036 + -6962890.5431*t)%1296000)/asecperrad
     
-    from warnings import warn
-    warn('2000B nutation model not yet working')
-    dpsi = deps = 0
+    #compute nutation series using array loaded from data directory
+    dat = _nut_data_00b
+    arg = dat.nl*el + dat.nlp*elp + dat.nF*F + dat.nD*D + dat.nOm*m
+    sarg = np.sin(arg)
+    carg = np.cos(arg)
     
-    return epsa,dpsi,deps
+    p1uasecperrad = asecperrad*1e7 #0.1 microasrcsecperrad
+    dpsils = ((dat.ps + dat.pst*t)*sarg + dat.pc*carg)/p1uasecperrad
+    depsls = ((dat.ec + dat.ect*t)*carg + dat.es*sarg)/p1uasecperrad
+    
+    #fixed offset in place of planetary tersm
+    masecperrad = asecperrad*1e3 #milliarcsec per rad
+    dpsipl = -0.135/masecperrad
+    depspl =  0.388/masecperrad
+    
+    return epsa,dpsils+dpsipl,depsls+depspl
                
 def _nutation_matrix(epoch):
     """
@@ -3425,9 +3502,9 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     
     if hasattr(angsize,'arcsec'):
         angsize = angsize.arcsec
-    sintheta = np.sin(angsize/206265)
+    sintheta = np.sin(angsize/asecperrad)
     return d*(1/sintheta/sintheta-1)**-0.5
-    #return angsize*d/206265
+    #return angsize*d/asecperrad
 
 def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     """
@@ -3468,7 +3545,7 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
         d = zord
         
     r=physize
-    res = 206265*np.arcsin(r*(d*d+r*r)**-0.5)
+    res = asecperrad*np.arcsin(r*(d*d+r*r)**-0.5)
     
     if objout:
         return AngularSeperation(res/3600)
