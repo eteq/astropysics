@@ -806,15 +806,28 @@ def load_wcs_spectrum(fn,fluxext=1,errext=None,hdrext=None,errtype='err'):
     try:
         hdr = f[fluxext if hdrext is None else hdrext].header
         
-        for k in ('CTYPE1','CRVAL1','CD1_1'):
-            if k not in hdr:
-                raise ValueError('missing header keyword %s'%k)
+        if 'CTYPE1' not in hdr:
+            from warnings import warn
+            warn('No CTYPE1 keyword, so uncertain if this is a linear spectrum')
+        else:
+            if not hdr['CTYPE1'] == 'LINEAR':
+                raise ValueError('Spectrum coordinates must be linear')
         
-        if not hdr['CTYPE1'] == 'LINEAR':
-            raise ValueError('Spectrum coordinates must be linear')
+        if 'CRVAL1' not in hdr:
+            raise ValueError('missing header keyword CRVAL1')
+        
+        if 'CD1_1' in hdr:
+            dispersion = hdr['CD1_1']
+        elif 'CDELT1' in hdr:
+            dispersion = hdr['CDELT1']
+        else:
+            raise ValueError('missing header keyword CD1_1 or CDELT1')
         
         flux = f[fluxext].data
-        x = np.arange(flux.size)*hdr['CD1_1']+hdr['CRVAL1']
+        #sometimes this is a 1xN array instead of just N:
+        if len(flux.shape)==2 and flux.shape[0]==1:
+            flux = flux[0]
+        x = np.arange(flux.size)*dispersion+hdr['CRVAL1']
         
         if errext is not None:
             err = f[errext].data
