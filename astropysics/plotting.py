@@ -786,6 +786,10 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
     lims can be None or (xmin,xmax,ymin,ymax)
     
     skwargs goes into scatter(), ckwargs goes into contour() or contourf() 
+    
+    WARNING: this function will likely be adapted to use 
+    :func:`matplotlib.pyplot.hexbin` in the near future instead of contour or 
+    contourf
     """
     from matplotlib.colors import Normalize
     
@@ -962,6 +966,93 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
             plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
         else:
             plt.ylabel('N(%s%s)'%(ltgt,xlabel))
+        
+        if preint:    
+            plt.draw()
+            plt.show()
+    finally:
+        plt.interactive(preint)
+        
+def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
+                     styles=None,**kwargs):
+    """
+    Generates histograms in the first parameter that are split over ranges based
+    on a second parameter.
+    
+    :param vals: values for generating the histograms
+    :type vals: array-like
+    :param edgevals: values to use for splitting the histograms
+    :type edgevals: array-like
+    :param edges: 
+        A sequence of values giving the boundaries in the `edgeval` space for
+        each of the histograms (lower bound is inclusive).  Must be 
+        monotonically increasing.
+    :type edges: sequence with len>1
+    :param bins: 
+        Bins for the `vals` following the form of
+        :func:`matplotlib.pyplot.hist`.  If None or an integer, the bins
+        will be inferred from the full data set.
+    :param clf: if True, the current figure will be cleared before plotting
+    :type clf: bool
+    :param colors: line colors for each histogram or None for default
+    :type styles: sequence of strings or None
+    :param styles: line styles for each of the histograms or None for default 
+    :type styles: sequnce of strings or None
+
+    kwargs are passed into the calls to :func:`matplotlib.pyplot.hist`
+    """
+    if len(edges)<2:
+        raise ValueError('edges must be length>1')
+    if colors is not None and len(edges)-1!=len(colors):
+        raise ValueError('colors must by length of edges minus one')
+    if styles is not None and len(edges)-1!=len(styles):
+        raise ValueError('styles must by length of edges minus one')
+    
+    vals = np.array(vals,copy=False)
+    edgevals = np.array(edgevals,copy=False)
+    if vals.shape != edgevals.shape:
+        raise ValueError('vals and edgevals do not have matching shapes')
+    
+    valslist = []
+    hstrs = []
+    for i in range(len(edges)-1):
+        l = edges[i]
+        u = edges[i+1]
+        if not l<u:
+            raise ValueError('edges not monotonically increasing')
+        valslist.append(vals[(l<=edgevals)&(edgevals<u)])
+        hstrs.append('[%.3f,%.3f)'%(l,u))
+    
+    if bins is None:
+        bins = np.histogram(vals)[1]
+    elif isinstance(bins,int):
+        bins = np.histogram(vals,bins=bins)[1]
+    
+    kwargs.setdefault('histtype','step')
+    lsmap = {'-':'solid','--':'dashed','-.':'dashdot',':':'dotted',
+             'solid':'solid','dashed':'dashed','dashdot':'dashdot','dotted':'dotted'}
+    
+    preint = plt.isinteractive()
+    try:
+        if clf:
+            plt.clf()
+            
+        maxh = -1
+        for i,v in enumerate(valslist):
+            if colors is not None:
+                kwargs['color'] = colors[i]
+            if styles is not None:
+                kwargs['ls'] = lsmap[styles[i]]
+            kwargs['label'] = hstrs[i]
+            kwargs['bins'] = bins
+            count = plt.hist(v,**kwargs)[0]
+            maxh = max(maxh,np.max(count))
+            
+        plt.ylim(0,maxh)
+        
+        if preint:    
+            plt.draw()
+            plt.show()
     finally:
         plt.interactive(preint)
 
