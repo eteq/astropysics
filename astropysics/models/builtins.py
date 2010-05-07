@@ -731,13 +731,21 @@ class TwoSlopeATanModel(FunctionModel1DAuto):
     form is
     
     .. math::
-        y = ax \\arctan(-\\frac{x-x0}{w}) + bx \\arctan(\\frac{x-x0}{w}) + c
+        y = (x-x_0) \\left[ \\frac{a+b}{2} - 
+                    \\frac{a-b}{\\pi} \\arctan(\\frac{x-x_0}{w})\\right] + c
     
     `a` is the slope for small x, `b` for large x, `c` is the value at x=x0,
     `x0` is the location of the transition, and `w` is the width of the
     transition
     
     """
+    #alternative representation for docs:
+    #.. math::
+    #    y = \\frac{a (x-x_0)}{\\pi} \\left(\\frac{\\pi}{2}-\\arctan(\\frac{x-x_0}{w}) \\right) +
+    #        \\frac{b (x-x_0)}{\\pi} \\left(\\frac{\\pi}{2}+\\arctan(\\frac{x-x_0}{w}) \\right) + c
+    
+    
+    
     def f(self,x,a=1,b=2,c=0,x0=0,w=1):
         xoff = x-x0
         tana = np.arctan(-xoff/w)/pi+0.5
