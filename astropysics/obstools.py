@@ -76,6 +76,8 @@ except ImportError:
             from datetime import timedelta
             return timedelta(hours=self._hoffset)
         
+        
+#<----------------------Time and calendar functions---------------------------->
 mjdoffset = 2400000.5
 """
 Offset between Julian Date and Modified Julian Date - e.g. mjd = jd - mjdoffset
@@ -624,11 +626,69 @@ __dat_changes = np.array([
 __dat_m = 12*__dat_changes[0] + __dat_changes[1]
     
 
+#<-------------------Site and Observing/Instrumentation-related---------------->
+
+def geographic_to_geocentric_latitude(geoglat):
+    """
+    Converts a geographic/geodetic latitude to a geocentric latitude.
+    
+    :param geoglat:
+        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
+        create one) or an angle in degrees for the geographic latitude.
+        
+    :returns: 
+        An :class:`astropysics.coords.AngularCoordinate` object with the
+        geocentric latitude.
+    """
+    from astropysics.constants import Rea,Reb
+    from astropysics.coords import AngularCoordinate
+    from operator import isSequenceType
+    
+    if not isinstance(geoglat,AngularCoordinate):
+        if isSequenceType(geoglat):
+            rads = AngularCoordinate(*geoglat).radians
+        else:
+            rads = AngularCoordinate(geoglat).radians
+    else:
+        rads = geoglat.radians
+    
+    boasq = (Reb/Rea)**2
+    return AngularCoordinate(np.arctan(boasq*np.tan(rads)),radians=True)
+
+def geocentric_to_geographic_latitude(geoclat):
+    """
+    Converts a geocentric latitude to a geographic/geodetic latitude.
+    
+    :param geoclat:
+        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
+        create one) or an angle in degrees for the geocentric latitude.
+        
+    :returns: 
+        An :class:`astropysics.coords.AngularCoordinate` object with the
+        geographic latitude.
+    """
+    from astropysics.constants import Rea,Reb
+    from astropysics.coords import AngularCoordinate
+    from operator import isSequenceType
+    
+    if not isinstance(geoclat,AngularCoordinate):
+        if isSequenceType(geoclat):
+            rads = AngularCoordinate(*geoclat).radians
+        else:
+            rads = AngularCoordinate(geoclat).radians
+    else:
+        rads = geoclat.radians
+        
+    boasq = (Reb/Rea)**2
+    return AngularCoordinate(np.arctan((1/boasq)*np.tan(rads)),radians=True)
+
+
 class Site(object):
     """
     This class represents a location on Earth from which skies are observable.
     
-    lat/long are coords.AngularCoordinate objects, altitude in meters
+    lat/long are coords.AngularCoordinate objects, altitude in meters. 
+    `latitude` here is the geographic/geodetic latitude.
     """
 #    tznames = {'EST':-5,'CST':-6,'MST':-7,'PST':-8,
 #               'EDT':-4,'CDT':-5,'MDT':-6,'PDT':-7}
@@ -673,7 +733,14 @@ class Site(object):
             self._lat = AngularCoordinate(*val)
         else:
             self._lat = AngularCoordinate(val)
-    latitude = property(_getLatitude,_setLatitude,doc='Latitude of the site in degrees')
+    latitude = property(_getLatitude,_setLatitude,doc='Geographic/Geodetic Latitude of the site as an :class:`AngularCoordinate` object')
+    
+    def _getGeocentriclat(self):
+        return geographic_to_geocentric_latitude(self._lat)
+    def _setGeocentriclat(self,val):
+        self._lat = geocentric_to_geographic_latitude(val)
+    geocentriclat = property(_getGeocentriclat,_setGeocentriclat,doc=None)
+    
     
     def _getLongitude(self):
         return self._long
@@ -686,7 +753,7 @@ class Site(object):
             self._long = AngularCoordinate(*val)
         else:
             self._long = AngularCoordinate(val)
-    longitude = property(_getLongitude,_setLongitude,doc='Longitude of the site in degrees')
+    longitude = property(_getLongitude,_setLongitude,doc='Longitude of the site as an :class:`AngularCoordinate` object')
     
     def _getAltitude(self):
         return self._alt
@@ -1735,6 +1802,8 @@ except ValueError: #in case US/Pacific is not present for some reason
     sites['uciobs'] = Site(33.63614044191056,-117.83079922199249,80,-8,'UC Irvine Observatory')
 sites['greenwich'] = Site('51d28m38s',0,7,0,'Royal Observatory,Greenwich')
 __loadobsdb(sites)
+
+
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 
 class Extinction(PipelineElement):
