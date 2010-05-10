@@ -1644,10 +1644,10 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     :attr:`epoch`).
     
     Changes to the :attr:`epoch` will result in the coordinates being updated
-    for precession, but not nutation. Nutation is not planned by the primary
-    author of this package, as IAU 2000 recommends using only CIO-based systems,
-    but if someone actually wants equinox-based nutation, feel free to implement
-    it and pass it along.
+    for precession, but not nutation, nor annual abberation. Neither are
+    planned by the primary author of this package, as IAU 2000 recommends using
+    only CIO-based systems, but if someone actually wants equinox-based
+    nutation, feel free to implement it and pass it along.
     
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
@@ -1681,8 +1681,16 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     inertial frame that only aligns with Earth's equator at J2000, but it is
     nearly an equatorial system at J2000.
     
+    .. note::
+        Strictly speaking this class is actually the Barycentric Celestial
+        Reference System (BCRS), as any space/proper motions are computed before 
+        this object (generally in :class:`EphemerisObject`). But the base
+        reference system for BCRS is ICRS, so it is called ICRS here for
+        clarity.
+        
+    
     .. warning:: 
-        Abberation and annual parralax are not yet included in transformations!
+        Abberation and annual parallax are not yet included in transformations!
         
     """
     
