@@ -1846,17 +1846,26 @@ class SersicModel(FunctionModel1DAuto):
         self.Ae *= val/self.f(0,self.Ae,self.re,self.n)
     A0 = property(_getA0,_setA0,doc='value at r=0')
     
-    def getBn(self,usecache=True):
+    def getBn(self):#,usecache=True):
         """
         Computes :math:`b_n` for the current sersic index.
         """
-        return self.bn(self.n,usecache)
+        from scipy.special import gammaincinv
+        return gammaincinv(2*self.n,0.5)
+    
+    def getBn_estimate(self,usecache=True):
+        """
+        Computes :math:`b_n` for the current sersic index usint the estimate
+        of MacArthur, Courteau, and Holtzman 2003  instead of via an actual
+        gamma function like :meth:`getBn`.
+        """
+        return self.bn_estimate(self.n,usecache)
     
     _bncache={}
     _bnpoly1=np.poly1d([-2194697/30690717750,131/1148175,46/25515,4/405,-1/3])
     _bnpoly2=np.poly1d([13.43,-19.67,10.95,-0.8902,0.01945])
     @staticmethod
-    def bn(n,usecache=True):
+    def bn_estimate(n,usecache=True):
         """
         bn is used to get the half-light radius.  If n is 
         None, the current n parameter will be used
