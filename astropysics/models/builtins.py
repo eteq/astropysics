@@ -1813,6 +1813,14 @@ class EinastoModel(FunctionModel1DAuto):
     :attr:`A` is the density where the log-slope is -2, and :attr:`rs` is the
     corresponding radius. The `alpha` parameter defaults to .17 as suggested by
     Navarro et al. 2010 
+    
+    .. note::
+        The Einasto profile is is mathematically identical to the Sersic profile
+        (:class:`SersicModel`), although the parameterization is different. By
+        Convention, Sersic generally refers to a 2D surface brightness/surface 
+        density profile, while Einasto is usually treated as a 3D density 
+        profile.
+    
     """
     xaxisname = 'r'
     yaxisname = 'rho'
@@ -1828,6 +1836,14 @@ class SersicModel(FunctionModel1DAuto):
         A_e e^{-b_n[(R/R_e)^{1/n}-1]}
     
     Ae is the value at the effective radius re
+    
+    .. note::
+        The Sersic profile is is mathematically identical to the Einasto profile
+        (:class:`EinastoModel`), although the parameterization is different. By
+        Convention, Sersic generally refers to a 2D surface brightness/surface 
+        density profile, while Einasto is usually treated as a 3D density 
+        profile.
+        
     """
     xaxisname = 'r'
     
