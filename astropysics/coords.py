@@ -1525,6 +1525,9 @@ def _load_nutation_data(datafn,seriestype):
 _nut_data_00a_ls = _load_nutation_data('iau00a_nutation_ls.tab','lunisolar')
 _nut_data_00a_pl = _load_nutation_data('iau00a_nutation_pl.tab','planetary')
 def _nutation_components20062000A(epoch):
+    """
+    :returns: eps,dpsi,deps in radians
+    """
     from obstools import epoch_to_jd
     
     epsa = obliquity(epoch_to_jd(epoch),2006)
@@ -1537,6 +1540,9 @@ def _nutation_components20062000A(epoch):
     
 _nut_data_00b = _load_nutation_data('iau00b_nutation.tab','lunisolar')
 def _nutation_components2000B(epoch):
+    """
+    :returns: eps,dpsi,deps in radians
+    """
     from obstools import epoch_to_jd
     jd = epoch_to_jd(epoch)
     epsa = obliquity(jd,2000)
@@ -1569,7 +1575,7 @@ def _nutation_components2000B(epoch):
     dpsipl = -0.135/masecperrad
     depspl =  0.388/masecperrad
     
-    return epsa,dpsils+dpsipl,depsls+depspl
+    return epsa,dpsils+dpsipl,depsls+depspl #all in radians
                
 def _nutation_matrix(epoch):
     """
@@ -1579,11 +1585,11 @@ def _nutation_matrix(epoch):
     r_true = M * r_mean
     """
     #TODO: implement higher precsiion 2006/2000A model if requested/needed
-    epsa,dpsi,deps = _nutation_components2000B(epoch)
+    epsa,dpsi,deps = _nutation_components2000B(epoch) #all in radians
     
-    return rotation_matrix(epsa,'x') *\
-           rotation_matrix(-dpsi,'z') *\
-           rotation_matrix(-(epsa + deps),'x')
+    return rotation_matrix(epsa,'x',False) *\
+           rotation_matrix(-dpsi,'z',False) *\
+           rotation_matrix(-(epsa + deps),'x',False)
 
 class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     """
