@@ -1539,12 +1539,20 @@ def _nutation_components20062000A(epoch):
 
     
 _nut_data_00b = _load_nutation_data('iau00b_nutation.tab','lunisolar')
-def _nutation_components2000B(epoch):
+def _nutation_components2000B(intime,asepoch=True):
     """
+    :param intime: time to compute the nutation components as a JD or epoch
+    :type intime: scalar
+    :param asepoch: if True, `intime` is interpreted as an epoch, otherwise JD
+    :type asepoch: bool
+    
     :returns: eps,dpsi,deps in radians
     """
     from obstools import epoch_to_jd
-    jd = epoch_to_jd(epoch)
+    if asepoch:
+        jd = epoch_to_jd(intime)
+    else:
+        jd = intime
     epsa = obliquity(jd,2000)
     t = (jd-epoch_to_jd(2000))/36525
     
@@ -1562,14 +1570,13 @@ def _nutation_components2000B(epoch):
     
     #compute nutation series using array loaded from data directory
     dat = _nut_data_00b
-    arg = dat.nl*el + dat.nlp*elp + dat.nF*F + dat.nD*D + dat.nOm*m
+    arg = dat.nl*el + dat.nlp*elp + dat.nF*F + dat.nD*D + dat.nOm*Om
     sarg = np.sin(arg)
     carg = np.cos(arg)
     
     p1uasecperrad = asecperrad*1e7 #0.1 microasrcsecperrad
-    dpsils = ((dat.ps + dat.pst*t)*sarg + dat.pc*carg)/p1uasecperrad
-    depsls = ((dat.ec + dat.ect*t)*carg + dat.es*sarg)/p1uasecperrad
-    
+    dpsils = np.sum((dat.ps + dat.pst*t)*sarg + dat.pc*carg)/p1uasecperrad
+    depsls = np.sum((dat.ec + dat.ect*t)*carg + dat.es*sarg)/p1uasecperrad
     #fixed offset in place of planetary tersm
     masecperrad = asecperrad*1e3 #milliarcsec per rad
     dpsipl = -0.135/masecperrad

@@ -533,11 +533,14 @@ def greenwich_sidereal_time(jd,apparent=True):
     
     
     """
-    era = earth_rotation_angle(jd,None)
+    from .constants import asecperrad
+    
+    era = earth_rotation_angle(jd,False) #SOFA routine uses radians version
     
     t = (jd - 2451545.0)/36525
-    gmst = (86400*era + 0.014506 + 4612.156534*t + 1.3915817*t**2 - \
-            0.00000044*t**3 - 0.000029956*t**4 - 0.0000000368*t**5)/3600
+    
+    gmst = era + (0.014506 + 4612.156534*t + 1.3915817*t**2 - 0.00000044*t**3 -\
+            0.000029956*t**4 - 0.0000000368*t**5)/asecperrad
             
     if apparent:
         if apparent == 'simple':
@@ -547,12 +550,12 @@ def greenwich_sidereal_time(jd,apparent=True):
             dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
         else:
             from .coords import _nutation_components2000B
-            eps,dpsi,deps = _nutation_components2000B()
-            dpsi = dspi*12/pi #want dpsi in hours, here it's in radians
-            
-        return (gmst + dpsi*np.cos(eps))%24.0
+            eps,dpsi,deps = _nutation_components2000B(jd,False)
+            dpsi = dpsi 
+           
+        return ((gmst + dpsi*np.cos(eps))*12/pi)%24
     else:
-        return gmst%24.0 
+        return (gmst*12/pi)%24
     
 #    #previous algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
 #    jd0 = np.round(jd-.5)+.5
