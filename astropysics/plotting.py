@@ -974,7 +974,7 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         plt.interactive(preint)
         
 def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
-                     styles=None,**kwargs):
+                     styles=None,edgename='',**kwargs):
     """
     Generates histograms in the first parameter that are split over ranges based
     on a second parameter.
@@ -998,6 +998,8 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
     :type styles: sequence of strings or None
     :param styles: line styles for each of the histograms or None for default 
     :type styles: sequnce of strings or None
+    :param edgename: Name of the variable for the edges (used in legend)
+    :type edgename: string
 
     kwargs are passed into the calls to :func:`matplotlib.pyplot.hist`
     """
@@ -1021,7 +1023,10 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
         if not l<u:
             raise ValueError('edges not monotonically increasing')
         valslist.append(vals[(l<=edgevals)&(edgevals<u)])
-        hstrs.append('[%.3f,%.3f)'%(l,u))
+        if edgename == '':
+            hstrs.append('[%.3f,%.3f)'%(l,u))
+        else:
+            hstrs.append(r'$%.3f \leq %s<%.3f$'%(l,edgename,u))
     
     if bins is None:
         bins = np.histogram(vals)[1]
