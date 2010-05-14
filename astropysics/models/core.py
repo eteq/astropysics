@@ -301,6 +301,12 @@ class FunctionModel(ParametricModel):
     A sequence of the parameter names that by default should be kept fixed.
     """
     
+    rangehint = None
+    """
+    A hint for the relevant range for this model in the form 
+    (dim0lower,dim0upper,dim1lower,dim1upper,...) or None for no hint
+    """
+    
     @abstractmethod
     def f(self,x,*params):
         """
@@ -500,6 +506,11 @@ class FunctionModel(ParametricModel):
                 raise ValueError('No x data provided and no fitted data already present')
         else:
             x = np.array(x,copy=False)
+        if x.dtype.kind == 'f':
+            #for unclear reasons, fitting sometimes misbehaves if a float32 
+            #is used instead of the python system float (usually float64/double)
+            #TODO:understand why this is necessary
+            x = x.astype(float)
         
         if y is None:
             if hasattr(self,'data') and self.data is not None:
@@ -2927,14 +2938,17 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                     datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
                 maxmind = (np.max(dataval),np.min(dataval))
             elif datarange is None:
-                raise ValueError("Can't choose limits for plotting without data or a range hint")
+                if self.rangehint is not None:
+                    datarange = self.rangehint
+                else:
+                    raise ValueError("Can't choose limits for plotting without data or a range hint")
                 
             
             grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
             res = self(grid)
             
             if log:
-                if 'mag' in log:
+                if isinstance(log,basestring) and 'mag' in log:
                     lognomag = log.replace('mag','')
                     zpt = float(lognomag) if lognomag.strip() != '' else 0
                     logfunc = lambda x:zpt-2.5*np.log10(x)
@@ -3004,7 +3018,10 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 datarange = (np.min(xd),np.max(xd),np.min(yd),np.max(yd))
             maxmind = (np.max(data[1]),np.min(data[1]))
         elif datarange is None:
-            raise ValueError("Can't choose limits for plotting without data or a range hint")
+            if self.rangehint is not None:
+                datarange = self.rangehint
+            else:
+                raise ValueError("Can't choose limits for plotting without data or a range hint")
             maxmind = None
         
         grid = np.mgrid[datarange[0]:datarange[1]:1j*nx,datarange[2]:datarange[3]:1j*ny]
