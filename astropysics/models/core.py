@@ -6,6 +6,9 @@ used in astropysics, seperated from the implementations of specific models found
 in the :mod:`builtins` module.
 
 
+
+.. |attrdata| replace:: :attr:`data <astropysics.models.core.ParametricModel.data>`
+
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -44,7 +47,7 @@ class ModelTypeError(Exception):
 class ParametricModel(object):
     """
     The superclass of all models with parameters. Subclasses should implement
-    abstract properties and methods:
+    the following abstract properties and methods:
     
     * :meth:`__call__`
         Takes a single argument as the model input, returns the model output
@@ -70,8 +73,14 @@ class ParametricModel(object):
     def __call__(self,x):
         raise NotImplementedError
        
-    params = abstractproperty(doc='a sequence of the parameter names')     
-    parvals = abstractproperty(doc='a sequence of the values in the parameters')       
+    params = abstractproperty(doc='A sequence of the parameter names (not editable in instances)')
+    """
+    A sequence of the parameter names (not editable for instances).
+    """     
+    parvals = abstractproperty(doc='The sequence of parameters values in the same order as :attr:`params`')       
+    """
+    The sequence of parameters values in the same order as :attr:`params`.
+    """  
     
     def _getPardict(self):
         return dict([t for t in zip(self.params,self.parvals)]) 
@@ -101,14 +110,21 @@ class ParametricModel(object):
             except TypeError,e:
                 e.args = ('invalid type for model data',)
                 raise
-    data = property(_getData,_setData,doc='data should be either None, or (datain,dataout,weights)')
+    data = property(_getData,_setData,doc="""
+    `data` should be either None, or a tuple(datain,dataout,weights).
+    """)
     
     def inv(self,output,*args,**kwargs):
         """
-        Compute the inverse of this model for the requested output
+        Compute the inverse of this model for the requested output.
         
-        It should raise a ModelTypeError if the model is not invertable for
-        the provided data set
+        :param output: 
+            The output value of the model at which to compute the inverse.
+        
+        :returns: The input value at which the model produces `output`
+        
+        :except ModelTypeError: 
+            If the model is not invertable for the provided data set.
         """
         raise ModelTypeError('Model is not invertible')
     
@@ -451,8 +467,8 @@ class FunctionModel(ParametricModel):
               that match one of the above two conditions
 
         :param savedata: 
-            If True, `x`,`y`,and`weights` will be saved to self.data. Otherwise,
-            data will be discarded after fitting.
+            If True, `x`,`y`,and `weights` will be saved to |attrdata|.
+            Otherwise, data will be discarded after fitting.
         :type savedata: bool
         :param updatepars:  
             If True, sets the parameters on the object to the best-fit values.
@@ -690,9 +706,9 @@ class FunctionModel(ParametricModel):
         """
         Determines the standard deviation of the model from the supplied data
         
-        :param x: Input data value or None to use stored :attr:`data`
+        :param x: Input data value or None to use stored |attrdata|
         :type x: array-like or None
-        :param y: Output data value or None to use stored :attr:`data`
+        :param y: Output data value or None to use stored |attrdata|
         :type y: array-like or None
         
         
@@ -714,9 +730,9 @@ class FunctionModel(ParametricModel):
         Compute residuals of the provided data against the model, e.g.
         :math:`y-{\\rm model}(x)`.
         
-        :param x: Input data value or None to use stored :attr:`data`
+        :param x: Input data value or None to use stored |attrdata|
         :type x: array-like or None
-        :param y: Output data value or None to use stored :attr:`data`
+        :param y: Output data value or None to use stored |attrdata|
         :type y: array-like or None
         :param retdata: If True, returns the data along with the model.
         :type retdata: bool
@@ -744,14 +760,14 @@ class FunctionModel(ParametricModel):
         """
         Computes the chi-squared statistic for the data assuming this model.
         
-        :param x: Input data value or None to use stored :attr:`data`
+        :param x: Input data value or None to use stored |attrdata|
         :type x: array-like or None
-        :param y: Output data value or None to use stored :attr:`data`
+        :param y: Output data value or None to use stored |attrdata|
         :type y: array-like or None
         :param weights: 
             Weights to adjust chi-squared, typically for error bars.
             Statistically interpreted as the inverse error (*not* inverse
-            variance). If None, any stored :attr:`data` will be used.
+            variance). If None, any stored |attrdata| will be used.
         :type weights: array-like or None
         
         :returns: tuple of floats (chi2,reducedchi2,p-value)
@@ -805,22 +821,22 @@ class FunctionModel(ParametricModel):
         in the fit.
         
         :param x: 
-            The input data - if None, will be taken from the :attr:`data`
+            The input data - if None, will be taken from the |attrdata|
             attribute.
         :type x: array-like or None
         :param y: 
-            The output data - if None, will be taken from the :attr:`data`
+            The output data - if None, will be taken from the |attrdata|
             attribute.
         :type y: array-like or None
         :param xerr: 
             Errors for the input data (assumed to be normally distributed), or
-            if None, will be taken from the :attr:`data`. Alternatively, it can
+            if None, will be taken from the |attrdata|. Alternatively, it can
             be a function that accepts the input data as the first argument and
             returns corresponding monte carlo sampled values.
         :type xerr: array-like, callable, or None
         :param yerr: 
             Errors for the output data (assumed to be normally distributed), or
-            if None, will be taken from the :attr:`data`. Alternatively, it can
+            if None, will be taken from the |attrdata|. Alternatively, it can
             be a function that accepts the output data as the first argument and
             returns corresponding monte carlo sampled values.
         :type yerr: array-like, callable, or None
@@ -862,7 +878,8 @@ class FunctionModel(ParametricModel):
         
         .. note::
             If `x`, `y`, `xerr`, or `yerr` are provided, they do *not* overwrite
-            the stored :attr:`data`, unlike most other methods for this class.
+            the stored |attrdata|, unlike most other methods for this class.
+            
         """
         if x is None:
             if self.data is None:
@@ -1565,14 +1582,19 @@ class FunctionModel1D(FunctionModel):
         :type logplot: '','x','y', or 'xy' string
         :param data: 
             Determines what (if any) data to display. If None, no data is
-            displayed. If 'auto', data from the :attr:`data` attribute of the
+            displayed. If 'auto', data from the |attrdata| attribute of the
             :class:`FunctionModel1D` will be used if present, or nothing if the
-            :attr:`data` attribute is empty or None. Otherwise, the data to be
+            |attrdata| attribute is empty or None. Otherwise, the data to be
             plotted (and possibly errors) can be provided as arrays or as a
             dictionary of inputs to the :func:`matplotlib.pyplot.scatter`
             function.
         :type data: 
             'auto', None, or array like of the form (x,y) or (x,y,(xerr,yerr))
+            
+        .. note::
+            By default, the model is plotted *over* the data points. If the
+            points should be drawn on top of the model, set the keyword argument
+            `zorder` to 0.
             
         """
         from matplotlib import pyplot as plt
@@ -1614,6 +1636,8 @@ class FunctionModel1D(FunctionModel):
             
             if clf:
                 plt.clf()
+                
+            #plot the model
             if 'x' in logplot and 'y' in logplot:
                 plt.loglog(x,y,*args,**kwargs)
             elif 'x' in logplot:
@@ -1623,18 +1647,22 @@ class FunctionModel1D(FunctionModel):
             else:
                 plt.plot(x,y,*args,**kwargs)
             
+            #now plot the data if present
             if data is not None:
                 if isMappingType(data):
                     if clf and 'c' not in data:
                         data['c']='g'
                     plt.scatter(**data)
                 else:
-                    plt.scatter(data[0],data[1],c='r',zorder=10)
+                    plt.scatter(data[0],data[1],c='r')
                     if data[2] is not None:
                         if len(data[2].shape)>1:
                             plt.errorbar(data[0],data[1],data[2][1],data[2][0],fmt=None,ecolor='k')
                         else:
                             plt.errorbar(data[0],data[1],data[2],fmt=None,ecolor='k')
+                            
+            
+                            
             plt.xlim(lower,upper)
             
             if self.xaxisname:
@@ -1802,6 +1830,7 @@ class FunctionModel1D(FunctionModel):
             If overridden in a subclass, the signature should be
             derivative(self,x,dx=1) , but dx will typically be ignored if an
             analytic solution is available. 
+            
         """
         if dx is None:
             x = np.array(x,copy=False)
@@ -2753,6 +2782,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             integrations if sampling is None, with lastintegrate[0] storing the
             result and lasteintegrate[1] storing the error on the integral for
             each pixel.
+            
         """
         import scipy.integrate as itg
         
@@ -2908,8 +2938,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         :type clf: bool
         :param data: 
             Data to be plotted along with the model.  If None, no data will be
-            plotted, or if 'auto', it will be taken from :attr:`model.data` if 
-            present.
+            plotted, or if 'auto', it will be taken from |attrdata| (if
+            present).
         :type data: array-like, None, or 'auto'
         :param log:  
             Can be False, True (natural log), '10' (base-10), 'mag', or 'mag##'
@@ -3587,7 +3617,7 @@ def scale_model(model,scaleparname='A'):
     the wrapped model (e.g. :math:`A m(x)`).
     
     :param model: the model to wrap (or a name of a model that will be created)
-    :type model: :class`FunctionModel` object or string
+    :type model: :class:`FunctionModel` object or string
     :param scaleparname:
         name for the parameter controlling the scaling factor
     :type scaleparname: string
@@ -3610,7 +3640,7 @@ def offset_model(model,offsetparname='C'):
     on the wrapped model (e.g. :math:`m(x)+C`). 
     
     :param model: the model to wrap (or a name of a model that will be created)
-    :type model: :class`FunctionModel` object or string
+    :type model: :class:`FunctionModel` object or string
     :param offsetparname:
         name for the parameter controlling the additive offset value
     :type offsetparname: string
@@ -3633,7 +3663,7 @@ def scale_and_offset_model(model,scaleparname='A',offsetparname='C'):
     scale and an additive offset on the wrapped model. (e.g. :math:`A m(x)+C`)
     
     :param model: the model to wrap (or a name of a model that will be created)
-    :type model: :class`FunctionModel` object or string
+    :type model: :class:`FunctionModel` object or string
     :param scaleparname:
         name for the parameter controlling the scaling factor
     :type scaleparname: string

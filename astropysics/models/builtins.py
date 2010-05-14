@@ -391,7 +391,8 @@ class GaussianModel(FunctionModel1DAuto):
     Normalized 1D gaussian function:
     
     .. math::
-        f(x) = e^{\\frac{-(x-\\mu)^2}{2 \\sigma^2}}
+        f(x) = \\frac{A}{\\sqrt{2 \\pi \\sigma^2} } e^{\\frac{-(x-\\mu)^2}{2 \\sigma^2}}
+        
     """
     def f(self,x,A=1,sig=1,mu=0):
         tsq=(x-mu)*2**-0.5/sig
@@ -515,10 +516,10 @@ class LognormalModel(FunctionModel1DAuto):
     e (e.g. a natural logarithm).
     
     .. note::
-        
         This model is effectively identical to a :class:`GaussianModel` with
         gmodel.setCall(xtrans='log##') where ## is the base, but is included
         because lognormals are often considered to be canonical.
+        
     """
     def f(self,x,A=1,siglog=1,mulog=0,base=e):
         return A*np.exp(-0.5*((np.log(x)/np.log(base)-mulog)/siglog)**2)*(2*pi)**-0.5/siglog
@@ -2098,7 +2099,7 @@ class GaussHermiteModel(FunctionModel1DAuto):
 #<-------------------------------------- 2D models ---------------------------->
 class Gaussian2DModel(FunctionModel2DScalarAuto):
     """
-    Two dimensional Gaussian model
+    Two dimensional Gaussian model (*not* normalized - peak value is 1).
     
     .. math::
         A e^{\\frac{-(x-\\mu_x)^2}{2 \\sigma_x^2}} e^{\\frac{-(y-\\mu_y)^2}{2 \\sigma_y^2}}
@@ -2124,7 +2125,13 @@ class ExponentialDiskModel(FunctionModel2DScalarAuto):
     """
     A disk with an exponential profile along both vertical and horizontal axes.
     The first coordinate is the horizontal/in-disk coordinate (scaled by `l`)
-    wile the second is z (assuming pa=0).
+    wile the second is `z`. i.e.
+    
+    .. math::
+        A e^{-|s/l|} e^{-|z/h|}
+        
+    for `pa` = 0 ; non-0 `pa` rotates the profile counter-clockwise by `pa`
+    radians.
     """
     _fcoordsys='cartesian'
     def f(self,inarr,A=1,l=2,h=1,pa=0):
@@ -2178,9 +2185,15 @@ class RoundBulgeModel(FunctionModel2DScalarSeperable):
         
 class ExponentialSechSqDiskModel(FunctionModel2DScalarAuto):
     """
-    A disk that is exponential along the horizontal/in-disk (first if `pa`=0)
-    coordinate, and follows a sech^2 profile along the vertical (second if
-    `pa`=0) coordinate.
+    A disk that is exponential along the horizontal/in-disk (first) coordinate,
+    and follows a :math:`{\\rm sech}^2(z)` profile along the vertical (second)
+    coordinate. i.e.
+    
+    .. math::
+        A e^{-|s/l|} {\\rm sech}^2 (z/h)
+        
+    for `pa` = 0 ; non-0 `pa` rotates the profile counter-clockwise by `pa`
+    radians.
     """
     
     _fcoordsys='cartesian'
