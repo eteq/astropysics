@@ -74,7 +74,9 @@ class LinearModel(FunctionModel1DAuto):
         """  
         if self.fittype == 'basic':
             if weights is None:
-                (m,b),merr,berr,dy = self.fitBasic(x,y,'m' in fixedpars,'b' in fixedpars)
+                (m,b),merr,berr,dy = self.fitBasic(x,y,
+                                          self.m if 'm' in fixedpars else False,
+                                          self.b if 'b' in fixedpars else False)
             else:
                 if len(fixedpars)>0:
                     raise ValueError('cannot fix parameters and do weighted fit')
@@ -125,16 +127,21 @@ class LinearModel(FunctionModel1DAuto):
         :type x: array-like
         :param y: y data for the fit
         :type y: array-like
-        :param fixslope: If True, only fits the intercept
-        :type fixslope: bool
-        :param fixint: If True, only fits the slope
-        :type fixint: bool
+        :param fixslope: 
+            If False or None, the best-fit slope will be found.
+            Otherwise,specifies the value to assume for the slope.
+        :type fixslope: scalar or False or None
+        :param fixint: 
+            If False or None, the best-fit intercept will be found.
+            Otherwise,specifies the value to assume for the intercept.
+        :type fixint: scalar or False or None
         
         :returns: ((m,b)),dm,db,dy)
         
         """
         N=len(x) 
-        if not fixint and not fixslope:
+        if (fixint is False or fixint is None) and \
+           (fixslope is False or fixslope is None):
             if len(y)!=N:
                 raise ValueError('data arrays are not same length!')
             sxsq=np.sum(x*x)
@@ -147,18 +154,18 @@ class LinearModel(FunctionModel1DAuto):
             dm=dy*(sxsq/delta)**0.5 
             db=dy*(N/delta)**0.5 
             
-        elif not fixint:
+        elif fixint is False or fixint is None:
             
-            m,dm=self.m,0
+            m,dm = fixslope,0
             
-            b=np.sum(y-m*x)/N 
+            b = np.sum(y-m*x)/N 
             
-            dy=(y-m*x-b).std(ddof=1)
+            dy = (y-m*x-b).std(ddof=1)
             #db= sum(dy*dy)**0.5/N
             db = dy
             
-        elif not fixslope:
-            b,db=self.b,0
+        elif fixslope is False or fixslope is None:
+            b,db = fixint,0
             
             sx=np.sum(x)
             sxy=np.sum(x*y)
@@ -2113,15 +2120,20 @@ class Gaussian2DModel(FunctionModel2DScalarAuto):
         sigx,sigy = self.sigx,self.sigy
         return (mux-4*sigx,mux+4*sigx,muy-4*sigy,muy+4*sigy)
         
-class EdgeOnDiskModel(FunctionModel2DScalarAuto):
+class ExponentialDiskModel(FunctionModel2DScalarAuto):
+    """
+    A disk with an exponential profile along both vertical and horizontal axes.
+    The first coordinate is the horizontal/in-disk coordinate (scaled by `l`)
+    wile the second is z (assuming pa=0).
+    """
     _fcoordsys='cartesian'
     def f(self,inarr,A=1,l=2,h=1,pa=0):
-        x,y = inarr
+        s,z = inarr
         
         sinpa,cospa = np.sin(pa),np.cos(pa)
-        xr = cospa*x+sinpa*y
-        yr = -sinpa*x+cospa*y
-        return A*np.exp(-np.abs(xr/l)-np.abs(yr/h))
+        sr = cospa*s+sinpa*z
+        zr = -sinpa*s+cospa*z
+        return A*np.exp(-np.abs(sr/l)-np.abs(zr/h))
     
     @property
     def rangehint(self):
@@ -2163,6 +2175,31 @@ class RoundBulgeModel(FunctionModel2DScalarSeperable):
         self.Ae = Ae
         self.re = re
         self.n = n
+        
+class ExponentialSechSqDiskModel(FunctionModel2DScalarAuto):
+    """
+    A disk that is exponential along the horizontal/in-disk (first if `pa`=0)
+    coordinate, and follows a sech^2 profile along the vertical (second if
+    `pa`=0) coordinate.
+    """
+    
+    _fcoordsys='cartesian'
+    def f(self,inarr,A=1,l=2,h=1,pa=0):
+        s,z = inarr
+        
+        if pa == 0:
+            sr,zr = s,z
+        else:
+            sinpa,cospa = np.sin(pa),np.cos(pa)
+            sr = cospa*s+sinpa*z
+            zr = -sinpa*s+cospa*z
+            
+        return A*np.exp(-np.abs(sr/l))*np.cosh(zr/h)**-2
+    
+    @property
+    def rangehint(self):
+        return (0,3*self.l,-3*self.h,3*self.h)
+
     
 #<-------------------------------Other Models---------------------------------->
     
