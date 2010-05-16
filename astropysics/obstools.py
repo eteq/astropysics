@@ -20,9 +20,9 @@ savings time calculations in :mod:`datetime` are important to be correct to less
 than DUT1 - otherwise, the "UTC" in :mod:`datetime` can simply by replaced with
 UT1 values when precision better than DUT1 is needed.
 
-Also note that some of these functions require the
-:mod:`dateutil <http://pypi.python.org/pypi/python-dateutil>` package (it is
-included with matplotlib)
+Also note that some of these functions require the `dateutil
+<http://labix.org/python-dateutil>`_ package (it is installed by default with
+matplotlib)
 
 .. todo:: examples/tutorials
 
@@ -86,35 +86,50 @@ Offset between Julian Date and Modified Julian Date - e.g. mjd = jd - mjdoffset
 
 def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=False):
     """
-    Convert a julian date to a calendar date and time.
+    Converts a julian date to a calendar date and time.
     
-    The julian date should be passed as the `jd` parameter, or None to get a 
+    :param jd: 
+        The Julian Date at which to compute the calendar date/time, a sequence
+        of JDs, or None for the current date/time at the moment the function is
+        called.
+    :type jd: scalar, array-like, or None
+    :param rounding: 
+        If non-0, Performs a fix for floating-point errors. It specifies the
+        number of milliseconds by which to round the result to the nearest
+        second. If 1000000 (one second), no milliseconds are recorded. If
+        larger, a ValueError is raised.
+    :type rounding: scalar 
+    :param output: 
+        Determines the format of the returned object and can be:
     
+            * 'datetime'
+                A list of :class:`datetime.datetime` objects in UTC will be
+                returned. If the input is a scalar, a single object will be
+                returned.
+            * 'array'
+                A Nx7 array will be returned of the form
+                [(year,month,day,hr,min,sec,msec),...] unless the input was a
+                scalar, in which case it will be a length-7 array.
+            * 'fracarray'
+                An Nx3 array (year,month,day) where day includes the decimal
+                portion.
+                
+    :param gregorian:  
+        If True, the output will be in the Gregorian calendar. Otherwise, it
+        will be Julian. If None, it will be assumed to switch over on October
+        4/15 1582.
+    :type gregorian: bool or None 
+    :param mjd:
+        If True, the input is interpreted as a modified julian date instead of a
+        standard julian date.
+    :type mjd: bool
     
-    `rounding` determines a fix for floating-point errors. It specifies the
-    number of milliseconds by which to round the result to the nearest second.
-    If 1000000, no milliseconds are recorded. If larger, a ValueError is raised.
+    :returns: 
+        The calendar date and time in a format determined by the `output`
+        parameter (see above).
     
-    
-    
-    `output` determines the format of the returned object and can be:
-    
-    * 'datetime'
-        A list of :class:`datetime.datetime` objects in UTC will be returned. If
-        the input is a scalar, a single object will be returned.
-    * 'array'
-        A Nx7 array will be returned of the form
-        [(year,month,day,hr,min,sec,msec),...] unless the input was a scalar, in
-        which case it will be a length-7 array.
-    * 'fracarray'
-        An Nx3 array (year,month,day) where day includes the decimal portion.
-        
-    If `gregorian` is True, the output will be in the Gregorian calendar.
-    Otherwise, it will be Julian. If None, it will be assumed to switch over on
-    October 4/15 1582.
-    
-    If `mjd` is True, the input is interpreted as a modified julian date instead
-    of a standard julian date.
+    :except ValueError: 
+        If `rounding` is larger than one second, or `output` is invalid.
     
     
     **Examples**
@@ -246,36 +261,52 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
     
 
 def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
+    
     """
-    Convert calendar value to julian date
+    Convert a calendar date and time to julian date.
     
-    the input `caltime` can either be:
+    :param caltime: 
+        The date and time to compute the JD.  Can be in one of these forms:
+        
+            * A sequence of floats in the order (yr,month,day,[hr,min,sec]). 
+            * A sequence in the order (yr,month,day,[hr,min,sec]) where at least
+               one of the elements is a sequence (a sequence will be returned).
+            * A :class:`datetime.datetime` or :class:`datetime.date` object 
+            * A sequence of :class:`datetime.datetime` or :class:`datetime.date`
+              objects (a sequence will be returned).
+            * None : returns the JD at the moment the function is called.
+        
+        If the time is unspecified, it is taken to be noon (i.e. Julian Date =
+        Julian Day Number)
+        
+    :param tz:  
+        Sets the time zone to assume for the inputs for conversion to UTC. Can
+        be any of the following:
+        
+            * None
+                No time zone conversion will occur unless `caltime` is given as
+                :class:`datetime.datetime` or :class:`datetime.date` objects
+                with `tzinfo`, in which case they will be converted to UTC using
+                their own `tzinfo`.
+            * a string
+                Specifies a timezone name (resolved into a timezone using the
+                :func:`dateutil.tz.gettz` function).
+            * a scalar
+                The hour offset of the timezone. 
+            * a :class:`datetime.tzinfo` object, 
+                This object will be used for timezone information.
+                
+    :param gregorian: 
+        If True, the input will be interpreted as in the Gregorian calendar.
+        Otherwise, it will be Julian. If None, it will be assumed to switch over
+        on October 4/15, 1582.
+    :type gregorian: bool or None
+    :param mjd: 
+        If True, a modified julian date is returned instead of the standard
+        julian date.
+    :type mjd: bool
     
-    * a sequence (yr,month,day,[hr,min,sec]). 
-    * a sequence as above with one or more elements a sequence; a sequence will
-      be returned.
-    * a :class:`datetime.datetime` or :class:`datetime.date` object 
-    * a sequence of such objects; a sequence will be returned.
-    
-    If datetime objects are given, and `tz` is None, values are converted to
-    UTC based on the datetime.tzinfo objects (if present).  if `tz` is not None,
-    the tzinfo in the datetime objects is ignored.
-    
-    If the time is unspecified, it is taken to be noon (i.e. Julian Date =
-    Julian Day Number)
-    
-    If `tz` is a string, it is taken to be a timezone name that will be used
-    to convert all the dates to UTC (requires :mod:`dateutil` package).  If `tz`
-    it is a scalar, it is taken to be the hour offset of the timezone. 
-    Or, if it is a :class:`datetime.tzinfo` object, that object will be used to
-    do the conversion to UTC.  
-    
-    If `gregorian` is True, the input will be interpreted as in the Gregorian
-    calendar. Otherwise, it will be Julian. If None, it will be assumed to
-    switch over on October 4/15 1582.
-    
-    If `mjd` is True, a modified julian date is returned instead of a standard
-    julian date.
+    :returns: JD as a float, or a sequence of JDs if sequences were input.
     
     
     **Examples**
@@ -425,46 +456,75 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
 
 def jd_to_epoch(jd,julian=True,asstring=False):
     """
-    Convert a Julian Date to a Julian or Besselian Epoch.
+    Converts a Julian Date to a Julian or Besselian Epoch expressed in decimal
+    years.
     
-    If `julian` is True, a Julian Epoch will be used (the year is exactly 365.25
-    days long). Otherwise, the epoch will be Besselian (assuming a tropical year
-    of 365.242198781 days). 
+    :param jd: Julian Date for computing the epoch.
+    :type jd: scalar or array-like
+    :param julian: 
+        If True, a Julian Epoch will be used (the year is exactly 365.25 days
+        long). Otherwise, the epoch will be Besselian (assuming a tropical year
+        of 365.242198781 days).
+    :type julian: bool
+    :param asstring: 
+        If True, a string of the form 'J2000.0' will be returned. If it is an
+        integer, the number sets the number of significant figures in the output
+        string Otherwise, scalars are returned (an int if a whole year, float if
+        not).
+    :type asstring: bool
     
-    if `asstring` is True, a string of the form 'J2000.0' will be returned. If
-    it is an integer, the number sets the number of significant figures in the
-    output string Otherwise, a scalar is returned (an int if a whole year, float
-    if not).
+    :returns: 
+        The epoch as a string (or list of strings if `jd` was array-like) if
+        `asstring` is True. If not, an int if a whole year, or a float (or array
+        if `jd` was array-like).
     
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
+    
     """
+    
+    jd = np.array(jd,copy=False)
+    
     if julian:
         epoch = 2000.0 + (jd - 2451545.0)/365.25
     else:
         epoch = 1900 + (jd - 2415020.31352)/365.242198781
         
-    if round(epoch)==epoch:
-        epoch = int(epoch) 
+    
         
     if asstring:
         if asstring is not True:
             fmt = ('J' if julian else 'B')+'{0:.'+str(int(asstring))+'}'
         else: 
             fmt = 'J{0}' if julian else 'B{0}'
-        return fmt.format(epoch)
+            
+        if len(epoch.shape) == 0:
+            return fmt.format(epoch)
+        else:
+            return [fmt.format(e) for e in epoch]
     else:
-        return epoch
+        if len(epoch.shape) == 0:
+            if round(epoch)==epoch:
+                return int(epoch)
+            else:
+                return float(epoch) 
+        else:
+            return epoch
 
 def epoch_to_jd(epoch,julian=True):
     """
-    Convert a Julian or Besselian Epoch to a Julian Day.
+    Converts a Julian or Besselian Epoch to a Julian Day.
     
-    `jepoch` can be a string (if the string has a B or J at the beginning, the
-    `julian` argument is ignored), or a float.
+    :param epoch: The epoch as a decimal year.
+    :type epoch: string, scalar, or array-like
+    :param julian: 
+        If True, a Julian Epoch will be used (the year is exactly 365.25 days
+        long). Otherwise, the epoch will be Besselian (assuming a tropical year
+        of 365.242198781 days). If `epoch` is a string and starts with 'B' or
+        'J', this parameter will be ignored, and the 'B' or 'J' specifies the
+        epoch type.
+    :type julian: bool
     
-    If `julian` is True, a Julian Epoch will be used (the year is exactly 365.25
-    days long). Otherwise, the epoch will be Besselian (assuming a tropical year
-    of 365.242198781 days). 
+    :returns: The Julian Day as a float or array (if `epoch` is array-like)
     
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     """
@@ -476,6 +536,10 @@ def epoch_to_jd(epoch,julian=True):
             julian = False
             epoch = epoch[1:]
         epoch = float(epoch)
+    else:
+        epoch = np.array(epoch,copy=False)
+        if epoch.dtype.kind == 'S':
+            return np.array([epoch_to_jd(e,julian) for e in epoch])
     
     if julian:
         return (epoch - 2000)*365.25 + 2451545.0
