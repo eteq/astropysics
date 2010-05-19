@@ -588,9 +588,9 @@ def greenwich_sidereal_time(jd,apparent=True):
     
     .. note::
         GAST-GMST = the equation of the equinoxes, so if the equation of the 
-        equinoxes is desired, simply do::
+        equinoxes for a particular date is desired, simply do::
         
-            eqeq = greenwich_sidereal_time(jds,True) - greenwich_sidereal_time(jds,False)
+            eqeq = greenwich_sidereal_time(jd,True) - greenwich_sidereal_time(jd,False)
         
     .. seealso:: 
         USNO Circular 179 and http://aa.usno.navy.mil/faq/docs/GAST.php
@@ -599,7 +599,7 @@ def greenwich_sidereal_time(jd,apparent=True):
     """
     from .constants import asecperrad
     
-    era = earth_rotation_angle(jd,False) #SOFA routine uses radians version
+    era = earth_rotation_angle(jd,False) #in radians
     
     t = (jd - 2451545.0)/36525
     
@@ -612,12 +612,14 @@ def greenwich_sidereal_time(jd,apparent=True):
             L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
             omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
             dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+            coor = 0
         else:
             from .coords import _nutation_components2000B
             eps,dpsi,deps = _nutation_components2000B(jd,False)
-            dpsi = dpsi 
-           
-        return ((gmst + dpsi*np.cos(eps))*12/pi)%24
+            dpsi = dpsi
+            raise  NotImplementedError('need to implement complementary terms for equation of the equinoxes from iauEect00 0 use "simple" for now')
+            coor = 0
+        return ((gmst + dpsi*np.cos(eps))*12/pi + coor)%24
     else:
         return (gmst*12/pi)%24
     
