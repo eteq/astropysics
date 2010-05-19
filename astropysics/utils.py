@@ -1132,7 +1132,7 @@ def rotation_matrix(angle,axis='z',degrees=True):
     :param degrees: If True the input angle is degrees, otherwise radians.
     :type degrees: boolean
     
-    :returns: :class:`numpy.matrix` unitary rotation matrix.
+    :returns: A :class:`numpy.matrix` unitary rotation matrix.
     """
     from math import sin,cos,radians,sqrt
     if degrees:
@@ -1179,96 +1179,6 @@ def rotation_matrix(angle,axis='z',degrees=True):
                           ( 2*x*y+2*w*z, wsq-xsq+ysq-zsq,2*y*z-2*w*x),
                           ( 2*x*z-2*w*y, 2*y*z+2*w*x, wsq-xsq-ysq+zsq)))
                           
-#def spherical_matrix_transform(lat,long,matrix,r=1,degrees=True):
-#    """
-#    Applies the a transformation matrix to the supplied spherical angles. 
-    
-#    :param lat: latitude angle
-#    :type lat: float or array-like
-#    :param long: longitudinal/azimuthal angle
-    
-#    :param matrix: the transformation matrix in cartesian coordinates
-#    :type matrix: a 3x3 :class:`numpy.matrix`
-    
-#    :param degrees: 
-#        If True, input angles will be interpreted as degrees, otherwise, radians.
-#    :type degrees: bool
-    
-#    :returns: 
-#        (lat,long) as decimal radians after the transformation matrix is
-#        applied or (lat,long,laterr,longerr) if errors are nonzero
-#    """
-#    #for single values, math module is much faster than numpy 
-#    from math import sin,cos,atan2,sqrt
-    
-#    m = np.asmatrix(matrix)
-    
-#    if unitarycheck:
-#        mdagger = m.H
-#        rtol = 1e-5 if unitarycheck is True else unitarycheck
-#        if not np.allclose(mdagger*m,m*mdagger,rtol):
-#            raise ValueError('matrix not unitary')
-    
-#    lat = self.lat.radians
-#    long = self.long.radians
-#    laterr = 0 if self.laterr is None else self.laterr.radians
-#    longerr = 0 if self.longerr is None else self.longerr.radians    
-    
-#    sb = sin(lat)
-#    cb = cos(lat)
-#    sl = sin(long)
-#    cl = cos(long)
-    
-#    #spherical w/ r=1 > cartesian
-#    x = cb*cl
-#    y = cb*sl
-#    z = sb
-    
-#    #do transform
-#    v = np.matrix((x,y,z)).T
-#    xp,yp,zp = (m*v).A1
-    
-#    #cartesian > spherical
-#    sp = sqrt(xp*xp+yp*yp) #cylindrical radius
-#    latp = atan2(zp,sp)
-#    longp = atan2(yp,xp)
-    
-#    #propogate errors if they are present
-    
-#    if laterr != 0 or longerr != 0:
-#        #TODO: check formulae
-#        #all of these are first order taylor expansions about the value
-#        dx = sqrt((laterr*sb*cl)**2+(longerr*cb*sl)**2)
-#        dy = sqrt((laterr*sb*sl)**2+(longerr*cb*cl)**2)
-#        dz = abs(laterr*cb)
-        
-#        dv = np.matrix((dx,dy,dz))
-#        dxp,dyp,dzp = np.sqrt(np.power(m,2)*np.power(dv,2))
-        
-#        #intermediate variables for dlatp - each of the partial derivatives
-#        chi = 1/(1+(zp/sp)**2) 
-#        #common factor chi not included below
-#        dbdx = x*z*sp**-3
-#        dbdy = y*z*sp**-3
-#        dbdz = 1/sp
-        
-#        dlatp = chi*sqrt((dxp*dbdx)**2 + (dyp*dbdy)**2 + (dzp*dbdz)**2)
-#        dlongp = sqrt((dxp*yp*xp**-2)**2 + (dyp/xp)**2)/(1 + (yp/xp)**2) #indep of z
-        
-#    else:
-#        laterr = None
-    
-#    if apply:
-#        self.lat.radians = latp
-#        self.long.radians = longp
-#        if laterr is not None:
-#            self.laterr.radians = dlatp
-#            self.longerr.radians = dlongp
-    
-#    if laterr is None:
-#        return latp,longp
-#    else:
-#        return latp,longp,dlatp,dlongp
                           
 def angle_axis(matrix,degrees=True):
     """
@@ -1302,6 +1212,33 @@ def angle_axis(matrix,degrees=True):
         return degrees(angle),axis
     else:
         return angle,axis
+    
+def rotation_matrix_xy(x,y):
+    """
+    Computes the rotation matrix that moves the +z-axis (pole) to a new vector
+    (x,y,z') where x and y are specified and z' is constrained by requiring
+    the vector to be length-1.
+    
+    :param x: The x-value of the new pole in the starting coordinate system
+    :type x: float
+    :param y: The y-value of the new pole in the starting coordinate system
+    :type y: float
+    
+    :returns: A :class:`numpy.matrix` unitary rotation matrix.
+    
+    """
+    from math import sqrt
+    
+    xsq = x*x
+    ysq = y*y
+    xy = x*y
+    
+    z = sqrt(1-xsq-ysq)
+    b = 1/(1+z)
+    
+    return np.matrix([[1-b*xsq,-b*xy,-x],
+                      [-b*xy,1-n*ysq,-y],
+                      [x,y,1-b*(xsq+ysq)]])
 
 #<--------------------------Robust statistics---------------------------------->    
 def interquartile_range(values,scaletonormal=False):
