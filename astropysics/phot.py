@@ -2856,14 +2856,27 @@ def ML_ratio_from_color(c,color='B-V'):
 
 def M_star_from_mags(B,V,R,I,color='B-V'):
     """
-    uses Bell&DeJong 01 relations - note that this is intended for 
-    normal spiral stellar pops
+    Uses Bell & DeJong 2001 relations to compute stellar mass - note that this is intended for normal
+    spiral stellar pops.
     
+    :param B: B-band absolute magnitude.
+    :type B:  float or array-like
+    :param V: V-band absolute magnitude.
+    :type V: float or array-like
+    :param R: R-band absolute magnitude.
+    :type R: float or array-like
+    :param I: I-band absolute magnitude.
+    :type I: float or array-like
+    :param color: 
+        The color to use for computing the stellar mass - either 'B-V', 'B-R',
+        'V-I', or 'mean'.
+    :type color: string
     
-    color can either be a 'B-V','B-R','V-I', or 'mean'
+    :returns: 
+        Stellar mass derived using the each possible color as well as the mean,
+        in a tuple (meanmstar,(B-derived,V-derived,R-derived,I-derived)).
+    """
     
-    returns stellar mass as mean,(B-derived,V-derived,R-derived,I-derived)
-    """    
     if color=='B-V':
         mlrb,mlrv,mlrr,mlri = ML_ratio_from_color(B-V,'B-V')[:4]
     elif color=='B-R':
@@ -2887,12 +2900,20 @@ def M_star_from_mags(B,V,R,I,color='B-V'):
     return np.mean(mstar),tuple(mstar)
 def ML_ratio_from_color_SDSS(c,color='g-r'):
     """
-    uses Bell 03 relations derived from SDSS
+    Uses Bell 2003 relations derived from SDSS to compute the mass-to-light ratio
+    of a galaxy goven it's color
     
-    color can either be a 'u-g','u-r','u-i','u-z','g-r','g-i','g-z','r-i','r-z'
+    :param c: The color of the galaxy (or galaxies) in magnitudes
+    :type c: float or array-like
+    :param color: 
+        The colors of input `c` - can be 'u-g', 'u-r', 'u-i', 'u-z', 'g-r',
+        'g-i', 'g-z', 'r-i', or 'r-z'.
+    :type color: string
     
-    returns tuple of mass-to-light ratios for each c as
-    (mlrg,mlrr,mlri,mlrz,mlrJ,mlrH,mlrK)
+    :returns: 
+        tuple of mass-to-light ratios in each band
+        (mlrg,mlrr,mlri,mlrz,mlrJ,mlrH,mlrK) for each color.
+    
     """
     b03table=np.array([[-0.221,  0.485, -0.099,  0.345, -0.053,  0.268, -0.105,  0.226,
         -0.128,  0.169, -0.209,  0.133, -0.26 ,  0.123],
@@ -2920,6 +2941,40 @@ def ML_ratio_from_color_SDSS(c,color='g-r'):
     return tuple(10**(a+b*c))
     
 def M_star_from_mags_SDSS(u,g,r,i,z,J=None,H=None,K=None,color='mean'):
+    """
+    Uses Bell 2003 relations derived from SDSS - computes stellar mass 
+    given magnitudes for a galaxy.
+    """
+    """
+    Uses Bell 2003 relations to compute stellar mass from SDSS photometry.
+    
+    :param u: b-band absolute magnitude.
+    :type u: float or array-like or None
+    :param g: v-band absolute magnitude.
+    :type g: float or array-like or None
+    :param r: r-band absolute magnitude.
+    :type r: float or array-like or None
+    :param i: i-band absolute magnitude.
+    :type i: float or array-like or None
+    :param z: z-band absolute magnitude.
+    :type z: float or array-like or None
+    :param J: J-band absolute magnitude.
+    :type J: float or array-like or None
+    :param H: H-band absolute magnitude.
+    :type H: float or array-like or None
+    :param K: K-band absolute magnitude.
+    :type K: float or array-like or None
+    :param color: 
+        The color to use for computing the stellar mass - either 'B-V', 'B-R',
+        'V-I', or 'mean'.
+    :type color: string
+    
+    :returns: 
+        Stellar mass derived using the each possible color as well as the mean,
+        in a tuple (meanmstar,(mstar_u,mstar_g,mstar_r,mstar_i,mstar_z, 
+        mstar_J,mstar_H,mstar_K)), although any that have None input will be missing.
+    
+    """
     mags = {'u':u,'g':g,'r':r,'i':i,'z':z,'J':J,'H':H,'K':K}
     
     if color=='mean':
