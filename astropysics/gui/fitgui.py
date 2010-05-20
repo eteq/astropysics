@@ -1044,10 +1044,9 @@ try:
                                   Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
                                   resizable=True,width=1280,height=900,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
         
-        def __init__(self,data,names=None,models=None,weights=None,**traits):
+        def __init__(self,data,names=None,models=None,weights=None,dofits=True,**traits):
             super(MultiFitGui,self).__init__(**traits)
             self._lastcurveaxes = None
-            #self.scene3d = None
             
             data = np.array(data,copy=False)
             if weights is None:
@@ -1058,7 +1057,6 @@ try:
             self.data = data
             if data.shape[0] < 2:
                 raise ValueError('Must have at least 2 columns')
-            
             
             if isinstance(names,basestring):
                 names = names.split(',')
@@ -1076,17 +1074,14 @@ try:
             
             #default to using 0th axis as parametric
             self.curveaxes = [(0,i) for i in range(len(data))[1:]]
-            
             if models is not None:
                 if len(models) != len(data)-1:
                     raise ValueError("models don't match data")
                 for i,m in enumerate(models):
                     fg = self.fgs[i]
                     fg.tmodel = TraitedModel(m)
-                    if not isinstance(m,FunctionModel1D):
+                    if dofits:
                         fg.fitmodel = True
-            
-            
             
         def _data_changed(self):
             self.curveaxes = [(0,i) for i in range(len(self.data))[1:]]
