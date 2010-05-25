@@ -31,8 +31,9 @@ Module API
 #TODO: seperate CatalogNode into a class that has children and one that doesnt
 #TODO: methods to automatically plot parts of the data sets and save visualizations
 #TODO: more stable persistence options (with atomic edits and histories?)
-#TODO: a gui catalog viewer w/ plotting options as impleemnted above
+#TODO: a gui catalog viewer w/ plotting options as implemented above
 #TODO: modules to also dynamically update via a web server
+#TODO: filters including errors for extractField
 
 from __future__ import division,with_statement
 from .constants import pi
