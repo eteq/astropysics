@@ -10,7 +10,7 @@ import numpy as np
 from enthought.traits.api import HasTraits,Instance,Int,Float,Bool,Button, \
                                  Event,Property,on_trait_change,Array,List, \
                                  Tuple,Str,Dict,cached_property,Color,Enum, \
-                                 TraitError,Undefined
+                                 TraitError,Undefined,DelegatesTo
 from enthought.traits.ui.api import View,Handler,Item,Label,Group,VGroup, \
                                     HGroup, InstanceEditor,EnumEditor, \
                                     ListEditor, TupleEditor,spring
@@ -78,6 +78,7 @@ class TraitedModel(HasTraits):
     fitdata = Event
     fittype = Property(Str)
     fittypes = Property
+    lastfitfailure = Instance(Exception,allow_none=True)
     
     def __init__(self,model,**traits):
         super(TraitedModel,self).__init__(**traits)
@@ -88,7 +89,6 @@ class TraitedModel(HasTraits):
             model = get_model_instance(model)
         elif isclass(model):
             model = model()
-            
         self.model = model
         
     def default_traits_view(self):
@@ -160,9 +160,12 @@ class TraitedModel(HasTraits):
             
             if 'fixedpars' not in kw:
                  kw['fixedpars'] = [tn.replace('fixfit_','') for tn in self.traits() if tn.startswith('fixfit_') if getattr(self,tn)]
-            
-            self.model.fitData(**kw)
-            self.updatetraitparams = True
+            try:
+                self.model.fitData(**kw)
+                self.updatetraitparams = True
+                self.lastfitfailure = None
+            except Exception,e:
+                self.lastfitfailure = e
     
     def _get_modelname(self):
         if self.model is None:
@@ -273,10 +276,11 @@ class FitGui(HasTraits):
     plot = Instance(Plot)
     colorbar = Instance(ColorBar)
     plotcontainer = Instance(HPlotContainer)
-    tmodel = Instance(TraitedModel,allow_none = False)
+    tmodel = Instance(TraitedModel,allow_none=False)
     nomodel = Property
     newmodel = Button('New Model...')
     fitmodel = Button('Fit Model')
+    showerror = Button('Fit Error')
     updatemodelplot = Button('Update Model Plot')
     autoupdate = Bool(True)
     data = Array(dtype=float,shape=(2,None))
@@ -356,6 +360,7 @@ class FitGui(HasTraits):
                                 Item('weights0rem',label='Remove 0-weight points for fit?'),
                                 HGroup(Item('newmodel',show_label=False),
                                        Item('fitmodel',show_label=False),
+                                       Item('showerror',show_label=False,enabled_when='tmodel.lastfitfailure'),
                                        VGroup(Item('chi2',label='Chi2:',style='readonly',format_str='%6.6g',visible_when='tmodel.model is not None'),
                                              Item('chi2r',label='reduced:',style='readonly',format_str='%6.6g',visible_when='tmodel.model is not None'))
                                        )#Item('selbutton',show_label=False))
@@ -594,6 +599,7 @@ class FitGui(HasTraits):
     
     def _fitmodel_fired(self):
         from warnings import warn
+        
         preaup = self.autoupdate
         try:
             self.autoupdate = False
@@ -618,10 +624,10 @@ class FitGui(HasTraits):
         self.updatestats = True
         
         
-    def _tmodel_changed(self,old,new):
-        #old is only None before it is initialized
-        if new is not None and new.model is not None and old is not None:
-            self.fitmodel = True
+#    def _tmodel_changed(self,old,new):
+#        #old is only None before it is initialized
+#        if new is not None and old is not None and new.model is not None:
+#            self.fitmodel = True
         
     def _newmodel_fired(self,newval):
         from inspect import isclass
@@ -636,11 +642,21 @@ class FitGui(HasTraits):
                     self.tmodel = TraitedModel(None)
                 elif self.modelselector.isvarargmodel:
                     self.tmodel = TraitedModel(cls(self.modelselector.modelargnum))
+                    self.fitmodel = True
                 else:
                     self.tmodel = TraitedModel(cls())
+                    self.fitmodel = True
             else: #cancelled
                 return      
-
+            
+    def _showerror_fired(self,evt):
+        if self.tmodel.lastfitfailure:
+            ex = self.tmodel.lastfitfailure
+            dialog = HasTraits(s=ex.__class__.__name__+': '+str(ex))
+            view = View(Item('s',style='custom',show_label=False),
+                        resizable=True,buttons=['OK'],title='Fitting error message')
+            dialog.edit_traits(view=view)
+            
     @cached_property
     def _get_chi2(self):
         try:
@@ -1079,7 +1095,14 @@ try:
                     raise ValueError("models don't match data")
                 for i,m in enumerate(models):
                     fg = self.fgs[i]
-                    fg.tmodel = TraitedModel(m)
+                    newtmodel = TraitedModel(m)
+                    if dofits:
+                        fg.tmodel = newtmodel
+                        fg.fitmodel = True #should happen automatically, but this makes sure
+                    else:
+                        oldpard = newtmodel.model.pardict
+                        fg.tmodel = newtmodel
+                        fg.tmodel .model.pardict = oldpard
                     if dofits:
                         fg.fitmodel = True
             
