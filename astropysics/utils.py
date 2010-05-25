@@ -1245,6 +1245,14 @@ def interquartile_range(values,scaletonormal=False):
     """
     Computes the interquartile range for the provided sequence of values, a
     more robust estimator than the variance.
+    
+    :param values: the values for which to compute the interquartile range
+    :type values: array-like, will be treated as 1D
+    :param scaletonormal: Rescale so that a normal distribution returns 1
+    :type scaletonormal: bool
+    
+    :returns: the interquartile range as a float
+    
     """
     from scipy.stats import scoreatpercentile
     from scipy.special import erfinv
@@ -1259,8 +1267,16 @@ def interquartile_range(values,scaletonormal=False):
     
 def median_absolute_deviation(values,scaletonormal=False):
     """
-    computes the median_absolute_deviation for the provided sequence of values, 
+    Computes the median_absolute_deviation for the provided sequence of values, 
     a more robust estimator than the variance.
+    
+    :param values: the values for which to compute the MAD
+    :type values: array-like, will be treated as 1D
+    :param scaletonormal: Rescale the MAD so that a normal distribution is 1
+    :type scaletonormal: bool
+    
+    :returns: the MAD as a float
+    
     """
     from scipy.special import erfinv
     
@@ -1278,11 +1294,16 @@ def biweight_midvariance(values,influencescale=9):
     Computes the biweight midvariance of a sequence of data points, a robust 
     statistic of scale.
     
-    `influence` sets the number of MAD units away at which a data point has no
-    weight
+    :param values: the values for which to compute the biweight
+    :type values: array-like, will be treated as 1D
+    :param influencescale: 
+        The number of MAD units away at which a data point has no weight
+    :type influencescale: int
     
-    returns bmv,median
-    """    
+    :returns: biweight,median tuple (both floats)
+    
+    """
+       
     x = np.array(values,copy=False).ravel()
     
     Q = np.median(x)
