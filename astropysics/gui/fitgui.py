@@ -1031,6 +1031,7 @@ try:
         the number of points
         """
         doplot3d = Bool(False)
+        show3d = Button('Show 3D Plot')
         replot3d = Button('Replot 3D')
         scalefactor3d = Float(0)
         do3dscale = Bool(False)
@@ -1048,19 +1049,40 @@ try:
         fgs = List(Instance(FitGui))
         
         
-        traits_view = View(HGroup(VGroup(Item('doplot3d',label='3D Plot?'),
-                                  Item('scene3d',editor=SceneEditor(scene_class=MayaviScene),show_label=False,resizable=True,visible_when='doplot3d'),
-                                  Item('plot3daxes',editor=TupleEditor(cols=3,labels=['x','y','z']),label='Axes',visible_when='doplot3d'),
-                                  HGroup(Item('do3dscale',label='Scale by weight?',visible_when='doplot3d'),
-                                  Item('scalefactor3d',label='Point scale',visible_when='doplot3d'),
-                                  Item('nmodel3d',label='Nmodel',visible_when='doplot3d')),
-                                  HGroup(Item('usecolor3d',label='Use color?',visible_when='doplot3d'),Item('color3d',label='Relation Color',visible_when='doplot3d',enabled_when='usecolor3d')),
-                                  Item('replot3d',show_label=False,visible_when='doplot3d'),
-                                  ),
-                                  Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False)),
-                                  resizable=True,width=1280,height=900,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
+        traits_view = View(VGroup(Item('fgs',editor=ListEditor(use_notebook=True,page_name='.plotname'),style='custom',show_label=False),
+                                  Item('show3d',show_label=False)),
+                                  resizable=True,height=900,buttons=['OK','Cancel'],title='Multiple Model Data Fitters')
+                                  
+        plot3d_view = View(VGroup(Item('scene3d',editor=SceneEditor(scene_class=MayaviScene),show_label=False,resizable=True),
+                                  Item('plot3daxes',editor=TupleEditor(cols=3,labels=['x','y','z']),label='Axes'),
+                                  HGroup(Item('do3dscale',label='Scale by weight?'),
+                                  Item('scalefactor3d',label='Point scale'),
+                                  Item('nmodel3d',label='Nmodel')),
+                                  HGroup(Item('usecolor3d',label='Use color?'),Item('color3d',label='Relation Color',enabled_when='usecolor3d')),
+                                  Item('replot3d',show_label=False),springy=True),
+                           resizable=True,height=800,width=800,title='Multiple Model3D Plot')
         
         def __init__(self,data,names=None,models=None,weights=None,dofits=True,**traits):
+            """
+            :param data: The data arrays 
+            :type data: sequence of c equal-length arrays (length N)
+            :param names: Names 
+            :type names: sequence of strings, length c
+            :param models: 
+                The models to fit for each pair either as strings or
+                :class:`astroypsics.models.ParametricModel` objects.
+            :type models: sequence of models, length c-1
+            :param weights: the weights for each point or None for no weights
+            :type weights: array-like of size N or None
+            :param dofits: 
+                If True, the data will be fit to the models when the object is 
+                created, otherwise the models will be passed in as-is (or as
+                created).
+            :type dofits: bool 
+            
+            extra keyword arguments get passed in as new traits
+            (r[finmask],m[finmask],l[finmask]),names='rh,Mh,Lh',weights=w[finmask],models=models,dofits=False)
+            """
             super(MultiFitGui,self).__init__(**traits)
             self._lastcurveaxes = None
             
@@ -1140,9 +1162,11 @@ try:
             
             self._lastcurveaxes = self.curveaxes
             
-        def _doplot3d_changed(self,new):
-            if new:
-                self.replot3d = True
+        def _show3d_fired(self):
+            self.edit_traits(view='plot3d_view')
+            self.doplot3d = True
+            self.replot3d = True
+            
         def _plot3daxes_changed(self):
             self.replot3d = True
             
