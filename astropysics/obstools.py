@@ -1942,7 +1942,7 @@ __loadobsdb(sites)
 
 #<-----------------Attenuation/Reddening and dust-related---------------------->
 
-class Extinction(PipelineElement):
+class Extinction(object):
     """
     This is the base class for extinction-law objects. Extinction laws can be
     passed in as a function to the initializer, or subclasses should override 
