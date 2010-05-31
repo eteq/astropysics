@@ -672,7 +672,7 @@ class _CoosysMeta(ABCMeta):
                 for vfc,vtc in zip(v.fromclasses,v.toclasses):
                     fromclass = cls if vfc == 'self' else vfc
                     toclass = cls if vtc == 'self' else vtc
-                    CoordinateSystem.registerTransform(fromclass,toclass,v.f)
+                    CoordinateSystem.registerTransform(fromclass,toclass,v.f,v.transtype)
                 setattr(cls,k,staticmethod(v.f))
                 
 class _TransformerMethodDeco(object):
@@ -680,10 +680,11 @@ class _TransformerMethodDeco(object):
     A class representing methods used for registering transforms  for the class
     the are in.
     """
-    def __init__(self,f,fromclass,toclass):
+    def __init__(self,f,fromclass,toclass,transtype=None):
         self.f = f
         self.fromclasses = [fromclass]
         self.toclasses = [toclass]
+        self.transtype = transtype
                         
 class CoordinateSystem(object):
     """
@@ -693,7 +694,7 @@ class CoordinateSystem(object):
     """
     from collections import defaultdict as _defaultdict
     
-    __metaclass__ = ABCMeta
+    __metaclass__ = _CoosysMeta
     __slots__ = tuple()
     
     @abstractmethod
@@ -701,16 +702,22 @@ class CoordinateSystem(object):
         raise NotImplementedError
     
     _converters = _defaultdict(dict) #first index is from, second is to
+    _transtypes = dict()
+    
     
     @staticmethod
-    def registerTransform(fromclass,toclass,func=None,overwrite=True):
+    def registerTransform(fromclass,toclass,func=None,transtype=None,
+                          overwrite=True):
         """
         Register a function to transform coordinates from one system to another.
         
         The transformation function is called is func(fromobject) and should 
         return a new object of type `toclass`.  If called with no arguments, 
         the function should raise a :exc:`NotImplementedError` or behave in a 
-        manner defined in subclasses (see e.g. :class:`LatLongCoordinates`)
+        manner defined in subclasses (see e.g. :class:`LatLongCoordinates`).  
+        If `transtype` is not None, the output of the transformation function is
+        filered through the function applied for that type using
+        :meth:`astropysics.CoordinateSystem.addTransType` .
         
         If the transformation function `func` is None, the function is taken to
         be a decorator, and if it is a method of a subclass of
@@ -725,6 +732,11 @@ class CoordinateSystem(object):
         :type toclass: subclass of :class:`CoordinateSystem` or 'self'
         :param func: the function to perform the transform or None if decorator.
         :type func: a callable or None
+        :param transtype: 
+            A transformation type that will be used to determine how the
+            transform is performed, or None for no transform type. (see
+            :meth:`astropysics.CoordinateSystem.addTransType` for details).
+        :type transtype: string or None
         :param overwrite: 
             If True, any already existing function will be silently overriden.
             Otherwise, a ValueError is raised.
@@ -763,7 +775,7 @@ class CoordinateSystem(object):
                     f.fromclasses.append(fromclass)
                     f.toclasses.append(toclass)
                 elif callable(f):
-                    return _TransformerMethodDeco(f,fromclass,toclass)
+                    return _TransformerMethodDeco(f,fromclass,toclass,transtype)
                 else:
                     raise TypeError('Tried to apply registerTransform to a non-callable')
                 
@@ -776,7 +788,19 @@ class CoordinateSystem(object):
             if not overwrite and (toclass in CoordinateSystem._converters[fromclass]):
                 raise ValueError('function already exists to convert {0} to {1}'.format(fromclass,toclass))
             
-            CoordinateSystem._converters[fromclass][toclass] = func
+            if transtype is not None:
+                try:
+                    ttf = CoordinateSystem._transtypes[transtype]
+                except KeyError:
+                    raise KeyError('coordinate transformation type %s does not exist'%transtype)
+                
+                lfunc = lambda cobj:ttf(func(cobj),cobj,toclass)
+                lfunc.basetrans = func
+                lfunc.transtype = transtype
+                CoordinateSystem._converters[fromclass][toclass] = lfunc
+            else:
+                func.transtype = transtype
+                CoordinateSystem._converters[fromclass][toclass] = func
         
     @staticmethod
     def getTransform(fromclass,toclass):
@@ -791,7 +815,49 @@ class CoordinateSystem(object):
         Deletes the transformation function to go from `fromclass` to `toclass`.
         """
         del CoordinateSystem._converters[fromclass][toclass]
-    
+        
+    @staticmethod
+    def addTransType(transtype,func=None):
+        """
+        Registers a new transformation type.  Transformation types are used to
+        implement particular classes of transformations with similar code.  The
+        function will be called as transfunc(trans,coords,toclass), where 
+        trans is the output of the actual registered transformation function, 
+        coords is the coordinate object that is being converted, and toclass
+        is the target class.
+        
+        :param transtype: name for the transformation type
+        :type transtype: string
+        :param func: 
+            The function to register, or if None, returns a function for use as
+            a decorator.  The decorated function will be treated as a normal 
+            function, so if it is in a class it will become an instance method.
+        :type func: callable or None
+        
+        """
+        if func is None: #decorator syntax
+            def deco(func):
+                CoordinateSystem.addTransType(transtype,func)
+                return func
+            return deco
+        else:
+            if transtype is None:
+                raise ValueError("can't have None as a transtype")
+            if not callable(func):
+                raise TypeError('attempted to register a transtype with a non-callable func')
+            
+            if transtype in CoordinateSystem._transtypes:
+                #go through and re-assign all existing transes to use the new one
+                for k,v in CoordinateSystem._converters.iteritems():
+                    for k2,v2 in v.items():
+                        if v2.transtype == transtype:
+                            btfunc = v2.basetrans
+                            coof = lambda cobj:func(btfunc(cobj),cobj,k2)
+                            coof.transtype = transtype
+                            coof.basetrans = btfunc
+                            CoordinateSystem._converters[k][k2] = coof
+            CoordinateSystem._transtypes[transtype] = func
+        
     def convert(self,tosys):
         """
         converts the coordinate system from it's current system to a new 
@@ -3791,5 +3857,3 @@ def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
     else:
         return l,b
 
-#clean namespace
-del abstractmethod,ABCMeta
