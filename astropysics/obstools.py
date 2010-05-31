@@ -459,8 +459,8 @@ def jd_to_epoch(jd,julian=True,asstring=False):
     Converts a Julian Date to a Julian or Besselian Epoch expressed in decimal
     years.
     
-    :param jd: Julian Date for computing the epoch.
-    :type jd: scalar or array-like
+    :param jd: Julian Date for computing the epoch, or None for current epoch.
+    :type jd: scalar, array-like, or None
     :param julian: 
         If True, a Julian Epoch will be used (the year is exactly 365.25 days
         long). Otherwise, the epoch will be Besselian (assuming a tropical year
@@ -481,8 +481,10 @@ def jd_to_epoch(jd,julian=True,asstring=False):
     :Reference: http://www.iau-sofa.rl.ac.uk/2003_0429/sofa/epj.html
     
     """
-    
-    jd = np.array(jd,copy=False)
+    if jd is None:
+        jd = calendar_to_jd(None)
+    else:
+        jd = np.array(jd,copy=False)
     
     if julian:
         epoch = 2000.0 + (jd - 2451545.0)/365.25
