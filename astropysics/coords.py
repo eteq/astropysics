@@ -817,46 +817,67 @@ class CoordinateSystem(object):
         del CoordinateSystem._converters[fromclass][toclass]
         
     @staticmethod
-    def addTransType(transtype,func=None):
+    def addTransType(funcorname):
         """
-        Registers a new transformation type.  Transformation types are used to
-        implement particular classes of transformations with similar code.  The
-        function will be called as transfunc(trans,coords,toclass), where 
-        trans is the output of the actual registered transformation function, 
-        coords is the coordinate object that is being converted, and toclass
-        is the target class.
+        Registers a new transformation type. Transformation types are used to
+        implement particular types of transformations without repeating similar
+        code in each of the actual transformation functions. 
         
-        :param transtype: name for the transformation type
-        :type transtype: string
-        :param func: 
-            The function to register, or if None, returns a function for use as
-            a decorator.  The decorated function will be treated as a normal 
-            function, so if it is in a class it will become an instance method.
-        :type func: callable or None
+        The transformation type function (`funcorname`) will be called as
+        transfunc(trans,coords,toclass), where trans is the output of the actual
+        registered transformation function, coords is the coordinate object that
+        is being converted, and toclass is the target class.
+        
+        :param funcorname: 
+            The function to register as the transfromation type function. If a
+            string, the string is taken to be the name to use for the
+            transformation (intended for use as a function decorator).
+            Otherwise, the transformation type name is taken from the name of
+            the function with any intial _ removed.
+        :type funcorname: callable or string
+        
+        :returns: 
+            The function itself, to allow for use as a decorator. Note that this
+            means that if used as a decorator inside a class, the function will
+            be assigned as an *instance* method.  Alternative, if `funcorname` 
+            is a string, a function to be called on the transformation function
+            will be returned (see second example).
+        
+        **Examples**
+        
+        @addTransType
+        def trans1(trans,coord,tocls):
+            return tocls(trans*coord.val)
+        
+        @addTransType('trans1')
+        def _transfunc(trans,coord,tocls):
+            return tocls(trans*coord.val)
         
         """
-        if func is None: #decorator syntax
-            def deco(func):
-                CoordinateSystem.addTransType(transtype,func)
-                return func
-            return deco
-        else:
-            if transtype is None:
-                raise ValueError("can't have None as a transtype")
-            if not callable(func):
-                raise TypeError('attempted to register a transtype with a non-callable func')
-            
-            if transtype in CoordinateSystem._transtypes:
+        def regtrans(func,typename):
+            if typename in CoordinateSystem._transtypes:
                 #go through and re-assign all existing transes to use the new one
                 for k,v in CoordinateSystem._converters.iteritems():
                     for k2,v2 in v.items():
-                        if v2.transtype == transtype:
+                        if v2.transtype == typename:
                             btfunc = v2.basetrans
                             coof = lambda cobj:func(btfunc(cobj),cobj,k2)
-                            coof.transtype = transtype
+                            coof.transtype = typename
                             coof.basetrans = btfunc
                             CoordinateSystem._converters[k][k2] = coof
-            CoordinateSystem._transtypes[transtype] = func
+            CoordinateSystem._transtypes[typename] = func
+            return func
+            
+        if isinstance(funcorname,basestring):
+            typename = funcorname
+            return lambda f:regtrans(f,typename)
+        elif callable(funcorname):
+            typename = funcorname.func_name
+            if typename.startswith('_'):
+                typename = typename[1:]
+            return regtrans(funcorname,typename)
+        else:
+            raise TypeError('funcorname is neither a callable nor a string')
         
     def convert(self,tosys):
         """
@@ -969,6 +990,13 @@ class LatLongCoordinates(CoordinateSystem):
     __metaclass__ = _LatLongMeta
     _latlongnames_ = (None,None)
     _longrange_ = None
+    
+    hubcoosys = None
+    """
+    The coordinate system that :class:`LatLongCoordinates` try to transform 
+    to/from if no direct transformation is available.  If None, it defaults to
+    :class:`EquatorialCoordinates`.
+    """
     
     def __init__(self,lat=0,long=0,laterr=None,longerr=None):
         """
@@ -1119,38 +1147,48 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
         
-    def conversionMatrix(self,tosys):
+    @staticmethod
+    @CoordinateSystem.addTransType
+    def _smatrix(m,coord,tocls):
+        newcoord = tocls()
+        newcoord.lat = coord._lat
+        newcoord.laterr = coord._laterr
+        newcoord.long = coord._long
+        newcoord.longerr = coord._longerr
+        newcoord.matrixRotate(m)
+        return newcoord
+        
+    def getConversionMatrix(self,tosys):
         """
-        Generates and returns the rotation matrix from the current 
-        coordinate system into the requested coordinate system
+        Generates and returns the rotation matrix to convert from this object's
+        coordinate system into the requested coordinate system class.
         
         :param tosys: The target coordinate system
         :type tosys: A subclass of :class:`LatLongCoordinates`
         
-        :returns: a 3x3 rotation matrix
+        :returns: 
+            A 3x3 rotation matrix or None if the conversion is not matrix-based
         
-        :except NotImplementedError: If the conversion cannot be made.
-        :except TypeError: 
-            If the target system is a subclass of LatLongCoordinates.
+        :except NotImplementedError: 
+            If no conversion exists between these coordinates.
+            
         """
-        if not issubclass(tosys,LatLongCoordinates):
-            raise TypeError('attempted to get a conversion matrix for conversion to a non-LatLongCoordinates system')
-            #return CoordinateSystem.convert(self,tosys)
-        elif tosys is self.__class__:
+        if tosys is self.__class__:
             return np.eye(3).view(np.matrix)
         else:
             try:
-                #call w/ second argument True to get matrix
-                return CoordinateSystem._converters[self.__class__][tosys](self,True) 
+                conv = CoordinateSystem._converters[self.__class__][tosys]
+                if conv.transtype != 'smatrix':
+                    return None
+                else:
+                    return conv(self)
             except (KeyError,TypeError),e:
                 strf = 'cannot generate matrix to transform from {0} to {1}'
                 raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
         
-    def matrixTransform(self,matrix,apply=True,unitarycheck=False):
+    def matrixRotate(self,matrix,apply=True,unitarycheck=False):
         """
-        Applies the supplied transformation matrix to these coordinates. The
-        transform matrix is assumed to be unitary, although this is not checked
-        unless `unitarycheck` is True.
+        Applies the supplied  unitary rotation matrix to these coordinates. 
         
         :param matrix: the transformation matrix in cartesian coordinates
         :type matrix: a 3x3 :class:`numpy.matrix`
@@ -1241,47 +1279,41 @@ class LatLongCoordinates(CoordinateSystem):
     
     def convert(self,tosys):
         """
-        Converts the coordinate system from it's current system to a new 
-        :class:`CoordinateSystem` object.  For :class:`LatLongCoordinate`
-        objects, if a converter is not available a conversion matrix to 
-        :class:`EquatorialCoordinates` and then to the target system will be
-        generated and applied.
+        Converts the coordinate system from it's current system to a new
+        :class:`CoordinateSystem` object. For :class:`LatLongCoordinate`
+        objects, if a converter is not available, a conversion to
+        :attr:`LatLongCoordinates.hubcoosys` (which by default is
+        :class:`EquatorialCoordinates`) and then to the target system will be
+        applied.
         
         :param tosys: The new coordinate system 
         :type tosys: A subclass of :class:`CoordinateSystem`
         
         :except: raises NotImplementedError if converters are not present
         """
-        #TODO:test
-        try:
-            m = self.conversionMatrix(tosys)
-        #TODO:SPEEDUP: don't catch exception, instead use some more direct means, or cache catching somehow
-        except NotImplementedError:
-            m1 = self.conversionMatrix(EquatorialCoordinates)
+        convs = CoordinateSystem._converters[self.__class__]
+        hubcoosys = self.hubcoosys
+        if hubcoosys is None:
+            hubcoosys = EquatorialCoordinates #this can be reassigned by user
+        
+        if tosys in convs:
+            return CoordinateSystem.convert(self,tosys)
+        elif hubcoosys in convs:
             try:
-                #TODO: determine if passing in potential the wrong type for conversion here is a problem
-                m2 = CoordinateSystem._converters[EquatorialCoordinates][tosys](self,True)
-            except (KeyError,TypeError),e:
-                errstr = 'cannot generate matrix to transform from EquatorialCoordinates to '+str(tosys)
-                raise NotImplementedError(errstr)
-            m = m2*m1
+                m1 = convs[hubcoosys](self) 
+                #calling hubcoosys->target conv w/self technically incorrect, but often gets the right result
+                m2 = CoordinateSystem._converters[hubcoosys][tosys](self) 
+                return LatLongCoordinates._smatrix(m2*m1,self,tosys)
+            except Exception,e:
+                niestr = 'could not convert from {0} to {1} by way of {2}'
+                niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
+                raise NotImplementedError(nies,e)
+        else:
+            niestr = 'could not convert from {0} to {1}'
+            raise NotImplementedError(niestr.format(self.__class__,tosys))
         
-        tres = self.matrixTransform(m,apply=False)
-        newcoords = tosys()
-        
-        #TODO:SPEEDUP: use _lat instead of lat and similar if workable?
-        newcoords.lat.radians = tres[0]
-        newcoords.long.radians = tres[1]
-        if len(tres)>3:
-            newcoords.laterr.radians = tres[2]
-            newcoords.longerr.radians = tres[3]
-            
-        if hasattr(newcoords,'_epoch'):
-            newcoords._epoch = self._epoch
-            
-        return newcoords
     
-class EpochalCoordinates(LatLongCoordinates):
+class EpochalLatLongCoordinates(LatLongCoordinates):
     """
     The origin and orientation of some coordinate systems are tied to the motion
     of the Earth. Hence, a particular location of the equinox as specified by
@@ -1313,12 +1345,19 @@ class EpochalCoordinates(LatLongCoordinates):
     def _setEpoch(self,val):
         if val is None:
             self._epoch = None
-        elif not hasattr(self,'_epoch') or self._epoch is None:
-            self._epoch = float(val)
         else:
-            self.transformToEpoch(float(val))
+            if val == 'now':
+                from obstools import jd_to_epoch
+                val = jd_to_epoch(None)
+            if not hasattr(self,'_epoch') or self._epoch is None:
+                self._epoch = float(val)
+            else:
+                self.transformToEpoch(float(val))
     epoch = property(_getEpoch,_setEpoch,doc="""
     Epoch for this coordinate as a float. 
+    
+    Setting with the string 'now' will set the epoch to the time at the moment
+    the command is executed.
     
     If set, this coordinate will be transformed to the new epoch, unless the
     current Epoch is None, in which case the epoch will be set with no
@@ -1350,7 +1389,7 @@ class EpochalCoordinates(LatLongCoordinates):
     
     def convert(self,tosys):
         res = LatLongCoordinates.convert(self,tosys)
-        if issubclass(tosys,EpochalCoordinates):
+        if issubclass(tosys,EpochalLatLongCoordinates):
             res._epoch = self._epoch
         return res
     convert.__doc__ = LatLongCoordinates.convert.__doc__
@@ -1363,11 +1402,9 @@ class EpochalCoordinates(LatLongCoordinates):
         transformation is performed
         """
         self._epoch = newepoch
-    
-    
         
 
-class EquatorialCoordinatesBase(EpochalCoordinates):
+class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
     """
     This object represents an angular location on the unit sphere, specified in
     right ascension and declination.  Some of the subclasses are not strictly 
@@ -1386,7 +1423,7 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
     def __str__(self):
         rastr = self.ra.getHmsStr(canonical=True)
         decstr = self.dec.getDmsStr(canonical=True)
-        return 'Equatorial Coordinates: {0} {1} ({2})'.format(rastr,decstr,self.epoch)
+        return '{3}: {0} {1} ({2})'.format(rastr,decstr,self.epoch,self.__class__.__name__)
     
     _dpc = None #default distance should be infinity
     def _getDistancepc(self):
@@ -1439,17 +1476,17 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
     """)
     
     def __getstate__(self):
-        d = EpochalCoordinates.__getstate__(self)
+        d = EpochalLatLongCoordinates.__getstate__(self)
         d['_dpc'] = self._dpc
         return d
     
     def __setstate__(self,d):
-        EpochalCoordinates.__setstate__(self,d)
+        EpochalLatLongCoordinates.__setstate__(self,d)
         self._dpc = d['_dpc']
     
     def __init__(self,*args,**kwargs):
         """
-        Input for equatorial coordinates
+        Input for equatorial coordinates. Can follow any of the following forms:
         
         * EquatorialCoordinatesBase()
         * EquatorialCoordinatesBase(:class:`EquatorialCoordinatesBase`)
@@ -1458,6 +1495,9 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         * EquatorialCoordinatesBase(ra,fdec,raerr,decerr)
         * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch)
         * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch,distancepc)
+        
+        Note that the default epoch is 2000 if not otherwise specified.  To 
+        disable epoch tranformations, set the epoch to None.
         
         """
         posargs = {}
@@ -1505,18 +1545,18 @@ class EquatorialCoordinatesBase(EpochalCoordinates):
         kwargs.setdefault('decerr',None)
         kwargs.setdefault('epoch',2000)
         
-        EpochalCoordinates.__init__(self,kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        EpochalLatLongCoordinates.__init__(self,kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
         if 'distancepc' in kwargs:
             self.distancepc = kwargs['distancepc']
             
     def convert(self,tosys):
-        res = EpochalCoordinates.convert(self,tosys)
+        res = EpochalLatLongCoordinates.convert(self,tosys)
         if self._dpc is not None:
             res._dpc = self._dpc
         return res
-    convert.__doc__ = EpochalCoordinates.convert.__doc__
+    convert.__doc__ = EpochalLatLongCoordinates.convert.__doc__
             
             
             
@@ -1677,8 +1717,8 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     Changes to the :attr:`epoch` will result in the coordinates being updated
     for precession nutation. Nutation currently uses the IAU 2000B model that
     should be good to ~1 mas. If abberration or annual parallax corrections are
-    necessary, convert to :class:`EquatorialCoordinatesICRS`, change the epoch,
-    and then convert back to :class:`EquatorialCoordinatesCIRS`.
+    necessary, convert to :class:`ICRSCoordinates`, change the epoch, and then
+    convert back to :class:`EquatorialCoordinatesCIRS`.
     
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
@@ -1697,23 +1737,25 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         IAU 2000 precessions from Capitaine, N. et al. 2003 as written in the
         USNO Circular 179.
         """
-        if EquatorialCoordinatesCIRS._nuton:
-            #convert from current to J2000
-            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
-            Bn = _nutation_matrix(self.epoch).T 
-            #convert to new epoch
-            A = _precession_matrix_J2000_Capitaine(newepoch)
-            An = _nutation_matrix(newepoch) 
-            M = An*A*B*Bn
-        else:
-            #convert from current to J2000
-            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
-            #convert to new epoch
-            A = _precession_matrix_J2000_Capitaine(newepoch)
-            M = A*B
+        if self.epoch is not None and newepoch is not None:
+            if EquatorialCoordinatesCIRS._nuton:
+                #convert from current to J2000
+                B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+                Bn = _nutation_matrix(self.epoch).T 
+                #convert to new epoch
+                A = _precession_matrix_J2000_Capitaine(newepoch)
+                An = _nutation_matrix(newepoch) 
+                M = An*A*B*Bn
+            else:
+                #convert from current to J2000
+                B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+                #convert to new epoch
+                A = _precession_matrix_J2000_Capitaine(newepoch)
+                M = A*B
+            self.matrixRotate(M)
             
-        self.matrixTransform(M)
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        #this sets the epoch
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -1744,16 +1786,17 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
         IAU 2000 precessions from Capitaine, N. et al. 2003 as written in the
         USNO Circular 179.
         """
-        #convert from current to J2000
-        B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
-        #convert to new epoch
-        A = _precession_matrix_J2000_Capitaine(newepoch)
-        self.matrixTransform(A*B)
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        if self.epoch is not None and newepoch is not None:
+            #convert from current to J2000
+            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+            #convert to new epoch
+            A = _precession_matrix_J2000_Capitaine(newepoch)
+            self.matrixRotate(A*B)
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
             
             
 
-class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
+class ICRSCoordinates(EquatorialCoordinatesBase):
     """
     Equatorial Coordinates tied to the International Celestial Reference System
     (ICRS). Strictly speaking this is not an Equatorial system, as it is an
@@ -1763,13 +1806,13 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     .. note::
         Strictly speaking this class is actually the Barycentric Celestial
         Reference System (BCRS), as any space/proper motions are computed before 
-        this object (generally in :class:`EphemerisObject`). But the base
-        reference system for BCRS is ICRS, so it is called ICRS here for
+        this object (generally in :class:`EphemerisObject`). But BCRS's orientation 
+        is tied to ICRS (it can be considered , so it is called ICRS here for
         clarity.
         
-    
     .. warning:: 
         Abberation and annual parallax are not yet included in transformations!
+        Also, all general relativistic effects are currently ignored.
         
     """
     
@@ -1779,7 +1822,7 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
         """
         ICRS is an inertial frame, so no transformation is necessary
         """
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
     
     #conversion methods and attributes are below
@@ -1801,47 +1844,51 @@ class EquatorialCoordinatesICRS(EquatorialCoordinatesBase):
     #make it a static method just for safety even though it isn't really visible
     __makeFrameBias = staticmethod(__makeFrameBias)
     
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
-    def _toEqE(icrsc,getmatrix=False):
-        if getmatrix:
-            B = self.frameBiasJ2000
-            P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
-            return P*B #no nutation for equinox-based
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
+    def _toEqE(icrsc):
+        B = ICRSCoordinates.frameBiasJ2000
+        if icrsc.epoch is None:
+            return B
         else:
-            #calls the getmatrix=True version
-            return icrsc.convert(EquatorialCoordinates)
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
-    def _toEqC(icrsc,getmatrix=False):
-        if getmatrix:
-            B = self.frameBiasJ2000
+            P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
+            return P*B #no nutation implemented for equinox-based
+    
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    def _toEqC(icrsc):
+        B = ICRSCoordinates.frameBiasJ2000
+        if icrsc.epoch is None:
+            return B
+        else:
             P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
             if EquatorialCoordinatesCIRS._nuton:
                 N = _nutation_matrix(icrsc.epoch)
                 return N*P*B
             else:
                 return P*B
-        else:
-            #calls the getmatrix=True version
-            return icrsc.convert(EquatorialCoordinates)
     
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')    
-    def _fromEqE(eqc,getmatrix=False):
-        if getmatrix:
-            #really we want inverse, but rotations are unitary -> inv==transpose
-            return EquatorialCoordinatesICRS._toEqE(None).T 
-        else:
-            #calls the getmatrix=True version
-            return eqc.convert(EquatorialCoordinatesICRS)
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
-    def _fromEqC(eqc,getmatrix=False):
-        if getmatrix:
-            #really we want inverse, but rotations are unitary -> inv==transpose
-            return EquatorialCoordinatesICRS._toEqC(None).T 
-        else:
-            #calls the getmatrix=True version
-            return eqc.convert(EquatorialCoordinatesICRS)
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
+    def _fromEqE(eqc):
+        #really we want inverse, but rotations are unitary -> inv==transpose
+        #we provide eqc in the call because the epoch is needed
+        return ICRSCoordinates._toEqE(eqc).T 
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    def _fromEqC(eqc):
+        #really we want inverse, but rotations are unitary -> inv==transpose
+        #we provide eqc in the call because the epoch is needed
+        return ICRSCoordinates._toEqC(eqc).T 
+    
+class ITRSCoordinates(EquatorialCoordinatesBase):
+    """
+    ???
+        
+    """
+    
+    __slots__ = tuple()
+    
+    def transformToEpoch(self,newepoch):
+        raise NotImplementedError
             
-class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
+class FK5Coordinates(EquatorialCoordinatesEquinox):
     """
     Equatorial Coordinates fixed to the FK5 reference system. 
     """
@@ -1869,8 +1916,9 @@ class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
         * 6800 BCE to 8200 CE
             > 1000"
         """
-        self.matrixTransform(self._precessionMatrixJ(self.epoch,newepoch))
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        if self.epoch is not None and newepoch is not None:
+            self.matrixRotate(self._precessionMatrixJ(self.epoch,newepoch))
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
     @staticmethod
     def _precessionMatrixJ(epoch1,epoch2):
@@ -1900,7 +1948,7 @@ class EquatorialCoordinatesFK5(EquatorialCoordinatesEquinox):
                rotation_matrix(theta,'y') *\
                rotation_matrix(-zeta,'z')
     
-class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
+class FK4Coordinates(EquatorialCoordinatesEquinox):
     """
     Equatorial Coordinates fixed to the FK4 reference system.  Note that this 
     implementation does *not* correct for the elliptic terms of aberration
@@ -1918,8 +1966,9 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
         method of Newcomb (pre-IAU1976) to compute precession.
         """
-        self.matrixTransform(self._precessionMatrixB(self.epoch,newepoch))
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        if self.epoch is not None and newepoch is not None:
+            self.matrixRotate(self._precessionMatrixB(self.epoch,newepoch))
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
     @staticmethod
     def _precessionMatrixB(epoch1,epoch2):
@@ -1955,7 +2004,7 @@ class EquatorialCoordinatesFK4(EquatorialCoordinatesEquinox):
                rotation_matrix(-zeta,'z')
         
         
-class EclipticCoordinatesCIRS(EpochalCoordinates):
+class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
     through the ecliptic at the current epoch.
@@ -1975,37 +2024,30 @@ class EclipticCoordinatesCIRS(EpochalCoordinates):
     obliqyear = 2006
     
     def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
-        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
+        EpochalLatLongCoordinates(beta,lamb,betaerr,lamberr,epoch)
         
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
-    def _toEq(eclsc,getmatrix=False):
-        if getmatrix:
-            return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
-        else:
-            #calls the getmatrix=True version
-            return icrsc.convert(EquatorialCoordinatesCIRS)
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    def _toEq(eclsc):
+        return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
         
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
-    def _fromEq(eqc,getmatrix=False):
-        if getmatrix:
-            return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
-        else:
-            #calls the getmatrix=True version
-            return eqc.convert(EclipticCoordinatesCIRS)
-        
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    def _fromEq(eqc):
+        return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
+    
     def transformToEpoch(self,newepoch):
-        eqc = self.convert(EquatorialCoordinatesCIRS)
-        eqc.epoch = newepoch
-        newval = eqc.convert(self.__class__)
-        self._lat._decval = newval._lat._decval
-        self._long._decval = newval._long._decval
-        self._laterr._decval = newval._lat._decval
-        self._longerr._decval = newval._longerr._decval
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        if self.epoch is not None and newepoch is not None:
+            eqc = self.convert(EquatorialCoordinatesCIRS)
+            eqc.epoch = newepoch
+            newval = eqc.convert(self.__class__)
+            self._lat._decval = newval._lat._decval
+            self._long._decval = newval._long._decval
+            self._laterr._decval = newval._lat._decval
+            self._longerr._decval = newval._longerr._decval
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
         
             
-class EclipticCoordinatesEquinox(EpochalCoordinates):
+class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
     through the ecliptic at the current epoch.
@@ -2025,63 +2067,76 @@ class EclipticCoordinatesEquinox(EpochalCoordinates):
     obliqyear = 1980
     
     def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
-        EpochalCoordinates(beta,lamb,betaerr,lamberr,epoch)
+        EpochalLatLongCoordinates(beta,lamb,betaerr,lamberr,epoch)
         
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
-    def _toEq(eclsc,getmatrix=False):
-        if getmatrix:
-            return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
-        else:
-            #calls the getmatrix=True version
-            return icrsc.convert(EquatorialCoordinatesEquinox)
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
+    def _toEq(eclsc):
+        return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
         
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
-    def _fromEq(eqc,getmatrix=False):
-        if getmatrix:
-            return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
-        else:
-            #calls the getmatrix=True version
-            return eqc.convert(EclipticCoordinatesEquinox)
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
+    def _fromEq(eqc):
+        return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
         
     def transformToEpoch(self,newepoch):
-        eqc = self.convert(EquatorialCoordinatesEquinox)
-        eqc.epoch = newepoch
-        newval = eqc.convert(self.__class__)
-        self._lat._decval = newval._lat._decval
-        self._long._decval = newval._long._decval
-        self._laterr._decval = newval._lat._decval
-        self._longerr._decval = newval._longerr._decval
-        EpochalCoordinates.transformToEpoch(self,newepoch)
+        if self.epoch is not None and newepoch is not None:
+            eqc = self.convert(EquatorialCoordinatesEquinox)
+            eqc.epoch = newepoch
+            newval = eqc.convert(self.__class__)
+            self._lat._decval = newval._lat._decval
+            self._long._decval = newval._long._decval
+            self._laterr._decval = newval._lat._decval
+            self._longerr._decval = newval._longerr._decval
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
     _latlongnames_ = ('b','l')
     _longrange_ = (0,360)
     
-    _ngp_J2000 = EquatorialCoordinatesFK5(192.859508, 27.128336,epoch=2000)
+    _ngp_J2000 = FK5Coordinates(192.859508, 27.128336,epoch=2000)
     _long0_J2000 = AngularCoordinate(122.932)
+    _ngp_B1950 = FK4Coordinates(192.25, 27.4,epoch=1950)
+    _long0_B1950 = AngularCoordinate(123)
     
-    def toSGal(self):
-        """
-        converts this position to Supergalactic coordinates
-        """
-        latang = SupergalacticCoordinates._nsgp_gal.lat.d
-        longang = SupergalacticCoordinates._nsgp_gal.long.d
-        mrot = rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
-        sgp = SupergalacticCoordinates(self)
-        sgp.matrixTransform(mrot)
-        return sgp
+    @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
+    def _fromFK5(fk5coords):
+        return rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
+               rotation_matrix(90 - GalacticCoordinates._ngp_J2000.dec.d,'y') *\
+               rotation_matrix(GalacticCoordinates._ngp_J2000.ra.d,'z')
     
+    @CoordinateSystem.registerTransform('self',FK5Coordinates,transtype='smatrix')
+    def _toFK5(galcoords):
+        return GalacticCoordinates._fromFK5(galcoords).T
     
+    @CoordinateSystem.registerTransform(FK4Coordinates,'self',transtype='smatrix')
+    def _fromFK4(fk4coords):
+        return rotation_matrix(180 - GalacticCoordinates._long0_B1950.d,'z') *\
+               rotation_matrix(90 - GalacticCoordinates._ngp_B1950.dec.d,'y') *\
+               rotation_matrix(GalacticCoordinates._ngp_B1950.ra.d,'z')
+    
+    @CoordinateSystem.registerTransform('self',FK4Coordinates,transtype='smatrix')
+    def _toFK4(galcoords):
+        return GalacticCoordinates._fromFK4(galcoords).T
+        
 class SupergalacticCoordinates(LatLongCoordinates):   
     __slots__ = tuple()
     _latlongnames_ = ('sgb','sgl')
     _longrange_ = (0,360)
     
-    _nsgp_gal = EquatorialCoordinatesFK4(6.32,47.37,epoch=1950)
+    _nsgp_gal = FK4Coordinates(6.32,47.37,epoch=1950)
     _sglong0_gal = 137.37
-    _nsgp_J2000 = EquatorialCoordinatesFK5(283.75420420,15.70894043,epoch=2000)
+    _nsgp_J2000 = FK5Coordinates(283.75420420,15.70894043,epoch=2000)
     _sglong0_J2000 = 42.30997710
+    
+    @CoordinateSystem.registerTransform('self',GalacticCoordinates,transtype='smatrix')
+    def _toGal(sgalcoords):
+        return SupergalacticCoordinates._fromGal(sgalcoords).T
+    
+    @CoordinateSystem.registerTransform(GalacticCoordinates,'self',transtype='smatrix')
+    def _fromGal(galcoords):
+        latang = SupergalacticCoordinates._nsgp_gal.lat.d
+        longang = SupergalacticCoordinates._nsgp_gal.long.d
+        return rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
     
 class HorizontalCoordinates(LatLongCoordinates):
     """
