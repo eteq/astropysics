@@ -53,29 +53,47 @@ def _get_package_data(dataname):
 
 #<-----------------------General IO utilities---------------------------------->
 
-def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
+def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
     """
-    this uses numpy.loadtxt to load a text file into a numpy record 
-    array where the field names are inferred from a commented text line.
+    Load a text file into a structured numpy array where the field names and
+    types are inferred from a line in the file.
     
-    the format for the field line is:
     
-    #field1:typecode1[:unit1] field2:typecode2[:unit2] (... )
+    It must begin with a comment (specified by the 'comments' keyword) and have
+    fields (sperated by the `delimiter`, default whitespace) composed of a
+    color-seperated field name and valid numpy dtype (e.g. 'f' for floats or 'i'
+    for integers).
     
-    with the character in place of the : optionally selected with the 
-    typedelim keyword.  Any comments in the line will be removed. 
-    type codes are the same as those used in numpy.dtype.  if units are provided
-    they are a numerical factor to multiply the column by - if ommitted, it is
-    assumed to be 1
+    If a third color-seperated component is present, it is a python expression
+    (with no spaces) that can be used to derive the value for that column given
+    values from the other columns.  numpy functions can be used with the prefix
+    'np'.  
     
-    fieldline tells which line of the file to use to find the line with
-    field information
+    An example field line might be::
     
-    asrecarray converts the array to a record array before returning, allowing
-    attribute-style access
+        #data1:f derived:f:data1+data2**2 data2:i:2
     
-    kwargs are passed into numpy.loadtxt
+    This will result in a 3-field record array with fields 'data1', 'derived',
+    and 'data2', where data1 and data2 are the columns of the input file.
+    
+    :param fn: The file name to load.
+    :type fn: string
+    :param fieldline: The line number that has the field information. 
+    :type fieldline: int
+    :param asrecarray: 
+        If True, returns a :class:`numpy.recarray`. Otherwise, returns a regular
+        :class:`numpy.ndarray` with a structured dtype.
+    :type asrecarray: 
+    
+    extra keywords are passed into :func:`numpy.loadtxt`
+    
+    :returns: A numpy record array or regular array with data from the text file.
+    
     """
+    
+    fieldline -= 1 #1-based to 0-based
+    typedelim = ':'
+    
     if 'dtype' in kwargs:
         raise ValueError("can't use field lines")
     
@@ -89,32 +107,47 @@ def loadtxt_text_fields(fn,fieldline=0,typedelim=':',asrecarray=True,**kwargs):
                 fields = l.split(delimiter)
                 break
     try:     
-        dtype = []   
-        factors = {}
+        dtype = []
+        loadtype = []
+        exprd = {}
         for fi in fields:
             t = tuple(fi.split(typedelim))
-            dtype.append(t[:2])
-            if len(t)>2:
-                factors[t[0]] = np.array(t[2],dtype=t[1])
+            if len(t)==2:
+                dtype.append(t)
+                loadtype.append(t)
+            elif len(t)==3:
+                dtype.append(t[:2])
+                exprd[t[0]] = t[2]
+            else:
+                raise ValueError('Invalid field line %s'%fi)
+            
+        loadtype = np.dtype(loadtype)
         dtype = np.dtype(dtype)
+        
     except TypeError: #figure out where the problem was
         for fi in fields:
             t = tuple(fi.split(typedelim))
             try:
-                dtype(t[1])
+                np.dtype(t[1])
             except TypeError:
-                raise TypeError('dtype code {1} invalid for field {0}'.format(t))
+                raise TypeError('dtype code {1} invalid for field {0}'.format(*t))
             #if something else went wrong, re-raise
             raise
-    arr = np.loadtxt(fn,dtype=dtype,**kwargs)
-    for n,f in factors.iteritems():
-        arr[n]*=f
+        
+    loadarr = np.loadtxt(fn,dtype=loadtype,**kwargs)
+    arr = np.empty(loadarr.size,dtype=dtype)
     
-    
+    ldict = {}
+    for fin in loadarr.dtype.names:
+        arr[fin] = ldict[fin] = loadarr[fin]
+        
+    for fin,expr in exprd.iteritems():
+        arr[fin] = eval(expr,globals(),ldict)
     
     if asrecarray:
         return arr.view(np.recarray)
-    return arr
+    else:
+        return arr
 
 
 class FixedColumnData(object):
