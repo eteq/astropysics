@@ -15,3 +15,12 @@ python setup.py install
 On some linux distributions, this may need to be 
 
 sudo python setup.py install
+
+Documentation
+-------------
+
+Documentation (in the "docs" directory) is meant to be used with sphinx (http://sphinx.pocoo.org).  Typical usage is
+
+python setup.py build_sphinx
+
+to build html documentation and place it in docs/_build/html.  Note that this requires Sphinx 1.0 (in beta as of this writing)

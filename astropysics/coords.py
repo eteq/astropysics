@@ -15,26 +15,25 @@ particularly strange cosmology is in use.
 
 .. seealso::
 
-   `Kapteyn libraries <http://www.astro.rug.nl/software/kapteyn/index.html>`_
+    `Kapteyn libraries <http://www.astro.rug.nl/software/kapteyn/index.html>`_
         A set of python libraries with excellent coordinate transform and other
         capabilities.
         
-   `Pyephem <http://rhodesmill.org/pyephem/>`_
+    `Pyephem <http://rhodesmill.org/pyephem/>`_
         A Pythonic implementation of the 
         `xephem <http://www.clearskyinstitute.com/xephem/>`_ ephemerides 
         algorithms. 
         
-   `Meeus, Jean H. "Astronomical Algorithms" ISBN 0943396352
-   <http://www.willbell.com/MATH/mc1.htm>`_ An authoritative reference on
-   coordinates, ephemerides, and related transforms in astronomy
+    `Meeus, Jean H. "Astronomical Algorithms" ISBN 0943396352 <http://www.willbell.com/MATH/mc1.htm>`_ 
+        An authoritative reference on coordinates, ephemerides, and related
+        transforms in astronomy.
    
-   `Standards Of Fundamental Astronomy (SOFA) <http://www.iausofa.org/>`_ The
-   IAU reference implementations for coordinates and earth rotation.
+    `Standards Of Fundamental Astronomy (SOFA) <http://www.iausofa.org/>`_ 
+        The IAU reference implementations for coordinates and earth rotation.
    
-   `USNO Circular 179
-   <http://aa.usno.navy.mil/publications/docs/Circular_179.pdf>`_ An excellent
-   description of the IAU 2000 resolutions and related background for defining
-   ICRS, CIO, and related standards.
+    `USNO Circular 179 <http://aa.usno.navy.mil/publications/docs/Circular_179.pdf>`_ 
+        An excellent description of the IAU 2000 resolutions and related
+        background for defining ICRS, CIO, and related standards.
    
 .. warning:: 
     While the framework for the coordinate transformations is done, the
@@ -94,12 +93,13 @@ except ImportError: #support for earlier versions
 
 class AngularCoordinate(object):
     """
-    An angular coordinate that on the unit sphere.
+    The value of an angular coordinate on the unit sphere.
     
     Arithmetic operators can be applied to the coordinate, and will be applied 
     directly to the numerical value in radians.  For + and -, two angular 
     coordinates may be used, although for -, an AngularSeperation object will
     be returned.
+    
     """
     import re as _re
     __slots__=('_decval','_range')
@@ -109,14 +109,13 @@ class AngularCoordinate(object):
     
     def __init__(self,inpt=None,sghms=None,range=None,radians=False):
         """
-        
         The input parser is very adaptable, and can be in any of the following 
         forms for `inpt`:
         
         * A float value
             if `radians` is True, this will be interpreted as decimal radians,
             otherwise, it is in degrees.
-        * A :class:`AngularCoordinate` object
+        * An :class:`AngularCoordinate` object
             A copy of the input object will be created.
         * None
             The default of 0 will be used.
@@ -887,7 +886,7 @@ class CoordinateSystem(object):
         :param tosys: The new coordinate system 
         :type tosys: A subclass of :class:`CoordinateSystem`
         
-        :except: raises NotImplementedError if conversion is not present
+        :except: raises :exc:`NotImplementedError` if conversion is not present
         """
         try:
             return CoordinateSystem._converters[self.__class__][tosys](self)
@@ -1563,7 +1562,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
 def _precession_matrix_J2000_Capitaine(epoch):
         """
         Computes the precession matrix from J2000 to the given Julian Epoch.
-        Expression from from Capitaine, N. et al. 2003 as written in the USNO
+        Expression from from Capitaine et al. 2003 as written in the USNO
         Circular 179.  This should match the IAU 2006 standard from SOFA 
         (although this has not yet been tested)
         """
@@ -1723,8 +1722,8 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
     the transformations from equatorial to horizontal coordinates are performed
-    by the :class:`Site <astropysics.obstools.Site>` class in the
-    :mod:`astropysics.obstools` module, and attempting to directly convert will
+    by the :class:`~astropysics.obstools.Site` class in the
+    :mod:`~astropysics.obstools` module, and attempting to directly convert will
     raise an :exc:`TypeError`.
     """
     
@@ -1773,7 +1772,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
     the transformations from equatorial to horizontal coordinates are performed
-    by the :class:`Site <astropysics.obstools.Site>` class in the
+    by the :class:`~astropysics.obstools.Site` class in the
     :mod:`astropysics.obstools` module, and attempting to directly convert will
     raise a :exc:`TypeError`.
     """
@@ -1915,6 +1914,7 @@ class FK5Coordinates(EquatorialCoordinatesEquinox):
             > 100"
         * 6800 BCE to 8200 CE
             > 1000"
+            
         """
         if self.epoch is not None and newepoch is not None:
             self.matrixRotate(self._precessionMatrixJ(self.epoch,newepoch))

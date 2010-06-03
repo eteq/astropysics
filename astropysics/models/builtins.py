@@ -17,7 +17,7 @@ Module API
 
 from __future__ import division,with_statement
 
-from core import *
+from core import * #includes pi
 from ..spec import HasSpecUnits as _HasSpecUnits
 from math import e
 
@@ -739,43 +739,41 @@ class TwoSlopeATanModel(FunctionModel1DAuto):
     form is
     
     .. math::
-        y = (x-x_0) \\left[ \\frac{a+b}{2} - 
-                    \\frac{a-b}{\\pi} \\arctan(\\frac{x-x_0}{w})\\right] + c
+        y = (x-x_0) \\frac{a+b}{2} +
+                    \\frac{  s - (x-x_0) (a-b)}{\\pi}
+                    \\arctan \\left (\\frac{x-x0}{w} \\right) + c
     
     `a` is the slope for small x, `b` for large x, `c` is the value at x=x0,
-    `x0` is the location of the transition, and `w` is the width of the
-    transition
+    `x0` is the location of the transition, `w` is the width of the transition,
+    and `s` is the amount of y-axis offset that occurs at the transition
+    (positive for left-to-right).
     
     """
-    #alternative representation for docs:
+    #no-S form from old docs
+    #.. math::
+    #    y = (x-x_0) \\left[ \\frac{a+b}{2} - 
+    #                \\frac{a-b}{\\pi} \\arctan(\\frac{x-x_0}{w})\\right] + c
+    #alternative representation of no-S form for docs:
     #.. math::
     #    y = \\frac{a (x-x_0)}{\\pi} \\left(\\frac{\\pi}{2}-\\arctan(\\frac{x-x_0}{w}) \\right) +
     #        \\frac{b (x-x_0)}{\\pi} \\left(\\frac{\\pi}{2}+\\arctan(\\frac{x-x_0}{w}) \\right) + c
     
+    #no-s form
+    #def f(self,x,a=1,b=2,c=0,x0=0,w=1):
+    #    xoff = x-x0
+    #    tana = np.arctan(-xoff/w)/pi+0.5
+    #    tanb = np.arctan(xoff/w)/pi+0.5
+    #    return a*xoff*tana+b*xoff*tanb+c
     
-    
-    def f(self,x,a=1,b=2,c=0,x0=0,w=1):
-        xoff = x-x0
-        tana = np.arctan(-xoff/w)/pi+0.5
-        tanb = np.arctan(xoff/w)/pi+0.5
-        return a*xoff*tana+b*xoff*tanb+c
-    
-    def criticalPoint(self):
-        """
-        Computes and returns the critical point where this model inflects or has
-        a max/min.
-        
-        if a = b, returns 0 (undefined critical point)
-        """
-        if self.a == self.b:
-            return 0
-        else:
-            from scipy.optimize import newton
-            bma = self.b - self.a
-            bpa = self.a + self.b
-            toroot = lambda u: bma*(np.arctan(u)+u/(1+u**2))+bpa*pi/2
-            ur = newton(toroot,0)
-            return ur*self.w+self.x0
+    def f(self,x,a=1,b=2,c=0,x0=0,w=1,s=0):
+        xo = x - x0
+#        if w==0:
+#            tanfactor = .5*np.sign(x-x0)
+#        else:
+#            tanfactor = np.arctan(xo/w)/pi
+        #above is unneccessary b/c numpy division properly does infinities
+        tanfactor = np.arctan(xo/w)/pi
+        return xo*(a+b)/2 + (s - xo*(a-b))*tanfactor + c
     
     @property
     def rangehint(self):
