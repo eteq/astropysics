@@ -2438,12 +2438,13 @@ class DependentSource(Source):
         the return value is a list of the values in the fields if geterrs is
         False, or (value,upperr,lowerr) if it is True
         """
-        if self in DependentSource.__depcyclestack:
-            DependentSource.__depcyclestack.append(self)
-            raise CycleError('Attempting to compute a DerivedValue that results in a cycle')
-        else:
-            DependentSource.__depcyclestack.append(self)
         try:
+            if self in DependentSource.__depcyclestack:
+                DependentSource.__depcyclestack.append(self)
+                raise CycleError('Attempting to compute a DerivedValue that results in a cycle')
+            else:
+                DependentSource.__depcyclestack.append(self)
+                
             fieldvals = [wr() for wr in self.depfieldrefs]    
             if None in fieldvals:
                 fieldvals = self.populateFieldRefs()
