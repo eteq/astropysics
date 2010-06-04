@@ -3138,21 +3138,27 @@ _band_to_msun={'U':5.61,
                
 def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     """
-    calculate a luminosity from a magnitude
+    Valculate a luminosity from an absolute magnitude.
     
-    input M can be either a magnitude value, a sequence/array of magnitudes, or
-    a dictionary where the keys will be interpreted as specifying the bands  
-    (e.g. they can be 'U','B','V', etc. to be looked up as described 
-    below or a value for the zero-point)
+    :param M: Absolute magnitude of the object
+    :type M: scalar or array-like
+    :param Mzpt: The magnitude zero point for the band, or a band name.
+    :type Mzpt: scalar, array-like, or string
+    :param Lzpt: 
+        Luminosity units - e.g. 4.64e32 for ergs in V with solar zero points, or
+        1 for solar.
+    :type Lzpt: scalar or array-like
+    :param Merr: Error in absolute magnitude 
+    :type Merr: scalar or array-like
     
-    if Merr is given, will return (L,dL)
+    :returns: Luminosity if Lerr is None, otherwise (lum,lumerr)
     
-    Mzpt specifies the magnitude that matches Lzpt, so Lzpt is a unit conversion
-    factor for luminosity - e.g. 4.64e32 for ergs in V with solar zero points,
-    or 1 for solar
+    .. note::
     
-    Mzpt can also be 'U','B','V','R','I','J','H', or 'K' and will use B&M values 
-    for solar magnitudes or 'u','g','r','i', or 'z' from http://www.ucolick.org/~cnaw/sun.html
+        Mzpt as a string can be 'U','B','V','R','I','J','H', or 'K' and will use
+        B&M values for solar magnitudes or 'u','g','r','i', or 'z' from
+        http://www.ucolick.org/~cnaw/sun.html
+    
     """
     from operator import isMappingType,isSequenceType
     
@@ -3183,9 +3189,21 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
 
 def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     """
-    calculate a magnitude from a luminosity
+    Calculate absolute magnitude from a luminosity.
     
-    see mag_to_lum() for syntax details
+    :param L: The luminosity 
+    :type L: scalar or array-like
+    :param Mzpt: The magnitude zero point for the band, or a band name.
+    :type Mzpt: scalar, array-like, or string
+    :param Lzpt: 
+        Luminosity units - e.g. 4.64e32 for ergs in V with solar zero points, or
+        1 for solar.
+    :type Lzpt: scalar or array-like
+    :param Lerr: Error in luminosity
+    :type Lerr: scalar or array-like
+    
+    :returns: asolute magnitude if Lerr is None, otherwise (mag,magerr)
+    
     """
     from operator import isMappingType,isSequenceType
         
