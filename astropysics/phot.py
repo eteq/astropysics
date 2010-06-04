@@ -3140,8 +3140,10 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     """
     Valculate a luminosity from an absolute magnitude.
     
-    :param M: Absolute magnitude of the object
-    :type M: scalar or array-like
+    :param M: 
+        Absolute magnitude of the object. If a dictionary, the keys will be
+        taken to specify band names (and Mzpt will be ignored).
+    :type M: scalar, array-like, or mapping.
     :param Mzpt: The magnitude zero point for the band, or a band name.
     :type Mzpt: scalar, array-like, or string
     :param Lzpt: 
@@ -3151,7 +3153,9 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     :param Merr: Error in absolute magnitude 
     :type Merr: scalar or array-like
     
-    :returns: Luminosity if Lerr is None, otherwise (lum,lumerr)
+    :returns: 
+        Luminosity if Lerr is None, otherwise (lum,lumerr) tuple (error assumes
+        normal approximation).
     
     .. note::
     
@@ -3165,72 +3169,84 @@ def mag_to_lum(M,Mzpt=4.83,Lzpt=1,Merr=None):
     dictin = isMappingType(M) and not np.isscalar(M) #numpy scalars are mapping types
     if dictin:
         dkeys = Mzpt = M.keys()
-        M = M.values()
+        M = np.array(M.values())
     elif type(M) is not np.ndarray:
-        M=np.array(M)
+        M = np.array(M)
         
     if isinstance(Mzpt,basestring):
-        Mzpt=_band_to_msun[Mzpt]
+        Mzpt = _band_to_msun[Mzpt]
     elif isSequenceType(Mzpt):    
-        Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
+        Mzpt = np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
         
     #L=(10**((Mzpt-M)/2.5))*Lzpt
     L = _mag_to_flux(M-Mzpt)*Lzpt
     
     if dictin:
-        L = dict([t for t in zip(dkeys,L)])
-    
-    if np.any(Merr):
-        #dL=Merr*L/1.0857362047581294 #-1.0857362047581294 = -2.5/ln(10)
-        dL = _magerr_to_fluxerr(Merr,M)
-        return L,dL
+        if np.any(Merr):
+            Merr = np.array([Merr[k] for k in dkeys])
+            dL = _magerr_to_fluxerr(Merr,M-Mzpt)*Lzpt
+            return dict([(k,(Li,dLi)) for k,Li,dLi in zip(dkeys,L,dL)])
+        else:
+            return dict([t for t in zip(dkeys,L)])
     else:
-        return L
+        if np.any(Merr):
+            dL = _magerr_to_fluxerr(Merr,M-Mzpt)*Lzpt
+            return L,dL
+        else:
+            return L
 
 def lum_to_mag(L,Mzpt=4.83,Lzpt=1,Lerr=None):
     """
     Calculate absolute magnitude from a luminosity.
     
-    :param L: The luminosity 
-    :type L: scalar or array-like
+    :param L: 
+        The luminosity of the object. If a dictionary, the keys will be taken to
+        specify band names (and Mzpt will be ignored).
+    :type L: scalar, array-like, or mapping.
     :param Mzpt: The magnitude zero point for the band, or a band name.
     :type Mzpt: scalar, array-like, or string
     :param Lzpt: 
         Luminosity units - e.g. 4.64e32 for ergs in V with solar zero points, or
         1 for solar.
     :type Lzpt: scalar or array-like
-    :param Lerr: Error in luminosity
+    :param Lerr: Error in luminosity (will be treated with normal approximation)
     :type Lerr: scalar or array-like
     
-    :returns: asolute magnitude if Lerr is None, otherwise (mag,magerr)
+    :returns:
+        Absolute magnitude if Lerr is None, otherwise (mag,magerr) tuple (error
+        assumes normal approximation).
     
     """
     from operator import isMappingType,isSequenceType
         
-    dictin = isMappingType(L) and not np.isscalar(M) #numpy scalars are mapping types    
+    dictin = isMappingType(L) and not np.isscalar(L) #numpy scalars are mapping types    
     if dictin:
         dkeys = Mzpt = L.keys()
-        L = L.values()
+        L = np.array(L.values())
     elif type(L) is not np.ndarray:
-        L=np.array(L)     
+        L = np.array(L)     
         
     if isinstance(Mzpt,basestring):
-        Mzpt=_band_to_msun[Mzpt]
+        Mzpt = _band_to_msun[Mzpt]
     elif isSequenceType(Mzpt):    
-        Mzpt=np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
+        Mzpt = np.array(map(lambda x:_band_to_msun.get(x,x),Mzpt))
         
     #M=Mzpt-2.5*np.log10(L/Lzpt)
     M = Mzpt+_flux_to_mag(L/Lzpt)
 
     if dictin:
-        M = dict([t for t in zip(dkeys,M)])
-
-    if np.any(Lerr):
-        #dM=1.0857362047581294*Lerr/L #-1.0857362047581294 = -2.5/ln(10)
-        dM = _fluxerr_to_magerr(Lerr,L)
-        return M,dM
+        if np.any(Lerr):
+            Lerr = np.array([Lerr[k] for k in dkeys])
+            dM = _fluxerr_to_magerr(Lerr/Lzpt,L/Lzpt)
+            return dict([(k,(Mi,dMi)) for k,Mi,dMi in zip(dkeys,M,dM)])
+        else:
+            return dict([t for t in zip(dkeys,M)])
     else:
-        return M
+        if np.any(Lerr):
+            dM = _fluxerr_to_magerr(Lerr/Lzpt,L/Lzpt)
+            return M,dM
+        else:
+            return M
     
 def color_to_flux_ratio(color,band1,band2):
     """
