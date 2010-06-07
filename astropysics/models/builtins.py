@@ -78,8 +78,14 @@ class LinearModel(FunctionModel1DAuto):
                                           self.m if 'm' in fixedpars else False,
                                           self.b if 'b' in fixedpars else False)
             else:
-                if len(fixedpars)>0:
-                    raise ValueError('cannot fix parameters and do weighted fit')
+                fixslope = fixint = None
+                if 'm' in fixedpars:
+                    fixslope = self.m
+                if 'b' in fixedpars:
+                    fixint = self.b
+                kwargs['fixint'] = fixint
+                kwargs['fixslope'] = fixslope
+                    
                 weights = np.array(weights,copy=False)
                 if len(weights.shape) == 2:
                     weights = ((x/weights[0])**2+(y/weights[1])**2)**0.5
@@ -105,7 +111,13 @@ class LinearModel(FunctionModel1DAuto):
         else:
             raise ValueError('invalid fittype %s'%self.fittype)
             
-        return ((m,b),merr,berr)
+        if len(fixedpars)>0:
+            if 'b' in fixedpars:
+                return ((m,),merr,berr)
+            elif 'm' in fixedpars:
+                return ((b,),merr,berr)
+        else:
+            return ((m,b),merr,berr)
     
     _fittypes = {'basic':_linearFit,'yerr':_linearFit,'fiterrxy':_linearFit}
     fittype = 'basic'
@@ -144,9 +156,9 @@ class LinearModel(FunctionModel1DAuto):
            (fixslope is False or fixslope is None):
             if len(y)!=N:
                 raise ValueError('data arrays are not same length!')
-            sxsq=np.sum(x*x)
-            sx,sy=np.sum(x),np.sum(y)
-            sxy=np.sum(x*y)
+            sxsq = np.sum(x*x)
+            sx,sy = np.sum(x),np.sum(y)
+            sxy = np.sum(x*y)
             delta=N*sxsq-sx**2
             m=(N*sxy-sx*sy)/delta
             b=(sxsq*sy-sx*sxy)/delta
@@ -155,7 +167,6 @@ class LinearModel(FunctionModel1DAuto):
             db=dy*(N/delta)**0.5 
             
         elif fixint is False or fixint is None:
-            
             m,dm = fixslope,0
             
             b = np.sum(y-m*x)/N 
@@ -182,7 +193,7 @@ class LinearModel(FunctionModel1DAuto):
         
         
     @staticmethod
-    def fitWeighted(x,y,sigmay=None,doplot=False):
+    def fitWeighted(x,y,sigmay=None,doplot=False,fixslope=None,fixint=None):
         """
         Does a linear weighted least squares fit and computes the coefficients 
         and errors.
@@ -194,11 +205,16 @@ class LinearModel(FunctionModel1DAuto):
         :param sigmay: 
             Error/standard deviation on y.  If None, weights are equal.
         :type sigmay: array-like or None
+        :param fixslope:
+            The value to force the slope to or None to leave the slope free.
+        :type fixslope: scalar or None
+        :param fixint: 
+            The value to force the intercept to or None to leave intercept free.
+        :type fixint: scalar or None
         
         :returns: tuple (m,b,sigma_m,sigma_b)
         
         """
-#        raise NotImplementedError('needs to be adapted to astro.models')
         from numpy import array,ones,sum
         if sigmay is None:
             sigmay=ones(len(x))
@@ -210,13 +226,38 @@ class LinearModel(FunctionModel1DAuto):
         x,y=array(x),array(y)
         
         w=1.0/sigmay/sigmay
-        delta=sum(w)*sum(w*x*x)-(sum(w*x))**2
-        A=(sum(w*x*x)*sum(w*y)-sum(w*x)*sum(w*x*y))/delta
-        B=(sum(w)*sum(w*x*y)-sum(w*x)*sum(w*y))/delta
-        diff=y-A-B*x
-        sigmaysq=sum(w*diff*diff)/(sum(w)*(N-2)/N) #TODO:check
-        sigmaA=(sigmaysq*sum(w*x*x)/delta)**0.5
-        sigmaB=(sigmaysq*sum(w)/delta)**0.5
+        
+        #B=slope,A=intercept
+        if (fixint is None or fixint is False) and \
+           (fixslope is None or fixslope is False):
+            delta=sum(w)*sum(w*x*x)-(sum(w*x))**2
+            A=(sum(w*x*x)*sum(w*y)-sum(w*x)*sum(w*x*y))/delta
+            B=(sum(w)*sum(w*x*y)-sum(w*x)*sum(w*y))/delta
+            diff=y-A-B*x
+            sigmaysq=sum(w*diff*diff)/(sum(w)*(N-2)/N) #TODO:check
+            sigmaA=(sigmaysq*sum(w*x*x)/delta)**0.5
+            sigmaB=(sigmaysq*sum(w)/delta)**0.5
+            
+        elif fixint is False or fixint is None:
+            B,sigmaB = fixslope,0
+            
+            A = np.sum(w*(y-B*x))/np.sum(w) 
+            
+            dy = (y-A-B*x).std(ddof=1)
+            sigmaA = dy
+            
+        elif fixslope is False or fixslope is None:
+            A,sigmaA = fixint,0
+            
+            sx = np.sum(w*x)
+            sxy = np.sum(w*x*y)
+            sxsq = np.sum(w*x*x)
+            B = (sxy-A*sx)/sxsq
+            
+            dy = (y-B*x-A).std(ddof=1) 
+            sigmaB = dy*sxsq**-0.5
+        else:
+            raise ValueError("can't fix both slope and intercept")
         
         if doplot:
             from matplotlib.pyplot import plot,errorbar,legend
