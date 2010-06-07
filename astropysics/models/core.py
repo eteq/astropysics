@@ -68,6 +68,7 @@ class ParametricModel(object):
     __metaclass__ = ABCMeta
     
     _data = None
+    _weightstype = 'ierror'
     
     @abstractmethod
     def __call__(self,x):
@@ -111,8 +112,69 @@ class ParametricModel(object):
                 e.args = ('invalid type for model data',)
                 raise
     data = property(_getData,_setData,doc="""
-    `data` should be either None, or a tuple(datain,dataout,weights).
+    `data` should be either None, or a tuple(datain,dataout,weights). Note that
+    the weights are interpreted statistically as errors based on the
+    `weightstype` attribute.
     """)
+    
+    def _getWeightstype(self):
+        return self._weightstype
+    def _setWeightstype(self,val):
+        if val not in ('ierror','ivar','error','var'):
+            raise ValueError('invalid weightstype '+str(val))
+        self._weightstype = val
+    weightstype = property(_getWeightstype,_setWeightstype,doc="""
+    Determines the statistical interpretation of the weights in `data`.  Can be:
+    
+    * 'ierror'
+        Weights act as inverse errors (default)
+    * 'ivar'
+        Weights act as inverse variance
+    * 'error'
+        Weights act as errors (non-standard - this makes points with larger
+        error bars count *more* towards the fit).
+    * 'var'
+        Weights act as variance (non-standard - this makes points with larger
+        error bars count *more* towards the fit).
+    """)
+    
+    def _weights_to_err(self,weights):
+        if weights is None:
+            return None
+        elif self._weightstype == 'ierror':
+            return 1.0/weights
+        elif self._weightstype == 'ivar':
+            return 1.0/(np.abs(weights)**0.5)
+        elif self._weightstype == 'error':
+            return weights
+        elif self._weightstype == 'var':
+            return np.abs(weights)**0.5
+        assert False,'should be unreachable'
+    
+    def _getErrors(self):
+        return 1/self._weights_to_err(self.data[2])
+    def _setErrors(self,val):
+        if np.isscalar(val):
+            val = val * np.ones_like(data[0])
+        else:
+            val = np.array(val,copy=False)
+            if val.shape != data[0].shape:
+                raise ValueError('Errors do not match data shape')
+            
+        if self._weightstype == 'ierror':
+            self.data[2] = 1/val
+        elif self._weightstype == 'ivar':
+            self.data[2] = val**-2
+        elif self._weightstype == 'error':
+            self.data[2] = weights = val.copy()
+        elif self._weightstype == 'var':
+            self.data[2] = val**2
+        assert False,'should be unreachable'
+    errors = property(_getErrors,_setErrors,doc="""
+    Sets the weights on `data` assuming the interpretation for errors given by
+    `weightstype`. If `data` is None/missing, a TypeError will be raised. 
+    """)
+    
     
     def inv(self,output,*args,**kwargs):
         """
@@ -766,8 +828,8 @@ class FunctionModel(ParametricModel):
         :type y: array-like or None
         :param weights: 
             Weights to adjust chi-squared, typically for error bars.
-            Statistically interpreted as the inverse error (*not* inverse
-            variance). If None, any stored |attrdata| will be used.
+            Statistically interpreted based on the `weightstype` attribute. If
+            None, any stored |attrdata| will be used.
         :type weights: array-like or None
         
         :returns: tuple of floats (chi2,reducedchi2,p-value)
@@ -806,8 +868,9 @@ class FunctionModel(ParametricModel):
                 while len(weights.shape)>1:
                     weights = np.sum(weights*weights,axis=0)**0.5
                 mody=self(x)
-                #assumes weights are inverse error, not ivar
-                chi2 = np.sum((weights*(y-mody))**2)
+                
+                err = self._weights_to_err(weights)
+                chi2 = np.sum(((y-mody)/err)**2)
         
         return chi2,chi2/dof,chisqprob(chi2,dof)
     
@@ -1557,7 +1620,7 @@ class FunctionModel1D(FunctionModel):
             return rh
         
     def plot(self,lower=None,upper=None,n=100,clf=True,logplot='',data='auto',
-                  *args,**kwargs):
+                  errorbars=True,*args,**kwargs):
         """
         Plot the model function and possibly data and error bars with
         :mod:`matplotlib.pyplot`. The plot will reflect any changes applied with
@@ -1590,6 +1653,14 @@ class FunctionModel1D(FunctionModel):
             function.
         :type data: 
             'auto', None, or array like of the form (x,y) or (x,y,(xerr,yerr))
+        :param errorbars: 
+            If True and weights are present in the data, error bars are shown on
+            the data based on the interpretation given by the `weightstype`
+            attribute. If False, no error bars are shown.
+        :type errorbars: boolean
+            
+        Additional arguments and keywords are passed into
+        :func:`matplotlib.pyplot.plot`.
             
         .. note::
             By default, the model is plotted *over* the data points. If the
@@ -1655,11 +1726,12 @@ class FunctionModel1D(FunctionModel):
                     plt.scatter(**data)
                 else:
                     plt.scatter(data[0],data[1],c='r')
-                    if data[2] is not None:
+                    if errorbars and data[2] is not None:
+                        err = self._weights_to_err(data[2])
                         if len(data[2].shape)>1:
-                            plt.errorbar(data[0],data[1],data[2][1],data[2][0],fmt=None,ecolor='k')
+                            plt.errorbar(data[0],data[1],err[1],err[0],fmt=None,ecolor='k')
                         else:
-                            plt.errorbar(data[0],data[1],data[2],fmt=None,ecolor='k')
+                            plt.errorbar(data[0],data[1],err,fmt=None,ecolor='k')
                             
             
                             
