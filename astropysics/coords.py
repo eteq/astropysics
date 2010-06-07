@@ -70,6 +70,7 @@ from .utils import DataObjectRegistry,rotation_matrix
 from .io import _get_package_data
 import numpy as np
 _twopi = 2*pi
+_pio2 = pi/2
 
 try:
     #requires Python 2.6
@@ -809,6 +810,41 @@ class CoordinateSystem(object):
         return CoordinateSystem._converters[fromclass][toclass]
     
     @staticmethod
+    def listAllTransforms():
+        """
+        Returns a list of 2-tuples (fromclass,toclass) of all the coordinate 
+        system combinations that have registered transformation functions.
+        """
+        trlist = []
+        for fr,l in CoordinateSystem._converters.iteritems():
+            for li in l:
+                trlist.append((fr,li))
+        return trlist
+    
+    @staticmethod
+    def listTransformsTo(toclass):
+        """
+        Returns a list of classes that can be transformed to the supplied class.
+        """
+        flist = []
+        for fr,l in CoordinateSystem._converters.iteritems():
+            for li in l:
+                if li is toclass:
+                    flist.append(fr)
+        return flist
+        
+    @staticmethod
+    def listTransformsFrom(fromclass):
+        """
+        Returns a list of classes that can be transformed from the supplied
+        class.
+        """
+        if fromclass in CoordinateSystem._converters:
+            return list(CoordinateSystem._converters[fromclass])
+        else:
+            return []
+        
+    @staticmethod
     def delTransform(fromclass,toclass):
         """
         Deletes the transformation function to go from `fromclass` to `toclass`.
@@ -1185,7 +1221,7 @@ class LatLongCoordinates(CoordinateSystem):
                 strf = 'cannot generate matrix to transform from {0} to {1}'
                 raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
         
-    def matrixRotate(self,matrix,apply=True,unitarycheck=False):
+    def matrixRotate(self,matrix,apply=True,fixrange=True,unitarycheck=False):
         """
         Applies the supplied  unitary rotation matrix to these coordinates. 
         
@@ -1195,6 +1231,11 @@ class LatLongCoordinates(CoordinateSystem):
             If True, the transform will be applied inplace to the coordinates
             for this object
         :type apply: boolean
+        :param fixrange: 
+            If True the latitude is autmoatically fixed to be on (-pi/2,pi/2) 
+            and the longitude is on (0,2pi).  Otherwise the raw coordinate is
+            output.
+        :type fixrange: boolean
         :param unitarycheck: 
             If True and the matrix is not unitary, a ValueError will be raised.
             Otherwise no check is performed.
@@ -1263,6 +1304,11 @@ class LatLongCoordinates(CoordinateSystem):
             
         else:
             laterr = None
+            
+        if fixrange:
+            ao = (latp+_pio2)/_twopi
+            latp = _twopi*abs((ao-np.floor(ao+0.5)))-_pio2
+            longp = longp % _twopi
         
         if apply:
             self.lat.radians = latp
@@ -1295,7 +1341,9 @@ class LatLongCoordinates(CoordinateSystem):
         if hubcoosys is None:
             hubcoosys = EquatorialCoordinates #this can be reassigned by user
         
-        if tosys in convs:
+        if not issubclass(tosys,CoordinateSystem):
+            raise TypeError('Coordinate system to convert to must be a subclass of CoordinateSystem ')
+        elif tosys in convs:
             return CoordinateSystem.convert(self,tosys)
         elif hubcoosys in convs:
             try:
