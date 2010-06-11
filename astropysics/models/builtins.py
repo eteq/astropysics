@@ -1517,7 +1517,10 @@ class NFWModel(FunctionModel1DAuto):
             self.setCall('getRhoMean')
             return self.inv(rhov,self.rc)
         finally:
-            self.setCall(*oldcall)
+            if oldcall is None:
+                self.setCall(None)
+            else:
+                self.setCall(*oldcall)
     
     def getMv(self,z=0):
         """
