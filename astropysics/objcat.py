@@ -3089,7 +3089,7 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
 #<--------------------builtin catalog types------------------------------------>
 
 class AstronomicalObject(StructuredFieldNode):
-    from .coords import EquatorialCoordinates
+    from .coords import ICRSCoordinates
     
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
@@ -3100,7 +3100,7 @@ class AstronomicalObject(StructuredFieldNode):
         
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
-    loc = Field('loc',EquatorialCoordinates)
+    loc = Field('loc',ICRSCoordinates)
     sed = SEDField('sed')
 
 class Test1(StructuredFieldNode):

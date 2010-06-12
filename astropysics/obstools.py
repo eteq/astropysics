@@ -26,6 +26,11 @@ matplotlib)
 
 .. todo:: examples/tutorials
 
+.. seealso::
+
+    :func:`astropysics.coords.earth_rotation_angle`
+    :func:`greenwich_sidereal_time`
+
 
 Classes and Inheritance Structure
 ---------------------------------
@@ -547,104 +552,6 @@ def epoch_to_jd(epoch,julian=True):
         return (epoch - 2000)*365.25 + 2451545.0
     else:
         return (epoch - 1900)*365.242198781 + 2415020.31352
-    
-def earth_rotation_angle(jd,degrees=True):
-    """
-    Earth Rotation Angle (ERA) for a given Julian Date.
-    
-    :param jd: The Julian Date or a sequence of JDs
-    :type jd: scalar or array-like
-    :param degrees: 
-        If True, the ERA is returned in degrees, if None, 1=full rotation.  
-        Otherwise, radians.
-    :type degrees: bool or None
-    
-    :returns: ERA or an array of angles (if `jd` is an array) 
-    
-    """
-    d = jd - 2451545.0 #days since 2000
-    res = (0.7790572732640 + 0.00273781191135448*d + (d%1.0))%1.0
-    
-    if degrees is None:
-        return res
-    elif degrees:    
-        return res*360
-    else:
-        return res*2*pi
-        
-def greenwich_sidereal_time(jd,apparent=True):
-    """
-    Computes the Greenwich Sidereal Time for a given Julian Date.
-    
-    :param jd: The Julian Date or a sequence of JDs
-    :type jd: scalar or array-like
-    :param apparent: 
-        If True, the Greenwich Apparent Sidereal Time (GAST) is returned,
-        computed from the IAU 2000B nutation model. In the special case that
-        'simple' is given, a faster (but much lower precision) nutation model
-        will be used. If False, the Greenwich Mean Sidereal Time (GMST) is
-        returned, instead.
-    :type apparent: 
-    
-    :returns: GMST or GAST in hours or an array of times (if `jd` is an array) 
-    
-    .. note::
-        GAST-GMST = the equation of the equinoxes, so if the equation of the 
-        equinoxes for a particular date is desired, simply do::
-        
-            eqeq = greenwich_sidereal_time(jd,True) - greenwich_sidereal_time(jd,False)
-        
-    .. seealso:: 
-        USNO Circular 179 and http://aa.usno.navy.mil/faq/docs/GAST.php
-    
-    
-    """
-    from .constants import asecperrad
-    
-    era = earth_rotation_angle(jd,False) #in radians
-    
-    t = (jd - 2451545.0)/36525
-    
-    gmst = era + (0.014506 + 4612.156534*t + 1.3915817*t**2 - 0.00000044*t**3 -\
-            0.000029956*t**4 - 0.0000000368*t**5)/asecperrad
-            
-    if apparent:
-        if apparent == 'simple':
-            eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
-            L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
-            omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
-            dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
-            coor = 0
-        else:
-            from .coords import _nutation_components2000B
-            eps,dpsi,deps = _nutation_components2000B(jd,False)
-            dpsi = dpsi
-            raise  NotImplementedError('need to implement complementary terms for equation of the equinoxes from iauEect00 0 use "simple" for now')
-            coor = 0
-        return ((gmst + dpsi*np.cos(eps))*12/pi + coor)%24
-    else:
-        return (gmst*12/pi)%24
-    
-#    #previous algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
-#    jd0 = np.round(jd-.5)+.5
-#    h = (jd - jd0) * 24.0
-#    d = jd - 2451545.0
-#    d0 = jd0 - 2451545.0
-#    t = d/36525
-    
-#    #mean sidereal time @ greenwich
-#    gmst = 6.697374558 + 0.06570982441908*d0 + 0.000026*t**2 + 1.00273790935*h
-#           #- 1.72e-9*t**3 #left off as precision to t^3 is unneeded
-   
-#    if apparent:
-#        eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
-#        L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
-#        omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
-#        dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
-#        return (gmst + dpsi*np.cos(eps))%24.0
-#    else:
-#        return gmst%24.0 
-    
 
     
 def delta_AT(jdutc,usett=False):
@@ -965,6 +872,7 @@ class Site(object):
         """
         #guts of calculation adapted from xidl 
         import datetime
+        from .coords import greenwich_sidereal_time
         
         rettype = kwargs.pop('returntype',None)
         apparent = kwargs.pop('apparent',True)

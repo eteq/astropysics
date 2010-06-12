@@ -35,6 +35,10 @@ particularly strange cosmology is in use.
         An excellent description of the IAU 2000 resolutions and related
         background for defining ICRS, CIO, and related standards.
    
+.. note::
+    Timekeeping/conversion functions are kept in :mod:`astropysics.obstools`,
+    although some are crucial to coordinate systems.
+   
 .. warning:: 
     While the framework for the coordinate transformations is done, the
     actual implementation is still a work in progress, so be aware that some of 
@@ -1026,7 +1030,7 @@ class LatLongCoordinates(CoordinateSystem):
     _latlongnames_ = (None,None)
     _longrange_ = None
     
-    hubcoosys = None
+    hubcoosys = None #this is set to EquatorialCoordinatesCIRS below
     """
     The coordinate system that :class:`LatLongCoordinates` try to transform 
     to/from if no direct transformation is available.  If None, it defaults to
@@ -1328,7 +1332,7 @@ class LatLongCoordinates(CoordinateSystem):
         :class:`CoordinateSystem` object. For :class:`LatLongCoordinate`
         objects, if a converter is not available, a conversion to
         :attr:`LatLongCoordinates.hubcoosys` (which by default is
-        :class:`EquatorialCoordinates`) and then to the target system will be
+        :class:`EquatorialCoordinatesCIRS`) and then to the target system will be
         applied.
         
         :param tosys: The new coordinate system 
@@ -1338,8 +1342,8 @@ class LatLongCoordinates(CoordinateSystem):
         """
         convs = CoordinateSystem._converters[self.__class__]
         hubcoosys = self.hubcoosys
-        if hubcoosys is None:
-            hubcoosys = EquatorialCoordinates #this can be reassigned by user
+#        if hubcoosys is None:
+#            hubcoosys = EquatorialCoordinatesCIRS #this can be reassigned by user
         
         if not issubclass(tosys,CoordinateSystem):
             raise TypeError('Coordinate system to convert to must be a subclass of CoordinateSystem ')
@@ -1750,6 +1754,48 @@ def _nutation_matrix(epoch):
     return rotation_matrix(epsa,'x',False) *\
            rotation_matrix(-dpsi,'z',False) *\
            rotation_matrix(-(epsa + deps),'x',False)
+           
+
+def _load_CIO_locator_data(datafn):
+    """
+    Loads CIO locator series terms from saved data files.
+    
+    returns polycoeffs,termsarr (starting with 0th)
+    """
+    
+    lines = [l for l in _get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    coeffs = []
+    sincs = []
+    coscs = []
+    orders = []
+    
+    inorder = False
+    for l in lines:
+        if 'Polynomial coefficients:' in l:
+            polys = l.replace('Polynomial coefficients:','').split(',')
+            polys = np.array(polys,dtype=float)
+        elif 'order' in l:
+            if inorder:
+                orders.append((np.array(coeffs,dtype=int),
+                               np.array(sincs,dtype=float),
+                               np.array(coscs,dtype=float)))
+                coeffs = []
+                sincs = []
+                coscs = []
+            inorder = True
+        elif inorder:
+            ls = l.split()
+            coeffs.append(ls[:6])
+            sincs.append(ls[6])
+            coscs.append(ls[7])
+    if inorder:
+        orders.append((np.array(coeffs,dtype=int),
+                       np.array(sincs,dtype=float),
+                       np.array(coscs,dtype=float)))
+        
+    return polys,orders
+_CIO_locator_data = _load_CIO_locator_data('iau00_cio_locator.tab')  
+
 
 class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     """
@@ -1803,6 +1849,54 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
             
         #this sets the epoch
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
+        
+    @staticmethod
+    def _CIOLocator(epoch):
+        """
+        Returns the CIO locator s for the provided epoch. s is the difference in
+        RA between the GCRS and CIP points for the ascending node of the CIP 
+        equator.
+        """
+        from .obstools import jd2000,epoch_to_jd
+        from .constants import asecperrad
+        
+        #first need to find x and y for the CIP, as s+XY/2 is needed
+        B = ICRSCoordinates.frameBiasJ2000
+        P = _precession_matrix_J2000_Capitaine(epoch)
+        N = _nutation_matrix(newepoch)
+        
+        #B*P*N takes GCRS to true, so CIP is bottom row
+        x,y,z = (B*P*N)[2]
+        
+        T = (epoch_to_jd(epoch) - jd2000)/36525
+        
+        fundargs = [] #fundamental arguments
+        
+        #TODO:implement these
+        fundargs.append(_mean_anomaly_of_moon(T))
+        fundargs.append(_mean_anomaly_of_sun(T))
+        fundargs.append(_mean_long_of_moon_minus_ascnode(T))
+        fundargs.append(_mean_elongation_of_moon_from_sun(T))
+        fundargs.append(_mean_long_ascnode_moon(T))
+        fundargs.append(_long_venus(T))
+        fundargs.append(_long_earth(T))
+        fundargs.append(_long_prec(T))
+        
+        fundargs = np.array(fundargs)
+        
+        polys,orders = _CIO_locator_data
+        polys = polys[:] #copy
+        
+        for i,o in enumerate(orders):
+            ns,sco,cco = o
+            a = np.dot(ns,fundargs)
+            polys[i] += sco*np.sin(a) + cco*np.cos(a)
+        
+        #val = s+ XY/2
+        return np.polyval(polys[::-1],T)/asecperrad - x*y/2.
+        
+#set default hub coordinate system to EquatorialCoordinatesCIRS
+LatLongCoordinates.hubcoosys = EquatorialCoordinatesCIRS
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -1840,7 +1934,14 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
             A = _precession_matrix_J2000_Capitaine(newepoch)
             self.matrixRotate(A*B)
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
-            
+          
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    def _toCIRS(eqsys):
+        raise NotImplementedError
+    
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    def _fromCIRS(cirssys):
+        raise NotImplementedError
             
 
 class ICRSCoordinates(EquatorialCoordinatesBase):
@@ -1912,18 +2013,7 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
                 return N*P*B
             else:
                 return P*B
-    
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
-    def _fromEqE(eqc):
-        #really we want inverse, but rotations are unitary -> inv==transpose
-        #we provide eqc in the call because the epoch is needed
-        return ICRSCoordinates._toEqE(eqc).T 
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
-    def _fromEqC(eqc):
-        #really we want inverse, but rotations are unitary -> inv==transpose
-        #we provide eqc in the call because the epoch is needed
-        return ICRSCoordinates._toEqC(eqc).T 
-    
+                
 class ITRSCoordinates(EquatorialCoordinatesBase):
     """
     ???
@@ -1933,7 +2023,29 @@ class ITRSCoordinates(EquatorialCoordinatesBase):
     __slots__ = tuple()
     
     def transformToEpoch(self,newepoch):
+        #implement polar motion
         raise NotImplementedError
+    
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    def _fromEqC(eqc):
+        raise NotImplementedError
+    
+    @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
+    def _fromEqE(eqe):
+        from .obstools import greenwich_sidereal_time
+        raise NotImplementedError    
+    
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    def _toEqC(itrsc):
+        #really we want inverse, but rotations are unitary -> inv==transpose
+        #we provide eqc in the call because the epoch is needed
+        return ICRSCoordinates._fromEqC(itrsc).T 
+    
+    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
+    def _toEqE(itrsc):
+        #really we want inverse, but rotations are unitary -> inv==transpose
+        #we provide eqc in the call because the epoch is needed
+        return ICRSCoordinates._fromEqE(itrsc).T 
             
 class FK5Coordinates(EquatorialCoordinatesEquinox):
     """
@@ -2208,49 +2320,11 @@ class HorizontalCoordinates(LatLongCoordinates):
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
     def _fromHoriz(incoosys=None):
         raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
-    
-EquatorialCoordinates = EquatorialCoordinatesEquinox
-EclipticCoordinates = EclipticCoordinatesEquinox
 
-def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
-    """
-    converts a sequence of position objects into an array of coordinates.  
-    
-    `coords` determines the order of the output coordinates - it can be a 
-    comma-seperated list of coordinate names or if 'auto', it will be 'lat,long'
-    for all coordinate systems except for Equatorial, which will use 'ra,dec'
-    
-    if `degrees` is True, returned arrays are in degrees, otherwise radians
-    """
-    if coords=='auto':
-        coordnames = None
-    else:
-        coordnames = coords.split(',')
-        
-    coords = []
-    if degrees:
-        for o in posobjs:
-            if coordnames is None:
-                if isinstance(o,EquatorialCoordinates):
-                    coords.append((o.ra.d,o.dec.d))
-                else:
-                    coords.append((o.lat.d,o.long.d))
-            else:
-                coords.append([getattr(o,c).d for c in coordnames])
-    else:
-        for o in posobjs:
-            if coordnames is None:
-                if isinstance(o,EquatorialCoordinates):
-                    coords.append((o.ra.r,o.dec.r))
-                else:
-                    coords.append((o.lat.r,o.long.r))
-            else:
-                coords.append([getattr(o,c).r for c in coordnames])
-
-    return np.array(coords).T
 
 #rotation_matrix function should really be defined here, but it is above 
 #because of it's use for generating class/module variables
+
 
     
 def obliquity(jd,algorithm=2006):
@@ -2295,8 +2369,236 @@ def obliquity(jd,algorithm=2006):
         raise ValueError('invalid algorithm year for computing obliquity')
         
     return (np.polyval(p,T)+corr)/3600.
+
+def earth_rotation_angle(jd,degrees=True):
+    """
+    Earth Rotation Angle (ERA) for a given Julian Date.
+    
+    :param jd: The Julian Date or a sequence of JDs
+    :type jd: scalar or array-like
+    :param degrees: 
+        If True, the ERA is returned in degrees, if None, 1=full rotation.  
+        Otherwise, radians.
+    :type degrees: bool or None
+    
+    :returns: ERA or an array of angles (if `jd` is an array) 
+    
+    """
+    d = jd - 2451545.0 #days since 2000
+    res = (0.7790572732640 + 0.00273781191135448*d + (d%1.0))%1.0
+    
+    if degrees is None:
+        return res
+    elif degrees:    
+        return res*360
+    else:
+        return res*2*pi
+        
+def greenwich_sidereal_time(jd,apparent=True):
+    """
+    Computes the Greenwich Sidereal Time for a given Julian Date.
+    
+    :param jd: The Julian Date or a sequence of JDs
+    :type jd: scalar or array-like
+    :param apparent: 
+        If True, the Greenwich Apparent Sidereal Time (GAST) is returned,
+        computed from the IAU 2000B nutation model. In the special case that
+        'simple' is given, a faster (but much lower precision) nutation model
+        will be used. If False, the Greenwich Mean Sidereal Time (GMST) is
+        returned, instead.
+    :type apparent: 
+    
+    :returns: GMST or GAST in hours or an array of times (if `jd` is an array) 
+        
+    .. seealso:: 
+        :func:`equation_of_the_equinoxes`
+        USNO Circular 179 and http://aa.usno.navy.mil/faq/docs/GAST.php
     
     
+    """
+    from .constants import asecperrad
+    
+    era = earth_rotation_angle(jd,False) #in radians
+    
+    t = (jd - 2451545.0)/36525
+    
+    gmst = era + (0.014506 + 4612.156534*t + 1.3915817*t**2 - 0.00000044*t**3 -\
+            0.000029956*t**4 - 0.0000000368*t**5)/asecperrad
+            
+    if apparent:
+        if apparent == 'simple':
+            eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
+            L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
+            omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
+            dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+            coor = 0
+        else:
+            from .coords import _nutation_components2000B
+            eps,dpsi,deps = _nutation_components2000B(jd,False)
+            dpsi = dpsi
+            raise  NotImplementedError('need to implement complementary terms for equation of the equinoxes from iauEect00 0 use "simple" for now')
+            coor = 0
+        return ((gmst + dpsi*np.cos(eps))*12/pi + coor)%24
+    else:
+        return (gmst*12/pi)%24
+    
+#    #previous algorithm described on USNO web site http://aa.usno.navy.mil/faq/docs/GAST.php
+#    jd0 = np.round(jd-.5)+.5
+#    h = (jd - jd0) * 24.0
+#    d = jd - 2451545.0
+#    d0 = jd0 - 2451545.0
+#    t = d/36525
+    
+#    #mean sidereal time @ greenwich
+#    gmst = 6.697374558 + 0.06570982441908*d0 + 0.000026*t**2 + 1.00273790935*h
+#           #- 1.72e-9*t**3 #left off as precision to t^3 is unneeded
+   
+#    if apparent:
+#        eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
+#        L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
+#        omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
+#        dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
+#        return (gmst + dpsi*np.cos(eps))%24.0
+#    else:
+#        return gmst%24.0 
+
+def equation_of_the_equinoxes(jd):
+    """
+    Computes equation of the equinoxes GAST-GMST.
+    
+    :param jd: The Julian Date or a sequence of JDs.
+    :type jd: scalar or array-like
+    
+    :returns: the equation of the equinoxes for the provided date in hours.
+    
+    """
+    return greenwich_sidereal_time(jd,True) - greenwich_sidereal_time(jd,False)
+
+def equation_of_the_origins(jd):
+    """
+    Computes the equation of the origins ERA - GAST
+    (ERA = Earth Rotation Angle, GAST = Greenwich Apparent Sidereal Time) 
+    
+    :param jd: The Julian Date or a sequence of JDs.
+    :type jd: scalar or array-like
+    
+    :returns: the equation of the origins for the provided date in hours.
+    
+    """
+    return earth_rotation_angle(jd,None)*24. - greenwich_sidereal_time(jd,True)
+
+
+def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
+    """
+    converts a sequence of position objects into an array of coordinates.  
+    
+    `coords` determines the order of the output coordinates - it can be a 
+    comma-seperated list of coordinate names or if 'auto', it will be 'lat,long'
+    for all coordinate systems except for Equatorial, which will use 'ra,dec'
+    
+    if `degrees` is True, returned arrays are in degrees, otherwise radians
+    """
+    if coords=='auto':
+        coordnames = None
+    else:
+        coordnames = coords.split(',')
+        
+    coords = []
+    if degrees:
+        for o in posobjs:
+            if coordnames is None:
+                if isinstance(o,EquatorialCoordinates):
+                    coords.append((o.ra.d,o.dec.d))
+                else:
+                    coords.append((o.lat.d,o.long.d))
+            else:
+                coords.append([getattr(o,c).d for c in coordnames])
+    else:
+        for o in posobjs:
+            if coordnames is None:
+                if isinstance(o,EquatorialCoordinates):
+                    coords.append((o.ra.r,o.dec.r))
+                else:
+                    coords.append((o.lat.r,o.long.r))
+            else:
+                coords.append([getattr(o,c).r for c in coordnames])
+
+    return np.array(coords).T
+
+#<----------------------Lunisolar/SS arguments for coords---------------------->
+def _mean_anomaly_of_moon(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _mean_long_of_moon_minus_ascnode(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _mean_elongation_of_moon_from_sun(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _mean_long_ascnode_moon(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _long_venus(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _long_earth(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+def _long_prec(T):
+    """
+    ??? 
+    
+    :param T: Julian centuries from 2000.0
+    :type T: float or array-like
+    
+    from SOFA (2010)
+    """
+    raise NotImplementedError
+
+    
+#TODO: Split Ephemerides out to seperate file
 #<--------------------------- Ephemerides classes ----------------------------->
 class EphemerisAccuracyWarning(Warning):
     """
@@ -3762,8 +4064,8 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
 #<---------------------DEPRECATED transforms----------------------------------->
 
 #galactic coordate reference positions from IAU 1959 and wikipedia
-_galngpJ2000=EquatorialCoordinates('12h51m26.282s','+27d07m42.01s')
-_galngpB1950=EquatorialCoordinates('12h49m0s','27d24m0s')
+_galngpJ2000=EquatorialCoordinatesEquinox('12h51m26.282s','+27d07m42.01s')
+_galngpB1950=EquatorialCoordinatesEquinox('12h49m0s','27d24m0s')
 _gall0J2000=122.932
 _gall0B1950=123
 
