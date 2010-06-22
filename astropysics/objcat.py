@@ -689,55 +689,63 @@ class FieldNode(CatalogNode,Sequence):
         given by the `node` argument and generate an :class:`array
         <numpy.ndarray>` of values for the specified fieldname.
         
-        `fieldnames` can be a single field name, a sequence of fieldnames, or a
-        comma-seperated string of field names.
+        :param node: The node from which to extract fields.
+        :type node: a :class:`FieldNode` object
+        :param fieldnames:  Can be:
         
-        `traversal` and `filter` accept arguments like :meth:`CatalogNode.visit`
+            * A single field name string.
+            * A sequence of fieldnames strings.
+            * A comma-seperated string of field names.
+            
+        :param traversal: see :meth:`CatalogNode.visit`
+        :param filter: see :meth:`CatalogNode.visit`
+        :param missing: 
+            Determines the behavior in the event that a field is not present (or
+            a non :class:`FieldNode` is encountered) it can be:
+            
+            * 'exception'
+                raise an exception if the field is missing
+            * 'skip'
+                do not include this object in the final array
+            * 'mask'
+                put 0 in the array location and return a mask of missing values as
+                the second return value
+            * 'masked'
+                return numpy.ma.MaskedArray objects instead of arrays, with the
+                missing values masked
+            * any other
+                fill any missing entries with this value
+            
+        :param converter: 
+            A function that is applied to the data before being added to the
+            array (or None to perform no conversion).
+        :type converter: callable or None
+        :param sources: 
+            Determines if a sequence of sources should be returned - if False,
+            only the array is returned. If True, the sources will be returned as
+            described below. By default, string representations of the sources
+            are returned. If it is set to 'object', the actual :class:`Source`
+            objects will be returned instead.
+        :type sources: bool or string value 'object'
+        :param errors: 
+            If True, the errors will be returned (see return values below). 
+        :type errors: bool
+        :param asrec: 
+            Is True, a :class:`record array <numpy.recarray>` is generated
+            instead of a regular :class:`array <numpy.ndarray>`. It can
+            optionally specify the numpy data type of the values, if it is a
+            sequence of size matching the number of fields, an equivalent
+            comma-seperated string, or a dictionary mapping fieldnames to
+            dtypes. Otherwise, the dtypes are inferred from the extracted
+            arrays.
+        :type asrec: bool
+        :param includeself: If True, this node itself will be included.
+        :type includeself: bool
         
-        `missing` determines the behavior in the event that a field is not 
-        present (or a non :class:`FieldNode` is encountered) it can be:
-        
-        * 'exception'
-            raise an exception if the field is missing
-        * 'skip'
-            do not include this object in the final array
-        * 'mask'
-            put 0 in the array location and return a mask of missing values as
-            the second return value
-        * 'masked'
-            return numpy.ma.MaskedArray objects instead of arrays, with the
-            missing values masked
-        * any other
-            fill any missing entries with this value
-        
-        `converter` is a function that is applied to the data before being 
-        added to the array (or None to perform no conversion).
-        
-        `sources` determines if a sequence of sources should be returned - if
-        False, only the array is returned, if it evaluates to True, the sources
-        will be returned as described below.  By default, string representations
-        of the sources are returned - if `sources`=='object', the actual
-        :class:`Source` objects will be returned instead.
-        
-        `dtypes` determines the numpy data type of the output arrays - if None, 
-        they will be inferred from the data. Otherwise, it must be either a 
-        sequence of size matching the number of fields requested, an equivalent 
-        comma-seperated string, or a dictionary mapping fieldnames to dtypes
-        
-        If `errors` is True, the errors will be returned (see return values
-        below).
-        
-        Is `asrec` is True, a :class:`record array <numpy.recarray>` is
-        generated instead of a regular :class:`array <numpy.ndarray>`. It can
-        optionally specify the numpy data type of the values, if it is a
-        sequence of size matching the number of fields, an equivalent
-        comma-seperated string, or a dictionary mapping fieldnames to dtypes.
-        Otherwise, the dtypes are inferred from the arrays themselves.
-        
-        
-        If `includeself` is True, the node itself will be included.
-        
-        *returns*
+        :returns:
+            If `missing` is 'mask', the below return values that are wrapped as
+            a (returnval,mask) tuple. If errors are returned, they are
+            (uppererror,lowererror) arrays, i.e. +/- . Can be:
         
         * a :class:`record array<numpy.recarray>` if `asrec` is True
         * an f x N :class:`array<numpy.ndarray>` of values if `sources` and 
@@ -746,9 +754,8 @@ class FieldNode(CatalogNode,Sequence):
         * (values,sources) if `sources` are True and `errors` are False
         * (values,errors) if `errors` are True and `sources` are False
         
-        If `missing` is 'mask', the above return values are wrapped in a
-        (returnval,mask) tuple.
         """
+        
         from functools import partial
         
         if missing in ('exception','raise','skip','mask','masked'):
@@ -936,6 +943,7 @@ class FieldNode(CatalogNode,Sequence):
         
         The other arguments are identical to
         :meth:`FieldNode.extractFieldAtNode`.
+        
         """
         sib = kwargs.pop('siblings',False)
         if sib and self.parent is not None:
@@ -2004,6 +2012,10 @@ class ObservedErroredValue(ObservedValue):
     
     @property
     def errors(self):
+        """
+        Errors on the measurement as a uppererror,lowererror tuple, or 0,0 
+        if no errors are present.
+        """
         u,l = self._upperr,self._lowerr
         if u is None and l is None:
             return 0,0
