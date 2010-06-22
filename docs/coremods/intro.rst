@@ -12,10 +12,11 @@ The modules forming the core of astropysics' functionality are documented below.
    objcat
    obstools
    coords
+   models
+   ccd
    phot
    spec
-   models
-   plotting
+   ephems
    io
-   ccd
+   plotting
    utils
