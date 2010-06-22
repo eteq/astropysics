@@ -1806,7 +1806,8 @@ class PhotometryBase(object):
     @property
     def totalmag(self):
         return self._magToFlux(self._totalflux)
-    
+
+
     
 class PointSpreadFunction(object):
     """
@@ -2900,6 +2901,7 @@ def M_star_from_mags(B,V,R,I,color='B-V'):
     return np.mean(mstar),tuple(mstar)
 def ML_ratio_from_color_SDSS(c,color='g-r'):
     """
+    
     Uses Bell 2003 relations derived from SDSS to compute the mass-to-light ratio
     of a galaxy goven it's color
     
@@ -2995,20 +2997,33 @@ def M_star_from_mags_SDSS(u,g,r,i,z,J=None,H=None,K=None,color='mean'):
 
 def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     """
-    compute the distance modulus given  a distance or redshift
+    Compute the distance modulus given  a distance or redshift.
     
-    intype can be:
-    * 'distance': will treat x as a distance in pc
-    * 'redshift': x is treated as a redshift
-     
-    if autocosmo is true, the cosmological calculation will be 
-    automatically  performed for z > 0.1.  If False, a 
-    non-cosmological calculation will be done.  If it is 'warn', 
-    a warning will be issued for any inputs where z>0.1
+    :param x: input redshift or distance
+    :type x: scalar or array-like
+    :param intype: Can be:
+    
+        * 'distance': treat `x` as a distance in pc
+        * 'redshift': `x` is treated as a redshift
+        
+    :param dx: error in the `x` or None for no error
+    :type dx: 
+    :param autocosmo: 
+        If True, the cosmological calculation will be automatically performed
+        for z > 0.1. If False, a non-cosmological calculation will be done. If
+        it is 'warn', a warning will be issued for any inputs where z>0.1
+    :type autocosmo: bool
+    
+    :returns: 
+        If `dx` is None, returns distance modulus (or array of distance moduli).
+        Otherwise, returns (dm,dmuppererror,dmlowererror)
     
     """
     from .coords import cosmo_z_to_dist
     from .constants import H0,c
+    
+    if not np.isscalar(x):
+        x = np.array(x,copy=False)
     
     c=c/1e5 #km/s
     cosmo=False
@@ -3041,22 +3056,43 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     elif dx is None:
         return 5*np.log10(x)-5
     else:
+        if not np.isscalar(ddm):
+            ddm = np.array(ddm,copy=False)
         dm = 5*np.log10(x)-5
         ddm = 5*dx/x/np.log(10)
         return dm,ddm,ddm
     
-def distance_from_modulus(dm):
+def distance_from_modulus(dm,ddm=None):
     """
-    compute the distance given the specified distance modulus.  Currently
-    non-cosmological
+    Compute the luminosity distance given the specified distance modulus. 
+    
+    :param dm: distance modulus
+    :type dm: scalar or array-like
+    :param ddm: distance modulus error
+    :type ddm: scalar or array-like
+    
+    :returns: luminosity distance in pc if ddm is None, else 
+              (d,duppererror,dlowererror)
+    
     """
-    return 10**(1+dm/5.0)
+    if not np.isscalar(dm):
+        dm = np.array(dm,copy=False)
+        
+    if ddm is None:
+        return 10**(1+dm/5.0)
+    else:
+        if not np.isscalar(ddm):
+            ddm = np.array(ddm,copy=False)
+        #return dm,np.log(10)*dm*ddm/5.0,np.log(10)*dm*ddm/5.0
+        uerr = 10**(1+(dm+ddm)/5.0) - dm
+        lerr = dm - 10**(1+(dm-ddm)/5.0)
+        return dm,uerr,lerr
     
 
 def abs_mag(appmag,x,intype='distance',autocosmo=True):
     """
     computes absolute magnitude from apparent magnitude and distance.
-    See astro.phot.distance_modulus for details on arguments
+    See :func:`distance_modulus` for details on arguments
     """
     from operator import isSequenceType
     if isSequenceType(appmag):
@@ -3068,7 +3104,7 @@ def abs_mag(appmag,x,intype='distance',autocosmo=True):
 def app_mag(absmag,x,intype='distance',autocosmo=True):
     """
     computes apparent magnitude from absolute magnitude and distance.
-    See astro.phot.distance_modulus for details on arguments
+    See :func:`distance_modulus`  for details on arguments
     """
     from operator import isSequenceType
     if isSequenceType(absmag):
