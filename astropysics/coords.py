@@ -1850,6 +1850,11 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         from .obstools import jd2000,epoch_to_jd
         from .constants import asecperrad
         
+        from .ephems import _mean_anomaly_of_moon,_mean_anomaly_of_sun,\
+                            _mean_long_of_moon_minus_ascnode,_long_earth,\
+                            _mean_elongation_of_moon_from_sun,_long_venus,\
+                            _mean_long_ascnode_moon,_long_prec
+        
         #first need to find x and y for the CIP, as s+XY/2 is needed
         B = ICRSCoordinates.frameBiasJ2000
         P = _precession_matrix_J2000_Capitaine(epoch)
@@ -1862,7 +1867,6 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         
         fundargs = [] #fundamental arguments
         
-        #TODO:implement these
         fundargs.append(_mean_anomaly_of_moon(T))
         fundargs.append(_mean_anomaly_of_sun(T))
         fundargs.append(_mean_long_of_moon_minus_ascnode(T))
@@ -2514,81 +2518,6 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
                 coords.append([getattr(o,c).r for c in coordnames])
 
     return np.array(coords).T
-
-
-
-#<----------Lunisolar/SS fundamental arguments for coords via SOFA------------->
-#TODO: eventually replace with ephems module objects?
-def _mean_anomaly_of_moon(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _mean_long_of_moon_minus_ascnode(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _mean_elongation_of_moon_from_sun(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _mean_long_ascnode_moon(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _long_venus(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _long_earth(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
-def _long_prec(T):
-    """
-    ??? 
-    
-    :param T: Julian centuries from 2000.0
-    :type T: float or array-like
-    
-    from SOFA (2010)
-    """
-    raise NotImplementedError
 
     
 
