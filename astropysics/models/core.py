@@ -2369,7 +2369,7 @@ class ModelSequence(object):
             self._extraparams = None
         
         self._params = params
-        self._models = tuple(models)
+        self.models = tuple(models)
         self._extraparams = extraparams
         
         self.outputcontraction = outputcontraction
@@ -2453,7 +2453,7 @@ class ModelSequence(object):
         """    
         scalarout = dictout = False
         if parnames is None:
-            parnames = self._models[0].params
+            parnames = self.models[0].params
             if self._extraparams is not None:
                 parnames.extend(self.extraparams)
             dictout = True
@@ -2465,7 +2465,7 @@ class ModelSequence(object):
         res = []
         for p in parnames:
             if p in self.params:
-                res.append(np.array([getattr(m,p) for m in self._models]))
+                res.append(np.array([getattr(m,p) for m in self.models]))
             elif p in self._extraparams:
                 res.append(np.array(self._extraparams[p]))
             else:
@@ -2496,7 +2496,7 @@ class ModelSequence(object):
         """
         scalarout = dictout = False
         if parnames is None:
-            parnames = self._models[0].params
+            parnames = self.models[0].params
             if self._extraparams is not None:
                 parnames.extend(self.extraparams)
             dictout = True
@@ -2513,20 +2513,20 @@ class ModelSequence(object):
             y = self._outcont(y)
         
         if self._interpdir == 'y':
-            interpin = np.array([self._outcont(m(x)) for m in self._models])
+            interpin = np.array([self._outcont(m(x)) for m in self.models])
             interpat = y
         elif self._interpdir == 'x':
-            interpin = np.array([m.inv(y) for m in self._models])
+            interpin = np.array([m.inv(y) for m in self.models])
             interpat = x
         elif self._interpdir == 'perp':
             raise NotImplementedError('perp interp direction not working yet')
             from .builtins import LinearModel
-            ys = np.array([m(x)-y for m in self._models])
-            closestmodel = self._models[np.where(ys==np.min(ys))[0][0]]
+            ys = np.array([m(x)-y for m in self.models])
+            closestmodel = self.models[np.where(ys==np.min(ys))[0][0]]
             dmod = closestmodel.derivative(x)
             linmod = LinearModel(m=-1/dmod,b=0)
             linmod.b = y - linmod(x)
-            interpin = (1 + linmod.m)**0.5*np.array([intersect_models(m,linmod,bounds=bnds(x-dmod,x+dmod)) for m in self._models]).ravel()
+            interpin = (1 + linmod.m)**0.5*np.array([intersectmodels(m,linmod,bounds=bnds(x-dmod,x+dmod)) for m in self.models]).ravel()
             interpat = x
         else:
             raise RuntimeError('This point should never be reachable in getParam!')
@@ -2546,7 +2546,7 @@ class ModelSequence(object):
                     raise RuntimeError('This point should never be reachable in getParam!')
         for p in parnames:
             if p in self._params:
-                interpout = np.array([getattr(m,p) for m in self._models])[sorti]
+                interpout = np.array([getattr(m,p) for m in self.models])[sorti]
             else: #instead in _extraparams
                 interpout = self._extraparams[p][sorti]
                 
@@ -2597,13 +2597,13 @@ class ModelSequence(object):
                 
               
             if x1 is None:
-                x1 = [m._getInvertedRangehint()[0] for m in self._models if m._getInvertedRangehint() is not None]
+                x1 = [m._getInvertedRangehint()[0] for m in self.models if m._getInvertedRangehint() is not None]
                 if len(x1)>0:
                     x1 = np.min(x1)
                 else:
                     raise ValueError('could not infer range from models - must provide x1')
             if x2 is None:  
-                x2 = [m._getInvertedRangehint()[1] for m in self._models if m._getInvertedRangehint() is not None]
+                x2 = [m._getInvertedRangehint()[1] for m in self.models if m._getInvertedRangehint() is not None]
                 if len(x2)>0:
                     x2 = np.max(x2)
                 else:
@@ -2620,7 +2620,7 @@ class ModelSequence(object):
                     labelpars.extend(self._extraparams)
             
             fixedlabel = kwargs.pop('label',None)        
-            for i,m in enumerate(self._models):
+            for i,m in enumerate(self.models):
                 if fixedlabel is None:
                     label = ['%s=%.2g'%t for t in m.pardict.iteritems() if t[0] in labelpars]
                     for ep,pv in self._extraparams.iteritems():
