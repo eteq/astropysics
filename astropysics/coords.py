@@ -1775,9 +1775,9 @@ def _load_CIO_locator_data(datafn):
             inorder = True
         elif inorder:
             ls = l.split()
-            coeffs.append(ls[:6])
-            sincs.append(ls[6])
-            coscs.append(ls[7])
+            coeffs.append(ls[:8])
+            sincs.append(ls[8])
+            coscs.append(ls[9])
     if inorder:
         orders.append((np.array(coeffs,dtype=int),
                        np.array(sincs,dtype=float),
@@ -1858,12 +1858,12 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         #first need to find x and y for the CIP, as s+XY/2 is needed
         B = ICRSCoordinates.frameBiasJ2000
         P = _precession_matrix_J2000_Capitaine(epoch)
-        N = _nutation_matrix(newepoch)
+        N = _nutation_matrix(epoch)
         
         #B*P*N takes GCRS to true, so CIP is bottom row
-        x,y,z = (B*P*N)[2]
+        x,y,z = (B*P*N).A[2]
         
-        T = (epoch_to_jd(epoch) - jd2000)/36525
+        T = (epoch - 2000)/36525
         
         fundargs = [] #fundamental arguments
         
@@ -1879,12 +1879,12 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         fundargs = np.array(fundargs)
         
         polys,orders = _CIO_locator_data
-        polys = polys[:] #copy
+        polys = polys.copy() #copy
         
         for i,o in enumerate(orders):
             ns,sco,cco = o
-            a = np.dot(ns,fundargs)
-            polys[i] += sco*np.sin(a) + cco*np.cos(a)
+            a = np.dot(ns,fundargs).sum()
+            polys[i] += np.sum(sco*np.sin(a) + cco*np.cos(a))
         
         #val = s+ XY/2
         return np.polyval(polys[::-1],T)/asecperrad - x*y/2.
