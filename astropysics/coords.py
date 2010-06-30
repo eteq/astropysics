@@ -1700,7 +1700,7 @@ def _nutation_components2000B(intime,asepoch=True):
         jd = epoch_to_jd(intime)
     else:
         jd = intime
-    epsa = obliquity(jd,2000)
+    epsa = np.radians(obliquity(jd,2000))
     t = (jd-epoch_to_jd(2000))/36525
     
     #Fundamental (Delaunay) arguments from Simon et al. (1994) via SOFA
@@ -1738,12 +1738,12 @@ def _nutation_matrix(epoch):
     Matrix converts from mean coordinate to true coordinate as
     r_true = M * r_mean
     """
-    #TODO: implement higher precsiion 2006/2000A model if requested/needed
+    #TODO: implement higher precsion 2006/2000A model if requested/needed
     epsa,dpsi,deps = _nutation_components2000B(epoch) #all in radians
     
-    return rotation_matrix(epsa,'x',False) *\
+    return rotation_matrix(-(epsa + deps),'x',False) *\
            rotation_matrix(-dpsi,'z',False) *\
-           rotation_matrix(-(epsa + deps),'x',False)
+           rotation_matrix(epsa,'x',False)
            
 
 def _load_CIO_locator_data(datafn):
@@ -1853,7 +1853,7 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         from .ephems import _mean_anomaly_of_moon,_mean_anomaly_of_sun,\
                             _mean_long_of_moon_minus_ascnode,_long_earth,\
                             _mean_elongation_of_moon_from_sun,_long_venus,\
-                            _mean_long_ascnode_moon,_long_prec
+                            _mean_long_asc_node_moon,_long_prec
         
         #first need to find x and y for the CIP, as s+XY/2 is needed
         B = ICRSCoordinates.frameBiasJ2000
@@ -1862,8 +1862,13 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         
         #B*P*N takes GCRS to true, so CIP is bottom row
         x,y,z = (B*P*N).A[2]
+        print 'B:\n',B
+        print 'P:\n',P
+        print 'N:\n',N
+        print 'BP:\n',B*P
+        print 'BPN:\n',B*P*N
         
-        T = (epoch - 2000)/36525
+        T = (epoch_to_jd(epoch) - jd2000)/36525
         
         fundargs = [] #fundamental arguments
         
@@ -1871,7 +1876,7 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         fundargs.append(_mean_anomaly_of_sun(T))
         fundargs.append(_mean_long_of_moon_minus_ascnode(T))
         fundargs.append(_mean_elongation_of_moon_from_sun(T))
-        fundargs.append(_mean_long_ascnode_moon(T))
+        fundargs.append(_mean_long_asc_node_moon(T))
         fundargs.append(_long_venus(T))
         fundargs.append(_long_earth(T))
         fundargs.append(_long_prec(T))
@@ -1879,15 +1884,16 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         fundargs = np.array(fundargs)
         
         polys,orders = _CIO_locator_data
-        polys = polys.copy() #copy
+        newpolys = polys.copy() #copy 0-values to add to
         
         for i,o in enumerate(orders):
             ns,sco,cco = o
-            a = np.dot(ns,fundargs).sum()
-            polys[i] += np.sum(sco*np.sin(a) + cco*np.cos(a))
-        
-        #val = s+ XY/2
-        return np.polyval(polys[::-1],T)/asecperrad - x*y/2.
+            a = np.dot(ns,fundargs)
+            newpolys[i] += np.sum(sco*np.sin(a) + cco*np.cos(a))
+        print 'T',T
+        print 'presegment:',np.polyval(newpolys[::-1],T)/asecperrad
+        print 'xyterm:',x*y/2.0
+        return np.polyval(newpolys[::-1],T)/asecperrad - x*y/2.0
         
 #set default hub coordinate system to EquatorialCoordinatesCIRS
 LatLongCoordinates.hubcoosys = EquatorialCoordinatesCIRS
@@ -1983,7 +1989,7 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     """
     Frame bias matrix such that vJ2000 = B*vICRS . 
     """
-    #make it a static method just for safety even though it isn't really visible
+    #make it a static method just for clarity even though it isn't really visible
     __makeFrameBias = staticmethod(__makeFrameBias)
     
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')

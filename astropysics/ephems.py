@@ -82,7 +82,7 @@ def _mean_anomaly_of_moon(T):
     :returns: Mean anomaly of the moon  in radians
     """
     from .constants import asecperrad
-    return (_mean_anomaly_of_moon_poly(T)/asecperrad)%_twopi
+    return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
 
 _mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
                                        0.000136,
@@ -99,7 +99,7 @@ def _mean_anomaly_of_sun(T):
     :returns: Mean anomaly of the sun  in radians
     """
     from .constants import asecperrad
-    return (_mean_anomaly_of_sun_poly(T)/asecperrad)%_twopi
+    return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
    
 _mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
                                               -0.001037,
@@ -117,7 +117,7 @@ def _mean_long_of_moon_minus_ascnode(T):
     
     """
     from .constants import asecperrad
-    return (_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad)%_twopi
+    return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
 
 _mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
                                                     0.006593,
@@ -134,14 +134,14 @@ def _mean_elongation_of_moon_from_sun(T):
     :returns: Mean elongation of the Moon from the Sun in radians
     """
     from .constants import asecperrad
-    return (_mean_elongation_of_moon_from_sun_poly(T)/asecperrad)%_twopi
+    return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
 
 _mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
                                           0.007702,
                                           7.4722,
                                           -6962890.5431,
                                           450160.398036])
-def _mean_long_ascnode_moon(T):
+def _mean_long_asc_node_moon(T):
     """
     From SOFA (2010) - IERS 2003 conventions
     
@@ -151,7 +151,7 @@ def _mean_long_ascnode_moon(T):
     :returns: Mean longitude of the Moon's ascending node in radians 
     """
     from .constants import asecperrad
-    return (_mean_long_ascnode_moon_poly(T)/asecperrad)%_twopi
+    return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
    
 def _long_venus(T):
     """
@@ -162,7 +162,7 @@ def _long_venus(T):
     
     :returns: Mean longitude of Venus in radians
     """
-    return (3.176146697 + 1021.3285546211*T)%_twopi
+    return np.fmod(3.176146697 + 1021.3285546211*T,_twopi)
    
 def _long_earth(T):
     """
@@ -173,7 +173,7 @@ def _long_earth(T):
     
     :returns: Mean longitude of Earth in radians
     """
-    return (1.753470314 + 628.3075849991*T)%_twopi
+    return np.fmod(1.753470314 + 628.3075849991*T,_twopi)
 
 def _long_prec(T):
     """
