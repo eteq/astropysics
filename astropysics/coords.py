@@ -1862,11 +1862,6 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         
         #B*P*N takes GCRS to true, so CIP is bottom row
         x,y,z = (B*P*N).A[2]
-        print 'B:\n',B
-        print 'P:\n',P
-        print 'N:\n',N
-        print 'BP:\n',B*P
-        print 'BPN:\n',B*P*N
         
         T = (epoch_to_jd(epoch) - jd2000)/36525
         
@@ -1890,9 +1885,7 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
             ns,sco,cco = o
             a = np.dot(ns,fundargs)
             newpolys[i] += np.sum(sco*np.sin(a) + cco*np.cos(a))
-        print 'T',T
-        print 'presegment:',np.polyval(newpolys[::-1],T)/asecperrad
-        print 'xyterm:',x*y/2.0
+        
         return np.polyval(newpolys[::-1],T)/asecperrad - x*y/2.0
         
 #set default hub coordinate system to EquatorialCoordinatesCIRS
