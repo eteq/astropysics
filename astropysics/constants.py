@@ -278,10 +278,23 @@ class FRWCosmology(Cosmology):
     
     def rhoC(self,z=0,units='cgs'):
         """
-        critical density at a given redshift
+        Computes the critical density at a given redshift, e.g.
         
-        units can be 'cgs' or 'cosmological' (Mpc,Msun)
-        TODO:check
+        .. math::
+            \\rho_c = \\frac{3 H(z)^2}{8 \\pi G}
+        
+        :param z: redshift at which to compute critical density
+        :type z: scalar or array
+        :param units: 
+            
+            *'cgs': g/cm^3
+            *'cosmological': Msun/Mpc^3
+        
+        :type units: string
+                    
+        :returns: Critical density in the requested units
+        :except ValueError: if an unrecognized `units` string is given
+        
         """
         H = self.H(z)*1e5*1e-6*pcpercm #km/s->cm/s, Mpc->cm
         cgsres = 3*H*H/(8*pi*G)
