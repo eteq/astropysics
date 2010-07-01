@@ -1404,13 +1404,15 @@ class NFWModel(FunctionModel1DAuto):
     profile. Equivalent to :class:`AlphaBetaGammaModel` with alpha,beta,gamma =
     (1,3,1)
     
-    Where relevant, units are r in kpc and rho in Msun kpc^-3
+    Where relevant, units are r in kpc and rho in Msun pc^-3
     """
     xaxisname = 'r'
     yaxisname = 'rho'
         
     def f(self,r,rho0=1,rc=1):
-        return rho0*rc*rc*rc*((r+rc)**(-2))*(r**-1)
+        x = r/rc
+        return rho0/(x*(1+x)**2)
+        #return rho0*rc*rc*rc*((r+rc)**(-2))*(r**-1)
     
     @property
     def rangehint(self):
@@ -1436,82 +1438,130 @@ class NFWModel(FunctionModel1DAuto):
         is not 0 or or if the keyword 'numerical' is True, this function will
         fall back to FunctionModel1D.integrateSpherical 
         """        
-        if kwargs.pop('numerical',False):
+        if kwargs.pop('numerical',False) or np.any(lower!=0):
             return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
         else:
-            x=upper/self.rc
+            x = upper/self.rc
             return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
-    def setC(self,c,Rvir=None,Mvir=None):
+    def setC(self,c,Rvir=None,Mvir=None,z=0):
         """
-        Sets the model parameters to match a given concentration given
-        virial radius and mass.
+        Sets the model parameters to match a given concentration given virial
+        radius and mass.
         
-        If Rvir or Mvir is None, the other will be set using the z=0  
-        Mvir_to_Rvir or Rvir_to_Mvir functions.  If both are None, a ValueError
-        will be raised
+        :param c: concentration = rvir/rc
+        :type c: scalar
+        :param Rvir:
+            virial radius to assume in kpc - if None, will be inferred from
+            `Mvir`, `c` and the virial overdensity (see `deltavir`).
+        :type Rvir: scalar or None
+        :param Mvir: 
+            virial mass to assume in Msun - if None, will be inferred from
+            `Rvir`, `c`, and the virial overdensity (see `deltavir`), or if
+            `Rvir` is None, from the current virial mass.
+        :type Mvir: scalar or None
+        :param z: 
+            redshift at which to compute virial overdensity if `Rvir` or `Mvir`
+            are None. If both are given, this is ignored.
+        :type z: scalar
+        
         """
-        if Rvir is None and Mvir is None:
-            raise ValueError('need to specify Rvir or Mvir')
-        elif Rvir is None:
-            Rvir = self.Mvir_to_Rvir(Mvir,z=0)
+        from ..constants import get_cosmology
+#        if Rvir is None and Mvir is None:
+#            raise ValueError('need to specify Rvir or Mvir')
+#        elif Rvir is None:
+#            Rvir = self.Mvir_to_Rvir(Mvir,z=0)
+#        elif Mvir is None:
+#            Mvir = self.Rvir_to_Mvir(Rvir,z=0)
+            
+        if Rvir is None:
+            if Mvir is None:
+                Mvir = self.getMv()
+                
+            rhov = get_cosmology().rhoC(z,'cosmological')*1e-18*self.deltavir(z)
+            Rvir = 1e-3*(3*Mvir/(4*pi*rhov))**(1/3)
+            
         elif Mvir is None:
-            Mvir = self.Rvir_to_Mvir(Rvir,z=0)
-        
-        self._c = c
+            rhov = get_cosmology().rhoC(z,'cosmological')*1e-18*self.deltavir(z)
+            Mvir = (4*pi*(Rvir*1e3)**3/3)*rhov
+        else: #both are specified, implying a particular deltavir
+            self._c = c
+            
         self.rc = Rvir/c
-        
         self.rho0 = 1
         a0 = self.integrateSpherical(0,Rvir)
         self.rho0 = Mvir/a0
         
-    def getC(self,z=0,rvir='delta',usesavedc=True):
+    def getC(self,z=0):
         """
-        returns the concentration (rvir/rc) if set, otherwise, calculates
-        it from the virial radius assuming present cosmology at the specified 
-        redshift
+        Returns the concentration of this profile(rvir/rc) for a given redshift.
         
-        `rvir` is the format that goes into  `getRv`
         
-        `usesavedc` determines if a previously set c should override the 
-        cosmologically-derived value
+        .. note::
+            If :meth:`setC` has been called with an explicitly provided Rvir and
+            Mvir, the concentration will be saved and this will return the saved
+            concentration instead of one computed for a given redshift. If this
+            is not desired, delete the :attr:`_c` attribute after calling
+            :meth:`setC` .
+        
         """
-        if hasattr(self,'_c') and usesavedc:
+        if hasattr(self,'_c'):
             return self._c
         else:
-            return self.getRv(z,rvir)/self.rc
+            return self.getRv(z)/self.rc
         
     def getRhoMean(self,r):
         """
-        computes the mean density within the requested radius, i.e.
-        M(<r)/(4/3 pi r^3)
-        """
-        vol = 4*pi*r**3/3
-        return self.integrateSpherical(0,r)/vol
+        Computes the mean density within the requested radius, i.e.
+        
+        .. math::
+            \\rho_m = M(<r)/(4/3 pi r^3)
             
-    def getRv(self,z=0,rvir='delta'):
+        density in units of Msun pc^-3 assuming `r` in kpc
         """
-        get the virial radius at a given redshift, with rvir choosing the 
-        type of virial radius - if 'delta' it will be computed from the 
-        cosmology, otherwise, it should be a multiple of the critical 
-        density
+        vol = 4*pi*(r*1e3)**3/3
+        return self.integrateSpherical(0,r)/vol
+    
+    def deltavir(self,z=0):
+        """
+        Returns the virial overdensity at a given redshift.  
+        
+        This method should be overridden if a particular definition of virial
+        radius is desired. E.g. to use r200 instead of rvir, do::
+        
+            nfwmodel.deltavir = lambda z:200
+        
+        
+        :param z: redshift at which to compute virial overdensity
+        :type z: scalar
+        
+        :returns: virial overdensity        
+        
+        """
+        from ..constants import get_cosmology
+        
+        return get_cosmology().deltavir(z)
+            
+    def getRv(self,z=0):
+        """
+        Get the virial radius at a given redshift, with `deltavir` choosing the
+        type of virial radius - if 'fromcosmology' it will be computed from the
+        cosmology, otherwise, it should be a multiple of the critical density
         
         units in kpc for mass in Msun
         """
         from scipy.optimize import newton
         from ..constants import get_cosmology,Ms
-        cosmo = get_cosmology()
         
-        if rvir == 'delta':
-            overden = cosmo.deltavir(z)
-        else:
-            overden = float(rvir)
+        cosmo = get_cosmology()
+        overden = self.deltavir(z)
         
         try:
-            rhoC = cosmo.rhoC(z,'cosmological')*1e-9 #Mpc^-3->kpc^-3
-            rhov = overden*rhoC
+            rhov = self.deltavir(z)*cosmo.rhoC(z,'cosmological')*1e-18 
+            # *1e-18  does Mpc^-3->pc^-3
         except:
             raise ValueError('current cosmology does not support critical density')
+        
         oldcall = self.getCall()
         try:
             self.setCall('getRhoMean')
@@ -1521,19 +1571,28 @@ class NFWModel(FunctionModel1DAuto):
                 self.setCall(None)
             else:
                 self.setCall(*oldcall)
+                
+        
     
     def getMv(self,z=0):
         """
-        gets the mass within the virial radius (for a particular redshift)
+        Gets the mass within the virial radius (for a particular redshift)
         """
         rv = self.getRv(z)
         return self.integrateSpherical(0,rv)
+    
+    
+    #Below are static scalings that are approximations 
     
     @staticmethod
     def Rvir_to_Mvir(Rvir,z=0):
         """
         from Bullock '01
         M_sun,kpc
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         from ..constants import get_cosmology
         c = get_cosmology()
@@ -1545,6 +1604,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Bullock '01
         M_sun,kpc
+        
+        .. warning::
+            These scalings are approximations.
+        
         """
         from ..constants import get_cosmology
         c = get_cosmology()
@@ -1556,6 +1619,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Bullock '01
         km/s,M_sun
+        
+        .. warning::
+            These scalings are approximations.
+        
         """
         from ..constants import get_cosmology
         c = get_cosmology()
@@ -1567,6 +1634,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Bullock '01
         km/s,M_sun
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         from ..constants import get_cosmology
         c = get_cosmology()
@@ -1578,6 +1649,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Bullock '01
         good from 80-1200 km/s in vvir
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         return (Vvir/0.468)**(1/1.1)
     
@@ -1586,6 +1661,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Maller & Bullock '04
         good from 80-1200 km/s in vvir
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         return (0.468)*Vmax**1.1
     
@@ -1594,6 +1673,10 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Maller & Bullock '04
         M_sun
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         cvir = 9.6*(Mvir/1e13)**-.13*(1+z)**-1
         return cvir if cvir>4 else 4.0
@@ -1603,22 +1686,44 @@ class NFWModel(FunctionModel1DAuto):
         """
         from Maller & Bullock '04
         M_sun
+        
+        .. warning::
+            These scalings are approximations.
+            
         """
         return 1e13*((Cvir/9.6)*(1+z))**(-1.0/.13)
     
     @staticmethod
     def Mvir_to_Vmax(Mvir,z=0):
+        """
+        Convert virial mass to vmax using the scalings here
+        
+        .. warning::
+            These scalings are approximations.
+            
+        """
         return NFWModel.Vvir_to_Vmax(NFWModel.Mvir_to_Vvir(Mvir,z))
     
     @staticmethod
     def Vmax_to_Mvir(Vmax,z=0):
+        """
+        Convert vmax to virial mass using the scalings here
+        
+        .. warning::
+            These scalings are approximations.
+            
+        """
         return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Mvir),z)
     
     @staticmethod
     def create_Mvir(Mvir,z=0):
         """
-        generate a new NFWModel with the given Mvir using the Mvir_to_Cvir
-        function to get the scaling
+        Generates a new NFWModel with the given Mvir using the
+        :meth:`Mvir_to_Cvir` function to get the scaling.
+        
+        .. warning::
+            These scalings are approximations.
+        
         """
         m = NFWModel()
         Cvir = m.Mvir_to_Cvir(Mvir,z)
@@ -1629,8 +1734,12 @@ class NFWModel(FunctionModel1DAuto):
     @staticmethod
     def create_Rvir(Rvir,z=0):
         """
-        generate a new NFWModel with the given Mvir using the Mvir_to_Cvir and
-        Rvir_to_Mvir functions to get the scaling
+        Generates a new NFWModel with the given Mvir using the Mvir_to_Cvir and
+        :meth:`Rvir_to_Mvir` functions to get the scaling.
+        
+        .. warning::
+            These scalings are approximations.
+        
         """
         m = NFWModel()
         Mvir = m.Rvir_to_Mvir(Rvir,z)
@@ -1641,14 +1750,62 @@ class NFWModel(FunctionModel1DAuto):
     @staticmethod
     def create_Cvir(Cvir,z=0):
         """
-        generate a new NFWModel with the given Mvir using the Cvir_to_Mvir
-        function to get the scaling
+        Generates a new NFWModel with the given Mvir using the
+        :meth:`Cvir_to_Mvir` function to get the scaling.
+        
+        .. warning::
+            These scalings are approximations.
+        
         """
         m = NFWModel()
         Mvir = m.Cvir_to_Mvir(Cvir,z)
         Rvir = m.Mvir_to_Rvir(Mvir,z)
         m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
         return m
+    
+class NFWProjectedModel(FunctionModel1DAuto):
+    
+    def f(self,R,rc=1,sig0=1):
+        x = R/rc
+        xsqm1 = x*x - 1
+        
+        Cinv = np.arccos(1/x)
+        nanmsk = np.isnan(Cinv)
+        Cinv[nanmsk] = np.arccosh(1/x[nanmsk])
+        
+        xterm = (1-np.abs(xsqm1)**-0.5*Cinv)/xsqm1
+        xterm[x==1] = 1/3
+                
+        return sig0*xterm/(2*pi*rc**2)
+        #sig0=Mv*g
+        
+    def integrateCircular(self,lower,upper,*args,**kwargs):
+        """
+        NFW Has an analytic form for the spherical integral - if the lower 
+        is not 0 or or if the keyword 'numerical' is True, this function will
+        fall back to FunctionModel1D.integrateCircular 
+        """        
+        if kwargs.pop('numerical',False) or np.any(lower!=0):
+            return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
+        else:
+            x = upper/self.rc
+            xterm = None
+            
+            if x > 1:
+                Cinv = np.arccos(1/x)
+            elif x < 1:
+                Cinv = np.arccosh(1/x)
+            else:
+                xterm = 1-np.log(2)
+            
+            if xterm is None:
+                xterm = Cinv*np.abs(x*x - 1)**-0.5 + np.log(x/2)
+                    
+            return self.sig0*xterm
+        
+    @property
+    def rangehint(self):
+        return self.rc/1000,1000*self.rc
     
 class AlphaBetaGammaModel(FunctionModel1DAuto):
     """
