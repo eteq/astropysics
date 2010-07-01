@@ -307,10 +307,18 @@ class FRWCosmology(Cosmology):
         virial overdensity as paramaterized in Bryan&Norman 98 for omega=1
         """
         if self.omegaK !=0:
-            raise NotImplementedError("can't compute for omega!=1")
+            raise NotImplementedError("can't compute deltavir for omega!=1")
         om = self.computeOmegaMz(z)
         x= om - 1
         return (18*pi**2+82*x-39*x**2)/om
+    
+class SCDMCosmology(FRWCosmology):
+    """
+    "Standard" CDM -- flat, with no cosmological constant.
+    """
+    omegaR=0 #radiation density
+    omegaM=1.0 #matter density
+    omegaL=0 #dark energy density
 
 class WMAP7Cosmology(FRWCosmology):
     """
