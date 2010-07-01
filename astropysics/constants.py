@@ -317,13 +317,23 @@ class FRWCosmology(Cosmology):
     
     def deltavir(self,z=0):
         """
-        virial overdensity as paramaterized in Bryan&Norman 98 for omega=1
+        Virial overdensity asparamaterized in Bryan&Norman 98 for a given
+        redshift.
+        
+        Good to 1% for omega(z) = 0.1-1, requires either omega = 1 (flat 
+        universe) or omega_lambda = 0.
         """
-        if self.omegaK !=0:
-            raise NotImplementedError("can't compute deltavir for omega!=1")
-        om = self.computeOmegaMz(z)
-        x= om - 1
-        return (18*pi**2+82*x-39*x**2)/om
+        if self.omegaK != 0:
+            if self.omegaL == 0:
+                om = self.computeOmegaMz(z)
+                x= om - 1
+                return (18*pi**2+60*x-32*x**2)
+            else:
+                raise NotImplementedError("can't compute deltavir with cosmological constant and omega!=1.0")
+        else:
+            om = self.computeOmegaMz(z)
+            x= om - 1
+            return (18*pi**2+82*x-39*x**2)
     
 class SCDMCosmology(FRWCosmology):
     """
