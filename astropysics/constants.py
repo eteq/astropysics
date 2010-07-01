@@ -287,8 +287,8 @@ class FRWCosmology(Cosmology):
         :type z: scalar or array
         :param units: 
             
-            *'cgs': g/cm^3
-            *'cosmological': Msun/Mpc^3
+            * 'cgs': g/cm^3
+            * 'cosmological': Msun/Mpc^3
         
         :type units: string
                     

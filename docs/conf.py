@@ -116,10 +116,14 @@ html_theme_options = {'rightsidebar':True,'stickysidebar':True,
                       'headfont':'Georgia, Times, serif',
                       'footerbgcolor'    :'#243194',
                       'footertextcolor'  :'#ffffff',
-                      'sidebarbgcolor'   :'#A3890E',
+                      'sidebarbgcolor'   :'#262d99',
                       'sidebartextcolor' :'#e2e2ea',
-                      'sidebarlinkcolor' :'#121D70',
-                      'relbarbgcolor'    :'#5D68BC',
+                      'sidebarlinkcolor' :'#e1dc0a',
+                      #'sidebarbgcolor'   :'#A3890E',
+                      #'sidebartextcolor' :'#e2e2ea',
+                      #'sidebarlinkcolor' :'#121D70',
+                      'relbarbgcolor'    :'#121D70',
+                      #'relbarbgcolor'    :'#5D68BC',
                       'relbartextcolor'  :'#ffffff',
                       'relbarlinkcolor'  :'#ffffff',
                       'bgcolor'          :'#eaeeee',
@@ -145,17 +149,17 @@ html_theme_options = {'rightsidebar':True,'stickysidebar':True,
 
 # The name of an image file (relative to this directory) to place at the top
 # of the sidebar.
-html_logo = '../logo/logo.png'
+#html_logo = '../logo/logo.png'
 
 # The name of an image file (within the static path) to use as favicon of the
 # docs.  This file should be a Windows icon file (.ico) being 16x16 or 32x32
 # pixels large.
-#html_favicon = None
+html_favicon = 'logo32thin.ico'
 
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ['_static','../logo/logo32thin.ico','../logo/logotext.png']
 
 # If not '', a 'Last updated on:' timestamp is inserted at every page bottom,
 # using the given strftime format.
@@ -213,7 +217,7 @@ latex_documents = [
 
 # The name of an image file (relative to this directory) to place at the top of
 # the title page.
-#latex_logo = None
+latex_logo = '../logo/logo.png'
 
 # For "manual" documents, if this is true, then toplevel headings are parts,
 # not chapters.
@@ -290,5 +294,4 @@ class TodoModule(Todo):
 
 
 def setup(app):
-
     app.add_directive('todomodule', TodoModule) #add this directive to document TODO comments in the root of the module
