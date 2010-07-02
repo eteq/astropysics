@@ -1,5 +1,17 @@
-#Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
-
+#Copyright 2008 Erik Tollerud
+#
+#   Licensed under the Apache License, Version 2.0 (the "License");
+#   you may not use this file except in compliance with the License.
+#   You may obtain a copy of the License at
+#
+#       http://www.apache.org/licenses/LICENSE-2.0
+#
+#   Unless required by applicable law or agreed to in writing, software
+#   distributed under the License is distributed on an "AS IS" BASIS,
+#   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+#   See the License for the specific language governing permissions and
+#   limitations under the License.
+   
 """
 
 ======
@@ -25,7 +37,7 @@ particularly strange cosmology is in use.
         transforms in astronomy.
    
     `Standards Of Fundamental Astronomy (SOFA) <http://www.iausofa.org/>`_ 
-        The IAU reference implementations for coordinates and earth rotation.
+        The IAU reference implementations for coordinates and earth rotation.  
    
     `USNO Circular 179 <http://aa.usno.navy.mil/publications/docs/Circular_179.pdf>`_ 
         An excellent description of the IAU 2000 resolutions and related
@@ -34,6 +46,15 @@ particularly strange cosmology is in use.
 .. note::
     Timekeeping/conversion functions are kept in :mod:`astropysics.obstools`,
     although some are crucial to coordinate systems.
+    
+.. note::
+    Some functionality in this module makes use of derived versions of the `SOFA
+    <http://www.iausofa.org/>`_ routines. Use of these derived works requires
+    inclusion of the SOFA license (included in the licenses/SOFA_LICENSE file of
+    the source distribution) and notation indicating how these routines have
+    been modified. In *all* cases where SOFA-derived routines are used, the
+    routine's functionality is replicated exactly as the SOFA implementation
+    (barring the possibility of typos), but adapted to the python language.
    
 .. warning:: 
     While the framework for the coordinate transformations is done, the
@@ -1970,7 +1991,7 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     
     
     def __makeFrameBias():
-        #see USNO circular 179 for frame bias -- all in milliarcsec
+        #sing USNO circular 179 for frame bias -- all in milliarcsec
         da0 = -14.6
         xi0 = -16.6170
         eta0 = -6.8192
@@ -1992,7 +2013,8 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
             return B
         else:
             P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
-            return P*B #no nutation implemented for equinox-based
+            N = np.mat(np.eye(3)) #no nutation implemented yet for equinox-based
+            return N*P*B 
     
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toEqC(icrsc):
@@ -3419,3 +3441,4 @@ def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
         return lo,bo
     else:
         return l,b
+    
