@@ -1,0 +1,17 @@
+{% extends "!layout.html" %}
+
+
+{%- block document %}
+     <div class="documentwrapper">
+     {%- if render_sidebar %}
+       <div class="bodywrapper">
+     {%- endif %}
+         <div class="body">
+           <br><img src="{{ pathto("_static/logotext.png", 1) }}" alt="Sphinx logo" /><br>
+           {% block body %} {% endblock %}
+         </div>
+     {%- if render_sidebar %}
+       </div>
+     {%- endif %}
+     </div>
+{%- endblock %}
