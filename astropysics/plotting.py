@@ -1072,6 +1072,180 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
             plt.show()
     finally:
         plt.interactive(preint)
+        
+        
+def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
+                 predelete=False,verbose=False,savekwargs={}):
+    """
+    Animates a figure made in matplotlib using the mplot3d 3D plotting tools.
+    
+    :param azels: 
+        Specifies the azimuth ane elevation to use for the key frames - each
+        segment will have `nframes` and linearly interpolate azimuth and
+        elevation between the `azels` values. If `relative` is True, the values
+        are offsets (in degrees) from the previous key frame. Otherwise, they
+        are absolute values (in degrees). If equal in length to `nframes`, the
+        initial frame is chosen based on the azim and elev when the function is
+        called. If len(`nframes`) == len(`nazels`)-1, the initial frame is taken
+        to be the first in `azels` (absolute, regardless of the `relative`
+        keyword value).
+    :type azels: sequence of (azim,elev) tuples
+    :param nframes: Number of frames per segment (see `azels` for lengths).  
+    :type nframes: sequence of ints
+    :param fn: 
+        The filename to use to save the animation frames. If the substring
+        '{fnum}' appears anywhere in this name, the frame number will be added
+        there. Otherwise, the frame number is added before the extension. If
+        None, no files are actually saved - the animation just plays in the
+        window.
+    :type fn: string or None
+    :param fig: The figure to use for the animation.
+    :type fig: :class:`matplotlib.figure.Figure` object, int, or None
+    :param relative: 
+        If True, ` azels`are relative to previous frame. Otherwise, they are
+        absolute.
+    :type relative: bool
+    :param predelete: 
+        If True, all files matching the pattern will be deleted before saving of
+        a new set of frames occurs.
+    :type predelete: bool
+    :param verbose: If True, info is printed for each frame.
+    :type verbose: bool
+    :param savekwargs: keyword arguments for :func:`matplotlib.pyplot.savefig`
+    :type savekwargs: dict
+    
+    :except ValueError: If `azels` and `nframes` don't have valid lengths
+    :except TypeError: If the current figure doesn't have one Axes3D 
+    
+    """
+    
+    import os,sys,glob
+    
+    if fn is not None and '{fnum}' not in fn:
+        fn = '_{fnum}'.join(os.path.splitext(fn))
+        
+    if predelete:
+        for fn in glob.glob(fn.replace('{fnum}','*')):
+            if os.path.isfile(fn):
+                if verbose:
+                    print 'deleting',fn
+                os.remove(fn)
+        
+    if fig is None:
+        fig = plt.gcf()
+    elif isinstance(fig,int):
+        fig = plt.figure(fig)
+        
+    if len(fig.axes) !=1:
+        raise TypeError('Figure does not have just 1 axis')
+    ax = fig.axes[0] 
+    if not hasattr(ax,'azim') or not hasattr(ax,'elev'):
+        raise TypeError('axis is not 3D')
+    
+    if len(azels) == len(nframes):
+        azel0 = None
+    elif len(azels)==len(nframes)+1:
+        azel0 = azels[0]
+        azels = azels[1:]
+    else:
+        raise ValueError('Invalid lengths for azels and nframes')
+    
+    if azel0 is not None:
+        ax.azim = azel0[0]
+        ax.elev = azel0[1]
+    
+    frames = []
+    if relative:
+        for (az,el),nf in zip(azels,nframes):
+            dazim = az/nf
+            delev = el/nf
+            frames.extend([(dazim,delev)]*nf)
+    else:
+        azlast = ax.azim
+        ellast = ax.elev
+        for (az,el),nf in zip(azels,nframes):
+            dazim = (az-azlast)/nf
+            delev = (el-ellast)/nf
+            frames.extend([(dazim,delev)]*nf)
+            azlast = az
+            ellast = el 
+    
+    #format string for frame count
+    frmstr = '%0'+str(len(str(len(frames))))+'i'
+    
+    fig.canvas.draw()
+    if fn is not None:
+        saveargs = [fn.replace('{fnum}',frmstr%0)]
+        fig.savefig(*saveargs,**savekwargs)
+    for i,(az,el) in enumerate(frames):
+        if verbose:
+            print 'From',(ax.azim,ax.elev),'adding',(az,el),\
+           '' if fn is None else ('and saving '+fn.replace('{fnum}',frmstr%i))
+        ax.azim += az
+        ax.elev += el
+        fig.canvas.draw()
+        if fn is not None:
+            saveargs = [fn.replace('{fnum}',frmstr%i)]
+            fig.savefig(*saveargs,**savekwargs)
+    
+def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
+    """
+    Given a base file name of the same name as given to ax3d_animate, generates
+    a movie using
+    
+    ffmpeg must be installed for this function to work.
+    
+    :param frfn: 
+        The filename to use to locate the animation frames. If the substring
+        '{fnum}' appears anywhere in this name, the frame number will be added
+        there. Otherwise, the frame number is added before the extension.
+    :type frfn: string
+    :param moviefn: Filename to use for the output movie
+    :type moviefn: string
+    :param inops: dictionary mapping ffmpeg options to their values for input
+    :type inops: dict or None
+    :param outops: dictionary mapping ffmpeg options to their values for output
+    :type outops: dict or None
+    
+    :except ValueError: if the ffmpeg call does not complete sucessfully
+    """
+    
+    import os,glob
+    
+    if '{fnum}' not in frfn:
+        frfn = '_{fnum}'.join(os.path.splitext(frfn))
+        
+    pre,post = frfn.split('{fnum}')
+    fns = glob.glob(pre+'*'+post)
+    
+    if inops is None:
+        inops = []
+    else:
+        tempops = []
+        for name,val in inops.iteritems():
+            temp.append('-'+name)
+            temp.append(val)
+        inops = tempops
+        
+    if outops is None:
+        outops = []
+    else:
+        tempops = []
+        for name,val in outops.iteritems():
+            temp.append('-'+name)
+            temp.append(val)
+        outops = tempops
+    
+    inops = ' '+' '.join(inops)
+    outops= ' '+' '.join(outops)
+    ffmpeginstr = pre+'%0'+str(len(fns[0])-len(pre)-len(post))+'d'+post
+    
+    callt = (inops,framerate,bitrate,ffmpeginstr,outops,moviefn)
+    ffmpegcall = 'ffmpeg%s -r %s -b %s -i %s%s %s'%callt
+    
+    retcode = os.system(ffmpegcall)
+    if retcode != 0:
+        raise ValueError('ffmpeg did not complete correctly - return code %i'%retcode)
 
 #<------------------------------------Maya VI---------------------------------->
 
