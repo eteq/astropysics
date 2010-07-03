@@ -12,13 +12,14 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
+
 """
+This module contains tools and utilities for computing ephemerides of solar
+system objects, as well as proper motion calculations for extrasolar objects.
 
-==============================================
-ephems -- ephemerides for Solar System objects
-==============================================
-
-The :mod:`ephems` 
+.. warning::
+    This module is currently being re-worked and has incomplete/possibly 
+    incorrect functionality
 
 .. seealso::
         
@@ -30,18 +31,21 @@ The :mod:`ephems`
     `Meeus, Jean H. "Astronomical Algorithms" ISBN 0943396352 <http://www.willbell.com/MATH/mc1.htm>`_ 
         An authoritative reference on coordinates, ephemerides, and related
         transforms in astronomy.
+        
+    `JPL Solar System Dynamics Group <http://ssd.jpl.nasa.gov/>`_
+        The standard source for solar system dynamics and ephemerides.  Source 
+        of DE200 and DE405 solar system models, and HORIZON ephemerides service.
 
 .. todo:: Tutorials
 
-
 Classes and Inheritance Structure
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.ephems
+.. inheritance-diagram:: astropysics.coords.ephems
    :parts: 1
-
+   
 Module API
-----------
+^^^^^^^^^^
 
 """
 
@@ -54,9 +58,11 @@ Module API
 #  Rotation Models": http://aa.usno.navy.mil/publications/docs/Circular_179.pdf
 from __future__ import division,with_statement
 
-from .constants import pi
-from .utils import DataObjectRegistry
+from ..constants import pi
+from ..utils import DataObjectRegistry
 import numpy as np
+
+from .coordsys import EquatorialCoordinatesEquinox as EquatorialCoordinates
 
 _twopi = 2*pi
 
@@ -93,7 +99,7 @@ def _mean_anomaly_of_moon(T):
     
     :returns: Mean anomaly of the moon  in radians
     """
-    from .constants import asecperrad
+    from ..constants import asecperrad
     return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
 
 _mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
@@ -110,7 +116,7 @@ def _mean_anomaly_of_sun(T):
     
     :returns: Mean anomaly of the sun  in radians
     """
-    from .constants import asecperrad
+    from ..constants import asecperrad
     return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
    
 _mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
@@ -128,7 +134,7 @@ def _mean_long_of_moon_minus_ascnode(T):
     :returns: Mean logitude of the Moon minus the ascending node in radians
     
     """
-    from .constants import asecperrad
+    from ..constants import asecperrad
     return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
 
 _mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
@@ -145,7 +151,7 @@ def _mean_elongation_of_moon_from_sun(T):
     
     :returns: Mean elongation of the Moon from the Sun in radians
     """
-    from .constants import asecperrad
+    from ..constants import asecperrad
     return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
 
 _mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
@@ -162,7 +168,7 @@ def _mean_long_asc_node_moon(T):
     
     :returns: Mean longitude of the Moon's ascending node in radians 
     """
-    from .constants import asecperrad
+    from ..constants import asecperrad
     return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
    
 def _long_venus(T):
@@ -225,7 +231,7 @@ class EphemerisObject(object):
         return self._jd0
     def _setJd0(self,val):
         from operator import isSequenceType
-        from .obstools import calendar_to_jd
+        from ..obstools import calendar_to_jd
         from datetime import datetime
         
         if hasattr(val,'year') or isSequenceType(val):
@@ -243,7 +249,7 @@ class EphemerisObject(object):
         return self._jd
     def _setJd(self,val):
         from operator import isSequenceType
-        from .obstools import calendar_to_jd
+        from ..obstools import calendar_to_jd
         from datetime import datetime
         
         if val == 'now':
@@ -285,7 +291,7 @@ class EphemerisObject(object):
                 self._validrange = None
             else:
                 from operator import isSequenceType
-                from .obstools import calendar_to_jd
+                from ..obstools import calendar_to_jd
                 from datetime import datetime
                 
                 vs = []
@@ -381,7 +387,8 @@ class SolarSystemObject(EphemerisObject):
         they are derived.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
-        from .obstools import jd_to_epoch
+        from ..obstools import jd_to_epoch
+        
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
             return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
@@ -731,7 +738,7 @@ class Sun(KeplerianOrbit):
         :attr:`jd` as an (x,y,z) tuple (in AU) .
         """
         if geocentric:
-            from .obstools import jd_to_epoch
+            from ..obstools import jd_to_epoch
             from math import radians,cos,sin,atan2,sqrt
             
             #now get the necessary elements
@@ -764,7 +771,7 @@ class Sun(KeplerianOrbit):
         derived.
         """
         from math import radians,degrees,cos,sin,atan2,sqrt
-        from obstools import jd_to_epoch
+        from ..obstools import jd_to_epoch
         
         if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
             return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
