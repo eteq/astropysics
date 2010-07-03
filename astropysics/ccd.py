@@ -59,7 +59,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
     Sequence = None
     
-from .utils import PipelineElement
+from .pipeline import PipelineElement
 
 
 

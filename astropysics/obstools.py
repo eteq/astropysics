@@ -61,7 +61,8 @@ Module API
 
 from __future__ import division,with_statement
 from .constants import pi
-from .utils import PipelineElement,DataObjectRegistry
+from .utils import DataObjectRegistry
+from .pipeline import PipelineElement
 import numpy as np
 
 try: 
@@ -2040,7 +2041,7 @@ class Extinction(object):
     
     #PipelineElement methods
 #    def _plFeed(self,data,src):
-#        from .utils import  PipelineError
+#        from .pipeline import  PipelineError
 #        from .spec import Spectrum
 #        if self._plbuffer is None:
 #            self._plbuffer = {'in':[],'out':[]} 
@@ -2051,7 +2052,7 @@ class Extinction(object):
 #            raise PipelineError('unrecognized Extinction correction input data')
         
 #    def _plProcess(self):
-#        from .utils import  PipelineError
+#        from .pipeline import  PipelineError
 #        if self._plbuffer is None:
 #            self._plbuffer = {'in':[],'out':[]} 
         
