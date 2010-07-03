@@ -14,9 +14,9 @@
 
 """
 
-========
-plotting
-========
+===================================================================
+plotting -- astronomy-oriented matplotlib and mayavi plotting tools
+===================================================================
 
 The :mod:`plotting` module contains classes and funtions to aid in making plots
 useful for astrophysics.

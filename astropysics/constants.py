@@ -14,9 +14,9 @@
 
 """
 
-=========
-constants
-=========
+=============================================================
+constants -- physical constants and cosmological calculations
+=============================================================
 
 The :mod:`constants` module contains attributes storing physical constants and
 conversion factors. Most of these are at the package level and should be

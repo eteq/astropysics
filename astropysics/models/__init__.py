@@ -14,9 +14,9 @@
 
 """
 
-======
-models
-======
+==================================================
+models -- model and data-fitting classes and tools
+==================================================
 
 The :mod:`models` module contains objects and functions for fitting data to
 models as well as calculations and estimates from these models. The available

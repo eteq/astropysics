@@ -14,11 +14,11 @@
 
 """
 
-====
-phot
-====
+=====================================================
+phot -- photometry/flux measurement classes and tools
+=====================================================
 
-The :mod:`phot` module contains classes and funtions for photometry or other
+The :mod:`phot` module contains classes and functions for photometry or other
 image-based flux measurements.
 
 

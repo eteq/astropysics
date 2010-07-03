@@ -14,9 +14,9 @@
 
 """
 
-===
-ccd
-===
+=============================
+ccd -- image processing tools
+=============================
 
 The :mod:`ccd` module contains classes and functions for processing CCD images
 or similar.

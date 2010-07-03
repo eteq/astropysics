@@ -14,9 +14,9 @@
 
 """
 
-=====
-utils
-=====
+======================================
+utils -- utility classes and functions
+======================================
 
 The :mod:`utils` module contains classes and funtions of general utility used in
 multiple places throughout `astropysics`. Some of these are

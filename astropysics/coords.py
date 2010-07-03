@@ -14,9 +14,9 @@
    
 """
 
-======
-coords
-======
+=======================================================
+coords -- coordinate classes and coordinate conversions
+=======================================================
 
 The :mod:`coords` module contains classes and functions specifying locations of
 objects on the sky as well as coordinate converstions and distance computations,

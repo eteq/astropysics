@@ -14,9 +14,9 @@
 
 """
 
-==
-io
-==
+=========================================
+io -- data input/output classes and tools
+=========================================
 
 The ``io`` module contains classes and functions for loading and saving data in
 various relevant formats used in astronomy, as well as convinience functions

@@ -7,9 +7,16 @@ Astropysics: astrophysics utilities for python
 ==============================================
 :Author: `Erik Tollerud <http://www.physics.uci.edu/~etolleru/>`_
 
-Astropysics is a library containing a variety of utilities and algorithms for reducing, analyzing, and visualizing astronomical data.  Best of all, it encourages the user to leverage the existing capabilities of Python to make this quick, easy, and as painless as cutting-edge science can even actually be.  There do exist other Python packages with some of the capabilities of this project, but the goal of this project is to integrate all these tools together and make them interact in the most straightforward ways possible.  
+Astropysics is a library containing a variety of utilities and algorithms for
+reducing, analyzing, and visualizing astronomical data. Best of all, it
+encourages the user to leverage the existing capabilities of Python to make this
+quick, easy, and as painless as cutting-edge science can even actually be. There
+do exist other Python packages with some of the capabilities of this project,
+but the goal of this project is to integrate all these tools together and make
+them interact in the most straightforward ways possible.
 
-(And to that end, if you are running one of those other projects, I'd love to help integrate our projects into a common framework!)
+(And to that end, if you are running one of those other projects, I'd love to 
+help integrate our projects into a common framework!)
 
 Documentation
 =============

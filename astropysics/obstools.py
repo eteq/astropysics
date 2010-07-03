@@ -14,9 +14,9 @@
 
 """
 
-========
-obstools
-========
+===============================================
+obstools -- miscellaneous tools for observation
+===============================================
 
 The :mod:`obstools` module stores tools for oberving (pre- and post-) as well as
 functioning as a module for various corrections and simple calculations that

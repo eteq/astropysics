@@ -14,9 +14,9 @@
 
 """
 
-======
-objcat
-======
+======================================================
+objcat -- flexible, dynamically updated object catalog 
+======================================================
 
 The :mod:`objcat` module contains classes and functions for generating catalogs
 of objects. This catalog is unique in that it stores source information and can

@@ -14,9 +14,9 @@
 
 """
 
-====
-spec
-====
+==========================================
+spec -- spectrum and SED classes and tools
+==========================================
 
 The :mod:`spec` module contains classes and funtions focused on plotting and
 analysis of arbitrary spectra and SEDs, as well as related utility functions.
