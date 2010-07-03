@@ -19,4 +19,5 @@ The modules forming the core of astropysics' functionality are documented below.
    ephems
    io
    plotting
+   pipeline
    utils
