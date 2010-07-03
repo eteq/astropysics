@@ -1124,12 +1124,12 @@ def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
     if fn is not None and '{fnum}' not in fn:
         fn = '_{fnum}'.join(os.path.splitext(fn))
         
-    if predelete:
-        for fn in glob.glob(fn.replace('{fnum}','*')):
-            if os.path.isfile(fn):
+    if fn is not None and predelete:
+        for dfn in glob.glob(fn.replace('{fnum}','*')):
+            if os.path.isfile(dfn):
                 if verbose:
-                    print 'deleting',fn
-                os.remove(fn)
+                    print 'deleting',dfn
+                os.remove(dfn)
         
     if fig is None:
         fig = plt.gcf()
@@ -1172,6 +1172,7 @@ def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
     
     #format string for frame count
     frmstr = '%0'+str(len(str(len(frames))))+'i'
+    print 'frmstr',frmstr,fn
     
     fig.canvas.draw()
     if fn is not None:
@@ -1179,8 +1180,10 @@ def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
         fig.savefig(*saveargs,**savekwargs)
     for i,(az,el) in enumerate(frames):
         if verbose:
-            print 'From',(ax.azim,ax.elev),'adding',(az,el),\
-           '' if fn is None else ('and saving '+fn.replace('{fnum}',frmstr%i))
+            print 'Frame',i+1,'of',len(frames),':'
+            print 'From',(ax.azim,ax.elev),'adding',(az,el)
+            if fn is not None:
+                print 'saving',fn.replace('{fnum}',frmstr%i)
         ax.azim += az
         ax.elev += el
         fig.canvas.draw()
@@ -1207,7 +1210,10 @@ def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
     :param outops: dictionary mapping ffmpeg options to their values for output
     :type outops: dict or None
     
-    :except ValueError: if the ffmpeg call does not complete sucessfully
+    :except ValueError: 
+        If the ffmpeg call does not complete sucessfully or there are no
+        matching files.
+        
     """
     
     import os,glob
@@ -1238,6 +1244,9 @@ def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
     
     inops = ' '+' '.join(inops)
     outops= ' '+' '.join(outops)
+    
+    if len(fns)<1:
+        raise ValueError('No files matching pattern %s were found'%(pre+'*'+post))
     ffmpeginstr = pre+'%0'+str(len(fns[0])-len(pre)-len(post))+'d'+post
     
     callt = (inops,framerate,bitrate,ffmpeginstr,outops,moviefn)
