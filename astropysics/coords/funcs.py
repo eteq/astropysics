@@ -164,7 +164,9 @@ def greenwich_sidereal_time(jd,apparent=True):
 
 def equation_of_the_equinoxes(jd):
     """
-    Computes equation of the equinoxes GAST-GMST.
+    Computes equation of the equinoxes GAST-GMST. That is, the difference
+    between GMT computed using the mean equinox instead of the true equinox
+    (i.e. including nutation).
     
     :param jd: The Julian Date or a sequence of JDs.
     :type jd: scalar or array-like
@@ -176,8 +178,9 @@ def equation_of_the_equinoxes(jd):
 
 def equation_of_the_origins(jd):
     """
-    Computes the equation of the origins ERA - GAST
-    (ERA = Earth Rotation Angle, GAST = Greenwich Apparent Sidereal Time) 
+    Computes the equation of the origins ERA - GAST (ERA = Earth Rotation Angle,
+    GAST = Greenwich Apparent Sidereal Time). This quantity is also the
+    difference in RA between the Celestial Intermediate Origin and the Equinox.
     
     :param jd: The Julian Date or a sequence of JDs.
     :type jd: scalar or array-like

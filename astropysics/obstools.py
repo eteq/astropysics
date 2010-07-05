@@ -41,7 +41,7 @@ matplotlib)
 .. seealso::
 
     :func:`astropysics.coords.earth_rotation_angle`
-    :func:`greenwich_sidereal_time`
+    :func:`astropysics.coords.greenwich_sidereal_time`
 
 
 Classes and Inheritance Structure
