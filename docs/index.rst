@@ -106,6 +106,9 @@ A number of other packages are necessary for added functionality in astropysics 
     * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
         Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://www.stsci.edu/trac/ssb/astrolib>`_ at the bottom of the page.
         
+    * `pydot <http://code.google.com/p/pydot/>`_
+        A python interface for `graphviz <http://www.graphviz.org/>`_ . Used to generate diagrams of graphs in a few places in astropysics.
+        
         
     Note that you can install all of these at once if you install astropysics using the following command::
     
@@ -116,6 +119,12 @@ A number of other packages are necessary for added functionality in astropysics 
         easy_install "astropysics[allnogui]"
         
     and as with all of these, you may need to prefix with ``sudo``.
+    
+Astropysics also includes pythonic wrappers around some astronomy-related tools that need to be installed seperately if their functionality is desired:
+
+    * `SExtractor <http://www.astromatic.net/software/sextractor>`_
+    * `Kcorrect <http://howdy.physics.nyu.edu/index.php/Kcorrect>`_
+    
 
 Development/Advanced Install
 ----------------------------

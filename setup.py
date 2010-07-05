@@ -59,6 +59,12 @@ See http://packages.python.org/Astropysics/ for detailed documentation.
 cmdclassd = {'build_py' : apy_build_py}
 if apy_build_sphinx is not None:
     cmdclassd['build_sphinx'] = apy_build_sphinx
+    
+#extra/recommended packages
+_extras = ['matplotlib','pyfits','ipython','pydot']
+_guiextras = ['traits','traitsGUI','chaco']
+_gui3dextras = ['mayavi']
+
 
 setup(name='Astropysics',
       version=versionstr,
@@ -70,11 +76,9 @@ setup(name='Astropysics',
       requires=['numpy','scipy'],
       install_requires=['numpy','scipy'],
       provides=['astropysics'],
-      extras_require={'plots':'matplotlib',
-                      'guis':['traits','traitsGUI','chaco'],
-                      'gui3d':'mayavi',
-                      'fits':'pyfits',
-                      'all':['matplotlib','traits','traitsGUI','chaco','pyfits','mayavi']},
+      extras_require={'all':_extras+_guiextras+_gui3dextras,
+                      'allnogui':_extras,
+                      'allno3d':_extras+_guiextras},
       
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
