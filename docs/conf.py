@@ -243,6 +243,8 @@ autoclass_content = 'both'
 
 todo_include_todos = 'dev' in release
 
+graphviz_output_format = 'svg' #can be 'svg' or 'png'
+
 #<-------------Custom extension functionality-------------->
 from sphinx.ext.todo import Todo,todo_node,nodes
 from sphinx.pycode import ModuleAnalyzer,PycodeError

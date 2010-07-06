@@ -26,6 +26,7 @@ transformation registry static methods of the :class:`CoordinateSystem` class
 
 .. todo:: examples
 
+{transformdiagram}
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -2217,6 +2218,29 @@ class FK5Coordinates(EquatorialCoordinatesEquinox):
     
     __slots__ = tuple()
     
+    @staticmethod
+    def _precessionMatrixJ(epoch1,epoch2):
+        """
+        Computes the precession matrix from one Julian epoch to another
+        """
+        T = (epoch1 - 2000)/100
+        dt = (epoch2 - epoch1)/100
+        
+        pzeta = (0.017998,0.000344,0.30188,-0.000139,1.39656,2306.2181)
+        temp = pzeta[5] + T*(pzeta[4]+T*pzeta[3])
+        zeta = dt*(temp + dt*((pzeta[2]+pzeta[1]*T) + dt*pzeta[0]))/3600
+        
+        pz = (0.018203,-0.000066,1.09468)
+        z = dt*(temp + dt*((pz[2]+pz[1]*T) + dt*pz[0]))/3600
+        
+        ptheta = (-0.041833,-0.000217,-0.42665,-0.000217,-0.85330,2004.3109)
+        temp = ptheta[5] + T*(ptheta[4]+T*ptheta[3])
+        theta = dt*(temp + dt*((ptheta[2]+ptheta[1]*T) + dt*ptheta[0]))/3600
+        
+        return rotation_matrix(-z,'z') *\
+               rotation_matrix(theta,'y') *\
+               rotation_matrix(-zeta,'z')
+    
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
@@ -2242,29 +2266,28 @@ class FK5Coordinates(EquatorialCoordinatesEquinox):
         if self.epoch is not None and newepoch is not None:
             self.matrixRotate(self._precessionMatrixJ(self.epoch,newepoch))
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
+        
+    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')
+    def _fromICRS(icrsc):
+        """
+        B-matrix from USNO circular 179 
+        """
+        eta0 = -19.9/3600000
+        xi0 = 9.1/3600000
+        da0 = -22.9/3600000
+        B = rotation_matrix(-eta0,'x') *\
+            rotation_matrix(xi0,'y') *\
+            rotation_matrix(da0,'z')
+            
+        epoch = icrsc.epoch
+        if icrsc.epoch is None:
+            return B
+        else:
+            return FK5Coordinates._precessionMatrixJ(2000,icrsc.epoch)*B
     
-    @staticmethod
-    def _precessionMatrixJ(epoch1,epoch2):
-        """
-        Computes the precession matrix from one Julian epoch to another
-        """
-        T = (epoch1 - 2000)/100
-        dt = (epoch2 - epoch1)/100
-        
-        pzeta = (0.017998,0.000344,0.30188,-0.000139,1.39656,2306.2181)
-        temp = pzeta[5] + T*(pzeta[4]+T*pzeta[3])
-        zeta = dt*(temp + dt*((pzeta[2]+pzeta[1]*T) + dt*pzeta[0]))/3600
-        
-        pz = (0.018203,-0.000066,1.09468)
-        z = dt*(temp + dt*((pz[2]+pz[1]*T) + dt*pz[0]))/3600
-        
-        ptheta = (-0.041833,-0.000217,-0.42665,-0.000217,-0.85330,2004.3109)
-        temp = ptheta[5] + T*(ptheta[4]+T*ptheta[3])
-        theta = dt*(temp + dt*((ptheta[2]+ptheta[1]*T) + dt*ptheta[0]))/3600
-        
-        return rotation_matrix(-z,'z') *\
-               rotation_matrix(theta,'y') *\
-               rotation_matrix(-zeta,'z')
+    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
+    def _toICRS(fk5c):
+        return FK5Coordinates._fromICRS(fk5c).T
     
 class FK4Coordinates(EquatorialCoordinatesEquinox):
     """
@@ -2320,7 +2343,43 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
         return rotation_matrix(-z,'z') *\
                rotation_matrix(theta,'y') *\
                rotation_matrix(-zeta,'z')
+               
+    @CoordinateSystem.registerTransform('self',FK5Coordinates,transtype='smatrix')
+    def _toFK5(fk4c):
+        from ..obstools import epoch_to_jd,jd_to_epoch
         
+        
+        #B1950->J2000 matrix from Murray 1989 A&A 218,325
+        B = np.mat([[0.9999256794956877,-0.0111814832204662,-0.0048590038153592],
+                    [0.0111814832391717,0.9999374848933135,-0.0000271625947142],
+                    [0.0048590037723143,-0.0000271702937440,0.9999881946023742]])
+        if fk4c.epoch is not None:
+            jd = epoch_to_jd(fk4c.epoch,False)
+            jepoch = jd_to_epoch(jd)
+            T = (jepoch - 1950)/100
+            
+            #now add in correction terms for FK4 rotating system
+            B[0,0] += -2.6455262e-9*T
+            B[0,1] += -1.1539918689e-6*T
+            B[0,2] += 2.1111346190e-6*T
+            B[1,0] += 1.1540628161e-6*T
+            B[1,1] += -1.29042997e-8*T
+            B[1,2] += 2.36021478e-8*T
+            B[2,0] += -2.1112979048e-6*T
+            B[2,1] += -5.6024448e-9*T
+            B[2,2] += 1.02587734e-8*T
+      
+            PB = _precessionMatrixB(fk4c.epoch,1950)
+            PJ = _precessionMatrixBJ(2000,jepoch)
+            
+            return PJ*B*PB
+        else:
+            return B
+    
+    @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
+    def _fromFK5(fk5c):
+        #need inverse because Murray's matrix is *not* a true rotation matrix
+        return FK5Coordinates._toFK5(fk5c).I
         
 class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     """
@@ -2366,7 +2425,6 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
         
-            
 class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     """
     Ecliptic Coordinates (beta, lambda) such that the fundamental plane passes
@@ -2483,6 +2541,28 @@ class HorizontalCoordinates(LatLongCoordinates):
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
     def _fromHoriz(incoosys=None):
         raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
+    
+    
+#Now that all the coordinate systems have been made, add a diagram to the docs
+try:
+    dotobj = CoordinateSystem.graphTransforms()
+    transstr="""
+Builtin Coordinate System Transforms
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+A number of coordinate systems are provided, some of which have pre-defined
+transformations. The defined transformation are shown in the diagram below.
+
+.. graphviz::
+
+    """+dotobj.to_string().replace('\n','\n    ')
+    __doc__ = __doc__.replace('{transformdiagram}',transstr)
+    del dotobj
+except ImportError:
+    #if pydot isn't present, just forget about the diagram
+    __doc__ = __doc__.replace('{transformdiagram}','')
+    
+#<--------------------------Convinience Functions------------------------------>
 
     
 def angular_string_to_dec(instr,hms=True,degrees=True):
@@ -2544,3 +2624,4 @@ def objects_to_coordinate_arrays(posobjs,coords='auto',degrees=True):
                 coords.append([getattr(o,c).r for c in coordnames])
 
     return np.array(coords).T
+
