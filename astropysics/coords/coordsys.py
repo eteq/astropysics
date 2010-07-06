@@ -1227,7 +1227,7 @@ class LatLongCoordinates(CoordinateSystem):
                 if conv.transtype != 'smatrix':
                     return None
                 else:
-                    return conv(self)
+                    return conv.basetrans(self)
             except (KeyError,TypeError),e:
                 strf = 'cannot generate matrix to transform from {0} to {1}'
                 raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
