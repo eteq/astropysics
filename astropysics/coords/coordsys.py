@@ -796,6 +796,56 @@ class CoordinateSystem(object):
             return []
         
     @staticmethod
+    def graphTransforms(writefile=None):
+        """
+        Returns a `Pydot <http://code.google.com/p/pydot/>` :class:`Dot` object
+        representing a graph of the registered coordinate systesm and the
+        transformations between them. 
+        
+        :param writefile: 
+            A filename to which the graph should be written. The format will be
+            inferred from the filename extension (default 'raw'). If None, no
+            file will be written.
+        :type writefile: string or None
+        
+        :except ImportError: If pydot is not installed.
+        
+        """
+        import pydot
+        
+        d = pydot.Dot()
+        ts = CoordinateSystem.listAllTransforms()
+        cs = set()
+        edges = []
+        
+        
+        for c1,c2 in ts:
+            cs.add(c1)
+            cs.add(c2)
+            if (c2,c1,False) in edges:
+                edges.remove((c2,c1,False))
+                edges.append((c2,c1,True))
+            else:
+                edges.append((c1,c2,False))
+                
+        for c in cs:
+            d.add_node(pydot.Node(c.__name__))
+        for c1,c2,bidir in edges:
+            e = pydot.Edge(c1.__name__,c2.__name__,dir=('both' if bidir else 'foreward'))
+            d.add_edge(e)
+            
+        if writefile is not None:
+            from os.path import splitext
+            base,ext = splitext(writefile)
+            if ext == '':
+                ext = 'raw'
+            else:
+                ext = ext.replace('.','')
+            d.write(writefile,format=ext)
+        
+        return d
+        
+    @staticmethod
     def delTransform(fromclass,toclass):
         """
         Deletes the transformation function to go from `fromclass` to `toclass`.
