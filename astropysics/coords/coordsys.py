@@ -1634,10 +1634,10 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     
     .. note::
         Strictly speaking this class is actually the Barycentric Celestial
-        Reference System (BCRS), as any space/proper motions are computed before 
-        this object (generally in :class:`EphemerisObject`). But BCRS's orientation 
-        is tied to ICRS (it can be considered , so it is called ICRS here for
-        clarity.
+        Reference System (BCRS), as any space/proper motions are computed before
+        this object (e.g. in :class:`~astropysics.ephems.EphemerisObject`). But
+        BCRS's orientation is tied to ICRS, so it is called ICRS here, as the 
+        true reference system is ICRS.
         
     .. warning:: 
         Abberation and annual parallax are not yet included in transformations!
@@ -2075,8 +2075,8 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     
     Epoch transformations in this system only adjust for polar motion - to
     account for earth rotation, transform back to
-    :class:`EquatorialCoordinatesCIRS` or :class:`EquatorialCoordinatesEquinox`
-    , change the epoch, then transfrom back to :class:`ITRSCoordinates` .
+    :class:`EquatorialCoordinatesCIRS` or :class:`EquatorialCoordinatesEquinox`,
+    change the epoch, then transfrom back to :class:`ITRSCoordinates`.
     
     Because polar motion is not fully predictable, a number of methods are
     available for approximating it. To choose a method, set the
