@@ -58,6 +58,7 @@ Module API
 #TODO: make Extinction classes spec.HasSpecUnits and follow models framework?
 #TODO: return Pipeline support to Extinction 
 #TODO: Instruments and telescopes for sites
+#TODO: get leap second from IERS web site
 
 from __future__ import division,with_statement
 from .constants import pi

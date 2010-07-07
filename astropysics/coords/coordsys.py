@@ -1911,17 +1911,18 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         if epoch is None:
             return B
         else:
-            from math import sin,cos
+            from math import sin,cos,atan,atan2,sqrt
+            from ..utils import rotation_matrix
             
             P = _precession_matrix_J2000_Capitaine(epoch)
             N = _nutation_matrix(epoch)
-            NPB = N*P*B
             
-            x,y,z = NPB.A[:,2]
+            
+            x,y,z = (N*P*B).A[2]
             xsq,ysq = x**2,y**2
             bz = 1/(1+z)
             s = EquatorialCoordinatesCIRS._CIOLocator(epoch)
-            
+                   
             #matrix components - see Circular 179 or IERS Conventions 2003
             a,b,c = 1-bz*xsq , -bz*x*y , -x
             d,e,f = -bz*x*y , 1 - bz*ysq , -y
@@ -1938,6 +1939,15 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
                  [a*si + d*co,b*si + e*co,c*si + f*co],
                  [     g,          h,          i     ]]     
             return np.mat(M)
+        
+#            #SOFA implementation using spherical angles - numerically identical
+#            r2 = x*x + y*y
+#            e = atan2(y,x) if r2 != 0 else 0
+#            d = atan(sqrt(r2/(1-r2)))
+            
+#            return rotation_matrix(-(e+s),'z',False) *\
+#                   rotation_matrix(d,'y',False) *\
+#                   rotation_matrix(e,'z',False)
         
     @staticmethod
     def _CIOLocator(epoch):
@@ -1959,8 +1969,8 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         P = _precession_matrix_J2000_Capitaine(epoch)
         N = _nutation_matrix(epoch)
         
-        #B*P*N takes GCRS to true, so CIP is bottom row
-        x,y,z = (B*P*N).A[2]
+        #N*P*B takes GCRS to true, so CIP is bottom row
+        x,y,z = (N*P*B).A[2]
         
         #T = (epoch_to_jd(epoch) - jd2000)/36525
         T = (epoch-2000)/100
@@ -2029,9 +2039,14 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
         """
         if self.epoch is not None and newepoch is not None:
             #convert from current to J2000
-            B = _precession_matrix_J2000_Capitaine(self.epoch).T #T==inv; real unitary
+            B = _nutation_matrix(self.epoch) *\
+                _precession_matrix_J2000_Capitaine(self.epoch).T 
+                #transpose==inv; matrix is real unitary
+                
             #convert to new epoch
-            A = _precession_matrix_J2000_Capitaine(newepoch)
+            A = _nutation_matrix(newepoch) *\
+                _precession_matrix_J2000_Capitaine(newepoch)
+                
             self.matrixRotate(A*B)
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
@@ -2042,7 +2057,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
             return B
         else:
             P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
-            N = np.mat(np.eye(3)) #no nutation implemented yet for equinox-based
+            N = _nutation_matrix(icrsc.epoch)
             return N*P*B 
     @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
     def _toICRS(eqsys):
@@ -2054,11 +2069,10 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
             return np.mat(np.eye(3))
         else:
             from ..obstools import epoch_to_jd
-            #from .funcs import equation_of_the_origins
-            #eqo = equation_of_the_origins(jd)*15.  #hours>degrees
-            #this function is ERA - GAST, and because nutation currently is not implemented, we instead use ERA-GMST
+            from .funcs import equation_of_the_origins
+            
             jd = epoch_to_jd(eqsys.epoch)
-            eqo = earth_rotation_angle(jd,None)*360. - greenwich_sidereal_time(jd,False)*15.
+            eqo = equation_of_the_origins(jd)*15.  #hours>degrees
             return rotation_matrix(-eqo,'z',True)
     
     @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
@@ -2190,9 +2204,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         epoch = eqe.epoch
         if epoch is not None:
             jd = epoch_to_jd(eqe.epoch)
-            #gst = greenwich_sidereal_time(jd,True)*15. #hours -> degrees
-            #Equinox has no nutation yet, so use GMST instead of GAST
-            gst = greenwich_sidereal_time(jd,False)*15. #hours -> degrees
+            gst = greenwich_sidereal_time(jd,True)*15. #hours -> degrees
             W = self._WMatrix(eqe.epoch)
             
             return W*rotation_matrix(gst)
