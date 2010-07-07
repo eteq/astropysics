@@ -931,7 +931,10 @@ def median_absolute_deviation(values,scaletonormal=False):
 def biweight_midvariance(values,influencescale=9):
     """
     Computes the biweight midvariance of a sequence of data points, a robust 
-    statistic of scale.
+    statistic of scale.  
+    
+    For normal and uniform distributions, it is typically close to, but a bit
+    above the variance.
     
     :param values: the values for which to compute the biweight
     :type values: array-like, will be treated as 1D

@@ -975,6 +975,21 @@ class Spectrum(HasSpecUnits):
             raise ValueError('no continuum action performed')
         
     def addFeatureRange(self,lower,upper,continuum='fromspec',identity=None):
+        """
+        Adds a spectral feature to the feature list for this spectrum.
+        
+        :param lower: The lower spectral x-axis bound for the feature.
+        :type lower: scalar
+        :param upper: The upper spectral x-axis bound for the feature.
+        :type upper: scalar
+        :param continuum: See :meth:`Spectrum.computeFeatureData` for details.
+        :param identity: 
+            If not None, the feature will be identified - see
+            :meth:`SpectralFeature.identify` for valid values.
+        
+        :returns: The :class:`SpectralFeature` object
+        
+        """
         sf = SpectralFeature(unit=self.unit,extent=(lower,upper),continuum=continuum)
         
         sf.computeFeatureData(self,edges='interp')
@@ -982,6 +997,7 @@ class Spectrum(HasSpecUnits):
             sf.identify(identity)
             
         self._features.append(sf)
+        return sf
     
     def addFeatureLocation(self,loc,smooth=None,window=200,**kwargs):
         """
