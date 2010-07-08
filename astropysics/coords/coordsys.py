@@ -1365,7 +1365,7 @@ class LatLongCoordinates(CoordinateSystem):
             except Exception,e:
                 niestr = 'could not convert from {0} to {1} by way of {2}'
                 niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
-                raise NotImplementedError(nies,e)
+                raise NotImplementedError(niestr,e)
         else:
             niestr = 'could not convert from {0} to {1}'
             raise NotImplementedError(niestr.format(self.__class__,tosys))
@@ -1447,7 +1447,7 @@ class EpochalLatLongCoordinates(LatLongCoordinates):
         from ..obstools import epoch_to_jd
         return epoch_to_jd(self._epoch,self.julianepoch)
     def _setJdepoch(self,val):
-        from .obstools import jd_to_epoch
+        from ..obstools import jd_to_epoch
         self._epoch = jd_to_epoch(val,self.julianepoch)
     jdepoch = property(_getJdepoch,_setJdepoch,doc="""
     Julian Date of the current epoch.  If set, it is assumed to be a Julian
@@ -2184,7 +2184,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
     def _fromEqC(eqc):
         from .funcs import earth_rotation_angle
-        from .obstools import epoch_to_jd
+        from ..obstools import epoch_to_jd
         
         epoch = eqc.epoch
         if epoch is not None:
