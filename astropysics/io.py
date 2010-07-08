@@ -833,22 +833,46 @@ class VOTable(VOTableReader): #name for backwards-compatibility
 
 #<--------------------------Spectrum loaders----------------------------------->
 
-def load_wcs_spectrum(fn,fluxext=1,errext=None,hdrext=None,errtype='err'):
+def load_wcs_spectrum(fn,fluxext=None,errext=None,hdrext=None,errtype='err'):
     """
-    Loads a spectrum from a fits file with WCS keywords CD1_1 and CRVAL_1
+    Loads a linear spectrum from a fits file with WCS keywords 'CD1_1' or
+    'CDELT1' and 'CRVAL_1'.
     
-    fluxext specifies the extension to use for the flux data, while errext
-    specifies err source (or None for no errors) - errtype gives the form
-    of the error data - either 'err','ierr','var', or 'ivar'
+    :param fn: File name of fits file with spectrum to load.
+    :type fn: string
+    :param fluxext: 
+        Fits extension to use for the spectrum or None to use the first that has
+        the WCS form (i.e. 'CD1_1'/'CDELT1' and 'CRVAL_1' present).
+    :type fluxext: int or None
+    :param errext: Fits extension to use for the errors or None to skip errors.
+    :type errext: int of None
+    :param hdrext: 
+        The fits extension to use to look for the header keywords - if None, this
+        will be the same as `fluxext`, or ignored if `fluxext` is None.
+    :type hdrext: int or None
+    :param errtype: Form of error data if present: 'err','ierr','var', or 'ivar'
+    :type errtype: str
     
-    hdrext specifies which extension to use to look for the header keywords - 
-    by default this is the same as the flux extension
+    :returns: An :class:`astropysics.spec.Spectrum` object
+    
+    :except ValueError: If the fits file is missing necessary keywords
+    :except IOError: If `fluxext` is None and no HDUs have the correct form
+    
     """
+    
     import pyfits
     from .spec import Spectrum
     
     f=pyfits.open(fn)
     try:
+        if fluxext is None:
+            for i,hdu in enumerate(f):
+                if 'CRVAL1' in hdu.header and ('CD1_1' in hdu.header or 'CDELT1' in hdu.header):
+                    fluxext = hdrext = i
+                    break
+            else:
+                raise IOError('Could not locate an HDU with CRVAL1 and CD1_1/CDELT1')
+            
         hdr = f[fluxext if hdrext is None else hdrext].header
         
         if 'CTYPE1' not in hdr:

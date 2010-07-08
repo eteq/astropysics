@@ -17,7 +17,7 @@ This module contains the internals for spylot, the Python Spectrum
 Plotter.
 """
 #TODO: clean up upper interface
-#TODO: smarter scaling/edge cleaning, inc scaling history ("reset" option?)
+#TODO: smarter scaling/edge cleaning, inc scaling history ("reset" option?) d.plot.x_axis.mapper.range.high
 #TODO: objcat support
 #TODO: remember line lists (better placed in spec)
 #TODO: add diagnostics like SNR

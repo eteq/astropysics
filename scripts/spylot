@@ -37,33 +37,42 @@ if len(fns) == 0:
 ss = []
 if ops.type == 'wcs':
     specs = []
-    if ops.ext is None:
-        ext = 1
-    else:
-        ext = ops.ext
+    ext = ops.ext
     for fn in fns:
-        print 'loading wcs spectrum file',fn
-        ss.append(spec.load_wcs_spectrum(fn,ext))    
+        try:
+            print 'Loading wcs spectrum file',fn
+            ss.append(spec.load_wcs_spectrum(fn,ext)) 
+        except Exception,e:
+            print 'Could not load',fn,':',e
 elif ops.type == 'deimos':
     for fn in fns:
-        if 'spec1d' in fn.lower():
-            print 'loading deimos spectrum file',fn
-            ss.append(spec.load_deimos_spectrum(fn,False))
-        else:
-            print 'deimos spectrum must be spec1d format'
-            sys.exit(1)
+        try:
+            if 'spec1d' in fn.lower():
+                print 'Loading deimos spectrum file',fn
+                ss.append(spec.load_deimos_spectrum(fn,False))
+            else:
+                raise ValueError('Deimos spectrum must be spec1d format!')
+        except Exception,e:
+            print 'Could not load',fn,':',e
 elif ops.type == 'astropysics':
     for fn in fns:
-        print 'loading astropysics spectrum file',fn
-        ss.append(spec.Spectrum.load(fn))
+        try:
+            print 'Loading astropysics spectrum file',fn
+            ss.append(spec.Spectrum.load(fn))
+        except Exception,e:
+                print 'Could not load',fn,':',e
             
 else:
     print 'Unrecognized spectrum type ',ops.type
     sys.exit(1)
     
-sp = spylot.Spylot(ss)
-    
-sp.configure_traits(ops.configfile)
+if len(ss)>0:
+    print 'Loaded',len(ss),'spectra'
+    sp = spylot.Spylot(ss)
+    sp.configure_traits(ops.configfile)
+else:
+    print 'Could not load any spectra, exiting'
+    sys.exit(1)
     
 
     
