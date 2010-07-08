@@ -1,0 +1,5 @@
+#!/bin/bash
+SOFALIB=~/lib/
+SOFAINC=~/include/ 
+
+gcc sofatests.c -o sofatests -lm -lsofa_c -I$SOFAINC -L$SOFALIB
