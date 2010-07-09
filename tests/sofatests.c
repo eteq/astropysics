@@ -40,6 +40,8 @@ void trans_coords(double ep, double jd) {
     
     iauS2p(lng*PI/180,lat*PI/180,1,vec);
     iauC2i00b(jd,0,rc2i);
+    printmat("C2I",rc2i);
+    printvec("cartesian vec",vec);
     iauRxp(rc2i,vec,transvec);
     
     printvec("transvec",transvec);
