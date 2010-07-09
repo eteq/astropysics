@@ -280,66 +280,72 @@ def scatter4d(x,y,c,s,xe=None,ye=None,logax=(False,False,False,False),scaling=(1
     
     returns collection,maskinds
     """
-
-    if c is None:
-        c=np.ones(len(x))
-    elif np.isscalar(c):
-        c=c*np.ones(len(x))
-    if s is None:
-        s=np.ones(len(x))
-    elif np.isscalar(s):
-        s=s*np.ones(len(x))
-    if len(x)!=len(y)!=len(c)!=len(s):
-        raise ValueError('data arrays not same length')
-    
-    x=x*scaling[0]
-    y=y*scaling[1]
-    c=c*scaling[2]
-    s=s*scaling[3]
-    
-    
-    inds=set(np.arange(len(x)))
-    if logax[0] and logax[1]:
-        plt.loglog()
-        inds.intersection_update(set(np.where(x>0)[0]))
-        inds.intersection_update(set(np.where(y>0)[0]))
-    elif logax[0]:
-        plt.semilogx()
-        inds.intersection_update(set(np.where(x>0)[0]))
-    elif logax[1]:
-        plt.semilogy()
-        inds.intersection_update(set(np.where(y>0)[0]))
-    if logax[2]:
-        c=np.log10(c)
-        inds.intersection_update(set(np.where(c>0)[0]))
-    if logax[3]:
-        s=np.log10(s)
-        inds.intersection_update(set(np.where(s>0)[0]))
-    inds=np.array(tuple(inds))
-    
-    if not outlines:
-        kwargs['lw']=0
+    preint = plt.isinteractive()
+    try:
+        if preint:
+            plt.gcf() #raises a window if it isn't present in interactive modes
+        plt.ioff()
+        if c is None:
+            c=np.ones(len(x))
+        elif np.isscalar(c):
+            c=c*np.ones(len(x))
+        if s is None:
+            s=np.ones(len(x))
+        elif np.isscalar(s):
+            s=s*np.ones(len(x))
+        if len(x)!=len(y)!=len(c)!=len(s):
+            raise ValueError('data arrays not same length')
         
-    
-    if xe is not None or ye is not None:
-        try:
-            xei=xe[inds]
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            xei=xe
-        try:
-            yei=ye[inds]
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            yei=ye
-        plt.errorbar(x[inds],y[inds],yei,xei,None,ecolor='k',**errkwargs)
-    if 'zorder' not in kwargs:
-        kwargs['zorder']=10
-    scat=plt.scatter(x[inds],y[inds],s[inds],c[inds],**kwargs)
-    
-    if cb:
-        cbo=plt.colorbar()
-        if type(cb) == str:
-            cbo.ax.set_ylabel(cb)
-            plt.draw()
+        x=x*scaling[0]
+        y=y*scaling[1]
+        c=c*scaling[2]
+        s=s*scaling[3]
+        
+        
+        inds=set(np.arange(len(x)))
+        if logax[0] and logax[1]:
+            plt.loglog()
+            inds.intersection_update(set(np.where(x>0)[0]))
+            inds.intersection_update(set(np.where(y>0)[0]))
+        elif logax[0]:
+            plt.semilogx()
+            inds.intersection_update(set(np.where(x>0)[0]))
+        elif logax[1]:
+            plt.semilogy()
+            inds.intersection_update(set(np.where(y>0)[0]))
+        if logax[2]:
+            c=np.log10(c)
+            inds.intersection_update(set(np.where(c>0)[0]))
+        if logax[3]:
+            s=np.log10(s)
+            inds.intersection_update(set(np.where(s>0)[0]))
+        inds=np.array(tuple(inds))
+        
+        if not outlines:
+            kwargs['lw']=0
+            
+        
+        if xe is not None or ye is not None:
+            try:
+                xei=xe[inds]
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                xei=xe
+            try:
+                yei=ye[inds]
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                yei=ye
+            plt.errorbar(x[inds],y[inds],yei,xei,None,ecolor='k',**errkwargs)
+        if 'zorder' not in kwargs:
+            kwargs['zorder']=10
+        scat=plt.scatter(x[inds],y[inds],s[inds],c[inds],**kwargs)
+        
+        if cb:
+            cbo=plt.colorbar()
+            if type(cb) == str:
+                cbo.ax.set_ylabel(cb)
+    finally:
+        plt.draw()
+        plt.interactive(preint)
     return scat,inds
 
 def square_subplot_dims(n):
@@ -367,181 +373,188 @@ def scatter_panel(p,plims,x,y,c=None,s=20,xe=None,ye=None,logax=(False,False,Fal
     from operator import isMappingType
     from datanalysis import linear_lsq
     
-    if len(p)!=len(x):
-        raise ValueError("p and data not same length")
-    
-    if not plab:
-        plab='p'
-        
-    if np.isscalar(plims):
-        ps=sorted(p)
-        plims=[ps[int(i*len(ps)/plims)] for i in range(1,plims)]
-    
-    if pcfg is None:
-        pcfg=square_subplot_dims(len(plims)+1)
-    if (pcfg[0]*pcfg[1])<len(plims):
-        raise ValueError('not enough panel space ')
-    
-    plims=list(plims)
-    plims.insert(0,min(p))
-    plims.append(max(p)+(max(p)-min(p))/1000) #TODO:more elegant way to get upper edge
-    scats=[]
+    preint = plt.isinteractive()
+    if preint:
+        plt.gcf()
     try:
-        colornorm=Normalize(vmin=min(c),vmax=max(c))
-    except TypeError: #means a scalar or None was used for c, which is acceptable to pass along
-        pass
-    
-    if not xls:
-        xls=(np.min(x),np.max(x))
-    if not yls:
-        yls=(np.min(y),np.max(y))
-    
-    if fitline:
-        if isMappingType(fitline):
-            if logax[0] and logax[1]:
-                mask=x>0 & y>0
-                xlsq,ylsq=np.log10(x)[mask],np.log10(y)[mask]
-            elif logax[0]:
-                mask=x>0
-                xlsq,ylsq=np.log10(x)[mask],y[mask]
-            elif logax[1]:
-                mask=y>0
-                xlsq,ylsq=x[mask],np.log10(y)[mask]
-            else:
-                xlsq,ylsq=x,y
+        plt.ioff()
+        if len(p)!=len(x):
+            raise ValueError("p and data not same length")
+        
+        if not plab:
+            plab='p'
             
-            if 'fixslope' in fitline:
-                if fitline['fixslope'] is True:
-                    fitline['fixslope']=linear_lsq(xlsq,ylsq)[0]
-                fixslope=fitline.pop('fixslope')
-            else:
-                fixslope=False
-            if 'fixint' in fitline:
-                if fitline['fixint'] is True:
-                    fitline['fixint']=linear_lsq(xlsq,ylsq)[1]
-                fixint=fitline.pop('fixint')
-            else:
-                fixint=False
+        if np.isscalar(plims):
+            ps=sorted(p)
+            plims=[ps[int(i*len(ps)/plims)] for i in range(1,plims)]
+        
+        if pcfg is None:
+            pcfg=square_subplot_dims(len(plims)+1)
+        if (pcfg[0]*pcfg[1])<len(plims):
+            raise ValueError('not enough panel space ')
+        
+        plims=list(plims)
+        plims.insert(0,min(p))
+        plims.append(max(p)+(max(p)-min(p))/1000) #TODO:more elegant way to get upper edge
+        scats=[]
+        try:
+            colornorm=Normalize(vmin=min(c),vmax=max(c))
+        except TypeError: #means a scalar or None was used for c, which is acceptable to pass along
+            pass
+        
+        if not xls:
+            xls=(np.min(x),np.max(x))
+        if not yls:
+            yls=(np.min(y),np.max(y))
+        
+        if fitline:
+            if isMappingType(fitline):
+                if logax[0] and logax[1]:
+                    mask=x>0 & y>0
+                    xlsq,ylsq=np.log10(x)[mask],np.log10(y)[mask]
+                elif logax[0]:
+                    mask=x>0
+                    xlsq,ylsq=np.log10(x)[mask],y[mask]
+                elif logax[1]:
+                    mask=y>0
+                    xlsq,ylsq=x[mask],np.log10(y)[mask]
+                else:
+                    xlsq,ylsq=x,y
                 
-            if 'c' not in fitline and 'color' not in fitline:
-                fitline['c']='k'
-            if 'ls' not in fitline and 'linestyle' not in fitline:
-                fitline['ls']='--'
-            if 'annotate' in fitline:
-                ann=fitline.pop('annotate')
+                if 'fixslope' in fitline:
+                    if fitline['fixslope'] is True:
+                        fitline['fixslope']=linear_lsq(xlsq,ylsq)[0]
+                    fixslope=fitline.pop('fixslope')
+                else:
+                    fixslope=False
+                if 'fixint' in fitline:
+                    if fitline['fixint'] is True:
+                        fitline['fixint']=linear_lsq(xlsq,ylsq)[1]
+                    fixint=fitline.pop('fixint')
+                else:
+                    fixint=False
+                    
+                if 'c' not in fitline and 'color' not in fitline:
+                    fitline['c']='k'
+                if 'ls' not in fitline and 'linestyle' not in fitline:
+                    fitline['ls']='--'
+                if 'annotate' in fitline:
+                    ann=fitline.pop('annotate')
+                else:
+                    ann=False
+                if 'asize' in fitline:
+                    asize=fitline.pop('asize')
+                else:
+                    asize=10
+                
             else:
+                fixslope=fixint=None
+                fitline={'c':'k','ls':'--'}
                 ann=False
-            if 'asize' in fitline:
-                asize=fitline.pop('asize')
-            else:
-                asize=10
+                
+        for i in range(len(plims)-1):
+            ind=np.where(np.logical_and(p>=plims[i],p<plims[i+1]))
+            plt.subplot(pcfg[0],pcfg[1],i+1)
+            try:
+                ci=c[ind]
+                kwargs['norm']=colornorm
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                ci=c
+            try:
+                si=s[ind]
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                si=s
+            try:
+                xei=xe[ind]
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                xei=xe
+            try:
+                yei=ye[ind]
+            except TypeError: #means a scalar or None was used, which is acceptable to pass along
+                yei=ye
+                
+            xi,yi=x[ind],y[ind]
             
-        else:
-            fixslope=fixint=None
-            fitline={'c':'k','ls':'--'}
-            ann=False
+            scats.append(scatter4d(xi,yi,ci,si,xei,yei,logax=logax,errkwargs=errkwargs,
+                                   scaling=scaling,outlines=outlines,cb=False,**kwargs))
+                
+            if fitline:                
+                if xls:
+                    mask=np.logical_and(min(xls)<=xi,xi<=max(xls))
+                else:
+                    mask=np.ndarray(xi.shape)
+                    mask.fill(True)
+                if yls:
+                    mask=np.logical_and(mask,np.logical_and(min(yls)<=yi,yi<=max(yls)))
+                if logax[0] and logax[1]: #loglog
+                    mask=np.logical_and(mask,np.logical_and(xi>0,yi>0))#make it safe for logs
+                    
+                    maski=np.where(mask)
+                    xfi,yfi=xi[maski],yi[maski]
+                    
+                    m,b,dy,dm,db = linear_lsq(np.log10(xfi),np.log10(yfi),fixslope=fixslope,fixint=fixint)
+                    xfp=np.logspace(np.log10(min(xfi)),np.log10(max(xfi)),200) 
+                    yfp=10**(m*np.log10(xfp)+b)
+                    stra='$\\log y=%0.3g\\log x+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
+                elif logax[0]:
+                    mask=np.logical_and(mask,xi>0)#make it safe for logs
+                    
+                    maski=np.where(mask)
+                    xfi,yfi=xi[maski],yi[maski]
+                    
+                    m,b,dy,dm,db = linear_lsq(np.log10(xfi),yfi,fixslope=fixslope,fixint=fixint)
+                    xfp=np.logspace(np.log10(min(xfi)),np.log10(max(xfi)),200) 
+                    yfp=m*np.log10(xfp)+b
+                    stra='$y=%0.3g\\log x+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
+                elif logax[1]:
+                    mask=np.logical_and(mask,yi>0)#make it safe for logs
+                    
+                    maski=np.where(mask)
+                    xfi,yfi=xi[maski],yi[maski]
+                    
+                    m,b,dy,dm,db = linear_lsq(xfi,np.log10(yfi),fixslope=fixslope,fixint=fixint)
+                    xfp=np.linspace(min(xfi),max(xfi),200)
+                    yfp=10**(m*xfp+b)
+                    stra='$\\log y=%0.3gx+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
+                else: #simple linear
+                    maski=np.where(mask)
+                    xfi,yfi=xi[maski],yi[maski]
+                    
+                    m,b,dy,dm,db = linear_lsq(xfi,yfi,fixslope=fixslope,fixint=fixint)
+                    xfp=np.linspace(min(xfi),max(xfi),200)
+                    yfp=m*xfp+b
+                    stra='$y=%0.3gx+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
+                    
+                plt.plot(xfp,yfp,**fitline)
+                if ann:
+                    stra,strl=stra.split('\n'),[]
+                    if ann is True:
+                        ann=tuple([True for i in stra])
+                    for i,t in enumerate(ann):
+                        if t:
+                            strl.append(stra[i])
+                    plt.annotate('\n'.join(strl),(xfp[len(xfp)/2],yfp[len(xfp)/2]),size=asize)
+                
+            plt.title('%0.3g <= %s < %0.3g'%(plims[i],plab,plims[i+1]),fontsize=tsize)
             
-    for i in range(len(plims)-1):
-        ind=np.where(np.logical_and(p>=plims[i],p<plims[i+1]))
-        plt.subplot(pcfg[0],pcfg[1],i+1)
-        try:
-            ci=c[ind]
-            kwargs['norm']=colornorm
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            ci=c
-        try:
-            si=s[ind]
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            si=s
-        try:
-            xei=xe[ind]
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            xei=xe
-        try:
-            yei=ye[ind]
-        except TypeError: #means a scalar or None was used, which is acceptable to pass along
-            yei=ye
-            
-        xi,yi=x[ind],y[ind]
-        
-        scats.append(scatter4d(xi,yi,ci,si,xei,yei,logax=logax,errkwargs=errkwargs,
-                               scaling=scaling,outlines=outlines,cb=False,**kwargs))
-            
-        if fitline:                
-            if xls:
-                mask=np.logical_and(min(xls)<=xi,xi<=max(xls))
-            else:
-                mask=np.ndarray(xi.shape)
-                mask.fill(True)
-            if yls:
-                mask=np.logical_and(mask,np.logical_and(min(yls)<=yi,yi<=max(yls)))
-            if logax[0] and logax[1]: #loglog
-                mask=np.logical_and(mask,np.logical_and(xi>0,yi>0))#make it safe for logs
+            if xlab:
+                plt.xlabel(xlab,fontsize=tsize)
+            if ylab:
+                plt.ylabel(ylab,fontsize=tsize)
+            plt.xlim(*xls)
+            plt.ylim(*yls)
                 
-                maski=np.where(mask)
-                xfi,yfi=xi[maski],yi[maski]
-                
-                m,b,dy,dm,db = linear_lsq(np.log10(xfi),np.log10(yfi),fixslope=fixslope,fixint=fixint)
-                xfp=np.logspace(np.log10(min(xfi)),np.log10(max(xfi)),200) 
-                yfp=10**(m*np.log10(xfp)+b)
-                stra='$\\log y=%0.3g\\log x+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
-            elif logax[0]:
-                mask=np.logical_and(mask,xi>0)#make it safe for logs
-                
-                maski=np.where(mask)
-                xfi,yfi=xi[maski],yi[maski]
-                
-                m,b,dy,dm,db = linear_lsq(np.log10(xfi),yfi,fixslope=fixslope,fixint=fixint)
-                xfp=np.logspace(np.log10(min(xfi)),np.log10(max(xfi)),200) 
-                yfp=m*np.log10(xfp)+b
-                stra='$y=%0.3g\\log x+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
-            elif logax[1]:
-                mask=np.logical_and(mask,yi>0)#make it safe for logs
-                
-                maski=np.where(mask)
-                xfi,yfi=xi[maski],yi[maski]
-                
-                m,b,dy,dm,db = linear_lsq(xfi,np.log10(yfi),fixslope=fixslope,fixint=fixint)
-                xfp=np.linspace(min(xfi),max(xfi),200)
-                yfp=10**(m*xfp+b)
-                stra='$\\log y=%0.3gx+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
-            else: #simple linear
-                maski=np.where(mask)
-                xfi,yfi=xi[maski],yi[maski]
-                
-                m,b,dy,dm,db = linear_lsq(xfi,yfi,fixslope=fixslope,fixint=fixint)
-                xfp=np.linspace(min(xfi),max(xfi),200)
-                yfp=m*xfp+b
-                stra='$y=%0.3gx+%0.3g $\n$\\sigma_x,\\sigma_y=\\pm %0.3g,\\pm %0.3g$\n$\\sigma = %0.3g$'%(m,b,dm,db,dy)
-                
-            plt.plot(xfp,yfp,**fitline)
-            if ann:
-                stra,strl=stra.split('\n'),[]
-                if ann is True:
-                    ann=tuple([True for i in stra])
-                for i,t in enumerate(ann):
-                    if t:
-                        strl.append(stra[i])
-                plt.annotate('\n'.join(strl),(xfp[len(xfp)/2],yfp[len(xfp)/2]),size=asize)
-            
-        plt.title('%0.3g <= %s < %0.3g'%(plims[i],plab,plims[i+1]),fontsize=tsize)
-        
-        if xlab:
-            plt.xlabel(xlab,fontsize=tsize)
-        if ylab:
-            plt.ylabel(ylab,fontsize=tsize)
-        plt.xlim(*xls)
-        plt.ylim(*yls)
-            
-    if cb and np.any(c):
-        try:
-            axo=plt.subplot('%i%i%i'%(pcfg[0],pcfg[0],len(plims)),aspect=20)
-            cbo=plt.colorbar(scats[-1],cax=axo)
-        except ValueError:
-            cbo=plt.colorbar(scats[-1])
-        if type(cb) == str:
-            cbo.ax.set_ylabel(cb)
-            plt.draw()
+        if cb and np.any(c):
+            try:
+                axo=plt.subplot('%i%i%i'%(pcfg[0],pcfg[0],len(plims)),aspect=20)
+                cbo=plt.colorbar(scats[-1],cax=axo)
+            except ValueError:
+                cbo=plt.colorbar(scats[-1])
+            if type(cb) == str:
+                cbo.ax.set_ylabel(cb)
+    finally:
+        plt.interactive(preint)
+        plt.draw()
             
     return scats
 
@@ -570,13 +583,14 @@ def dual_value_plot(x,y1,y2,fmt='-o',yerrs=None,xerrs=None,**kwargs):
     #        y2n[i]=y2[i]
     #y2=y2n
     pon=plt.isinteractive()
+    if pon:
+        plt.gcf() #raises window if it isn't present
     try:
         plt.ioff()
         for xi,y1i,y2i,yei,xei in zip(x,y1,y2,yerrs,xerrs):
             plt.errorbar((xi,xi),(y1i,y2i),yei,xei,'o-',**kwargs)
         if pon:
             plt.draw()
-            plt.show()
     finally:
         plt.interactive(pon)
         
@@ -889,7 +903,6 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
         
         if isinter:    
             plt.draw()
-            plt.show()
     finally:
         plt.interactive(isinter)
         
@@ -971,6 +984,9 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     
     preint = plt.isinteractive()
     try:
+        if preint:
+            plt.gcf() #raises a window if it isn't present in interactive modes
+        plt.ioff()
         pltfunc(x,y,**kwargs)
         plt.xlabel(xlabel)
         ltgt = '<' if Nlt else '>'
@@ -981,7 +997,6 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         
         if preint:    
             plt.draw()
-            plt.show()
     finally:
         plt.interactive(preint)
         
