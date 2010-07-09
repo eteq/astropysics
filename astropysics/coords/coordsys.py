@@ -225,15 +225,15 @@ class AngularCoordinate(object):
     def _setDegminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
             raise ValueError('Must set degminsec as a length-3 iterator')
-        self.degrees=abs(dms[0])+abs(dms[1])/60.+abs(dms[2])/3600.
+        self.degrees = abs(dms[0])+abs(dms[1])/60.+abs(dms[2])/3600.
         if dms[0]<0:
             self._decval*=-1
     def _getDegminsec(self):
-        fulldeg=abs(self.degrees)
-        deg=int(fulldeg)
-        fracpart=fulldeg-deg
-        min=int(fracpart*60.)
-        sec=fracpart*3600.-min*60.
+        fulldeg = abs(self.degrees)
+        deg = int(fulldeg)
+        fracpart = fulldeg-deg
+        min = int(fracpart*60.)
+        sec = fracpart*3600.-min*60.
         return -deg if self.degrees < 0 else deg,min,sec
     degminsec = property(_getDegminsec,_setDegminsec,doc="""
     The value of this :class:`AngularCoordinate` as an (degrees,minutes,seconds)
@@ -244,13 +244,13 @@ class AngularCoordinate(object):
     def _setHrsminsec(self,dms):
         if not hasattr(dms, '__iter__') or len(dms)!=3:
             raise ValueError('Must set hrsminsec as a length-3 iterator')
-        self.degrees=15*(dms[0]+dms[1]/60.+dms[2]/3600.)
+        self.degrees = 15*(dms[0]+dms[1]/60.+dms[2]/3600.)
     def _getHrsminsec(self):
-        factorized=self.degrees/15.
-        hrs=int(factorized)
-        mspart=factorized-hrs
-        min=int(mspart*60.)
-        sec=mspart*3600.-min*60.
+        factorized = self.degrees/15.
+        hrs = int(factorized)
+        mspart = factorized - hrs
+        min = int(mspart*60.)
+        sec = mspart*3600.-min*60.
         return hrs,min,sec
     hrsminsec = property(_getHrsminsec,_setHrsminsec,doc="""
     The value of this :class:`AngularCoordinate` as an (hours,minutes,seconds)
@@ -261,7 +261,7 @@ class AngularCoordinate(object):
     def _setDecdeg(self,deg):
         rads = deg*pi/180.
         if self.range is not None:
-            self._checkRange(rads)
+            rads = self._checkRange(rads)
         self._decval = rads
     def _getDecdeg(self):
         return self._decval*180/pi
@@ -272,7 +272,7 @@ class AngularCoordinate(object):
     
     def _setRad(self,rads):
         if self.range is not None:
-            self._checkRange(rads)
+            rads = self._checkRange(rads)
         self._decval = rads
     def _getRad(self):
         return self._decval
@@ -284,7 +284,7 @@ class AngularCoordinate(object):
     def _setDechr(self,hr):
         rads = hr*pi/12
         if self.range is not None:
-            self._checkRange(rads)
+            rads = self._checkRange(rads)
         self._decval = rads
     def _getDechr(self):
         return self._decval*12/pi
@@ -294,10 +294,27 @@ class AngularCoordinate(object):
     h = hours
     
     def _checkRange(self,rads):
+        """
+        Checks if the input value is in range - returns the new value, or raises
+        a :exc:`ValueError`.
+        """
         if self._range is not None:
-            low,up = self._range
-            if not low <= rads <= up:
-                raise ValueError('Attempted to set angular coordinate outside range')
+            low,up,cycle = self._range
+            if cycle is None:
+                if low <= rads <= up:
+                    return rads 
+                else:
+                    raise ValueError('Attempted to set angular coordinate outside range')
+            else:
+                if cycle > 0:
+                    #this means use "triangle wave" pattern with the given quarter-period 
+                    from math import sin,asin
+                    offset = low/(low-up)-0.5
+                    return (up-low)*(asin(sin(pi*(2*rads/cycle+offset)))/pi+0.5)+low
+                else:
+                    return (rads+low)%(up-low)-low
+        else:
+            return rads
     def _setRange(self,newrng):
         oldrange = self._range        
         try:
@@ -306,37 +323,50 @@ class AngularCoordinate(object):
             else:
                 from math import radians
                 newrng = tuple(newrng)
-                if len(newrng) != 2:
-                    raise ValueError('range is not a 2-sequence')
-                elif newrng[0] > newrng[1]:
+                if len(newrng) == 2:
+                    if newrng[1]-newrng[0] == 360:
+                        newrng = (newrng[0],newrng[1],0)
+                    else:
+                        newrng = (newrng[0],newrng[1],None)
+                elif len(newrng)==3:
+                    pass
+                else:
+                    raise TypeError('range is not a 2 or 3-sequence')
+                if newrng[0] > newrng[1]:
                     raise ValueError('lower edge of range is not <= upper')
-                newrng = (radians(newrng[0]),radians(newrng[1]))
+                
+                newrng = ( radians(newrng[0]),radians(newrng[1]), \
+                           None if newrng[2] is None else radians(newrng[2]) )
             self._range = newrng
-            self._checkRange(self._decval)
-        except ValueError:
+            self._decval = self._checkRange(self._decval)
+        except ValueError,e:
             self._range = oldrange
-            raise ValueError('Attempted to set range when value is out of range')
+            if e.args[0] == 'lower edge of range is not <= upper':
+                raise e
+            else:
+                raise ValueError('Attempted to set range when value is out of range')
     def _getRange(self):
         if self._range is None:
             return None
         else:
             from math import degrees
-            return degrees(self._range[0]),degrees(self._range[1])
-    range=property(_getRange,_setRange,doc="""
-    The acceptable range of angles for this :class:`AngularCoordinate` as a
-    2-tuple (lower,upper) with both angles in degrees. Will raise a
-    :exc:`ValueError` if the current value is outside the range.
-    """)
+            if self._range[2] is None:
+                return degrees(self._range[0]),degrees(self._range[1])
+            else:
+                return degrees(self._range[0]),degrees(self._range[1]),degrees(self._range[2])
+    range = property(_getRange,_setRange,doc="""
+    The acceptable range of angles for this :class:`AngularCoordinate`.  This can
+    be set as a 2-sequence (lower,upper), or as a 3-sequence (lower,upper,cycle), 
+    where cycle can be :
     
-    ############################################################################
-    #                                                                          #
-    #                                                                          #
-    #  and then a monkey showed up                                             #
-    #  and gave you a kiss                                                     #
-    #  and you were confused                                                   #
-    #                                                                          #
-    #                                             comment poem by Rie O:-)     #
-    ############################################################################
+        * 0: Angle values are coerced to lie in the range (default for 
+          2-sequence if upper-lower is 360 degrees)
+        * None: A :exc:`ValueError` will be raised if out-of-range (default for 
+          2-sequence otherwise)
+        * A positive scalar: Values are coerced in a triangle wave scheme, with
+          the scalar specifying the period. e.g. for the latitude, (-90,90,360)
+          would give the correct behavior)
+    """)
    
     def __str__(self):
         return self.getDmsStr(sep=('d',"'",'"'))
@@ -1031,7 +1061,7 @@ class LatLongCoordinates(CoordinateSystem):
     """
     __slots__ = ('_lat','_long','_laterr','_longerr')
     __metaclass__ = _LatLongMeta
-    _latlongnames_ = (None,None)
+    _latlongnames_ = ('latitude','longitude')
     _longrange_ = None
     
     hubcoosys = None #this is set to EquatorialCoordinatesCIRS below
@@ -1046,7 +1076,7 @@ class LatLongCoordinates(CoordinateSystem):
         See the associated attribute docstrings for the meaning of the inputs.  
         """
         
-        self._lat = AngularCoordinate(range=(-90,90))
+        self._lat = AngularCoordinate(range=(-90,90,360))
         self._long = AngularCoordinate(range=self._longrange_)
         
         if hasattr(lat,'lat') and hasattr(lat,'long'):
@@ -1360,8 +1390,12 @@ class LatLongCoordinates(CoordinateSystem):
             try:
                 m1 = convs[hubcoosys](self) 
                 #calling hubcoosys->target conv w/self technically incorrect, but often gets the right result
-                m2 = CoordinateSystem._converters[hubcoosys][tosys](self) 
-                return LatLongCoordinates._smatrix(m2*m1,self,tosys)
+                m2 = CoordinateSystem._converters[hubcoosys][tosys](self)
+                if isinstance(m1,np.matrix) and isinstance(m2,np.matrix) and \
+                   m1.shape==(3,3) and m2.shape==(3,3): 
+                    return LatLongCoordinates._smatrix(m2*m1,self,tosys)
+                else: #not matrix transforms,but exit - do normal conversion
+                    return self.convert(hubcoosys).convert(tosys)
             except Exception,e:
                 niestr = 'could not convert from {0} to {1} by way of {2}'
                 niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
@@ -2117,7 +2151,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     
     __slots__ = tuple('_dpc') 
     #_dpc is included for transformation to/from Equatorial-like systems
-    _longrange_ = (-180,180) #TODO:test the effects of this
+    _longrange_ = (-180,180)
     
     polarmotion = None
     """
@@ -2191,7 +2225,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
             jd = epoch_to_jd(eqc.epoch)
             
             era = earth_rotation_angle(jd,degrees=True)*360. #rotations-> degrees
-            W = self._WMatrix(eqc.epoch)
+            W = ITRSCoordinates._WMatrix(eqc.epoch)
             
             return W*rotation_matrix(era)
         else:
@@ -2205,7 +2239,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         if epoch is not None:
             jd = epoch_to_jd(eqe.epoch)
             gst = greenwich_sidereal_time(jd,True)*15. #hours -> degrees
-            W = self._WMatrix(eqe.epoch)
+            W = ITRSCoordinates._WMatrix(eqe.epoch)
             
             return W*rotation_matrix(gst)
         else:
