@@ -312,7 +312,7 @@ class AngularCoordinate(object):
                     offset = low/(low-up)-0.5
                     return (up-low)*(asin(sin(pi*(2*rads/cycle+offset)))/pi+0.5)+low
                 else:
-                    return (rads+low)%(up-low)-low
+                    return (rads-low)%(up-low)+low
         else:
             return rads
     def _setRange(self,newrng):
@@ -2163,7 +2163,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         """
         s-prime, the offset between the0 of longitude for the CIO of CIRS and
         the TIO of TIRS (Terrestrial Intermediate Reference System) - TIRS and
-        ITRS differ by polar motion.
+        ITRS differ by polar motion. Return value in radians.
         
         This is really,really small, and isn't really necessary except for
         completeness
@@ -2224,7 +2224,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         if epoch is not None:
             jd = epoch_to_jd(eqc.epoch)
             
-            era = earth_rotation_angle(jd,degrees=True)*360. #rotations-> degrees
+            era = earth_rotation_angle(jd,degrees=True)
             W = ITRSCoordinates._WMatrix(eqc.epoch)
             
             return W*rotation_matrix(era)

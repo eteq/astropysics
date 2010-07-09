@@ -93,7 +93,22 @@ def earth_rotation_angle(jd,degrees=True):
         return res*360
     else:
         return res*2*pi
-        
+    
+#polynomials for function greenwich_sidereal_time
+from ..constants import asecperrad
+_gmst_poly_circular179 = np.poly1d(np.array([-0.0000000368,
+                                             0.000029956,
+                                             -0.00000044,
+                                             1.3915817,
+                                             4612.156534,
+                                             0.014506])/asecperrad)
+_gmst_poly_sofa = np.poly1d(np.array([0.00001882,
+                                      -0.00009344,
+                                      1.39667721,
+                                      4612.15739966,
+                                      0.014506])/asecperrad)
+del asecperrad
+
 def greenwich_sidereal_time(jd,apparent=True):
     """
     Computes the Greenwich Sidereal Time for a given Julian Date.
@@ -113,6 +128,7 @@ def greenwich_sidereal_time(jd,apparent=True):
     .. seealso:: 
         :func:`equation_of_the_equinoxes`
         USNO Circular 179 and http://aa.usno.navy.mil/faq/docs/GAST.php
+        SOFA functions iauGmst00 and iauGst00b 
     
     
     """
@@ -121,19 +137,21 @@ def greenwich_sidereal_time(jd,apparent=True):
     era = earth_rotation_angle(jd,False) #in radians
     
     t = (jd - 2451545.0)/36525
+    #Why is Circular 179 different from SOFA? Using the SOFA value
+    #gmst = era + _gmst_poly_circular179(t)
+    gmst = era + _gmst_poly_sofa(t)
     
-    gmst = era + (0.014506 + 4612.156534*t + 1.3915817*t**2 - 0.00000044*t**3 -\
-            0.000029956*t**4 - 0.0000000368*t**5)/asecperrad
             
     if apparent:
         if apparent == 'simple':
+            d = jd - 2451545.0
             eps =  np.radians(23.4393 - 0.0000004*d) #obliquity
             L = np.radians(280.47 + 0.98565*d) #mean longitude of the sun
             omega = np.radians(125.04 - 0.052954*d) #longitude of ascending node of moon
             dpsi = -0.000319*np.sin(omega) - 0.000024*np.sin(2*L) #nutation longitude
             coor = 0
         else:
-            from ..coords import _nutation_components2000B
+            from .coordsys import _nutation_components2000B
             eps,dpsi,deps = _nutation_components2000B(jd,False)
             dpsi = dpsi
             raise  NotImplementedError('need to implement complementary terms for equation of the equinoxes from iauEect00 0 use "simple" for now')

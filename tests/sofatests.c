@@ -4,6 +4,7 @@
 #include "strings.h"
 #define PI 3.1415926535897931
 
+//Helpers
 void printmat(char* title, double mat[3][3]) {
     printf("%s:\n[[ %e,%e,%e]\n [%e,%e,%e]\n[%e,%e,%e]]\n",title,
             mat[0][0],mat[0][1],mat[0][2],
@@ -16,6 +17,13 @@ void printvec(char* title, double vec[3]) {
             vec[0],vec[1],vec[2]);
 }
 
+void deg2dms(double deg,int* d,int* m,double* s) {
+    *d = (int)(deg);
+    *m = (int)((deg-*d)*60);
+    *s = ((deg-*d-*m/60.)*3600);
+}
+
+//Test functions
 void trans_matricies(double ep, double jd1) {
     double dpsi,deps,epsa,rb[3][3],rp[3][3],rbp[3][3],rn[3][3],rbpn[3][3],rc2i[3][3];
 
@@ -32,33 +40,49 @@ void trans_matricies(double ep, double jd1) {
 }
 
 void trans_coords(double ep, double jd) {
-    double vec[3],transvec[3],rc2i[3][3];
-    double theta,phi,r;
+    double vec[3],transvec[3],rc2i[3][3],rbpn[3][3],rc2t[3][3];
+    double theta,phi,rasec,decsec;
+    int rahr,ramin,decdegi,decmin;
     
-    double lat = 10;
-    double lng = 20;
+    double lng = 10; //ra
+    double lat = 20; //dec
     
-    iauS2p(lng*PI/180,lat*PI/180,1,vec);
+    iauS2c(lng*PI/180,lat*PI/180,vec);
     iauC2i00b(jd,0,rc2i);
-    printmat("C2I",rc2i);
-    printvec("cartesian vec",vec);
+    //printmat("C2I",rc2i);
+    //printvec("cartesian vec",vec);
+    iauPnm00b(jd, 0, rbpn);
+    //printmat("BPN",rbpn);
+    //printvec("cartesian vec",vec);
+    iauC2t00b(jd,0,jd,0,0,0,rc2t);
+    //printmat("C2T",rc2t);
+    //printvec("cartesian vec",vec);
+    
     iauRxp(rc2i,vec,transvec);
-    
-    printvec("transvec",transvec);
-    iauP2s(transvec,&phi,&theta,&r);
-    
-    double radeg = theta*180/PI/15;
-    int rahr = (int)(radeg);
-    int ramin = (int)((radeg-rahr)*60);
-    double rasec = ((radeg-rahr-ramin/60.)*3600);
-    double decdeg = phi*180/PI;
-    int decdegi = (int)(decdeg);
-    int decmin = (int)((decdeg-decdegi)*60);
-    double decsec = ((decdeg-decdegi-decmin/60.)*3600);
-    printf("transvec coords: ra:%ih%im%gs dec:%id%im%gs\n",rahr,ramin,rasec,decdegi,decmin,decsec);
+    iauC2s(transvec,&theta,&phi);
     
     
+    deg2dms(theta*180/PI/15,&rahr,&ramin,&rasec);
+    deg2dms(phi*180/PI,&decdegi,&decmin,&decsec);
+    printf("CIRS coords: ra:%ih%im%gs dec:%id%im%gs\n",rahr,ramin,rasec,decdegi,decmin,decsec);
+    
+    iauRxp(rbpn,vec,transvec);
+    iauC2s(transvec,&theta,&phi);
+    
+    deg2dms(theta*180/PI/15,&rahr,&ramin,&rasec);
+    deg2dms(phi*180/PI,&decdegi,&decmin,&decsec);
+    printf("Equinox/BPN coords: ra:%ih%im%gs dec:%id%im%gs\n",rahr,ramin,rasec,decdegi,decmin,decsec);
+    
+    iauRxp(rc2t,vec,transvec);
+    iauC2s(transvec,&theta,&phi);
+    printf("ITRS coords: lat:%g long:%g\n",phi*180/PI,theta*180/PI);
 
+}
+
+void earth_rotation(double ep, double jd) {
+    printf("ERA:%g\n",iauEra00(jd,0));
+    printf("GAST:%g\n",iauGst00b(jd,0));
+    printf("GMST:%g\n",iauGmst00(jd,0,jd,0));
 }
 
 int main(int argc, const char* argv[] ){
@@ -77,6 +101,10 @@ int main(int argc, const char* argv[] ){
         }   
         if (doall|(strcmp(testname,"trans_coords")==0)) {
             trans_coords(epoch,jd);
-        }  
+        }
+        if (doall|(strcmp(testname,"earth_rotation")==0)) {
+            earth_rotation(epoch,jd);
+        }    
     }
+    
 }
