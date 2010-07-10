@@ -216,18 +216,22 @@ class FixedColumnData(object):
         self.cols[name] = (lower,upper,format)
         
     def addColumnsFromFile(self,fn,linestart=None,sep=None,useskiprows=True,
-                                maxcols=None):
+                                maxcols=100):
         """
-        Adds columns parsed from a data file itself.
+        Adds columns parsed from a file (typicall a data file that will afterwards be read).
         
-        The parsed file is expected to have lines that begins with the
-        `linestart` argument and the rest should be able to be split into three
-        or four columns in order name,lower,upper,format .
+        The parsed file is expected to have lines that begin with the
+        `linestart` argument and the rest of the line should be able to be split
+        (using `sep`) into three or four columns in order
+        name,lower,upper,format .
+        
         
         :param fn: File name of the file to parse
         :type fn: string
-        :param linestart: String that indicates the line is a column line.
-        :type linestart: 
+        :param linestart: 
+            String that indicates the line is a column line, or None to just use
+            the first `maxcols` columns.
+        :type linestart: string or None
         :param sep: 
             The seperator string to split the line or None for whitespace.
         :type sep: string or None
@@ -241,6 +245,26 @@ class FixedColumnData(object):
         :type maxcols: int or None
         
         :returns: number of columns added
+        
+        **Examples**
+        
+        For a file that starts like: 
+        
+        ID 0 3 int
+        data 4 10 float
+        moredata 11 15 int
+        
+        use addColumnsFromFile('filename',linestart=None,sep=None,maxcols=3)
+        
+        And for a file with format specifier
+        
+        #: ID,0,3,int
+        #: data,4,10,float
+        #: moredata,11,15,int
+        
+        use addColumnsFromFile('filename',linestart='#: ',sep=',')
+        
+        
         """
         #used below to properly re-adjust string dtypes
         def maybe_convert_string(linesplit):
