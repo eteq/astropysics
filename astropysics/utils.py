@@ -904,7 +904,7 @@ def interquartile_range(values,scaletonormal=False):
     else:
         return res
     
-def median_absolute_deviation(values,scaletonormal=False):
+def median_absolute_deviation(values,scaletonormal=False,cenestimator=np.median):
     """
     Computes the median_absolute_deviation for the provided sequence of values, 
     a more robust estimator than the variance.
@@ -913,6 +913,11 @@ def median_absolute_deviation(values,scaletonormal=False):
     :type values: array-like, will be treated as 1D
     :param scaletonormal: Rescale the MAD so that a normal distribution is 1
     :type scaletonormal: bool
+    :param cenestimator: 
+        A function to estimate the center of the values from a 1D array of
+        values. To actually be the "median" absolute deviation, this must be
+        left as the default (median).    
+    :type cenestimator: callable
     
     :returns: the MAD as a float
     
@@ -928,7 +933,7 @@ def median_absolute_deviation(values,scaletonormal=False):
     else:
         return res
     
-def biweight_midvariance(values,influencescale=9):
+def biweight_midvariance(values,influencescale=9,cenestimator=np.median):
     """
     Computes the biweight midvariance of a sequence of data points, a robust 
     statistic of scale.  
@@ -941,6 +946,11 @@ def biweight_midvariance(values,influencescale=9):
     :param influencescale: 
         The number of MAD units away at which a data point has no weight
     :type influencescale: int
+    :param cenestimator: 
+        A function to estimate the center of the values from a 1D array of
+        values. To be a true standard biweight midvariance, this must be left as
+        the default (median).
+    :type cenestimator: callable
     
     :returns: biweight,median tuple (both floats)
     
@@ -948,8 +958,8 @@ def biweight_midvariance(values,influencescale=9):
        
     x = np.array(values,copy=False).ravel()
     
-    Q = np.median(x)
-    MAD = median_absolute_deviation(x)
+    Q = cenestimator(x)
+    MAD = median_absolute_deviation(x,cenestimator=cenestimator)
        
     ui = (x-Q)/(influencescale*MAD)
     uisq=ui**2
