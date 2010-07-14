@@ -1685,6 +1685,8 @@ class FunctionModel1D(FunctionModel):
         
         isinter = plt.isinteractive()
         try:
+            if isinter:
+                plt.gcf() #raises window instead of blocking if no window is present
             plt.ioff()
             if data is 'auto':
                 if self.data:
@@ -1756,7 +1758,6 @@ class FunctionModel1D(FunctionModel):
                 
             if isinter:
                     plt.draw()
-                    plt.show()
         finally:
             plt.interactive(isinter)
     
@@ -2603,6 +2604,8 @@ class ModelSequence(object):
         
         isinter = plt.isinteractive()
         try:
+            if isinter:
+                plt.gcf() #raises a window if it isn't present in interactive modes
             plt.ioff()
             if clf:
                 plt.clf()
@@ -2650,8 +2653,7 @@ class ModelSequence(object):
             if legend:
                 plt.legend()
             
-            if isinter:        
-                plt.show()
+            if isinter:      
                 plt.draw()
         finally:
             plt.interactive(isinter)

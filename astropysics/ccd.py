@@ -39,6 +39,7 @@ Module API
 
 """
 
+#TODO: clarify sign convention - currently y switched? (although correct for FITS orientation)
 #TODO: ccd image viewing gui
 #TODO: generalize CCD to imaging of other sorts?
 #TODO: ccd registry (possibly with registry actually in Site/Observatory?)
@@ -638,6 +639,8 @@ class CCDImage(object):
         
         preint=plt.isinteractive()    
         try:
+            if preint:
+                plt.gcf() #brings up window if not already presnt
             if clf:
                 plt.clf()
             
@@ -1560,8 +1563,10 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,
         if img not in imdict:
             imdict[img]=load_image_file(img)    
         
-    preint=plt.isinteractive()    
+    preint = plt.isinteractive()    
     try:
+        if preint:
+           plt.gcf() 
         plt.ioff()
         if clf:
             plt.clf()
@@ -1581,7 +1586,6 @@ def mosaic_objects(xcens,ycens,radii,images,row=None,titles=None,noticks=True,
             plt.title(ti)
         if preint:
             plt.draw()
-            plt.show()
     finally:
         if preint:
             plt.ion()

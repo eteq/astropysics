@@ -1066,6 +1066,8 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
     
     preint = plt.isinteractive()
     try:
+        if preint:
+            plt.gcf()
         if clf:
             plt.clf()
             
@@ -1084,7 +1086,6 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
         
         if preint:    
             plt.draw()
-            plt.show()
     finally:
         plt.interactive(preint)
         
