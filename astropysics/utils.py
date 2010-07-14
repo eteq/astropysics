@@ -606,32 +606,51 @@ def moments(arr,ms,axes=None,bgmethod=None,norm=True,std=False):
 def centroid(val,axes=None,offset=None):
     """
     Convinience function calling `moments`  to get just the first
-    normalized moment (e.g. the centroid)
+    normalized moment (e.g. the centroid).
+    
+    :param val: n-d array for which to compute the centroid.
+    :type val: array-like
     """
     return moments(val,1,None if axes is None else (axes,),offset,True,False)
 
-def sigma_clip(data,sig=3,iters=1,center='median',maout=False):
+def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
     """
-    This performs the sigma clipping algorithm - i.e. the data will
-    be iterated over `iters` times, each time rejecting points 
-    that are more than `sig` standard deviations discrepant 
+    This performs the sigma clipping algorithm - i.e. the data will be iterated
+    over, each time rejecting points that are more than a specified number of
+    standard deviations discrepant.
     
-    center is the estimation technique to compute the  assumed 
-    center of the clipping - see `estimate_background` for options
+    :param data: input data (will be flattened to 1D)
+    :type data: array-like
+    :param sig: The number of standard deviations to use as the clipping limit. 
+    :type sig: scalar
+    :param iters: number of iterations to perform clipping
+    :type iters: int
+    :param cenfunc: 
+        The technique to compute the center for the clipping - may be any valid
+        input to :func:`estimate_background`
+    :param varfunc: 
+        The method to compute the variance about the. Should take a 1D array as
+        input and output a scalar. This will be compared to the square of the
+        data as if it is the variance.
+    :type varfunc: a callable
+    :param maout: If True, return a masked array (see return value for details).
+    :type maout: bool
     
-    if maout is True, returns a numpy.ma.Maskedarray with the filtered points
-    masked.  Otherwise, returns a tuple (filtereddata,mask) 
-    (mask is False for clipped points, shaped as original) 
+    :returns: 
+        A :class:`numpy.ma.Maskedarray` with the rejected points masked, if
+        `maout` is True. If `maout is False, a tuple (filtereddata,mask) is
+        returned where the mask is False for rejected points (and matches the
+        shape of the input).
+    
     """
-    
     data = np.array(data,copy=False)
     oldshape = data.shape
     data = data.ravel()
     
     mask = np.ones(data.size,bool)
     for i in range(iters):
-        do = data-estimate_background(data[mask],center)
-        mask = do*do <= np.var(data[mask])*sig
+        do = data-estimate_background(data[mask],cenfunc)
+        mask = do*do <= varfunc(data[mask])*sig
         
     if maout:
         return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
@@ -674,15 +693,32 @@ def nd_grid(*vecs):
         arrs.append(arr.transpose(transorder))
     return np.array(arrs)
 
-def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
+def lin_to_log_rescale(val,lower=1,upper=3,base=10):
+    """
+    Linearly rescales input values onto the range [base^lower,base^upper] and
+    then applies the requested base of logarithm to the rescaled values.
+    
+    :param val: input linear values
+    :type val: array-like
+    :param lower: lower value for output values
+    :type lower: scalar
+    :param upper: upper value for output values
+    :type upper: scalar
+    :param base: base of logarithm
+    :type base: base of logarithm
+    
+    :returns: logarithm of rescaled input
+    
+    """
     """
     maps linear values onto the range [lower,upper] and then applies the
     requested base of logarithm
     """
     if lower > upper:
         raise ValueError('lower must be less than upper')
-    if lower <= 0:
-        raise ValueError('lower must be greater than 0')
+    
+    lower = base**lower
+    upper = base**upper
     
     val = np.array(val,copy=False)
     #offset to [0,something]
@@ -700,12 +736,23 @@ def lin_to_log_rescale(val,lower=1,upper=1000,base=10):
 
 def crossmask(x,threshold=0,belowtoabove=True):
     """
-    Returns a boolean mask :class:`numpy.ndarray` for the point where the
-    input (interpreted as a 1D array) crosses or has complted crossing (if
-    between) from below (or above) a threshold.
+    Generates a boolean mask for the point where the input crosses or has
+    complted crossing (if between) from below (or above) a threshold.
     
     If `belowtoabove` is True, the returned masks is for where the input
     transitions from below to above.  Otherwise, from above to below.
+    
+    :param x: input (will be flattened to 1D)
+    :type x: array-like
+    :param threshold: the transition value for where the crossings occur
+    :type threshold: scalar
+    :param belowtoabove: 
+        If True, the returned mask is for where the input transitions from below
+        to above. Otherwise, from above to below.
+    :type belowtoabove: bool
+    
+    :returns: A mask that is True where crossing occurs, False everywhere else.
+    :rtype: bool :class:`~numpy.ndarray`
     
     **Example**
     
