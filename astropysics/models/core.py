@@ -162,6 +162,17 @@ class ParametricModel(object):
         elif self._weightstype == 'var':
             return np.abs(weights)**0.5
         assert False,'should be unreachable'
+        
+    def _err_to_weights(self,errs):
+        if self._weightstype == 'ierror':
+            return 1/errs
+        elif self._weightstype == 'ivar':
+            return errs**-2
+        elif self._weightstype == 'error':
+            return errs.copy()
+        elif self._weightstype == 'var':
+            return errs**2
+        assert False,'should be unreachable'
     
     def _getErrors(self):
         return 1/self._weights_to_err(self.data[2])
@@ -172,16 +183,7 @@ class ParametricModel(object):
             val = np.array(val,copy=False)
             if val.shape != data[0].shape:
                 raise ValueError('Errors do not match data shape')
-            
-        if self._weightstype == 'ierror':
-            self.data[2] = 1/val
-        elif self._weightstype == 'ivar':
-            self.data[2] = val**-2
-        elif self._weightstype == 'error':
-            self.data[2] = weights = val.copy()
-        elif self._weightstype == 'var':
-            self.data[2] = val**2
-        assert False,'should be unreachable'
+        self.data[2] = _err_to_weights(val)
     errors = property(_getErrors,_setErrors,doc="""
     Sets the weights on `data` assuming the interpretation for errors given by
     `weightstype`. If `data` is None/missing, a TypeError will be raised. 
@@ -1660,9 +1662,10 @@ class FunctionModel1D(FunctionModel):
             displayed. If 'auto', data from the |attrdata| attribute of the
             :class:`FunctionModel1D` will be used if present, or nothing if the
             |attrdata| attribute is empty or None. Otherwise, the data to be
-            plotted (and possibly errors) can be provided as arrays or as a
-            dictionary of inputs to the :func:`matplotlib.pyplot.scatter`
-            function.
+            plotted (and possibly errors) can be provided as arrays. Or if a
+            dictionary is given, it will be treated as keyword arguments to the
+            :func:`matplotlib.pyplot.scatter` function (possibly with data as
+            'xdata','ydata',and 'weights' entries).
         :type data: 
             'auto', None, or array like of the form (x,y) or (x,y,(xerr,yerr))
         :param errorbars: 
@@ -1688,25 +1691,38 @@ class FunctionModel1D(FunctionModel):
             if isinter:
                 plt.gcf() #raises window instead of blocking if no window is present
             plt.ioff()
+            
             if data is 'auto':
                 if self.data:
                     data = self.data
                 else:
                     data = None
+            if isMappingType(data):
+                datakwargs = data.copy()
+                data = [ datakwargs.pop('xdata',None),
+                         datakwargs.pop('ydata',None),
+                         datakwargs.pop('weights',None) ]
+                if 'auto' in data or data[0] is None or data[1] is None:
+                    if self.data:
+                        data = self.data
+                    else:
+                        data = None
+                elif data[2] is None and 'errors' in data:
+                    data[2] = self._err_to_weights(datakwargs.pop('errors'))
+            else:
+                datakwargs = {'c':'r'}
                     
             if data is not None:
                 if lower is None:
-                    lower=np.min(data[0])
+                    lower = datakwargs.pop('lower',np.min(data[0]))
                 if upper is None:
-                    upper=np.max(data[0])
+                    upper = datakwargs.pop('upper',np.max(data[0]))
             
             if lower is None or upper is None:
                 rh = self._getInvertedRangehint()
                 if rh is None:
                     raise ValueError("Can't choose limits for plotting without data or a range hint")
                 
-                
-                    
                 if lower is None:
                     lower = rh[0]
                 if upper is None:
@@ -1734,18 +1750,13 @@ class FunctionModel1D(FunctionModel):
             
             #now plot the data if present
             if data is not None:
-                if isMappingType(data):
-                    if clf and 'c' not in data:
-                        data['c']='g'
-                    plt.scatter(**data)
-                else:
-                    plt.scatter(data[0],data[1],c='r')
-                    if errorbars and data[2] is not None:
-                        err = self._weights_to_err(data[2])
-                        if len(data[2].shape)>1:
-                            plt.errorbar(data[0],data[1],err[1],err[0],fmt=None,ecolor='k')
-                        else:
-                            plt.errorbar(data[0],data[1],err,fmt=None,ecolor='k')
+                plt.scatter(data[0],data[1],**datakwargs)
+                if errorbars and data[2] is not None:
+                    err = self._weights_to_err(data[2])
+                    if len(data[2].shape)>1:
+                        plt.errorbar(data[0],data[1],err[1],err[0],fmt=None,ecolor='k')
+                    else:
+                        plt.errorbar(data[0],data[1],err,fmt=None,ecolor='k')
                             
             
                             
