@@ -621,7 +621,9 @@ def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
     
     :param data: input data (will be flattened to 1D)
     :type data: array-like
-    :param sig: The number of standard deviations to use as the clipping limit. 
+    :param sig: 
+        The number of standard deviations to use as the clipping limit, or 
+        the square root of the variance limit.
     :type sig: scalar
     :param iters: number of iterations to perform clipping
     :type iters: int
@@ -650,7 +652,7 @@ def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
     mask = np.ones(data.size,bool)
     for i in range(iters):
         do = data-estimate_background(data[mask],cenfunc)
-        mask = do*do <= varfunc(data[mask])*sig
+        mask = do*do <= varfunc(data[mask])*sig**2
         
     if maout:
         return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
