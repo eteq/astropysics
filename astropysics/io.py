@@ -316,18 +316,23 @@ class FixedColumnDataParser(object):
         """
         del self.cols[name]
         
-    def parseFile(self,fn):
+    def parseFile(self,fn,maskedarray=False):
         """
         Parse a file that follows this object's format.
         
         :param fn: File name of the file to parse
         :type fn: string
+        :params maskedarray: 
+            If True, the function returns a masked array, otherwise a record
+            array.
+        :type maskedarray: bool           
         
         :returns: 
-            A tuple (recarr,masks) where recarr is the data and masks is a 
-            dictionary mapping column names to masks.  The masks are True if
-            the value is valid, and False if not.
-        :rtype: a :class:`numpy.core.records.recarray` and a dict
+            If `maskedarray` is False, a tuple (recarr,masks) where recarr is a
+            :class:`numpy.core.records.recarray` and masks is a dictionary
+            mapping column names to masks. The masks are True if the value is
+            valid, and False if not.  If `maskedarray` is True, a 
+            :class:`numpy.ma.core.MaskedArray` is returned.
         """
         lists = dict([(k,list()) for k in self.cols])
         addi = -int(self.firstcolindx)
@@ -366,8 +371,15 @@ class FixedColumnDataParser(object):
                 alist.append(np.array(lst))
         
         recarr = np.rec.fromarrays(alist,names=','.join(sortnames))
+        masks = dict(masks)
         
-        return recarr,dict(masks)
+        if maskedarray:
+            marr = np.ma.MaskedArray(recarr)
+            for n,m in masks.iteritems():
+                marr[n].mask = ~m
+            return marr
+        else:
+            return recarr,masks
     
     def writeFile(self,fn,data,masks=None,colstart='# '):
         """
