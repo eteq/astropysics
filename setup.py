@@ -59,7 +59,9 @@ See http://packages.python.org/Astropysics/ for detailed documentation.
 cmdclassd = {'build_py' : apy_build_py}
 if apy_build_sphinx is not None:
     cmdclassd['build_sphinx'] = apy_build_sphinx
-    
+ 
+
+apyspkgs = find_packages()
 #extra/recommended packages
 _extras = ['matplotlib','pyfits','ipython','pydot']
 _guiextras = ['traits','traitsGUI','chaco']
@@ -70,7 +72,7 @@ setup(name='Astropysics',
       version=versionstr,
       description='Astrophysics libraries for Python',
       
-      packages=find_packages(),
+      packages=apyspkgs,
       package_data={'astropysics':['data/*']},
       scripts=['scripts/spylot','scripts/fitsinfo'],
       requires=['numpy','scipy'],
