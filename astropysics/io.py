@@ -162,7 +162,7 @@ def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
         return arr
 
 
-class FixedColumnData(object):
+class FixedColumnDataParser(object):
     """
     Parses a data file composed of lines with a fixed set of columns
     with the same number of bytes in each
@@ -170,14 +170,15 @@ class FixedColumnData(object):
     """
     
     
-    def __init__(self,skiprows=0,oneindexed=True,commentchars='#'):
+    def __init__(self,skiprows=0,firstcolindx=1,commentchars='#'):
         """
         :param skiprows: The number of rows to skip initially
         :type skiprows: int
-        :param oneindexed: 
-            If True, the column numbers will be treated such that the first
-            column is column #"1" - otherwise, the first column is #"0".
-        :type oneindexed: bool
+        :param indexing: 
+            The value of the first column as used in the definition of the upper
+            and lower edges of fields - that is, if 1, the "1-indexing"
+            convntion is used, or if 0, standard python "0-indexing" is used.
+        :type oneindexed: positive int
         :param commentchars: 
             The comment character - any lines that start with these characters
             will be ignored.
@@ -186,7 +187,7 @@ class FixedColumnData(object):
         self.cols = {}
         self.skiprows = skiprows
         self.commentchars = list(commentchars)
-        self.oneindexed = oneindexed
+        self.firstcolindx = firstcolindx
         
     def _overlapcheck(self,lower,upper,exclude=None):
         for n,(l,u,f) in self.cols.iteritems():
@@ -201,9 +202,13 @@ class FixedColumnData(object):
         :type name: string
         :param lower: 
             lowest character index for this column *including* this one.
+            Convention for the value of first column is controlled by
+            :attr:`firstcol` attribute of the object - default is 1-indexing
         :type lower: int
         :param upper:
             highest character index for this column *including* this one.
+            Convention for the value of first column is controlled by
+            :attr:`firstcol` attribute of the object - default is 1-indexing
         :type upper: int
         :param format: 
             Format for this column, or None to infer from the contents.
@@ -325,7 +330,10 @@ class FixedColumnData(object):
         :rtype: a :class:`numpy.core.records.recarray` and a dict
         """
         lists = dict([(k,list()) for k in self.cols])
-        addi = -int(self.oneindexed)
+        addi = -int(self.firstcolindx)
+        
+        if len(self.cols) == 0:
+            raise IndexError('No columns defined in FixedColumnDataParser')
         
         with open(fn) as f:
             for i,row in enumerate(f):
@@ -418,19 +426,19 @@ class FixedColumnData(object):
 def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
                                 columnsep=None,maxcols=None,oneindexed=True):
     """
-    Loads a fixed column data file using :class:`FixedColumnData`. 
+    Loads a fixed column data file using :class:`FixedColumnDataParser`. 
     
     If `fncol` is None, it will assumed to be the same as `fn`.
     
     For details on arguments controlling how columns are inferred, See
-    :meth:`FixedColumnData.addColumnsFromFile`. For other arguments see
-    :class:`FixedColumnData`.
+    :meth:`FixedColumnDataParser.addColumnsFromFile`. For other 
+    arguments see :class:`FixedColumnDataParser`.
     
-    See :meth:`FixedColumnData.parseFile` for return type
+    See :meth:`FixedColumnDataParser.parseFile` for return type
     """
     if fncol is None:
         fncol = fn
-    fcp = FixedColumnData(skiprows,oneindexed,comments)
+    fcp = FixedColumnDataParser(skiprows,oneindexed,comments)
     fcp.addColumnsFromFile(fncol,columnlinestart,columnsep,True,maxcols)
     return fcp.parseFile(fn)
 
