@@ -640,7 +640,7 @@ def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
     
     :returns: 
         A :class:`numpy.ma.Maskedarray` with the rejected points masked, if
-        `maout` is True. If `maout is False, a tuple (filtereddata,mask) is
+        `maout` is True. If maout is False, a tuple (filtereddata,mask) is
         returned where the mask is False for rejected points (and matches the
         shape of the input).
     

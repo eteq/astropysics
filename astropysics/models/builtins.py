@@ -1412,11 +1412,20 @@ class SpecifiedKnotSplineModel(_KnotSplineModel):
     
 class NFWModel(FunctionModel1DAuto):
     """
-    A Navarro, Frenk, and White 1996 profile -- the canonical dark matter halo
-    profile. Equivalent to :class:`AlphaBetaGammaModel` with alpha,beta,gamma =
-    (1,3,1)
+    A Navarro, Frenk, and White 1996 profile -- the canonical
+    :math:`\\Lambda {\\rm CDM}` dark matter halo profile:
+    
+    .. math::
+        \\rho(r) = \\frac{\\rho_0}{r/r_c (1+r/r_c)^2} .
     
     Where relevant, units are r in kpc and rho in Msun pc^-3
+    
+    .. note::
+        This form is equivalent to an :class:`AlphaBetaGammaModel` with
+        :math:`(\\alpha,\\beta,\\gamma) = (1,3,1)` , but with a slightly
+        different overall normalization. This class also has a number of
+        helper methods.
+    
     """
     xaxisname = 'r'
     yaxisname = 'rho'
@@ -1836,6 +1845,11 @@ class AlphaBetaGammaModel(FunctionModel1DAuto):
     
     In this case the offset is given by :math:`\\log_{10}(A)` and the logaritmhic scale
     radius is :math:`\\log_{10}(r_s)`.
+    
+    .. note::
+        Dehnen (1993) models correspond to :math:`(\\alpha,\\beta,\\gamma) =
+        (1,4,\\gamma)` , and hence are not provided as a separate class.
+    
     """
     
     def f(self,r,rs=1,A=1,alpha=1,beta=2,gamma=1):
@@ -2170,12 +2184,18 @@ class DeVaucouleursModel(SersicModel):
     
 class JaffeModel(FunctionModel1DAuto):
     """
-    Jaffe (1983) profile as defined in Binney & Tremain as:
+    Jaffe (1983) profile as defined in Binney & Tremaine as:
     
     .. math::
-        \\frac{A}{4 \\pi r_j^3} \\frac{r_j^4}{r^2 (r+r_j)^2)}
+        \\frac{A}{4 \\pi} \\frac{r_j}{r^2 (r+r_j)^2)}
     
-    where :attr:`A` is the total mass enclosed. 
+    where :attr:`A` is the total mass enclosed. :attr:`rj` is the radius that
+    encloses half the mass.
+    
+    .. note::
+        This form is equivalent to an :class:`AlphaBetaGammaModel` with
+        :math:`(\\alpha,\\beta,\\gamma) = (1,4,2)` , but with a slightly
+        different overall normalization. 
     
     """
     def f(self,r,A=1,rj=1):
@@ -2192,7 +2212,15 @@ class HernquistModel(FunctionModel1DAuto):
     .. math::
         \\frac{A r_0}{2 \\pi r (r+r_0)^3}
     
-    where :attr:`A` is the total mass enclosed
+    where :attr:`A` is the total mass enclosed. Note that :attr:`r0` does not
+    enclose half the mass - the radius enclosing half the mass is 
+    :math:`r_h = \\frac{r_0}{\\sqrt{2}-1}` .
+    
+    .. note::
+        This form is equivalent to an :class:`AlphaBetaGammaModel` with
+        :math:`(\\alpha,\\beta,\\gamma) = (1,4,1)` , but with a slightly
+        different overall normalization.
+    
     """
     def f(self,r,A=1,r0=1):
         return (A/2/pi)*(r0/r)*(r+r0)**-3
