@@ -2,6 +2,7 @@
 #Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
 from __future__ import division,with_statement
 
+from glob import glob
 from distribute_setup import use_setuptools
 use_setuptools()
 from setuptools import setup,find_packages
@@ -67,6 +68,7 @@ _extras = ['matplotlib','pyfits','ipython','pydot']
 _guiextras = ['traits','traitsGUI','chaco']
 _gui3dextras = ['mayavi']
 
+scripts = glob('scripts/*')
 
 setup(name='Astropysics',
       version=versionstr,
@@ -74,7 +76,7 @@ setup(name='Astropysics',
       
       packages=apyspkgs,
       package_data={'astropysics':['data/*']},
-      scripts=['scripts/spylot','scripts/fitsinfo'],
+      scripts=scripts,
       requires=['numpy','scipy'],
       install_requires=['numpy','scipy'],
       provides=['astropysics'],
