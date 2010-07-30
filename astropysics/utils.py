@@ -209,7 +209,10 @@ class SymmetricMapping(MutableMapping):
     one direction are the value for the other, and vice versa. 
     
     Note that this means all values most be unique and non-mutable.
-    (Not thread safe?)
+    
+    .. warning::
+        This class is probably not at all thread safe.
+        
     """
     def __init__(self,*args):
         """
@@ -247,7 +250,11 @@ class SymmetricMapping(MutableMapping):
 class _LinkedDict(dict):
     """
     A dictionary that applies the reverse of it's operation to a linked
-    mapping (Not thread safe?)
+    mapping
+    
+    .. warning::
+        This class is probably not at all thread safe.
+
     """
     def __init__(self,link,*args,**kwargs):
         self.link = link
@@ -496,6 +503,51 @@ class DataObjectRegistry(dict):
             return dict(zip(ks,ns))
         else:
             return ns
+        
+        
+def replace_docs(*args):
+    """
+    This class is a decorator indicating that the decorated object should 
+    have part (or all) of its docstring replaced by another object's docstring.
+    
+    **Examples**    
+    
+    def f1(x):
+        '''
+        Docstring 1
+        '''
+        ...
+    
+    @replace_docs(f1)
+    def f2(x):
+        '''
+        Docstrong 2
+        '''
+        ...
+        
+    @replace_docs(f1)
+    def f3(x):
+        '''
+        Docstrong 2 {sub:f1}
+        '''
+        ...
+    
+    And now the docstring for f2 will be 'Docstring 1', and for f3, 'Docstrong 2
+    Docstrong 1' .
+    
+    
+    """
+    ons = []
+    for obj in args:
+        ons.append(obj.__name__)
+    def f(oldfunc):
+        od = oldfunc.__doc__
+        if od is None:
+            oldfunc.__doc__ 
+        else:
+            pass
+        return oldfunc
+    return f
 
 
 #<--------------------Analysis/simple numerical functions---------------------->
