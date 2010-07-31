@@ -19,4 +19,5 @@ The modules forming the core of astropysics' functionality are documented below.
    io
    plotting
    pipeline
+   publication
    utils
