@@ -49,6 +49,7 @@ Module API
 
 from __future__ import division,with_statement
 from .constants import pi
+from .utils import add_docs_and_sig as _add_docs_and_sig
 import numpy as np
 from collections import deque
 
@@ -674,13 +675,15 @@ class FieldNode(CatalogNode,Sequence):
             for n in node:
                 vals.extend(FieldNode.setToSourceAtNode(n,src,missing,traversal,siblings))
             return vals
-        
+    
+    @_add_docs_and_sig(setToSourceAtNode) 
     def setToSourceAtSelf(self,*args,**kwargs):
         """
-        Sets the given src string or Source object as the current source for 
-        this FieldNode and it's subtree
+        Sets the given src string or Source object as the current source for
+        this FieldNode and it's subtree. Based on
+        :meth:`FieldNode.setToSourceAtNode` :
         
-        see :meth:`FieldNode.setToSourceAtNode` for details
+        {docstr:setToSourceAtNode}
         """
         return FieldNode.setToSourceAtNode(self,*args,**kwargs)
         
@@ -945,6 +948,7 @@ class FieldNode(CatalogNode,Sequence):
             else:
                 return res
             
+    @_add_docs_and_sig(extractFieldAtNode) 
     def extractField(self,*args,**kwargs):
         """
         Walk through the tree starting from this object.
@@ -953,9 +957,9 @@ class FieldNode(CatalogNode,Sequence):
         siblings (e.g. the parent subtree, except for the parent itself), and
         this overwrites `includeself`.
         
-        The other arguments are identical to
-        :meth:`FieldNode.extractFieldAtNode`.
+        The other arguments are for :meth:`FieldNode.extractFieldAtNode` : 
         
+        {docstr:extractFieldAtNode}
         """
         sib = kwargs.pop('siblings',False)
         if sib and self.parent is not None:
@@ -2564,14 +2568,15 @@ class Catalog(CatalogNode):
         return i+countoffset
     
     #<----------------------FieldNode children-specific ----------------------->
+    @_add_docs_and_sig(FieldNode.extractFieldAtNode)
     def extractField(self,*args,**kwargs):
         """
         Walk through the tree starting from this object and generate an array 
         of the values for the requested fieldname if any :class:`FieldNode`s are in this
         :class:`Catalog`.
         
-        The other arguments are identical to
-        :meth:`FieldNode.extractFieldAtNode`.
+        The other arguments are for :meth:`FieldNode.extractFieldAtNode` :
+        {docstr:extractFieldAtNode}
         """
         kwargs['includeself']=False
         return FieldNode.extractFieldAtNode(self,*args,**kwargs)

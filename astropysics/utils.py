@@ -40,6 +40,7 @@ Module API
 
 from __future__ import division,with_statement
 import numpy as np
+import re as _re
 
 try:
     #requires Python 2.6
@@ -504,51 +505,169 @@ class DataObjectRegistry(dict):
         else:
             return ns
         
+
+#<-----------------------Tools for manipulating docstrings--------------------->
+# A regular expression used to determine the amount of space to
+# remove.  It looks for the first sequence of spaces immediately
+# following the first newline, or at the beginning of the string.
+_find_dedent_regex = _re.compile("(?:(?:\n\r?)|^)( *)\S")
+# A cache to hold the regexs that actually remove the indent.
+_dedent_regex = {}
+def change_indentation(s,ind=0):
+    """
+    Sets the starting indentation of the provided docstring to the given 
+    indentation level.
+    
+    :param s: The string to dedent
+    :type s: string
+    :param ind: Amount of indentation, either as a string (that will be
+                substituted) or an integer number of spaces.
+    :type ind: str or int
+    
+    :returns: a string like `s` with leading indentation removed.
+    """
+    # This function is based on the matplotlib.cbook.dedent function
+    
+    if not isinstance(ind,basestring):
+        ind = ' '*ind
+    indsub = '\n'+ind
+    
+    if not s:      # includes case of s is None
+        return ''
+
+    match = _find_dedent_regex.match(s)
+    if match is None:
+        return s
+
+    # This is the number of spaces to remove from the left-hand side.
+    nshift = match.end(1) - match.start(1)
+    if nshift == 0:
+        return s
+
+    # Get a regex that will remove *up to* nshift spaces from the
+    # beginning of each line.  If it isn't in the cache, generate it.
+    unindent = _dedent_regex.get(nshift, None)
+    if unindent is None:
+        unindent = _re.compile("\n\r? {0,%d}" % nshift)
+        _dedent_regex[nshift] = unindent
+
+    result = unindent.sub(indsub, s).strip()
+    return result
         
-def replace_docs(*args):
+        
+def _add_docs_deco(nmdocs,func):
+    """
+    Decorator partialized for used in `add_docs` and similar.
+    """
+    match = _find_dedent_regex.match(func.__doc__)
+    if match is None:
+        indent = 0
+    else:
+        indent = match.end(1) - match.start(1)
+    doc = func.__doc__
+    if doc is None:
+        doc = ''
+    for n,d in nmdocs:
+        replstr = '{docstr:%s}'%n
+        d = change_indentation(d,indent)
+        if replstr in doc:
+            doc = doc.replace(replstr,d)
+        else:
+            doc += ('\n' + (indent*' ') + d)
+    func.__doc__ = doc    
+    return func
+        
+def add_docs(*args):
     """
     This class is a decorator indicating that the decorated object should 
     have part (or all) of its docstring replaced by another object's docstring.
     
+    The arguments are objects with a `__name__` and `__doc__` attribute. If a
+    string of the form '{docstr:Name}' is present in the decorated object's
+    docstring, it will be replaced by the docstring from the passed in object
+    with `__name__` of 'Name'. Any arguments without a '{docstr:Whatever}' to
+    replace will be appended to the end of the decorated object's docstring.
+    
     **Examples**    
+    .. testsetup::
     
-    def f1(x):
-        '''
-        Docstring 1
-        '''
-        ...
+        from astropysics.utils import add_docs
     
-    @replace_docs(f1)
-    def f2(x):
-        '''
-        Docstrong 2
-        '''
-        ...
-        
-    @replace_docs(f1)
-    def f3(x):
-        '''
-        Docstrong 2 {sub:f1}
-        '''
-        ...
-    
-    And now the docstring for f2 will be 'Docstring 1', and for f3, 'Docstrong 2
-    Docstrong 1' .
-    
+    .. doctest::    
+        >>> def f1(x):
+        >>>     '''Docstring 1'''
+        >>>     pass
+        >>> def f2(x):
+        >>>     '''
+        >>>     Docstring 2
+        >>>     and more!
+        >>>     '''
+        >>>     pass
+        >>> @add_docs(f1)
+        >>> def f3(x):
+        >>>     '''
+        >>>     Docstring 3
+        >>>     '''
+        >>>     pass
+        >>> @add_docs(f2)
+        >>> def f4(x):
+        >>>     '''
+        >>>     Docstring 3
+        >>>     '''
+        >>>     pass
+        >>> @add_docs(f1)
+        >>> def f5(x):
+        >>>     '''
+        >>>     Docstrong 2 {docstr:f1}
+        >>>     '''
+        >>>     pass
+        >>> f1.__doc__
+        'Docstring 1'
+        >>> f2.__doc__
+        '\n    Docstring 2\n    and more!\n    '
+        >>> f3.__doc__
+        '\n    Docstring 3\n    \n    Docstring 1'
+        >>> f4.__doc__
+        '\n    Docstring 3\n    \n    Docstring 2\n    and more!'
+        >>> f5.__doc__
+        '\n    Docstrong 2 Docstring 1\n    '
     
     """
-    ons = []
-    for obj in args:
-        ons.append(obj.__name__)
-    def f(oldfunc):
-        od = oldfunc.__doc__
-        if od is None:
-            oldfunc.__doc__ 
-        else:
-            pass
-        return oldfunc
-    return f
+    from functools import partial
+    
+    nmdocs = [(obj.__name__,obj.__doc__) for obj in args]
+    return partial(_add_docs_deco,nmdocs)
 
+def add_docs_and_sig(*args):
+    """
+    Does the same thing as :func:`replace_docs`, but also adds the function
+    signature of the argument function to the replaced (followed by a newline).
+    Note that this requires that the argument object be a function (and not
+    anything with a `__name__` and `__doc__` attribute)
+    """
+    from functools import partial
+    from inspect import getargspec
+    
+    nmdocs = []
+    for obj in args:
+        #get the wrapped function for classmethod and staticmethod
+        if hasattr(obj,'__get__'):
+            obj = obj.__get__(0)
+        args, varargs, varkw, defaults = getargspec(obj)
+        for i,d in enumerate(reversed(defaults)):
+            if isinstance(d,basestring):
+                ds = "'"+d+"'"
+            else:
+                ds = str(d)
+            args[-i] = args[-i]+'='+ds
+        if varargs:
+            args.insert(0,'*'+varargs)
+        if varkw:
+            args.append('**'+varkw)
+        sigstr = obj.__name__+'('+','.join(args)+')'
+        newdoc = sigstr+'\n'+obj.__doc__
+        nmdocs.append((obj.__name__,newdoc))
+    return partial(_add_docs_deco,nmdocs)
 
 #<--------------------Analysis/simple numerical functions---------------------->
 def estimate_background(arr,method='median'):
