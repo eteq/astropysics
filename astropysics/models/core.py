@@ -58,8 +58,11 @@ class ModelTypeError(Exception):
     
 class ParametricModel(object):
     """
-    The superclass of all models with parameters. Subclasses should implement
-    the following abstract properties and methods:
+    The superclass of all models with parameters. 
+    
+    *Subclassing*
+    
+    Subclasses should implement the following abstract properties and methods:
     
     * :meth:`__call__`
         Takes a single argument as the model input, returns the model output
@@ -2672,20 +2675,22 @@ class ModelSequence(object):
 
 class InputCoordinateTransformer(object):
     """
-    This mixin (i.e. a class intended to be subclassed to provide extra
-    functionality) class converts  FunctionModel input values from one 
-    coordinate system to another.
+    This mixin class (i.e. a class intended to be subclassed to provide extra
+    functionality) converts FunctionModel input values from one coordinate
+    system to another.
     
-    In subclasses, the following should be defined at class level:
+    *Subclassing*
     
-    * '_inputtransforms': a dictionary of dictionaries where the 
-      values are functions that define the transforms as
-      _intransforms[incoordsys][funccoordsys] = func
-    * 'incoordsys': the default input coordinate system
-    * 'fcoordsys': the coordinate system the function is defined in 
+    In subclasses, the following *class* attributes should be defined:
     
-    to implement the transform, just call tranformCoordinates(input) and 
-    feed the return value into the f-function
+    * :attr:`_inputtransforms` : a dictionary of dictionaries where the values
+      are functions that define the transforms as
+      ``_intransforms[incoordsys][funccoordsys] = func``
+    * :attr:`incoordsys` : the default input coordinate system
+    * :attr:`fcoordsys` : the coordinate system in which the function is defined
+    
+    To implement the transform, just call :meth:`tranformCoordinates` and 
+    feed the return value into the :func:`f` function.
     """
     _inputtransforms = {}
     incoordsys = None
