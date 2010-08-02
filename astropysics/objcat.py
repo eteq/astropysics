@@ -236,28 +236,41 @@ class CatalogNode(object):
         This function walks through the object and all its children, executing
         func(:class:`CatalogNode`) and returning a list of the return values
         
-        traversal is the traversal order of the tree - can be:
+        :param func: The function to call as ``func(node)`` on each node.
+        :type func: a callable
         
-        * 'preorder'
-        * 'postorder'
-        * an integer indicating at which index the root should be evaluated
-          (pre/post are 0/-1)
-        * a float between -1 and 1 indicating where the root should be evaluated
-          as a fraction
-        * 'level'/'breathfirst' 
-        * None:only visit this Node
+        :param traversal:  
+            The traversal order of the tree - can be:
         
-        `filter` can be:
+            * 'preorder'
+            * 'postorder'
+            * an integer indicating at which index the root should be evaluated
+              (pre/post are 0/-1)
+            * a float between -1 and 1 indicating where the root should be evaluated
+              as a fraction
+            * 'level'/'breathfirst' 
+            * None:only visit this Node
         
-        * False: process and return all values
-        * a callable: is called as g(node) and if it returns False, the node
-          will not be processed nor put in the list (also ignores anything that
-          returns None)
-        * any other: if the node returns this value on processing, it will not
-          be included in the returned list
+        :param filter:
+            Sets a filter to control which nodes are visited. Can be:
+        
+            * False
+                process and return all values
+            * A callable 
+                is called as g(node) and if it returns False, the node will not
+                be processed nor put in the list (also ignores anything that
+                returns None)
+            * any other
+                If the node returns this value on processing, it will not be
+                included in the returned list.
                     
-        if `includeself` is not True, the function will not visit the node 
-        itself (only the sub-trees)
+        :param includeself: 
+            If False, the function will not visit the node itself (only the
+            sub-trees)
+        :type includeself: bool
+        
+        :returns: A list with the return values of `visitfunc` at each visited node.
+            
         """       
         if callable(filter):
             oldfunc = func
