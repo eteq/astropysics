@@ -588,12 +588,14 @@ def add_docs(*args):
     with `__name__` of 'Name'. Any arguments without a '{docstr:Whatever}' to
     replace will be appended to the end of the decorated object's docstring.
     
-    **Examples**    
+    **Examples**   
+     
     .. testsetup::
     
         from astropysics.utils import add_docs
     
     .. doctest::    
+    
         >>> def f1(x):
         >>>     '''Docstring 1'''
         >>>     pass
@@ -624,13 +626,13 @@ def add_docs(*args):
         >>> f1.__doc__
         'Docstring 1'
         >>> f2.__doc__
-        '\n    Docstring 2\n    and more!\n    '
+        '\\n    Docstring 2\\n    and more!\\n    '
         >>> f3.__doc__
-        '\n    Docstring 3\n    \n    Docstring 1'
+        '\\n    Docstring 3\\n    \\n    Docstring 1'
         >>> f4.__doc__
-        '\n    Docstring 3\n    \n    Docstring 2\n    and more!'
+        '\\n    Docstring 3\\n    \\n    Docstring 2\\n    and more!'
         >>> f5.__doc__
-        '\n    Docstrong 2 Docstring 1\n    '
+        '\\n    Docstrong 2 Docstring 1\\n    '
     
     """
     from functools import partial
