@@ -12,8 +12,33 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-#!/usr/bin/env python
-from __future__ import with_statement
+"""
+
+============================================================
+publication -- tools for preparing astronomy papers in LaTeX 
+============================================================
+
+The :mod:`publication` module contains classes and funtions to assist in
+preparing papers or other publications with an emphasis on common astronomy
+journals. The tools here are for use with `LaTeX
+<http://www.latex-project.org/>`_ as the actual authoring tools.
+
+.. todo:: examples
+
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.publication
+   :parts: 1
+
+Module API
+----------
+
+"""
+
+from __future__ import division,with_statement
+
+#<-------------------------------OLD--------------------->
 
 class TeXDoc(object):
     def __init__(self,filename):
@@ -349,4 +374,15 @@ def prep_for_arxiv_pub(fnbase=None,targetdir='./pubArXiv/',fnoutbase='ms',replbi
             
 
     
-            
+#<-----------------------NEW BELOW HERE------------------------------------>
+
+class TeXNode(object):
+    """
+    TODO:DOC
+    """
+    
+class TeXDoc(TeXNode):
+    """
+    TODO:DOC
+    """
+    
