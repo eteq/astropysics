@@ -30,6 +30,8 @@ Fundamentally, the catalog should be thought of as a tree (`this kind
 <http://en.wikipedia.org/wiki/Tree>`_) of :class:`FieldNode` objects. Normally,
 a :class:`Catalog` object acts as the root.
 
+todo:add examples!
+
 Classes and Inheritance Structure
 ---------------------------------
 
@@ -377,15 +379,16 @@ class ActionNode(object):
     but do not store data and hence are not a part of the :class:`CatalogNode`
     heirarchy. Thus, they have a parent, but no children.
     
-    The parent for these nodes should be a :class:`Catalog` object, as other
-    :class:`CatalogNode` objects cannot store an :class:`ActionNode`.
+    The parent for these nodes should be a :class:`Catalog` object or None, as
+    other :class:`CatalogNode` objects cannot store an :class:`ActionNode`. An
+    :class:`ActionNode` generally assume that the :class:`Catalog` methods are
+    available if the parent is not None
     
     *Subclassing*
     
-    Subclasses must:
-    
-    * call :meth:`ActionNode.__init__` in their :meth:`__init__`
-    * override the :meth:`__call__` method
+    * If :meth:`__init__` is defined in a subclass, :meth:`ActionNode.__init__` 
+      must be called with a parent.
+    * Subclasses must override the abstract :meth:`__call__` method
     
     """
     
@@ -417,8 +420,7 @@ class ActionNode(object):
     
 class FieldNode(CatalogNode,Sequence):
     """
-    A node in the catalog that has Fields.  This is an abstract class that 
-    must have its initializer overriden.
+    A node in the catalog that has Fields.  
     
     Note that for these subclasses, attribute access (e.g. node.fieldname) 
     accesses the Field object, while mapping or sequence-style access 
@@ -442,15 +444,16 @@ class FieldNode(CatalogNode,Sequence):
     """
     __slots__=('_fieldnames',)
     
-    @abstractmethod
+    #@abstractmethod
     def __init__(self,parent,**kwargs):
         """
-        Create a new fieldNode with the provided parent.
+        Create a new fieldNode with the provided `parent`.
         
         kwargs are assigned as node values as self[kwargkey] = kwargvalue
         """
         #TODO: consider using CatalogNode.__init__?
-        super(FieldNode,self).__init__(parent)
+        #super(FieldNode,self).__init__(parent)
+        CatalogNode.__init__(self,parent)
         self._fieldnames = []
         
         for k,v in kwargs.iteritems():
@@ -769,13 +772,13 @@ class FieldNode(CatalogNode,Sequence):
             If `missing` is 'mask', the below return values that are wrapped as
             a (returnval,mask) tuple. If errors are returned, they are
             (uppererror,lowererror) arrays, i.e. +/- . Can be:
-        
-        * a :class:`record array<numpy.recarray>` if `asrec` is True
-        * an f x N :class:`array<numpy.ndarray>` of values if `sources` and 
-          `errors` are False
-        * (values,errors,sources) if `sources` and `errors` are True
-        * (values,sources) if `sources` are True and `errors` are False
-        * (values,errors) if `errors` are True and `sources` are False
+            
+            * a :class:`record array<numpy.recarray>` if `asrec` is True
+            * an f x N :class:`array<numpy.ndarray>` of values if `sources` and
+              `errors` are False
+            * (values,errors,sources) if `sources` and `errors` are True
+            * (values,sources) if `sources` are True and `errors` are False
+            * (values,errors) if `errors` are True and `sources` are False
         
         """
         
@@ -930,6 +933,7 @@ class FieldNode(CatalogNode,Sequence):
         else:
             arr = np.array(lsts)
             if errors:
+                errmsk = np.array([[2*[err == (0,0)] for err in fi] for fi in errs])
                 errs = np.array(errs)
             
             if len(arr)==1:
@@ -944,6 +948,8 @@ class FieldNode(CatalogNode,Sequence):
                 res = arr,np.array(masks)
             elif missing == 'masked':
                 res = np.ma.MaskedArray(arr,~np.array(masks))
+                if errors:
+                    errs = np.ma.MaskedArray(errs,errmsk)
             else:
                 res = arr
             
@@ -993,45 +999,6 @@ class FieldNode(CatalogNode,Sequence):
                     return node
         visitkwargs['filter'] = None    
         return node.visit(visitfunc,**visitkwargs)
-    
-    
-
-def generate_pydot_graph(node,graphfields=True):
-    """
-    this function will generate a pydot.Dot object representing the supplied 
-    node and its children.  Note that the pydot package must be installed
-    installed for this to work
-    
-    if `graphfields` is True, this includes the fields as a record style 
-    graphviz graph
-    """
-    import pydot
-    
-    nodeidtopdnode={}
-    def visitfunc(node):
-        pdnode = pydot.Node(id(node),label=str(node))
-        if isinstance(node,FieldNode):
-            if graphfields:
-                pdnode.set_shape('record')
-                fieldstr = '|'.join([f.strCurr().replace(':',':') for f in node.fields()])
-                pdnode.set_label('"{%s| | %s}"'%(node,fieldstr))
-            else:
-                pdnode.set_shape('box')
-        nodeidtopdnode[id(node)] = pdnode
-        try:
-            edge = pydot.Edge(nodeidtopdnode[id(node.parent)],pdnode)
-        except KeyError:
-            edge = None
-        return pdnode,edge
-    nelist = node.visit(visitfunc,traversal='preorder')
-    
-    g = pydot.Dot()
-    g.add_node(nelist[0][0])
-    for node,edge in nelist[1:]:
-        g.add_node(node)
-        g.add_edge(edge)
-        
-    return g
 
 #<----------------------------node attribute types----------------------------->    
  
@@ -1390,289 +1357,6 @@ class Field(MutableSequence):
     @property
     def errors(self):
         return [v.errors if hasattr(v,'errors') else (0,0) for v in self._vals]
-    
-class SEDField(Field):
-    """
-    This field represents the Spectral Energy Distribution of this object - 
-    e.g. a collection of Spectra or Photometric measurements
-    """
-    
-    
-    __slots__ = ['_maskedsedvals','_unit']
-    
-    def __init__(self,name='SED',unit='angstroms',type=None,defaultval=None, usedef=None):
-        from .spec import Spectrum,HasSpecUnits
-        from .phot import PhotObservation
-        
-        super(SEDField,self).__init__(name)
-        
-        
-        
-        self._type = tuple((Spectrum,PhotObservation))
-        self._maskedsedvals = set()
-        unittuple = HasSpecUnits.strToUnit(unit)
-        self._unit = unittuple[0]+'-'+unittuple[1]
-        
-        if type is not None and set(type) != set(self._type):
-            raise ValueError("SEDFields only accept Spectrum and PhotObservation objects - can't set type")
-        
-        if defaultval:
-            self[None] = defaultval
-        
-        
-    def __getstate__(self):
-        d = super(SEDField,self).__getstate__()
-        d['_maskedsedvals'] = self._maskedsedvals
-        d['_unit'] = self._unit
-        return d
-    
-    def __setstate__(self,d):
-        super(SEDField,self).__setstate__(d)
-        self._maskedsedvals = d['_maskedsedvals']
-        self._unit = d['_unit']
-        
-    def __call__(self):
-        return self.getFullSED()
-    
-    def __setitem__(self,key,val):
-        """
-        allow self['source'] = (bands,values) syntax
-        """
-        from .phot import PhotObservation
-        
-        if isinstance(val,tuple) and len(val) == 2:
-            return super(SEDField,self).__setitem__(key,PhotObservation(*val))
-        else:
-            return super(SEDField,self).__setitem__(key,val)
-        
-    @property
-    def type(self):
-        return self._type
-    
-    @property
-    def default(self):
-        return self()
-    
-    @property
-    def specs(self):
-        from .spec import Spectrum
-        return [o for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
-    @property
-    def specsources(self):
-        from .spec import Spectrum
-        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
-    
-    @property
-    def phots(self):
-        from .phot import PhotObservation
-        return [o for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
-    @property
-    def photsources(self):
-        from .phot import PhotObservation
-        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
-    
-    def _getUnit(self):
-        return self._unit
-    def _setUnit(self,val):
-        from .spec import HasSpecUnits
-        #this checks to make sure the unit is valid
-        val = HasSpecUnits.strToUnit(val)
-        val = val[0]+'-'+val[1]
-        
-        oldu = self._unit
-        try:
-            for obj in self:
-                if hasattr(obj,'unit'):
-                    obj.unit = val
-            self._unit = val
-        except:
-            for obj in self:
-                obj.unit = oldu
-            raise
-    unit = property(_getUnit,_setUnit,doc="""
-    The units to use in the objects of this SED - see 
-    astropysics.spec.HasSpecUnits for valid units
-    """)
-    
-    def getMasked(self):
-        """
-        return a copy of the values masked from the full SED
-        """
-        return tuple(sorted(self._maskedsedvals))
-    def mask(self,val):
-        """
-        mask the value (either index or source name) to not appear in the
-        full SED
-        """
-        if isinstance(val,int):
-            self._maskedsedvals.add(val)
-        else:
-            self._maskedsedvals.add(self.index(val))
-    def unmask(self,val):
-        """
-        unmask the value (either index or source name) to appear in the
-        full SED
-        """
-        if isinstance(val,int):
-            self._maskedsedvals.remove(val)
-        else:
-            self._maskedsedvals.remove(self.index(val))
-    def unmaskAll(self):
-        """
-        unmask all values (all appear in full SED)
-        """
-        self._maskedsedvals.clear()
-        
-    def getBand(self,bands,asflux=False,asdict=False):
-        """
-        determines the magnitude or flux in the requested band.
-        
-        The first photometric measurement in this SEDField that has
-        the band will be used - if not present, it will be computed 
-        from  the first Spectrum with appropriate overlap.  If none
-        of these are found, a ValueError will be raised
-        
-        if asflux is True, the result will be returned as a flux - 
-        otherwise, a magnitude is returned.
-        
-        asdict returns a dictionary of results - otherwise, a sequence will
-        be returned (or a scalar if only one band is requested)
-        """
-        from .phot import str_to_bands
-        bands = str_to_bands(bands)
-        vals = []
-        for b,bn in zip(bands,[b.name for b in bands]):
-            v = None
-            for p in self.phots:
-                if bn in p.bandnames:
-                    i = p.bandnames.index(bn)
-                    v = p.flux[i] if asflux else p.mag[i]
-                    break
-            if v is None:
-                for s in self.specs:
-                    if b.isOverlapped(s):
-                        v = b.computeFlux(s) if asflux else b.computeMag(s)
-                        break
-            if v is None:
-                raise ValueError('could not locate value for band '%bn)
-            vals.append(v)
-        
-        if asdict:
-            return dict([(b.name,v) for b,v in zip(bands,vals)])
-        elif len(vals)==1:
-            return vals[0]
-        else:
-            return vals
-    
-    def getFullSED(self):
-        """
-        the generates a astropysics.spec.Spectrum object that represents all 
-        the information contained in this SEDField
-        """
-        from .spec import Spectrum
-        
-        x = np.array([])
-        f = np.array([])
-        e = np.array([])
-        for s in self.specs:
-            x = np.r_[x,s.x]
-            f = np.r_[f,s.flux]
-            e = np.r_[e,s.err]
-        
-        for p in self.phots:
-            pf,pe = p.flux,p.fluxerr
-            px,pw = p.getBandInfo()
-            px = np.tile(px/pw,np.prod(px.shape)/len(p))
-            px = px.reshape((len(p),np.prod(px.shape)/len(p)))
-            pf = pf.reshape((len(p),np.prod(pf.shape)/len(p)))
-            pe = pe.reshape((len(p),np.prod(pe.shape)/len(p)))
-            x = np.r_[x,px.ravel()]
-            f = np.r_[f,pf.ravel()]
-            e = np.r_[e,pe.ravel()]
-            
-        return Spectrum(x,f,e,unit=self.unit)
-        
-    def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),log='',clf=True):
-        """
-        Generates a plot of the SED of this object.
-        
-        colors is a tuple of colors as (spec,phot,specerr,photerr,other)
-        """       
-        from matplotlib import pyplot as plt
-        from .spec import HasSpecUnits
-        
-        specs = self.specs
-        phots = self.phots
-        
-        mxy1 = np.max([np.max(s.flux) for s in specs]) if len(specs) > 0 else None
-        mxy2 = np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in phots]) if len(phots) > 0 else None
-        mxy = max(mxy1,mxy2)
-        mny1 = np.min([np.min(s.flux) for s in self.specs]) if len(specs) > 0 else None
-        mny2 = np.min([np.min(p.getFluxDensity(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
-        if mny1 is None:
-            mny = mny2
-        elif mny2 is None:
-            mny = mny1
-        else:
-            mny = min(mny1,mny2)
-        mxx1 = np.max([np.max(s.x) for s in self.specs]) if len(specs) > 0 else None
-        mxx2 = np.max([np.max(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
-        mxx = max(mxx1,mxx2)
-        mnx1 = np.min([np.min(s.x) for s in self.specs]) if len(specs) > 0 else None
-        mnx2 = np.min([np.min(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
-        if mnx1 is None:
-            mnx = mnx2
-        elif mnx2 is None:
-            mnx = mnx1
-        else:
-            mny = min(mnx1,mnx2)
-        
-        preint = plt.isinteractive()
-        try:
-            plt.interactive(False)
-
-            if clf:
-                plt.clf()
-                
-            if 'x' in log and 'y' in log:
-                plt.loglog()
-            elif 'x' in log:
-                plt.semilogx()
-            elif 'y' in log:
-                plt.semilogy()
-            
-            c = (colors[0],colors[2],colors[4],colors[4])
-            for s in specs:
-                s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
-                
-            lss = ('--',':','-.','-')
-            for i,p in enumerate(phots):
-                if plotbands:
-                    if plotbands is True:
-                        plotbands = {'bandscaling':(mxy - mny)*0.5,'bandoffset':mny}
-                    plotbands['ls'] = lss[i%len(lss)]
-                p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
-                
-            rngx,rngy=mxx-mnx,mxy-mny
-            plt.xlim(mnx-rngx*0.1,mxx+rngx*0.1)
-            plt.ylim(mny-rngy*0.1,mxy+rngy*0.1)
-            
-            xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
-            xl = xl.replace('wavelength','\\lambda')
-            xl = xl.replace('frequency','\\nu')
-            xl = xl.replace('energy','E')
-            xl = xl.replace('angstrom','\\AA')
-            xl = xl.replace('micron','\\mu m')
-            xl = tuple(xl.split('-'))
-            plt.xlabel('$%s/{\\rm %s}$'%xl)
-            
-            plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
-            
-            if preint:
-                plt.show()
-                plt.draw()
-        finally:
-            plt.interactive(preint)
     
 class _SourceMeta(type):
     def __call__(cls,*args,**kwargs):
@@ -2575,6 +2259,23 @@ class Catalog(CatalogNode):
             
         return i+countoffset
     
+    def insertInto(self,insertnode):
+        """
+        Inserts this Catalog into another catalog heirarchy in the place of 
+        a node `insertnode` . This will replace the current parent, if any.
+        
+        :param insertnode: 
+            The node to insert this :class:`Catalog` in the place of. This
+            :class:`Catalog` becomes the parant of `insertnode` .
+        :type insertnode: :class:`CatalogNode`
+        """
+        newparent = insertnode.parent
+        ind = newparent.index(insertnode)
+        insertnode.parent = self
+        self.parent = newparent
+        #put the Catalog in the same location in the parent as the old node
+        newparent._children.insert(ind,newparent._children.pop())
+        
     #<----------------------FieldNode children-specific ----------------------->
     @_add_docs_and_sig(FieldNode.extractFieldAtNode)
     def extractField(self,*args,**kwargs):
@@ -3123,10 +2824,296 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
         return parent
     
     
-#<--------------------builtin catalog types------------------------------------>
+#<--------------------builtin/special purpose classes-------------------------->
+class SEDField(Field):
+    """
+    This field represents the Spectral Energy Distribution of this object - 
+    e.g. a collection of Spectra or Photometric measurements
+    """
+    
+    
+    __slots__ = ['_maskedsedvals','_unit']
+    
+    def __init__(self,name='SED',unit='angstroms',type=None,defaultval=None, usedef=None):
+        from .spec import Spectrum,HasSpecUnits
+        from .phot import PhotObservation
+        
+        super(SEDField,self).__init__(name)
+        
+        
+        
+        self._type = tuple((Spectrum,PhotObservation))
+        self._maskedsedvals = set()
+        unittuple = HasSpecUnits.strToUnit(unit)
+        self._unit = unittuple[0]+'-'+unittuple[1]
+        
+        if type is not None and set(type) != set(self._type):
+            raise ValueError("SEDFields only accept Spectrum and PhotObservation objects - can't set type")
+        
+        if defaultval:
+            self[None] = defaultval
+        
+        
+    def __getstate__(self):
+        d = super(SEDField,self).__getstate__()
+        d['_maskedsedvals'] = self._maskedsedvals
+        d['_unit'] = self._unit
+        return d
+    
+    def __setstate__(self,d):
+        super(SEDField,self).__setstate__(d)
+        self._maskedsedvals = d['_maskedsedvals']
+        self._unit = d['_unit']
+        
+    def __call__(self):
+        return self.getFullSED()
+    
+    def __setitem__(self,key,val):
+        """
+        allow self['source'] = (bands,values) syntax
+        """
+        from .phot import PhotObservation
+        
+        if isinstance(val,tuple) and len(val) == 2:
+            return super(SEDField,self).__setitem__(key,PhotObservation(*val))
+        else:
+            return super(SEDField,self).__setitem__(key,val)
+        
+    @property
+    def type(self):
+        return self._type
+    
+    @property
+    def default(self):
+        return self()
+    
+    @property
+    def specs(self):
+        from .spec import Spectrum
+        return [o for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
+    @property
+    def specsources(self):
+        from .spec import Spectrum
+        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
+    
+    @property
+    def phots(self):
+        from .phot import PhotObservation
+        return [o for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
+    @property
+    def photsources(self):
+        from .phot import PhotObservation
+        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
+    
+    def _getUnit(self):
+        return self._unit
+    def _setUnit(self,val):
+        from .spec import HasSpecUnits
+        #this checks to make sure the unit is valid
+        val = HasSpecUnits.strToUnit(val)
+        val = val[0]+'-'+val[1]
+        
+        oldu = self._unit
+        try:
+            for obj in self:
+                if hasattr(obj,'unit'):
+                    obj.unit = val
+            self._unit = val
+        except:
+            for obj in self:
+                obj.unit = oldu
+            raise
+    unit = property(_getUnit,_setUnit,doc="""
+    The units to use in the objects of this SED - see 
+    astropysics.spec.HasSpecUnits for valid units
+    """)
+    
+    def getMasked(self):
+        """
+        return a copy of the values masked from the full SED
+        """
+        return tuple(sorted(self._maskedsedvals))
+    def mask(self,val):
+        """
+        mask the value (either index or source name) to not appear in the
+        full SED
+        """
+        if isinstance(val,int):
+            self._maskedsedvals.add(val)
+        else:
+            self._maskedsedvals.add(self.index(val))
+    def unmask(self,val):
+        """
+        unmask the value (either index or source name) to appear in the
+        full SED
+        """
+        if isinstance(val,int):
+            self._maskedsedvals.remove(val)
+        else:
+            self._maskedsedvals.remove(self.index(val))
+    def unmaskAll(self):
+        """
+        unmask all values (all appear in full SED)
+        """
+        self._maskedsedvals.clear()
+        
+    def getBand(self,bands,asflux=False,asdict=False):
+        """
+        determines the magnitude or flux in the requested band.
+        
+        The first photometric measurement in this SEDField that has
+        the band will be used - if not present, it will be computed 
+        from  the first Spectrum with appropriate overlap.  If none
+        of these are found, a ValueError will be raised
+        
+        if asflux is True, the result will be returned as a flux - 
+        otherwise, a magnitude is returned.
+        
+        asdict returns a dictionary of results - otherwise, a sequence will
+        be returned (or a scalar if only one band is requested)
+        """
+        from .phot import str_to_bands
+        bands = str_to_bands(bands)
+        vals = []
+        for b,bn in zip(bands,[b.name for b in bands]):
+            v = None
+            for p in self.phots:
+                if bn in p.bandnames:
+                    i = p.bandnames.index(bn)
+                    v = p.flux[i] if asflux else p.mag[i]
+                    break
+            if v is None:
+                for s in self.specs:
+                    if b.isOverlapped(s):
+                        v = b.computeFlux(s) if asflux else b.computeMag(s)
+                        break
+            if v is None:
+                raise ValueError('could not locate value for band '%bn)
+            vals.append(v)
+        
+        if asdict:
+            return dict([(b.name,v) for b,v in zip(bands,vals)])
+        elif len(vals)==1:
+            return vals[0]
+        else:
+            return vals
+    
+    def getFullSED(self):
+        """
+        the generates a astropysics.spec.Spectrum object that represents all 
+        the information contained in this SEDField
+        """
+        from .spec import Spectrum
+        
+        x = np.array([])
+        f = np.array([])
+        e = np.array([])
+        for s in self.specs:
+            x = np.r_[x,s.x]
+            f = np.r_[f,s.flux]
+            e = np.r_[e,s.err]
+        
+        for p in self.phots:
+            pf,pe = p.flux,p.fluxerr
+            px,pw = p.getBandInfo()
+            px = np.tile(px/pw,np.prod(px.shape)/len(p))
+            px = px.reshape((len(p),np.prod(px.shape)/len(p)))
+            pf = pf.reshape((len(p),np.prod(pf.shape)/len(p)))
+            pe = pe.reshape((len(p),np.prod(pe.shape)/len(p)))
+            x = np.r_[x,px.ravel()]
+            f = np.r_[f,pf.ravel()]
+            e = np.r_[e,pe.ravel()]
+            
+        return Spectrum(x,f,e,unit=self.unit)
+        
+    def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),log='',clf=True):
+        """
+        Generates a plot of the SED of this object.
+        
+        colors is a tuple of colors as (spec,phot,specerr,photerr,other)
+        """       
+        from matplotlib import pyplot as plt
+        from .spec import HasSpecUnits
+        
+        specs = self.specs
+        phots = self.phots
+        
+        mxy1 = np.max([np.max(s.flux) for s in specs]) if len(specs) > 0 else None
+        mxy2 = np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in phots]) if len(phots) > 0 else None
+        mxy = max(mxy1,mxy2)
+        mny1 = np.min([np.min(s.flux) for s in self.specs]) if len(specs) > 0 else None
+        mny2 = np.min([np.min(p.getFluxDensity(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        if mny1 is None:
+            mny = mny2
+        elif mny2 is None:
+            mny = mny1
+        else:
+            mny = min(mny1,mny2)
+        mxx1 = np.max([np.max(s.x) for s in self.specs]) if len(specs) > 0 else None
+        mxx2 = np.max([np.max(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        mxx = max(mxx1,mxx2)
+        mnx1 = np.min([np.min(s.x) for s in self.specs]) if len(specs) > 0 else None
+        mnx2 = np.min([np.min(p.getBandInfo(self.unit)[0]) for p in self.phots]) if len(phots) > 0 else None
+        if mnx1 is None:
+            mnx = mnx2
+        elif mnx2 is None:
+            mnx = mnx1
+        else:
+            mny = min(mnx1,mnx2)
+        
+        preint = plt.isinteractive()
+        try:
+            plt.interactive(False)
+
+            if clf:
+                plt.clf()
+                
+            if 'x' in log and 'y' in log:
+                plt.loglog()
+            elif 'x' in log:
+                plt.semilogx()
+            elif 'y' in log:
+                plt.semilogy()
+            
+            c = (colors[0],colors[2],colors[4],colors[4])
+            for s in specs:
+                s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
+                
+            lss = ('--',':','-.','-')
+            for i,p in enumerate(phots):
+                if plotbands:
+                    if plotbands is True:
+                        plotbands = {'bandscaling':(mxy - mny)*0.5,'bandoffset':mny}
+                    plotbands['ls'] = lss[i%len(lss)]
+                p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
+                
+            rngx,rngy=mxx-mnx,mxy-mny
+            plt.xlim(mnx-rngx*0.1,mxx+rngx*0.1)
+            plt.ylim(mny-rngy*0.1,mxy+rngy*0.1)
+            
+            xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
+            xl = xl.replace('wavelength','\\lambda')
+            xl = xl.replace('frequency','\\nu')
+            xl = xl.replace('energy','E')
+            xl = xl.replace('angstrom','\\AA')
+            xl = xl.replace('micron','\\mu m')
+            xl = tuple(xl.split('-'))
+            plt.xlabel('$%s/{\\rm %s}$'%xl)
+            
+            plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
+            
+            if preint:
+                plt.show()
+                plt.draw()
+        finally:
+            plt.interactive(preint)
 
 class AstronomicalObject(StructuredFieldNode):
-    from .coords import ICRSCoordinates
+    """
+    A :class:`StructuredFieldNode` with the basic fields for an astronomical
+    object.
+    """
+    from .coords import CoordinateSystem as _CSys
     
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
@@ -3137,8 +3124,410 @@ class AstronomicalObject(StructuredFieldNode):
         
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
-    loc = Field('loc',ICRSCoordinates)
+    loc = Field('loc',_CSys)
     sed = SEDField('sed')
+    
+    
+class PlottingAction2D(ActionNode):
+    """
+    This :class:`ActionNode` uses :mod:`matplotlib` to generate 2D plots of data
+    in an objcat catalog.
+    """
+    def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
+                 plottype='plot',plotkwargs=None,clf=True,savefile=None,
+                 ordering='postorder'):
+        
+        ActionNode.__init__(self,parent,nodename)
+        self.xaxisname = xaxisname
+        """
+        A string specifying the name of the field to use for the x-axis.
+        """
+        self.yaxisname = yaxisname
+        """
+        A string specifying the name of the field to use for the y-axis.
+        """
+        self.savefile = savefile
+        """
+        A string specifying the file name to save the plot to when the node is
+        called.  If None, the plot will not be saved.
+        """
+        self.plottype = plottype
+        """
+        A string specifying the type of plot to make - 'plot', 'errorbar', or
+        'scatter' are the only options, currently. These call
+        :func:`matplotlib.pyplot.plot`, :func:`matplotlib.pyplot.errorbar`, and
+        :func:`matplotlib.pyplot.scatter` , respectively.
+        """
+        self.plotkwargs = plotkwargs
+        """
+        Additional keywords to be passed into the plotting command, or None for
+        defaults.
+        """
+#        self.source = source
+#        """
+#        Specifies a particular source for all plotted elements. Can be a string
+#        or a :class:`Source` object. Alternatively a 2-tuple (xsource,ysource)
+#        can specify different sources for each axis. If None, the current value
+#        for all the objects is used.
+#        """
+        self.ordering = ordering
+        """
+        Determines the order of the plotted arrays. If 'sortx' or 'sorty', the
+        values will be sorted on the x and y axis, respectively. Otherwise,
+        specifies the `traversal` argument for
+        :meth:`FieldNode.extractFieldAtNode` .
+        """
+        
+        self.clf = clf
+        """
+        If True, the figure will be cleared before plotting.
+        """
+        
+    def __call__(self,node=None):
+        """
+        Perform the plotting (and saves the plot if :attr:`savefile` is not
+        None).
+        
+        :param node: 
+            The node at which to start plotting. If None, the parent will be
+            used.
+        
+        """
+        if node is None:
+            node = self.parent
+        
+        if isinstance(self.ordering,basestring) and self.ordering.startswith('sort'):
+            traversal = 'postorder'
+            sort = self.ordering[4:]
+        else:
+            traversal = self.ordering
+            sort = False
+        
+        ics = isinstance(node,FieldNode)
+            
+        xarr,xerr = FieldNode.extractFieldAtNode(node,self.xaxisname,traversal,
+                                missing='masked',includeself=ics,errors=True)
+        yarr,yerr = FieldNode.extractFieldAtNode(node,self.yaxisname,traversal,
+                                missing='masked',includeself=ics,errors=True)
+        
+        if sort=='x':
+            sorti = np.argsort(xarr)
+            xarr = xarr[sorti]
+            xerr = xerr[sorti]
+            yarr = yarr[sorti]
+            yerr = yerr[sorti]
+        elif sort=='y':
+            sorti = np.argsort(yarr)
+            xarr = xarr[sorti]
+            xerr = xerr[sorti]
+            yarr = yarr[sorti]
+            yerr = yerr[sorti]
+        
+        if self.plottype == 'plot':
+            from matplotlib.pyplot import plot,clf
+            
+            pkwargs = {} if self.plotkwargs is None else self.plotkwargs
+            if self.clf:
+                clf()
+            plot(xarr.astype(float),yarr.astype(float),**pkwargs)
+            
+        elif self.plottype == 'errorbar':
+            from matplotlib.pyplot import errorbar,clf
+            
+            pkwargs = {'fmt':'o'} if self.plotkwargs is None else self.plotkwargs
+            
+            if np.all(xerr.mask):
+                xerr = None
+            else:
+                xerr = xerr.filled(0).T.astype(float)[::-1]
+            if np.all(yerr.mask):
+                yerr = None
+            else:
+                yerr = yerr.filled(0).T.astype(float)[::-1]
+            if self.clf:
+                clf()
+            errorbar(xarr.astype(float),yarr.astype(float),yerr,xerr,**pkwargs)
+            
+        elif self.plottype == 'scatter':
+            from matplotlib.pyplot import scatter,clf
+            
+            pkwargs = {} if self.plotkwargs is None else self.plotkwargs
+            if self.clf:
+                clf()
+            scatter(xarr.astype(float),yarr.astype(float),**pkwargs)
+        else:
+            raise ValueError('invalid plottype '+str(self.plottype))
+        
+        if self.savefile:
+            from matplotlib.pyplot import savefig
+            savefig(self.savefile)
+            
+class TextTableAction(ActionNode):
+    """
+    This :class:`ActionNode` generates and returns formatted text tables.
+    """
+    def __init__(self,parent,arrnames,titles=None,nodename='Table Node',
+                      tabformat='ascii',fmt='%.18e',errors=True,
+                      ordering='postorder',savefile=None):
+        ActionNode.__init__(self,parent,nodename)
+        
+        self.arrnames = arrnames
+        """
+        A sequence of field names to use to extract the data.
+        """
+        self.titles = titles
+        """
+        A sequence of titles for the fields - must match :attr:`arrnames` or be
+        None to use :attr:`arrnames` as the titles.
+        """
+        self.tabformat = tabformat
+        """
+        The format for the text table. Can be 'ascii(sep)' for a table with
+        `sep` as the seperator and newlines seperating the rows, 'ascii' is the
+        same with space as the seperator, 'latex' for a LaTeX-style table, or
+        'deluxetable' for AASTex-style deluxtables.
+        """
+        self.fmt = fmt
+        """
+        The formatting specifier for each of the columns. Must be a single 
+        string or a sequence that matches arrnames.
+        """
+        self.errors = errors
+        """
+        Include errorbar values in the table, if present.
+        """        
+        self.savefile = savefile
+        """
+        A string specifying the file name to save the table to when the node is
+        called.  If None, the table will not be saved.
+        """
+        self.ordering = ordering
+        """
+        Determines the order of the plotted arrays. If 'sort#', the values will
+        be sorted on the axis specified by #. Otherwise, specifies the
+        `traversal` argument for :meth:`FieldNode.extractFieldAtNode` .
+        """
+        
+    def __call__(self,node=None):
+        """
+        Generate the table (and saves the if :attr:`savefile` is not None).
+        
+        :param node: 
+            The node at which to start plotting. If None, the parent will be
+            used.
+            
+        :returns: A string with the table data
+        
+        """
+        if node is None:
+            node = self.parent
+            
+        if self.titles is None:
+            titles = self.arrnames
+        else:
+            titles = self.titles
+        if len(titles) != len(self.arrnames):
+            raise ValueError('titles do not match arrnames')
+        
+        if isinstance(self.fmt,basestring):
+            fmts = [self.fmt]*len(titles)
+        else:
+            fmts = self.fmt
+        if len(fmts) != len(self.arrnames):
+            raise ValueError('fmt does not match arrnames')
+        
+        if isinstance(self.ordering,basestring) and self.ordering.startswith('sort'):
+            traversal = 'postorder'
+            sort = self.ordering[4:]
+        else:
+            traversal = self.ordering
+            sort = False
+        
+        ics = isinstance(node,FieldNode)
+        
+        arrs,errs = [],[]
+        for arrname in self.arrnames:
+            arr,err = FieldNode.extractFieldAtNode(node,arrname,traversal,
+                                   missing='masked',includeself=ics,errors=True)
+            arrs.append(arr)
+            errs.append(err)
+        
+        if sort:
+            sorti = np.argsort(arrs[int(i)])
+            arrs = [arr[sorti] for arr in arrs]
+            
+        if self.tabformat.startswith('ascii'):
+            if self.tabformat[5:]=='':
+                sep = ' '
+            else:
+                sep = self.tabformat[6:-1]
+            if self.errors:
+                titemp = []
+                for ti in titles:
+                    titemp.append(ti)
+                    titemp.append(ti+'_err')
+                titles = titemp
+            header = '#'+sep.join(titles)
+            lines = [header]
+            if self.errors:
+                erravg = np.sum(errs,axis=-1)/2.
+                for i in range(len(arrs[0])):
+                    ss = []
+                    for arr,err,fmt in zip(arrs,erravg,fmts):
+                        ss.append(fmt%arr[i])
+                        ss.append(fmt%err[i])
+                    lines.append(sep.join(ss))
+            else:
+                for i in range(len(arrs[0])):
+                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    lines.append(sep.join(ss))
+            tabtxt = '\n'.join(lines)
+        elif self.tabformat == 'latex':
+            header = '\\begin{tabular}{'+'|'.join([' c ']*len(titles))+'}'
+            lines = [header]
+            lines.append(' & '.join(titles)+r' \\')
+            lines.append(r'\hline')
+            if self.errors:
+                for i in range(len(arrs[0])):
+                    ss = []
+                    for arr,err,fmt in zip(arrs,errs,fmts):
+                        errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
+                        errsubstr = errsubstrfmt%tuple(err[i])
+                        ss.append(fmt%arr[i]+errsubstr)
+                    lines.append(' & '.join(ss)+r'\\')
+            else:
+                for i in range(len(arrs[0])):
+                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    lines.append(' & '.join(ss)+r' \\')
+            lines[-1] = lines[-1][:-2]
+            lines.append('\\end{tabular}')
+            tabtxt = '\n'.join(lines)
+            
+        elif self.tabformat == 'deluxetable':
+            lines = ['\\begin{deluxetable*}{'+''.join(['c']*len(titles))+'}']
+            lines.append('\\tablecolumns{%i}'%len(titles))
+            lines.append('\\tablecaption{<insert caption here>}')
+            lines.append('\\tablehead{')
+            for i,ti in enumerate(titles):
+                lines.append('\\colhead{'+ti+'}'+'\\tablenotemark{'+chr(97+i)+'}')
+            lines.append('}')
+            lines.append('')
+            lines.append('\\startdata')
+            lines.append('') 
+            if self.errors:
+                for i in range(len(arrs[0])):
+                    ss = []
+                    for arr,err,fmt in zip(arrs,errs,fmts):
+                        errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
+                        errsubstr = errsubstrfmt%tuple(err[i])
+                        ss.append(fmt%arr[i]+errsubstr)
+                    lines.append(' & '.join(ss)+r'\\')
+            else:
+                for i in range(len(arrs[0])):
+                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    lines.append(' & '.join(ss)+r' \\')
+            lines[-1] = lines[-1][:-2]
+            lines.append('')
+            lines.append('\\enddata')
+            lines.append('')
+            for i,ti in enumerate(titles):
+                lines.append('\\tablenotetext{'+chr(97+i)+'}{<insert note here>}') 
+            lines.append('')
+            lines.append('\\tablecomments{<insert comments here>}')
+            lines.append('')
+            lines.append('\\end{deluxetable*}')
+            tabtxt = '\n'.join(lines)
+        else:
+            raise ValueError('Unrecognized format '+str(self.format))
+        
+        if self.savefile:
+            with open(self.savefile,'w') as f:
+                f.write(tabtxt)
+        
+        return tabtxt
+
+
+class PydotGraphAction(ActionNode):
+    """
+    This :class:`ActionNode` will generate a pydot.Dot object representing the
+    node and its children. Note that :mod:`pydot` must be installed for this to
+    work.
+    
+    if `graphfields` is True, this includes the fields as a record style 
+    graphviz graph
+    """
+    def __init__(self,parent,nodename='Pydot Graphing Node',graphfields=False,
+                      traversal='preorder',savefile=None,prog=None):
+        ActionNode.__init__(self,parent,nodename) 
+        
+        self.savefile = savefile
+        """
+        A string specifying the file name to save the graph to when the node is
+        called.  If None, the graph will not be saved.
+        """
+        self.prog = prog
+        """
+        The graphviz processing tool to use to generate the graph if the file 
+        is saved with pydot.
+        """
+        self.graphfields = graphfields
+        """
+        If True, the fields are included as a record style graphviz graph.
+        """
+        self.traversal = traversal
+        """
+        Sets the traversal type for generating the graph - is any valid
+        :meth:`CatalogNode.visit` `traversal` argument.
+        """
+        
+        
+    def __call__(self,node=None):
+        """
+        Generate the graph (and save if :attr:`savefile` is not None).
+        
+        :param node: 
+            The node at which to generate the graph. If None, the parent will be
+            used.
+            
+        :returns: A :class:`pydot.Dot` object
+        
+        """
+        import pydot
+        
+        if node is None:
+            node = self.parent
+        
+        nodeidtopdnode={}
+        def visitfunc(node):
+            pdnode = pydot.Node(id(node),label=str(node))
+            if isinstance(node,FieldNode):
+                if self.graphfields:
+                    pdnode.set_shape('record')
+                    fieldstr = '|'.join([f.strCurr().replace(':',':') for f in node.fields()])
+                    pdnode.set_label('"{%s| | %s}"'%(node,fieldstr))
+                else:
+                    pdnode.set_shape('box')
+            nodeidtopdnode[id(node)] = pdnode
+            try:
+                edge = pydot.Edge(nodeidtopdnode[id(node.parent)],pdnode)
+            except KeyError:
+                edge = None
+            return pdnode,edge
+        nelist = node.visit(visitfunc,traversal=self.traversal)
+        
+        g = pydot.Dot()
+        g.add_node(nelist[0][0])
+        for node,edge in nelist[1:]:
+            g.add_node(node)
+            g.add_edge(edge)
+        
+        if self.savefile:
+            from os.path import splitext
+            ext = splitext(self.savefile)[1][1:]
+            g.write(self.savefile,prog=self.prog,format=ext)
+        
+        return g
+        
     
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
