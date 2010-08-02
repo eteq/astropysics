@@ -25,9 +25,10 @@ changed. It also provides mechanisms for safely saving these object catalogss in
 a database, and someday soon will include a web interface to interact with the
 catalog via the internet.
 
-Fundamentally, the catalog should be thought of as a tree in the computer
-science sense, or a directed acyclic graph of :class:`FieldNode` objects.
-Normally, a :class:`Catalog` object acts as the root.
+Fundamentally, the catalog should be thought of as a tree (`this kind
+<http://en.wikipedia.org/wiki/Tree_(data_structure)>`_, rather than `this one
+<http://en.wikipedia.org/wiki/Tree>`_) of :class:`FieldNode` objects. Normally,
+a :class:`Catalog` object acts as the root.
 
 Classes and Inheritance Structure
 ---------------------------------
@@ -101,7 +102,10 @@ class CatalogNode(object):
     
     This is an abstract class that must have its initializer overriden.
     
-    Subclasses must call super(Subclass,self).__init__(parent) in their __init__
+    *Subclassing*
+        * Subclasses must call super(Subclass,self).__init__(parent) in their
+          __init__
+    
     """
     
     __metaclass__ = ABCMeta
@@ -353,7 +357,7 @@ class CatalogNode(object):
         else:
             return cPickle.load(file)
 
-#place save/load at module-level, as well
+#these place save/load at module-level, as well
 def save(node,file,savechildren=True):
     """
     save the specified node as a file with the given name or file-like object
@@ -373,12 +377,16 @@ class ActionNode(object):
     but do not store data and hence are not a part of the :class:`CatalogNode`
     heirarchy. Thus, they have a parent, but no children.
     
-    This class is typically used for nodes that are associated with a
-    :class:`Catalog` objects, as most other :class:`CatalogNode` objects cannot 
-    store an :class:`ActionNode`. 
+    The parent for these nodes should be a :class:`Catalog` object, as other
+    :class:`CatalogNode` objects cannot store an :class:`ActionNode`.
     
-    Subclasses must call ``super(Subclass,self).__init__(parent,[name])`` in
-    their :meth:`__init__` and override the :meth:`__call__` method.
+    *Subclassing*
+    
+    Subclasses must:
+    
+    * call :meth:`ActionNode.__init__` in their :meth:`__init__`
+    * override the :meth:`__call__` method
+    
     """
     
     __metaclass__ = ABCMeta
@@ -3131,76 +3139,6 @@ class AstronomicalObject(StructuredFieldNode):
     name = Field('name',basestring)
     loc = Field('loc',ICRSCoordinates)
     sed = SEDField('sed')
-
-class Test1(StructuredFieldNode):
-    num = Field('num',(float,int),(4.2,1,2))
-    num2 = Field('num2',(float,int),(5.6,1.5,0.3))
-    
-    @StructuredFieldNode.derivedFieldFunc
-    def f(num='num',num2='num2'):
-        return 2*num+1+num2
-    
-    @StructuredFieldNode.derivedFieldFunc(ferr=True)
-    def f2(num='num',num2='num2'):
-        num,unum,lnum = num
-        val = 2/num
-        uerr = unum*2*num**-2
-        lerr = lnum*2*num**-2
-        return val,uerr,lerr
-    
-    @StructuredFieldNode.derivedFieldFunc
-    def f3(num='num',num2='num2'):
-        return num2*num
-    
-class Test2(StructuredFieldNode):
-    val = Field('val',float,4.2)
-    
-    @StructuredFieldNode.derivedFieldFunc(num='num')
-    def d1(val='val',d2='d2'):
-        return val+np.exp(d2)
-    
-    @StructuredFieldNode.derivedFieldFunc(num='num')
-    def d2(d1='d1'):
-        if d1 is not None:
-            return np.log(d1)
-    
-def test_cat():
-    c = Catalog()
-    t1 = Test1(c)
-    t2 = Test1(c)
-    t2['num'] = ('testsrc1',7)
-    
-    subc = Catalog('sub-cat',c)
-    ts1 = Test1(subc)
-    ts1['num'] = ('testsrc2',8.5)
-    ts2 = Test1(subc,num=('testsrc2',12.7),f=('testows',123.45))
-    ts3 = Test1(subc)
-    ts3['num'] = ('testsrc2',10.3)
-    
-    return c
-
-def test_sed():
-    from numpy.random import randn,rand
-    from numpy import linspace
-    from .spec import Spectrum
-    from .phot import PhotObservation
-    from .models import BlackbodyModel
-    
-    f = SEDField()
-    scale = 1e-9
-    
-    f['s1'] = Spectrum(linspace(3000,8000,1024),scale*(randn(1024)/4+2.2),scale*rand(1024)/12)
-    m = BlackbodyModel(T=3300)
-    m.peak = 2.2
-    x2 = linspace(7500,10000,512)
-    err = randn(512)/12
-    f['s2'] = Spectrum(x2,scale*(m(x2)+err),scale*err)
-    
-    f['o1'] = PhotObservation('BVRI',[13,12.1,11.8,11.5],.153)
-    f['o2'] = PhotObservation('ugriz',randn(5,12)+12,rand(5,12)/3)
-    
-    return f
-
     
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
   
