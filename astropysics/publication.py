@@ -263,7 +263,7 @@ def prep_for_apj_pub(fnbase=None,targetdir='./pubApJ/',replbib=False):
     finally:
         f.close()
     chmod(targetdir+'ms.tar.gz',33188)
-            
+        
 def prep_for_arxiv_pub(fnbase=None,targetdir='./pubArXiv/',fnoutbase='ms',replbib=False):
     from os import sep,mkdir,chmod,system
     from os.path import exists,isdir
@@ -386,3 +386,17 @@ class TeXDoc(TeXNode):
     TODO:DOC
     """
     
+#issue warning if abstract too long
+#strip comments
+#.tar.gz up with appropriate name and date            
+def prep_for_arxiv_pub(texfile):
+    raise NotImplementedError
+
+#Tasks: redo figures into f##[l].eps and move the files
+#set class to aastex
+#strip comments
+#fix any deluxetable* -> deluxetable (and rotate)
+#issue warning if abstract too long
+#.tar.gz up with appropriate name and date
+def prep_for_apj_pub(texfile,authorlast):
+    raise NotImplementedError
