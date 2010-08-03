@@ -43,12 +43,11 @@ Module API
 
 """
 
-#TODO: seperate CatalogNode into a class that has children and one that doesnt
+#TODO: Figure out if there's a derived value problem from fcurve/MAKE TESTS
 #TODO: make it so adding a derived func to a StructuredFieldNode adds in the new fields if they aren't present
 #TODO: more stable persistence options (with atomic edits and histories?)
 #TODO: a gui catalog viewer w/ plotting options as implemented above
-#TODO: modules to also dynamically update via a web server
-#TODO: filters including errors for extractField
+#TODO: modules to dynamically update via a web server
 
 from __future__ import division,with_statement
 from .constants import pi
