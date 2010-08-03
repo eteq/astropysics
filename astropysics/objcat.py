@@ -44,7 +44,7 @@ Module API
 """
 
 #TODO: seperate CatalogNode into a class that has children and one that doesnt
-#TODO: methods to automatically plot parts of the data sets and save visualizations
+#TODO: make it so adding a derived func to a StructuredFieldNode adds in the new fields if they aren't present
 #TODO: more stable persistence options (with atomic edits and histories?)
 #TODO: a gui catalog viewer w/ plotting options as implemented above
 #TODO: modules to also dynamically update via a web server
@@ -157,30 +157,47 @@ class CatalogNode(object):
     def children(self):
         return tuple(self._children)
     
-    def reorderChildren(self,neworder):
+    def reorderChildren(self,neworder,inverseinds=False):
         """
         Change the order of the children
         
-        neworder can be either a sequence of  indecies (e.g. to reorder
-        [a,b,c] to [c,a,b], neworder would be [2,0,1]), the string
-        'reverse', or a function like the cmp keyword as would appear
-        in the sorted builtin (can be None to do default sorting). 
+        :param neworder: 
+            Must be one of:
+                * 'reverse'
+                    Flip the order of the children
+                * Array-like with integer values
+                    Specifies the new order of the children. (e.g. to reorder
+                    [a,b,c] to [c,a,b], neworder would be [2,0,1])
+                * A callable 
+                    Reorders the children as per the :meth:`sort` list method,
+                    using the callable as the `cmp` argument - it is called as
+                    cmp(node1,node2) and should return -1 if node1<node2, 0 if
+                    equal, or 1 if node1>node2.
+                * None 
+                    Reorders as per standard python list sorting
+                    
+        :param inverseinds: 
+            If True and `neworder` is integer array-like, does inverse
+            reordering (e.g. if `neworder` is [2,0,1] and the children are
+            [c,a,b] ,the children are reordered to [a,b,c]).  Otherwise,
+            has no effect.
         """
         if neworder == 'reverse':
             self._children.reverse()
         elif callable(neworder):
+            self._children.sort()
+        elif callable(neworder):
             self._children.sort(cmp=neworder)
-        else: #TODO:faster way to do this if necessary?
+        else:
+            neworder = np.array(neworder,copy=False).ravel()
             if len(neworder) != len(self._children):
                 raise ValueError('input sequence does not have correct number of elements')
-            
-            added = np.zeros(len(self._children),dtype=bool)
-            newl = []
-            for i in neworder:
-                if added[i]:
-                    raise ValueError('input sequence has repeats')
-                newl.append(self._children[i])
-                added[i] = True
+            if np.unique(neworder).size!=neworder.size:
+                raise ValueError('input sequence has repeats')
+            if inverseinds:
+                neworder = argsort(neworder)
+            #now reorder
+            self._children[:] = np.array(self._children,dtype=object)[neworder]
     
     def addChild(self,node):
         """
@@ -3148,7 +3165,7 @@ class PlottingAction2D(ActionNode):
     """
     def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
                  plottype='plot',plotkwargs=None,clf=True,savefile=None,
-                 ordering='postorder'):
+                 logify=None,ordering='postorder'):
         
         ActionNode.__init__(self,parent,nodename)
         self.xaxisname = xaxisname
@@ -3183,6 +3200,12 @@ class PlottingAction2D(ActionNode):
 #        can specify different sources for each axis. If None, the current value
 #        for all the objects is used.
 #        """
+        self.logify = logify
+        """
+        Determines if a particular axis should be in log (base-10) form. If
+        None, no axes will be log, otherwise, should be either 'x', 'y', or
+        'xy', specifying which axes should be made logarithmic.
+        """
         self.ordering = ordering
         """
         Determines the order of the plotted arrays. If 'sortx' or 'sorty', the
@@ -3222,7 +3245,23 @@ class PlottingAction2D(ActionNode):
                                 missing='masked',includeself=ics,errors=True)
         yarr,yerr = FieldNode.extractFieldAtNode(node,self.yaxisname,traversal,
                                 missing='masked',includeself=ics,errors=True)
-        
+                                
+        if self.logify:
+            if 'x' in self.logify:
+                logxarr = np.log10(xarr)
+                uxerr,lxerr = xerr.T
+                loguxerr = np.log10(xarr+uxerr)-logxarr
+                loglxerr = np.log10(xarr-lxerr)+logxarr
+                xarr = logxarr
+                xerr = np.array((loguxerr,loglxerr)).T
+            if 'y' in self.logify:
+                logyarr = np.log10(yarr)
+                uyerr,lyerr = yerr.T
+                loguyerr = np.log10(yarr+uyerr)-logyarr
+                loglyerr = np.log10(yarr-lyerr)+logyarr
+                yarr = logyarr
+                yerr = np.array((loguyerr,loglyerr)).T
+                
         if sort=='x':
             sorti = np.argsort(xarr)
             xarr = xarr[sorti]
@@ -3275,23 +3314,33 @@ class PlottingAction2D(ActionNode):
             from matplotlib.pyplot import savefig
             savefig(self.savefile)
             
-class TextTableAction(ActionNode):
+class TableTextAction(ActionNode):
     """
     This :class:`ActionNode` generates and returns formatted text tables.
     """
-    def __init__(self,parent,arrnames,titles=None,nodename='Table Node',
-                      tabformat='ascii',fmt='%.18e',errors=True,
-                      ordering='postorder',savefile=None):
+    def __init__(self,parent,arrnames,titles=None,details=None,caption=None,
+                nodename='Table Node',tabformat='ascii',fmt='%.18e',errors=True,
+                logify=None,ordering='postorder',savefile=None):
         ActionNode.__init__(self,parent,nodename)
         
         self.arrnames = arrnames
         """
-        A sequence of field names to use to extract the data.
+        A sequence of field names to use to extract the data. If the special 
+        name 'source' is given, the sources used for each data set are included.
         """
         self.titles = titles
         """
         A sequence of titles for the fields - must match :attr:`arrnames` or be
         None to use :attr:`arrnames` as the titles.
+        """
+        self.details = details
+        """
+        A sequence of strings giving more detailed information for for the
+        fields - must match :attr:`arrnames` or be None to ignore.
+        """
+        self.caption = caption
+        """
+        A strings for a table caption or None to have no caption.
         """
         self.tabformat = tabformat
         """
@@ -3314,26 +3363,41 @@ class TextTableAction(ActionNode):
         A string specifying the file name to save the table to when the node is
         called.  If None, the table will not be saved.
         """
+        self.logify = logify
+        """
+        Determines tf a particular axis should be in log (base-10) form. If
+        None, no axes will be log, otherwise, must be a sequence of bools
+        matching arrnames that is True if the column should have the log of its 
+        data taken.
+        """
         self.ordering = ordering
         """
         Determines the order of the plotted arrays. If 'sort#', the values will
         be sorted on the axis specified by #. Otherwise, specifies the
-        `traversal` argument for :meth:`FieldNode.extractFieldAtNode` .
+        `traversal` argument for :meth:`FieldNode.extractFieldAtNode` . 
         """
         
-    def __call__(self,node=None):
+    def __call__(self,node=None,reorder=None):
         """
         Generate the table (and saves the if :attr:`savefile` is not None).
         
         :param node: 
             The node at which to start plotting. If None, the parent will be
             used.
+        :param reorder: 
+            An array of indicies to change the order of the table before
+            writing, or None to use the catalog ordering.
+        :type: int array or None
             
         :returns: A string with the table data
         
         """
+        from operator import isSequenceType
+        
         if node is None:
             node = self.parent
+            
+        storesources = 'source' in self.arrnames
             
         if self.titles is None:
             titles = self.arrnames
@@ -3342,12 +3406,23 @@ class TextTableAction(ActionNode):
         if len(titles) != len(self.arrnames):
             raise ValueError('titles do not match arrnames')
         
+        if self.details is not None and len(self.details) != len(self.arrnames):
+            raise ValueError('details do not match arrnames')
+        
         if isinstance(self.fmt,basestring):
             fmts = [self.fmt]*len(titles)
         else:
             fmts = self.fmt
         if len(fmts) != len(self.arrnames):
             raise ValueError('fmt does not match arrnames')
+        
+        if not isSequenceType(self.logify):
+            logifys = [self.logify]*len(titles)
+        else:
+            logifys = self.logify
+        if len(logifys) != len(self.arrnames):
+            raise ValueError('fmt does not match arrnames')
+        
         
         if isinstance(self.ordering,basestring) and self.ordering.startswith('sort'):
             traversal = 'postorder'
@@ -3358,13 +3433,64 @@ class TextTableAction(ActionNode):
         
         ics = isinstance(node,FieldNode)
         
-        arrs,errs = [],[]
-        for arrname in self.arrnames:
-            arr,err = FieldNode.extractFieldAtNode(node,arrname,traversal,
-                                   missing='masked',includeself=ics,errors=True)
-            arrs.append(arr)
-            errs.append(err)
-        
+        arrs,errs,srcs = [],[],[]
+        srcmap = {}
+        for arrname,logify in zip(self.arrnames,logifys):
+            if arrname!='source':
+                arr,err,src = FieldNode.extractFieldAtNode(node,arrname,traversal,
+                        missing='masked',includeself=ics,errors=True,sources=True)
+                if logify:
+                    logarr = np.log10(arr)
+                    arrs.append(logarr)
+                    #need to be cleverer w/errors?
+                    uerr,lerr = err.T
+                    loguerr = np.log10(arr+uerr)-logarr
+                    loglerr = np.log10(arr-lerr)+logarr
+                    errs.append(np.array((loguerr,loglerr)).T)
+                else:
+                    arrs.append(arr)
+                    errs.append(err)
+                srcs.append(src)
+            
+        if storesources:
+            srcs = np.array(srcs)
+            srcs[srcs.astype('S9')=='dependent'] = 'None'
+            usrcs = np.unique(srcs)
+            #'none' should always be 0
+            if 'None' in usrcs:
+                usrcs[usrcs=='None'] = usrcs[0]
+                usrcs[0] = 'None'
+            else:
+                usrcs = np.concatenate((['None'],usrcs))
+            srccodes = np.empty(srcs.shape,dtype=int)
+            for i,src in enumerate(usrcs):
+                srccodes[srcs==src] = i
+                
+            
+            ocodes = []
+            for code in srccodes.T.ravel():
+                if code not in ocodes:
+                    ocodes.append(code)
+            ocodes.remove(0)
+            ocodes.insert(0,0)
+            ocodes = np.array(ocodes)
+            srccodes = np.choose(srccodes,np.argsort(ocodes))
+            usrcs = usrcs[ocodes]
+            
+            srcstrs = []
+            for src in srccodes.T:
+                lsrc = [str(s) for s in np.unique(src)]
+                
+                if '0' in lsrc:
+                    lsrc.remove('0')
+                srcstrs.append(','.join(lsrc))
+            sind = self.arrnames.index('source')
+            arrs.insert(sind,srcstrs)
+            errs.insert(sind,[0]*len(srcstrs))
+            
+            srcannotation = [' %i) %s'%t for t in enumerate(usrcs) if t[0]!=0]
+            srcannotation = 'Source Code:'+','.join(srcannotation)+'.'
+                
         if sort:
             sorti = np.argsort(arrs[int(i)])
             arrs = [arr[sorti] for arr in arrs]
@@ -3382,6 +3508,14 @@ class TextTableAction(ActionNode):
                 titles = titemp
             header = '#'+sep.join(titles)
             lines = [header]
+            if self.caption:
+                for l in self.caption.split('\n'):
+                    lines.append('#'+l)
+            if self.details is not None:
+                for ti,det in zip(titles,self.details):
+                    lines.append('#%s: %s'%(ti,det))
+            elif storesources is not None:
+                lines.append('#'+srcannotation)
             if self.errors:
                 erravg = np.sum(errs,axis=-1)/2.
                 for i in range(len(arrs[0])):
@@ -3392,37 +3526,51 @@ class TextTableAction(ActionNode):
                     lines.append(sep.join(ss))
             else:
                 for i in range(len(arrs[0])):
-                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    ss = [fmt%arr[i] if arr[i] is not np.ma.masked else '...' for arr,fmt in zip(arrs,fmts)]
                     lines.append(sep.join(ss))
             tabtxt = '\n'.join(lines)
         elif self.tabformat == 'latex':
-            header = '\\begin{tabular}{'+'|'.join([' c ']*len(titles))+'}'
-            lines = [header]
+            lines = []
+            lines.append('\\begin{table}[htbp]')
+            lines.append('\\begin{tabular}{'+'|'.join([' c ']*len(titles))+'}')
             lines.append(' & '.join(titles)+r' \\')
             lines.append(r'\hline')
             if self.errors:
                 for i in range(len(arrs[0])):
                     ss = []
                     for arr,err,fmt in zip(arrs,errs,fmts):
-                        errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
-                        errsubstr = errsubstrfmt%tuple(err[i])
-                        ss.append(fmt%arr[i]+errsubstr)
+                        if arr[i] is np.ma.masked:
+                            ss.append('\\nodata')
+                        else:
+                            errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
+                            errsubstr = errsubstrfmt%tuple(err[i])
+                            ss.append(fmt%arr[i]+errsubstr)
                     lines.append(' & '.join(ss)+r'\\')
             else:
                 for i in range(len(arrs[0])):
-                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    ss = ['\\nodata' if arr[i] is np.ma.masked else fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
                     lines.append(' & '.join(ss)+r' \\')
             lines[-1] = lines[-1][:-2]
             lines.append('\\end{tabular}')
+            
+            caption = self.caption if self.caption is not None else ''
+            if storesources:
+                caption += ('. ' if not caption.endswith('.') else ' ') + srcannotation
+            if caption != '':
+                lines.append('\\caption{'+caption+'}')
+            lines.append('\\end{table}')
             tabtxt = '\n'.join(lines)
             
         elif self.tabformat == 'deluxetable':
             lines = ['\\begin{deluxetable*}{'+''.join(['c']*len(titles))+'}']
             lines.append('\\tablecolumns{%i}'%len(titles))
-            lines.append('\\tablecaption{<insert caption here>}')
+            if self.caption is not None:
+                lines.append('\\tablecaption{'+self.caption+'}')
             lines.append('\\tablehead{')
             for i,ti in enumerate(titles):
-                lines.append('\\colhead{'+ti+'}'+'\\tablenotemark{'+chr(97+i)+'}')
+                tnote = '' if self.details is None else '\\tablenotemark{'+chr(97+i)+'}'
+                lines.append('    \\colhead{'+ti+tnote+'} &')
+            lines[-1] = lines[-1][:-2]
             lines.append('}')
             lines.append('')
             lines.append('\\startdata')
@@ -3431,22 +3579,28 @@ class TextTableAction(ActionNode):
                 for i in range(len(arrs[0])):
                     ss = []
                     for arr,err,fmt in zip(arrs,errs,fmts):
-                        errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
-                        errsubstr = errsubstrfmt%tuple(err[i])
-                        ss.append(fmt%arr[i]+errsubstr)
+                        if arr[i] is np.ma.masked:
+                            ss.append('\\nodata')
+                        else:
+                            errsubstrfmt = ('^{+'+fmt+'}_{-'+fmt+'}')
+                            errsubstr = errsubstrfmt%tuple(err[i])
+                            ss.append(fmt%arr[i]+errsubstr)
                     lines.append(' & '.join(ss)+r'\\')
             else:
                 for i in range(len(arrs[0])):
-                    ss = [fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
+                    ss = ['\\nodata' if arr[i] is np.ma.masked else fmt%arr[i] for arr,fmt in zip(arrs,fmts)]
                     lines.append(' & '.join(ss)+r' \\')
             lines[-1] = lines[-1][:-2]
             lines.append('')
             lines.append('\\enddata')
             lines.append('')
-            for i,ti in enumerate(titles):
-                lines.append('\\tablenotetext{'+chr(97+i)+'}{<insert note here>}') 
-            lines.append('')
-            lines.append('\\tablecomments{<insert comments here>}')
+            if self.details is None:
+                if 'source' in self. arrnames:
+                    lines.append('')
+                    lines.append('\\tablecomments{'+srcannotation+'}')
+            for i,det in enumerate(self.details):
+                lines.append('\\tablenotetext{'+chr(97+i)+'}{'+det+'}') 
+
             lines.append('')
             lines.append('\\end{deluxetable*}')
             tabtxt = '\n'.join(lines)
