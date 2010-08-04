@@ -37,6 +37,8 @@ Module API
 """
 
 from __future__ import division,with_statement
+from .utils import add_docs_and_sig as _add_docs_and_sig
+from .utils import add_docs as _add_docs
 import numpy as np
 
 try:
@@ -434,25 +436,32 @@ class FixedColumnDataParser(object):
                     
                     
                 
-         
+@_add_docs_and_sig(FixedColumnDataParser.parseFile,FixedColumnDataParser.addColumnsFromFile)       
+@_add_docs(FixedColumnDataParser)   
 def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
-                                columnsep=None,maxcols=None,oneindexed=True):
+                                columnsep=None,maxcols=None,oneindexed=True,
+                                maskedarray=False):
     """
     Loads a fixed column data file using :class:`FixedColumnDataParser`. 
     
     If `fncol` is None, it will assumed to be the same as `fn`.
     
-    For details on arguments controlling how columns are inferred, See
-    :meth:`FixedColumnDataParser.addColumnsFromFile`. For other 
-    arguments see :class:`FixedColumnDataParser`.
+    :meth:`FixedColumnDataParser.parseFile` describes the return types and 
+    `maskedarray` parameter:
+    {docstr:parseFile}
     
-    See :meth:`FixedColumnDataParser.parseFile` for return type
+    For details on arguments controlling how columns are inferred, See
+    :meth:`FixedColumnDataParser.addColumnsFromFile`:
+    {docstr:addColumnsFromFile}
+    
+    For other arguments see :class:`FixedColumnDataParser`
+    
     """
     if fncol is None:
         fncol = fn
     fcp = FixedColumnDataParser(skiprows,oneindexed,comments)
     fcp.addColumnsFromFile(fncol,columnlinestart,columnsep,True,maxcols)
-    return fcp.parseFile(fn)
+    return fcp.parseFile(fn,maskedarray=maskedarray)
 
 def load_tipsy_format(fn):
     """

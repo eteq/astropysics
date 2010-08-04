@@ -661,7 +661,7 @@ def add_docs_and_sig(*args):
                 ds = "'"+d+"'"
             else:
                 ds = str(d)
-            args[-i] = args[-i]+'='+ds
+            args[-1-i] = args[-1-i]+'='+ds
         if varargs:
             args.insert(0,'*'+varargs)
         if varkw:
