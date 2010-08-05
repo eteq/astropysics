@@ -37,6 +37,20 @@ Module API
 """
 
 from __future__ import division,with_statement
+try:
+    #requires Python 2.6
+    from abc import ABCMeta
+    from abc import abstractmethod
+    from abc import abstractproperty
+    from collections import Sequence,MutableSequence
+except ImportError: #support for earlier versions
+    abstractmethod = lambda x:x
+    abstractproperty = property
+    ABCMeta = type
+    class MutableSequence(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
+    class Sequence(object):
+        __slots__=('__weakref__',) #support for weakrefs as necessary
 
 #<-------------------------------OLD--------------------->
 
@@ -378,13 +392,183 @@ def prep_for_arxiv_pub(fnbase=None,targetdir='./pubArXiv/',fnoutbase='ms',replbi
 
 class TeXNode(object):
     """
-    TODO:DOC
+    An element in the TeX parsing tree.  The main shared characteristic is
+    that calling the node will return a string with the combined text.
+    
+    *Subclassing*
+    
+    Subclasses must implement :meth:`getSelfText` (see docstring for details)
+    
     """
     
-class TeXDoc(TeXNode):
+    __metaclass__ = ABCMeta
+    
+    def __init__(self,parent):
+        self.parent = parent
+        self.children = []
+    
+    def getChildrenText(self):
+        """
+        Returns the text for the child nodes (or empty string if leaf)
+        """
+        txt = [c() for c in self.children]
+        return ''.join(txt)
+    
+    @abstractmethod
+    def getSelfText(self):
+        """
+        Subclass implementations must return a 2-tuple of strings such that
+        the child text goes in between the tuple elements.
+        """
+        raise NotImplementedError
+    
+    def __call__(self):
+        """
+        Returns the text associated with this node, composed by combining 
+        the self text and children text
+        """
+        st1,st2 = self.getSelfText()
+        return st1 + self.getChildrenText() + st2
+    
+    def isLeaf(self):
+        """
+        Returns True if this node is a leaf (has no children)
+        """
+        return self.children is None or len(self.children) == 0
+    
+    def isRoot(self):
+        """
+        Returns True if this node is a root (has no parent)
+        """
+        return self.parent is None
+    
+class TeXFile(TeXNode):
     """
     TODO:DOC
     """
+    def __init__(self,fn=None):
+        self.parent = None
+        self.children = []
+        if fn is not None:
+            with open(fn) as f:
+                s = f.read()
+            self._parse(str)
+    
+    def _parse(self,f):
+        """
+        Parse the file - `f` can be a file object or a string w/newlines
+        """
+        if isinstance(f,basestring):
+            f = f.split('\n')
+        for l in f:
+            
+        raise NotImplementedError
+    
+    def save(fn):
+        with open(fn,'w') as f:
+            f.write(self())
+    
+class TeXt(TeXNode):
+    """
+    A node that stores generic text. This is always a leaf.
+    """
+    def __init__(self,parent,text):
+        self.parent = parent
+        self.text = text
+        
+    @property
+    def children(self):
+        return tuple()
+    
+    def getSelfText(self):
+        return (self.text,'')
+    
+class Newline(TeXNode):
+    """
+    A node that stores just a new line. This is always a leaf.
+    """
+    def __init__(self,parent):
+        self.parent = parent
+        
+    @property
+    def children(self):
+        return tuple()
+    
+    def getSelfText(self):
+        return ('\n','')
+    
+class Preamble(TeXNode):
+    """
+    TODO:DOC
+    """
+    def __init__(self,parent,content):
+        self.parent = parent
+        self.children = []
+        
+        raise NotImplementedError
+    
+    
+class Environment(TeXNode):
+    """
+    A LaTex environment.  
+    
+    *Subclassing*
+    Subclasses should implement the :meth:`parse` method - see the method for 
+    syntax
+    
+    """
+    def __init__(self,parent,content,envname=None):
+        """
+        If envname is None, it will be taken from the class-level envname object
+        """
+        self.parent = parent
+        self.children = c = []
+        
+        if envname is not None:
+            self.envname = envname
+        elif not hasattr(self,'name'):
+            raise ValueError('Environment must have a name')
+        
+        parsed = self.parse(content)
+        
+        for p in parsed:
+            if isinstance(p,basestring):
+                c.append(Newline(self))
+                for txt in p.split('\n'):
+                    c.append(TeXt(self,txt))
+                    c.append(Newline(self))
+                
+            elif isinstance(p,TeXNode):
+                c.append(p)
+            else:
+                raise TypeError('invalid parsed item '+str(p))
+        
+    def parse(self,content):
+        """
+        This method can be overridden in subclasses to add particular 
+        children or functionality.  It should return a list of objects to be
+        added as children, optionally interspersed with unprocessed strings.
+        """
+        return [content]
+    
+    def getSelfText(self):
+        b = '\\begin{'+self.envname+'}'
+        e = '\\end{'+self.envname+'}'
+        return (b,e)
+    
+class Document(Environment):
+    envname = 'document'
+    
+class Figure(Environment):
+    envname = 'figure'
+    
+class Command(TeXNode):
+    """
+    TODO:DOC
+    """
+    def __init__(self,parent,content 
+    
+    
     
 #issue warning if abstract too long
 #strip comments
