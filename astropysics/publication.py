@@ -447,13 +447,26 @@ class TeXFile(TeXNode):
     TODO:DOC
     """
     def __init__(self,fn=None):
-        raise NotImplementedError
+        self.parent = None
+        self.children = []
+        if fn is not None:
+            with open(fn) as f:
+                s = f.read()
+            self._parse(str)
     
-    def _parse(self,str):
+    def _parse(self,f):
+        """
+        Parse the file - `f` can be a file object or a string w/newlines
+        """
+        if isinstance(f,basestring):
+            f = f.split('\n')
+        for l in f:
+            
         raise NotImplementedError
     
     def save(fn):
-        raise NotImplementedError
+        with open(fn,'w') as f:
+            f.write(self())
     
 class TeXt(TeXNode):
     """
@@ -488,27 +501,72 @@ class Preamble(TeXNode):
     """
     TODO:DOC
     """
+    def __init__(self,parent,content):
+        self.parent = parent
+        self.children = []
+        
+        raise NotImplementedError
     
     
 class Environment(TeXNode):
     """
-    TODO:DOC
+    A LaTex environment.  
+    
+    *Subclassing*
+    Subclasses should implement the :meth:`parse` method - see the method for 
+    syntax
+    
     """
+    def __init__(self,parent,content,envname=None):
+        """
+        If envname is None, it will be taken from the class-level envname object
+        """
+        self.parent = parent
+        self.children = c = []
+        
+        if envname is not None:
+            self.envname = envname
+        elif not hasattr(self,'name'):
+            raise ValueError('Environment must have a name')
+        
+        parsed = self.parse(content)
+        
+        for p in parsed:
+            if isinstance(p,basestring):
+                c.append(Newline(self))
+                for txt in p.split('\n'):
+                    c.append(TeXt(self,txt))
+                    c.append(Newline(self))
+                
+            elif isinstance(p,TeXNode):
+                c.append(p)
+            else:
+                raise TypeError('invalid parsed item '+str(p))
+        
+    def parse(self,content):
+        """
+        This method can be overridden in subclasses to add particular 
+        children or functionality.  It should return a list of objects to be
+        added as children, optionally interspersed with unprocessed strings.
+        """
+        return [content]
+    
+    def getSelfText(self):
+        b = '\\begin{'+self.envname+'}'
+        e = '\\end{'+self.envname+'}'
+        return (b,e)
     
 class Document(Environment):
-    """
-    TODO:DOC
-    """
+    envname = 'document'
     
 class Figure(Environment):
-    """
-    TODO:DOC
-    """
+    envname = 'figure'
     
 class Command(TeXNode):
     """
     TODO:DOC
     """
+    def __init__(self,parent,content 
     
     
     
