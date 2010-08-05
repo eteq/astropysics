@@ -2764,7 +2764,30 @@ class SExtractorError(Exception):
     
 def UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed=False):
     """
-    transform UBVRcIc magnitudes to ugriz magnitudes as per Jester et al. (2005)
+    This function transforms UBVRI (Johnson-Cousins) photometry to the SDSS
+    system, using the transformations of Jester et al. (2005). If only UBV is
+    available, only ugr can be derived (set R and I to 0).
+    
+    :param U: U-band magnitude
+    :type U: scalar or array-like
+    :param B: B-band magnitude
+    :type B: scalar or array-like
+    :param V: V-band magnitude
+    :type V: scalar or array-like
+    :param R: R-band magnitude (Cousins)
+    :type R: scalar or array-like
+    :param I: I-band magnitude (Cousins)
+    :type I: scalar or array-like
+    :param ugrizprimed: 
+        If True, the outputs are in the SDSS photometric telescope system
+        (u'g'r'i'z'), otherwise, the system of the main photometric survey
+        (ugriz).
+    :type ugrizprimed: bool
+    
+    :returns: 
+        (u,g,r,i,z) magnitudes in the requested SDSS system as a tuple of
+        scalars or arrays (depending on the type of the inputs)
+    
     """
     if not ugrizprimed:
         umg    =    1.28*(U-B)   + 1.13  
@@ -2782,8 +2805,31 @@ def UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed=False):
     
 def ugriz_to_UBVRI(u,g,r,i,z,ugrizprimed=False):
     """
-    transform ugriz magnitudes to UBVRcIc magnitudes as per Jester et al. (2005)
-    (note that z is unused)
+    This function transforms SDSS photometry to the UBVRcIc, using the 
+    transformations of Jester et al. (2005).  
+    
+    :param u: u-band magnitude
+    :type u: scalar or array-like
+    :param g: g-band magnitude
+    :type g: scalar or array-like
+    :param r: r-band magnitude
+    :type r: scalar or array-like
+    :param i: i-band magnitude
+    :type i: scalar or array-like
+    :param z: 
+        z-band magnitude. Note that this is unused in the Jester transform, but
+        is included for completness.
+    :type z: scalar or array-like
+    :param ugrizprimed: 
+        If True, the inputs are in the SDSS photometric telescope system
+        (u'g'r'i'z'), otherwise, the system of the main photometric survey
+        (ugriz).
+    :type ugrizprimed: bool
+    
+    :returns: 
+        (u,g,r,i,z) magnitudes in the requested SDSS system as a tuple of
+        scalars or arrays (depending on the type of the inputs)
+    
     """
     if not ugrizprimed:
         UmB    =    0.78*(u-g) - 0.88 
@@ -2799,16 +2845,37 @@ def ugriz_to_UBVRI(u,g,r,i,z,ugrizprimed=False):
     return UmB+B,B,V,V-VmR,V-VmR-RmI
 
 def transform_dict_ugriz_UBVRI(d,ugrizprimed=False):
+    """
+    Uses :func:`UBVRI_to_ugriz` and :func:`ugriz_to_UBVRI` to transform a
+    dictionary of magnitudes (or arrays of magnitudes) in one system into the
+    other. The keys in the dictionary should be the name of the bands, while the
+    values are the actual magnitudes. The computed magnitudes will then be added
+    with keys matching the appropriate band name. This uses the Jester 2005
+    transformation equations.
+    
+    :param d: 
+        A dictionary with the names of the magnitudes in one of the systems (not
+        both) are keys.  Any missing mags are assumed to be 9999.
+    :param ugrizprimed:
+        If True, the ugriz bands are for the SDSS photometric telescope system
+        (u'g'r'i'z'), otherwise, the system of the main photometric survey
+        (ugriz).
+    :type ugrizprimed: bool
+    
+    :raises ValueError: 
+        If either both photometric systems or neither are present in the
+        dictionary.
+    """
     ugriz = 'u' in d or 'g' in d or 'r' in d or 'i' in d or 'z' in d
     UBVRI = 'U' in d or 'B' in d or 'V' in d or 'R' in d or 'I' in d
     if ugriz and UBVRI:
         raise ValueError('both systems already present')
     if ugriz:
-        u=d['u'] if 'u' in d else 0
-        g=d['g'] if 'g' in d else 0
-        r=d['r'] if 'r' in d else 0
-        i=d['i'] if 'i' in d else 0
-        z=d['z'] if 'z' in d else 0
+        u=d['u'] if 'u' in d else 9999
+        g=d['g'] if 'g' in d else 9999
+        r=d['r'] if 'r' in d else 9999
+        i=d['i'] if 'i' in d else 9999
+        z=d['z'] if 'z' in d else 9999
         U,B,V,R,I=ugriz_to_UBVRI(u,g,r,i,z,ugrizprimed)
         if 'g' in d and 'r' in d:
             d['B']=B
@@ -2821,12 +2888,12 @@ def transform_dict_ugriz_UBVRI(d,ugrizprimed=False):
         else:
             raise ValueError('need g and r to do anything')
         
-    if UBVRI:
-        U=d['U'] if 'U' in d else 0
-        B=d['B'] if 'B' in d else 0
-        V=d['V'] if 'V' in d else 0
-        R=d['R'] if 'R' in d else 0
-        I=d['I'] if 'I' in d else 0
+    elif UBVRI:
+        U=d['U'] if 'U' in d else 9999
+        B=d['B'] if 'B' in d else 9999
+        V=d['V'] if 'V' in d else 9999
+        R=d['R'] if 'R' in d else 9999
+        I=d['I'] if 'I' in d else 9999
         u,g,r,i,z=UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed)
         if 'B' in d and 'V' in d:
             d['g']=g
@@ -2838,6 +2905,9 @@ def transform_dict_ugriz_UBVRI(d,ugrizprimed=False):
                 d['z']=z
         else:
             raise ValueError('need B and V to do anything')
+        
+    else:
+        raise TypeError('No magnitudes found')
         
         
 def ML_ratio_from_color(c,color='B-V'):
