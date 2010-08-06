@@ -483,19 +483,13 @@ class TeXt(TeXNode):
     def getSelfText(self):
         return (self.text,'')
     
-class Newline(TeXNode):
+class Newline(TeXt):
     """
     A node that stores just a new line. This is always a leaf.
     """
+    text = '\n'
     def __init__(self,parent):
         self.parent = parent
-        
-    @property
-    def children(self):
-        return tuple()
-    
-    def getSelfText(self):
-        return ('\n','')
     
 class Preamble(TeXNode):
     """
@@ -514,9 +508,13 @@ class Environment(TeXNode):
     
     *Subclassing*
     Subclasses should implement the :meth:`parse` method - see the method for 
-    syntax
+    syntax.  They must also be registered with the :meth:`registerEnvironment` 
+    static method to have them be parsed with the default :class:`TeXFile` 
+    parser.
     
     """
+    
+    
     def __init__(self,parent,content,envname=None):
         """
         If envname is None, it will be taken from the class-level envname object
@@ -556,12 +554,45 @@ class Environment(TeXNode):
         e = '\\end{'+self.envname+'}'
         return (b,e)
     
+    #used for static functions on the registry
+    _registry = []
+    
+    @staticmethod
+    def registerEnvironment(envclass):
+        """
+        """
+        return envclass
+    
+    @staticmethod
+    def unregisterEnvironment(envclass):
+        """
+        Removes the `envclass` :class:`Environment` object from the registered 
+        environment list
+        """
+        
+    @staticmethod
+    def getEnvironments():
+        """
+        Returns a tuple of the registered environments.
+        """
+        return tuple(Environment._registry)
+    
+def environment_factory(texstr):
+    """
+    This function takes a string from a TeX document starting with '\begin' and 
+    ending in '\end{...}' and uses it to construct the appropriate Environment
+    object.
+    """
+    
+@register_environment
 class Document(Environment):
     envname = 'document'
-    
+
+@register_environment  
 class Figure(Environment):
     envname = 'figure'
-    
+
+@register_environment
 class Command(TeXNode):
     """
     TODO:DOC
