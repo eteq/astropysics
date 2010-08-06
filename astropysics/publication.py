@@ -527,10 +527,12 @@ class Environment(TeXNode):
         elif not hasattr(self,'name'):
             raise ValueError('Environment must have a name')
         
+        #TODO: take care of adding new environments here?
         parsed = self.parse(content)
         
         for p in parsed:
             if isinstance(p,basestring):
+                
                 c.append(Newline(self))
                 for txt in p.split('\n'):
                     c.append(TeXt(self,txt))
@@ -547,6 +549,7 @@ class Environment(TeXNode):
         children or functionality.  It should return a list of objects to be
         added as children, optionally interspersed with unprocessed strings.
         """
+        
         return [content]
     
     def getSelfText(self):
@@ -555,12 +558,25 @@ class Environment(TeXNode):
         return (b,e)
     
     #used for static functions on the registry
-    _registry = []
+    _registry = {}
     
     @staticmethod
     def registerEnvironment(envclass):
         """
+        Registers the provided `envclass` in the environment registry.  Also
+        returns the class to allow use as a decorator.
+        
+        :except TypeError: 
+            If the provided class is not a :class:`Environment` subclass. 
+        :except ValueError: 
+            If the :attr:`envname` attribute matches one already in the registry.
         """
+        if not issubclass(envclass,Environment):
+            raise TypeError('envclass must be an Environment subclass')
+        for e in Environment._registry:
+            if envclass.envname in Environment.registry:
+                raise ValueError('envname %s already present in class %s'%(envclass.envname,e))
+        Environment._registry[envclass.envname] = envclass
         return envclass
     
     @staticmethod
@@ -568,21 +584,41 @@ class Environment(TeXNode):
         """
         Removes the `envclass` :class:`Environment` object from the registered 
         environment list
+        
+        :param envclass: 
+            The :class:`Environment` object to be removed, or its associated
+            envname.
         """
+        if isinstance(envclass,basestring):
+            del Environment._registry[envclass]
+        else:
+            regclass = Environment._registry.pop(envclass.envname)
+            if regclass is not envclass:
+                Environment._registry[envclass.envname] = regclass
+                raise KeyError("envname %s found, but doesn't match class %s"%(envclass.envname,envclass))
         
     @staticmethod
     def getEnvironments():
         """
         Returns a tuple of the registered environments.
         """
-        return tuple(Environment._registry)
+        return tuple(Environment._registry.values())
     
-def environment_factory(texstr):
+def environment_factory(parent,texstr):
     """
     This function takes a string from a TeX document starting with '\begin' and 
     ending in '\end{...}' and uses it to construct the appropriate Environment
     object.
     """
+    enstart = texstr.index('{')+1
+    enend = texstr.index('}')
+    envname = texstr[enstart:enend]
+    content = texstr[enend+1:textstr.rindex('\\end')]
+    if envname in Environment._registry:
+        envcls = Environment._registry[envname]
+        return envcls(parent,content)
+    else:
+        return Environment(parent,content,envname)
     
 @register_environment
 class Document(Environment):
