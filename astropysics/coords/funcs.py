@@ -474,12 +474,12 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     
     :param a1: the first coordinate for the first set of coordinates
     :type a1: 1D :class:`numpy.ndarray`
-    :param a2: the second coordinate for the first set of coordinates
+    :param b1: the second coordinate for the first set of coordinates
+    :type b1: 1D :class:`numpy.ndarray`
+    :param a2: the first coordinate for the second set of coordinates
     :type a2: 1D :class:`numpy.ndarray`
-    :param a1: the first coordinate for the second set of coordinates
-    :type a1: 1D :class:`numpy.ndarray`
-    :param a2: the second coordinate for the second set of coordinates
-    :type a2: 1D :class:`numpy.ndarray`
+    :param b2: the second coordinate for the second set of coordinates
+    :type b2: 1D :class:`numpy.ndarray`
     :param multi:
         Determines behavior if more than one coordinate pair matches.  Can be:
         

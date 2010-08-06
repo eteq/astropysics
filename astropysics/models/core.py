@@ -3289,9 +3289,9 @@ class FunctionModel2DScalarSeperable(FunctionModel2DScalar):
         :param rmodel: 
             A FunctionModel1D that is to be used as the radial function.
         :type rmodel: A valid input to :func:`get_model_instance`
-        :param rmodel: 
+        :param thetamodel: 
             A FunctionModel1D that is to be used as the polar function.
-        :type rmodel: A valid input to :func:`get_model_instance`
+        :type thetamodel: A valid input to :func:`get_model_instance`
         """
         if rmodel is None:
             self.__dict__['_rmodel'] = None
