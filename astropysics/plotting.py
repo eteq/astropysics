@@ -1207,17 +1207,252 @@ def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
             saveargs = [fn.replace('{fnum}',frmstr%i)]
             fig.savefig(*saveargs,**savekwargs)
     
-def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
+
+
+#<------------------------------------Maya VI---------------------------------->
+
+def mlab_anaglyph(dostereo=True,anasat=0,anamask=[4,3]):
     """
-    Given a base file name of the same name as given to ax3d_animate, generates
-    a movie using
+    Switch :mod:`enthought.mayavi.mlab` to use "checkerboard" style stereo
     
-    ffmpeg must be installed for this function to work.
+    :param dostereo: 
+        Turns on stereo if True, off if False, or if None, toggles stereo mode.
+    :param anasat: saturation for anaglyph mode
+    :param anamask: color mask for anaglyph mode
+    
+    :returns: the VTK render window object
+    """
+    from enthought.mayavi import mlab as M
+    
+    w = M.gcf().scene.renderer.render_window
+    w.stereo_type = 'anaglyph'
+    w.anaglyph_color_mask = anamask
+    w.anaglyph_color_saturation = anasat
+    if dostereo is None:
+        dostereo = not w.stereo_render 
+    else:
+        w.stereo_render = bool(dostereo)
+    return w
+
+def mlab_checkerboard(dostereo=True):
+    """
+    Switch :mod:`enthought.mayavi.mlab` to use "checkerboard" style stereo
+    
+    :param dostereo: 
+        Turns on stereo if True, off if False, or if None, toggles stereo mode.
+    
+    
+    :returns: the VTK render window object
+    """
+    from enthought.mayavi import mlab as M
+    
+    w = M.gcf().scene.render_window
+    w.stereo_type = 'checkerboard'
+    if dostereo is None:
+        dostereo = not w.stereo_render 
+    else:
+        w.stereo_render = bool(dostereo)
+    return w
+    
+
+def mlab_camera(fp=None,pos=None,angle=None,dorender=True):
+    """
+    Adjust :mod:`enthought.mayavi.mlab` camera based on a position and focal 
+    point rather than angles as used by :func:`enthought.mayavi.mlab.` .
+    
+    :param fp: An (x,y,z) sequence for the focal point or None to leave alone.
+    :param pos: 
+        An (x,y,z) sequence for the camera position  or None to leave alone.
+    :param angle: The field-of-view angle in degrees or None to leave alone.
+    :param bool dorender: 
+        If True, the scene will be re-rendered at the end of this function.
+        
+    :returns: The VTK Camera object
+    """
+    from enthought.mayavi import mlab as M
+    s = M.gcf().scene
+    c = s._renderer.active_camera
+    if fp is not None:
+        try:
+            if len(fp) != 3:
+                raise ValueError('focal point must be a length-3 sequence or scalar')
+            c.focal_point = fp
+        except: #scalar
+            oldfp=c.focal_point
+            normedfp=oldfp*(oldfp*oldfp).sum()**-0.5
+            c.focal_point=fp*normedfp
+    if pos is not None:
+        if len(pos) != 3:
+            raise ValueError('Position must be a length-3 sequence')
+        c.position = pos
+    if angle is not None:
+        c.view_angle=angle
+        
+    s.renderer.reset_camera_clipping_range()
+    if dorender:
+        s.render()
+    
+    return c
+
+def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
+                              relative=True,fps=None,ui=False):
+    """
+    This generates an animation using the :func:`mlab.animate` mechanism that
+    rotates the scene and possibly zooms in and out with a fixed focal point.
+     
+    :param azs: 
+        A sequence of azimuthal angles (in degrees), a single angle to apply on
+        every frame, or None to not change the angle.
+    :param els: 
+        A sequence of elevation angles (in degrees), a single angle to apply on
+        every frame, or None to not change the angle.
+    :param rolls: 
+        A sequence of roll angles (in degrees), a single angle to apply on
+        every frame, or None to not change the angle.
+    :param dists: 
+        A sequence of distances, a single angle to apply on every frame, or None
+        to not change the angle.
+    :param bool relative:
+        If True, the `azs`,`els`, and `rolls` angles are relative to the current
+        orientation, and `dists` is a multiple of the current distance.
+        Otherwise, the quantities are absolute angles and distances.
+    :param fnbase: 
+        The filename for the files (_### will be added between the extension and
+        filename) or None to just show the animation and not save. The file type
+        will be inferred from the extension, but if no extension is given, .png
+        will be used.
+    :param fps: 
+        Sets the approximate number of frames per second for the animation as it
+        plays - set to None for no delay between frames.
+    :param bool ui: 
+        If True, a GUI will be available while the animation is running to pause
+        or stop the animation.  If False, the GUI will not be shown.
+    
+    :returns: 
+        (anim,fnlist) `anim` is an animator of the sort that
+        :func:`mlab.animate` returns -- call this animator to start the
+        animation. `fnlist` is a list of filenames that have been saved - it
+        will initially be empty, but once the animation is run, it will be
+        populated.
+   
+    """
+    from enthought.mayavi import mlab
+        
+    ns = []
+    for v in (azs,els,rolls,dists):
+        try:
+            ns.append(len(v))
+        except:
+            ns.append(None)
+    n = max(ns)
+    if n is None:
+        raise ValueError('no make_movie inputs are arrays!')
+    if any([e!=n for e in ns if e is not None]):
+        raise ValueError("arrays don't match!")
+    
+    if ns[0] is None:
+        azs = [azs]*n
+    if ns[1] is None:
+        els = [els]*n
+    if ns[2] is None:
+        rolls = [rolls]*n
+    if ns[3] is None:
+        dists = [dists]*n
+        
+    if fnbase is not None:    
+        fnn,fne = os.path.splitext(fnbase)
+        if fne == '':
+            fne = '.png'
+        fnpat = '{0}_{2:0'+str(int(np.ceil(np.log10(n))))+'}{1}'
+    
+    if fps is None:
+        delay=0
+    else:
+        delay = 1000/fps #30 FPS goal
+    
+    fnlist = []
+    
+    @mlab.animate(delay=delay,ui=ui)
+    def anim_gen()
+        initview = mlab.view()
+        initroll = mlab.roll()
+        
+        for i,(az,el,roll,dist) in enumerate(zip(azs,els,rolls,dists)):
+            if fnbase is not None:
+                savefn = fnpat.format(fnn,fne,i)
+                print 'Saving',savefn
+                mlab.savefig(savefn)
+                fnlist.append(savefn)
+            if relative:
+                s = mlab.gcf().scene
+                if az is not None:
+                    s.camera.azimuth(az)
+                if el is not None:
+                    s.camera.elevation(el)
+                if roll is not None:
+                    s.camera.roll(roll)
+                if dist is not None:
+                    s.camera.dolly(1/dist)
+                s.renderer.reset_camera_clipping_range()
+                s.render()
+            else:
+                mlab.view(az,el,dist)
+                mlab.roll(roll)
+            yield
+                
+        mlab.view(*initview)
+        mlab.roll(*initroll)
+    return anim_gen,fnlist
+
+def mvi_texture(s,texture,genmode='plane'):
+    """
+    Generates a texture and applies it to a mayavi surface.
+    
+    :param s: A :class:`enthought.mayavi.modules.surface.Surface` object or None
+    to only load the texture.
+    :param texture: 
+        A :class:`enthought.mayavi.sources.api.ImageReader` object or a file 
+        name for an image to be used as the texture
+    :param genmode: 
+        The tcoord_generator_mode to use. Should be 'none' or 'cylinder' or
+        'sphere' or 'plane'.  Ignored if `s` is None. See
+        :class:`enthought.mayavi.modules.surface.Surface` docs for more details.
+    
+    :returns: The :class:`enthought.mayavi.modules.surface.Surface` object 
+    
+    """
+    from enthought.mayavi.sources.api import ImageReader
+    from enthought.persistence.file_path import FilePath
+    
+    fp = FilePath(fn)
+    ir = ImageReader(file_path=fp)
+    
+    if s is not None:
+        s.actor.tcoord_generator_mode = genmode
+        s.actor.texture_source_object = texture
+        s.actor.mapper.scalar_visibility = False
+        s.actor.enable_texture = True
+    
+    return ir
+
+#<-----------------------------------Generic/utility--------------------------->
+def make_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None,
+                            run=True):
+    """
+    Given a base file name where movie frame files have been saved, generates a
+    movie using `ffmpeg <http://www.ffmpeg.org/>`_ . This is intended to be used
+    with the *_animate functions in this module, but can be used for any set of
+    filenames that follow the correct pattern and define movie frames.
+    
+    `ffmpeg <http://www.ffmpeg.org/>`_ must be installed for this function to
+    work.
     
     :param frfn: 
         The filename to use to locate the animation frames. If the substring
         '{fnum}' appears anywhere in this name, the frame number will be added
-        there. Otherwise, the frame number is added before the extension.
+        there. Otherwise, the frame number is added before the extension. This
+        is the same form as the same as the input to :func:`ax3d_animate` or
+        :func:`mlab_animate_rotzoom`.
     :type frfn: string
     :param moviefn: Filename to use for the output movie
     :type moviefn: string
@@ -1225,6 +1460,12 @@ def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
     :type inops: dict or None
     :param outops: dictionary mapping ffmpeg options to their values for output
     :type outops: dict or None
+    :param bool run: 
+        If True, ffmpeg is actually called. Otherwise, no movie is made, but
+        the returned string can be executed at the command line.
+        
+    :returns: A string with the command line call to ffmpeg
+    
     
     :except ValueError: 
         If the ffmpeg call does not complete sucessfully or there are no
@@ -1271,69 +1512,4 @@ def ax3d_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None):
     retcode = os.system(ffmpegcall)
     if retcode != 0:
         raise ValueError('ffmpeg did not complete correctly - return code %i'%retcode)
-
-#<------------------------------------Maya VI---------------------------------->
-
-def mlab_anaglyph(val=None,anasat=0,anamask=[4,3]):
-    """
-    switch mayavi.mlab to use "anaglyph" style stereo
-    """
-    from enthought.mayavi import mlab as M
-    w=M.gcf().scene.renderer.render_window
-    if val is None:
-        val = not w.stereo_render 
-    w.stereo_render = val
-    w.stereo_type = 'anaglyph'
-    w.anaglyph_color_mask=anamask
-    w.anaglyph_color_saturation=anasat
-    return w
-
-def mlab_checkerboard(dostereo=True):
-    """
-    switch mayavi.mlab to use "checkerboard" style stereo
-    """
-    from enthought.mayavi import mlab as M
-    w=M.gcf().scene.render_window
-    w.stereo_render = bool(dostereo)
-    w.stereo_type = 'checkerboard'
-    return w
-    
-
-def mlab_camera(fp=None,pos=None,angle=None):
-    """
-    adjust mayavi.mlab camera
-    """
-    from enthought.mayavi import mlab as M
-    c=M.gcf().scene._renderer.active_camera
-    if fp is not None:
-        try:
-            if len(fp) != 3:
-                raise ValueError('Focal Point Must be a length-3 sequence or scalar')
-            c.focal_point = fp
-        except: #scalar
-            oldfp=c.focal_point
-            normedfp=oldfp*(oldfp*oldfp).sum()**-0.5
-            c.focal_point=fp*normedfp
-    if pos is not None:
-        if len(pos) != 3:
-            raise ValueError('PositionMust be a length-3 sequence')
-        c.position = pos
-    if angle is not None:
-        c.view_angle=angle
-    return c
-
-
-def mvi_texture_src(fn):
-    from enthought.mayavi.sources.api import ImageReader
-    from enthought.persistence.file_path import FilePath
-    fp = FilePath(fn)
-    return ImageReader(file_path=fp)
-
-def mvi_apply_texture(s,texture,genmode='plane'):
-    if type(texture) == str:
-        texture = mvi_texture_src(texture)
-        
-    s.actor.tcoord_generator_mode = genmode
-    s.actor.texture_source_object = texture
-    s.actor.mapper.scalar_visibility = False
-    s.actor.enable_texture = True
+    return ffmpegcall
