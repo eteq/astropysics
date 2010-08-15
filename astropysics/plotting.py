@@ -1295,7 +1295,7 @@ def mlab_camera(fp=None,pos=None,angle=None,dorender=True):
     return c
 
 def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
-                              relative=True,fps=None,ui=False):
+                              relative=True,fps=None,ui=False,figsize=None):
     """
     This generates an animation using the :func:`mlab.animate` mechanism that
     rotates the scene and possibly zooms in and out with a fixed focal point.
@@ -1327,6 +1327,10 @@ def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
     :param bool ui: 
         If True, a GUI will be available while the animation is running to pause
         or stop the animation.  If False, the GUI will not be shown.
+    :param figsize: 
+        The resolution at which to save the figure as a (xpix,ypix) tuple or
+        None to just use the window size.
+    
     
     :returns: 
         (anim,fnlist) `anim` is an animator of the sort that
@@ -1337,6 +1341,7 @@ def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
    
     """
     from enthought.mayavi import mlab
+    import os
         
     ns = []
     for v in (azs,els,rolls,dists):
@@ -1366,22 +1371,24 @@ def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
         fnpat = '{0}_{2:0'+str(int(np.ceil(np.log10(n))))+'}{1}'
     
     if fps is None:
-        delay=0
+        delay=10
     else:
-        delay = 1000/fps #30 FPS goal
+        delay = int(round(1000/fps)) #30 FPS goal
     
     fnlist = []
-    
+    print 'top'
+    @mlab.show
     @mlab.animate(delay=delay,ui=ui)
-    def anim_gen()
-        initview = mlab.view()
-        initroll = mlab.roll()
+    def anim_gen():
+        oldview = initview = mlab.view()
+        oldroll = initroll = mlab.roll()
+        print 'init',initview,initroll
         
         for i,(az,el,roll,dist) in enumerate(zip(azs,els,rolls,dists)):
             if fnbase is not None:
                 savefn = fnpat.format(fnn,fne,i)
-                print 'Saving',savefn
-                mlab.savefig(savefn)
+                print 'Saving',savefn,'of',len(azs)
+                mlab.savefig(savefn,size=figsize)
                 fnlist.append(savefn)
             if relative:
                 s = mlab.gcf().scene
@@ -1396,12 +1403,21 @@ def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
                 s.renderer.reset_camera_clipping_range()
                 s.render()
             else:
-                mlab.view(az,el,dist)
+                if az is None:
+                    az = oldview[0]
+                if el is None:
+                    el = oldview[1]
+                if dist is None:
+                    dist = oldview[2]
+                mlab.view(az,el,dist,oldview[3],reset_roll=False)
                 mlab.roll(roll)
+                
+                oldview = mlab.view()
+                oldroll = mlab.roll()
             yield
                 
         mlab.view(*initview)
-        mlab.roll(*initroll)
+        mlab.roll(initroll)
     return anim_gen,fnlist
 
 def mvi_texture(s,texture,genmode='plane'):
