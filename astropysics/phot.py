@@ -105,11 +105,11 @@ class AsinhMagnitude(Magnitude):
     def magerrToFluxerr(self,err,mag):
         b = self.b
         #TODO:fix/test
-        return 2*b*err/-self.a*(1+self.magToFlux(mag)**2)**0.5
+        return 2*b*err/-self.a*(1+(self.magToFlux(mag)/2/b)**2)**0.5
     def fluxToMag(self,flux):
         b = self.b
         return self.a*(np.arcsinh(flux/2/b)+self._logb)
-    def fluxerr_to_magerr(self,err,flux):
+    def fluxerrToMagerr(self,err,flux):
         #TODO:fix/test
         return -self.a*err/2/b/(1 + (flux/2/b)**2)**0.5
 
