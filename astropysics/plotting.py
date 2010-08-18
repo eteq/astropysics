@@ -1376,7 +1376,7 @@ def mlab_animate_rotzoom(fnbase,azs=None,els=None,rolls=None,dists=None,
         delay = int(round(1000/fps)) #30 FPS goal
     
     fnlist = []
-    print 'top'
+    
     @mlab.show
     @mlab.animate(delay=delay,ui=ui)
     def anim_gen():
