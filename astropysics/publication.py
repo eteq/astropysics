@@ -126,7 +126,7 @@ class TeXFile(TeXNode):
             f = f.split('\n')
         for l in f:
             
-        raise NotImplementedError
+            raise NotImplementedError
     
     def save(fn):
         with open(fn,'w') as f:
@@ -200,7 +200,7 @@ class Environment(TeXNode):
         #now split out nested environments and commands and build them 
         splitenv = self._envre.split(content) 
         envstrs = splitenv[1::4]
-        for i,txts in eumerate(slitenv[::4])
+        for i,txts in eumerate(slitenv[::4]):
             #for each text chunk, split out the command nodes
             splitcomm = _commandre.split(txts)
             for i in range(1,len(splitcomm),2):
@@ -263,7 +263,7 @@ class Environment(TeXNode):
         if not issubclass(envclass,Environment):
             raise TypeError('envclass must be an Environment subclass')
         for e in Environment._registry:
-            if envclass.envname in Environment.registry:
+            if envclass.envname in Environment._registry:
                 raise ValueError('envname %s already present in class %s'%(envclass.envname,e))
         Environment._registry[envclass.envname] = envclass
         return envclass
@@ -309,11 +309,11 @@ def environment_factory(parent,texstr):
     else:
         return Environment(parent,content,envname)
     
-@register_environment
+@Environment.registerEnvironment
 class Document(Environment):
     envname = 'document'
 
-@register_environment  
+@Environment.registerEnvironment
 class Figure(Environment):
     envname = 'figure'
 
