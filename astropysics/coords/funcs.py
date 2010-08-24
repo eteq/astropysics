@@ -468,18 +468,24 @@ def radec_str_to_decimal(ra,dec):
 
 def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     """
-    Match one coordinate array to another within a specified tolerance. Distance
-    is determined by the cartesian distance between the two arrays added in 
-    quadrature.
+    Match one coordinate array to another within a specified tolerance (`eps`).
+    Distance is determined by the cartesian distance between the two arrays,
+    implying the small-angle approximation if the input coordinates are
+    spherical. Units are arbitrary, but should match between all coordinates
+    (and `eps` should be in the same units)
     
     :param a1: the first coordinate for the first set of coordinates
-    :type a1: 1D :class:`numpy.ndarray`
+    :type a1: array-like
     :param b1: the second coordinate for the first set of coordinates
-    :type b1: 1D :class:`numpy.ndarray`
+    :type b1: array-like
     :param a2: the first coordinate for the second set of coordinates
-    :type a2: 1D :class:`numpy.ndarray`
+    :type a2: array-like
     :param b2: the second coordinate for the second set of coordinates
-    :type b2: 1D :class:`numpy.ndarray`
+    :type b2: array-like
+    :param eps: 
+        The maximum seperation allowed for coordinate pairs to be considered
+        matched.
+    :type eps: float
     :param multi:
         Determines behavior if more than one coordinate pair matches.  Can be:
         
@@ -512,6 +518,11 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
         (array([False, False, False,  True], dtype=bool), array([False, False, 
         False,  True], dtype=bool))
     """
+    a1 = np.array(a1,copy=False).ravel()
+    b1 = np.array(b1,copy=False).ravel()
+    a2 = np.array(a2,copy=False).ravel()
+    b2 = np.array(b2,copy=False).ravel()
+    
     def find_sep(A,B):
         At = np.tile(A,(len(B),1))
         Bt = np.tile(B,(len(A),1))
