@@ -781,7 +781,12 @@ class ScatterLasso(object):
         return self.matchLastXYs(xys,map=d.keys())
             
 
-def subplots_adjust_points(left=None, bottom=None, right=None, top=None, wspace=None, hspace=None , fig = None):
+def subplots_adjust_points(left=None,bottom=None,right=None,top=None, 
+                           wspace=None,hspace=None,fig=None):
+    """
+    Performs the same operation as :func:`matplotlib.pyplot.subplots_adjust` but
+    uses point size uinits instead of fractions of the total figure size.
+    """
     if fig is None:
         fig=plt.gcf()
     w,h=fig.get_figwidth(),fig.get_figheight()
@@ -813,9 +818,10 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
     
     skwargs goes into scatter(), ckwargs goes into contour() or contourf() 
     
-    WARNING: this function will likely be adapted to use 
-    :func:`matplotlib.pyplot.hexbin` in the near future instead of contour or 
-    contourf
+    .. warning:: 
+        This function will likely be adapted to use
+        :func:`matplotlib.pyplot.hexbin` in the near future instead of contour
+        or contourf, so don't expect it to stay consistent until that happens
     """
     from matplotlib.colors import Normalize
     
@@ -1215,10 +1221,10 @@ def mlab_anaglyph(dostereo=True,anasat=0,anamask=[4,3]):
     """
     Switch :mod:`enthought.mayavi.mlab` to use "checkerboard" style stereo
     
-    :param dostereo: 
+    :param bool dostereo: 
         Turns on stereo if True, off if False, or if None, toggles stereo mode.
-    :param anasat: saturation for anaglyph mode
-    :param anamask: color mask for anaglyph mode
+    :param float anasat: saturation for anaglyph mode
+    :param 2-sequence anamask: color mask for anaglyph mode
     
     :returns: the VTK render window object
     """
@@ -1424,14 +1430,15 @@ def mvi_texture(s,texture,genmode='plane'):
     """
     Generates a texture and applies it to a mayavi surface.
     
-    :param s: A :class:`enthought.mayavi.modules.surface.Surface` object or None
-    to only load the texture.
+    :param s: 
+        A :class:`enthought.mayavi.modules.surface.Surface` object or None to
+        only load the texture.
     :param texture: 
         A :class:`enthought.mayavi.sources.api.ImageReader` object or a file 
-        name for an image to be used as the texture
+        name for an image to be used as the texture.
     :param genmode: 
         The tcoord_generator_mode to use. Should be 'none' or 'cylinder' or
-        'sphere' or 'plane'.  Ignored if `s` is None. See
+        'sphere' or 'plane'. Ignored if `s` is None. See
         :class:`enthought.mayavi.modules.surface.Surface` docs for more details.
     
     :returns: The :class:`enthought.mayavi.modules.surface.Surface` object 
@@ -1456,9 +1463,9 @@ def make_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None,
                             run=True):
     """
     Given a base file name where movie frame files have been saved, generates a
-    movie using `ffmpeg <http://www.ffmpeg.org/>`_ . This is intended to be used
-    with the *_animate functions in this module, but can be used for any set of
-    filenames that follow the correct pattern and define movie frames.
+    movie using `ffmpeg <http://www.ffmpeg.org/>`_. This is intended to be used
+    with the :func:`*_animate` functions in this module, but can be used for any
+    set of filenames that follow the correct pattern and define movie frames.
     
     `ffmpeg <http://www.ffmpeg.org/>`_ must be installed for this function to
     work.
