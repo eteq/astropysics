@@ -1774,6 +1774,61 @@ class FunctionModel1D(FunctionModel):
                     plt.draw()
         finally:
             plt.interactive(isinter)
+            
+    def plotResiduals(self,x=None,y=None,clf=True,logplot='',**kwargs):
+        """
+        Plots the residuals of the provided data (:math:`y-y_{mod}`) against this
+        model.
+        
+        :param x: 
+            The x data to plot the residuals for, or None to get it from any
+            fitted data.
+        :type x: array-like or None
+        :param y: 
+            The x data to plot the residuals for, or None to get it from any
+            fitted data.
+        :type y: array-like or None
+        :param bool clf: If True, the plot will be cleared first.
+        :param logplot: Sets which axes are logarithmic
+        :type logplot: '','x','y', or 'xy' string
+        
+        Additional arguments and keywords are passed into
+        :func:`matplotlib.pyplot.scatter`. 
+        
+        """
+        from matplotlib import pyplot as plt
+        
+        if x is None:
+            if self.data is None:
+                raise ValueError("No xdata provided and no fitted data present - can't plot residuals")
+            x = self.data[0]
+        if y is None:
+            if self.data is None:
+                raise ValueError("No ydata provided and no fitted data present - can't plot residuals")
+            y = self.data[1]
+        
+        isinter = plt.isinteractive()
+        try:
+            if clf:
+                plt.clf()
+            
+            #apply log if necessary
+            if 'x' in logplot and 'y' in logplot:
+                plt.loglog()
+            elif 'x' in logplot:
+                plt.semilogx()
+            elif 'y' in logplot:
+                plt.semilogy()
+            
+            ym = self(x)
+            kwargs.setdefault('c','r')    
+            plt.scatter(x,y-ym,**kwargs)
+                
+            if isinter:
+                plt.draw()
+        finally:
+            plt.interactive(isinter)
+        
     
     #Can Override:
     def integrate(self,lower,upper,method=None,n=100,jac=None,**kwargs):
