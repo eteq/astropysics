@@ -2359,6 +2359,20 @@ class Gaussian2DModel(FunctionModel2DScalarAuto):
         mux,muy = self.mux,self.muy
         sigx,sigy = self.sigx,self.sigy
         return (mux-4*sigx,mux+4*sigx,muy-4*sigy,muy+4*sigy)
+    
+class Linear2DModel(FunctionModel2DScalarAuto):
+    """
+    A simple model that is simply the linear combination of the two inputs.
+    
+    .. math::
+        a x + b y + c
+    
+    """
+    
+    _fcoordsys='cartesian'
+    def f(self,inarr,a,b,c):
+        p1,p2 = inarr
+        return a*p1+b*p2+c
         
 class ExponentialDiskModel(FunctionModel2DScalarAuto):
     """
