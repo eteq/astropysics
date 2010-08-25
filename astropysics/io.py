@@ -70,22 +70,21 @@ def _get_package_data(dataname):
 def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
     """
     Load a text file into a structured numpy array where the field names and
-    types are inferred from a line in the file.
-    
+    types are inferred from a line (typically the first) in the file.
     
     It must begin with a comment (specified by the 'comments' keyword) and have
     fields (sperated by the `delimiter`, default whitespace) composed of a
-    color-seperated field name and valid numpy dtype (e.g. 'f' for floats or 'i'
+    colon-seperated field name and valid numpy dtype (e.g. 'f' for floats or 'i'
     for integers).
     
-    If a third color-seperated component is present, it is a python expression
+    If a third colon-seperated component is present, it is a python expression
     (with no spaces) that can be used to derive the value for that column given
     values from the other columns.  numpy functions can be used with the prefix
     'np'.  
     
     An example field line might be::
     
-        #data1:f derived:f:data1+data2**2 data2:i:2
+        #data1:f derived:f:data1+data2**2 data2:i
     
     This will result in a 3-field record array with fields 'data1', 'derived',
     and 'data2', where data1 and data2 are the columns of the input file.
