@@ -3179,10 +3179,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             plt.xlim(datarange[0],datarange[1])
             plt.ylim(datarange[2],datarange[3])
             
-            if isinter:
-                plt.draw()
-                plt.show()
         finally:
+            plt.draw()
             plt.interactive(isinter)
     def plot3d(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',**kwargs):
         """
@@ -3235,8 +3233,13 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
                 kwscat = dict(data)
             else:
                 kwscat = {}
-            kwscat.setdefault('c',data[1])
-            M.points3d(xd,yd,**kwscat)
+            zd = data[1]
+            zres = zd-self((xd,yd))
+            kwscat.setdefault('scale_mode','none')
+            kwscat.setdefault('scale_factor','auto')
+            g = M.points3d(xd,yd,zd,zres,**kwscat)
+            if kwscat['scale_factor'] == 'auto':
+                g.glyph.glyph.scale_factor /= 2
                 
         #M.xlim(datarange[0],datarange[1])
         #M.ylim(datarange[2],datarange[3])
@@ -3293,10 +3296,8 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             plt.axhline(0,color='k',ls=':')
             plt.xlabel(xaxis)
             
-            if isinter:
-                    plt.draw()
-                    plt.show()
         finally:
+            plt.draw()
             plt.interactive(isinter)
     
 class FunctionModel2DScalarAuto(FunctionModel2DScalar):
