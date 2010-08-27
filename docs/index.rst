@@ -70,7 +70,9 @@ where again, you may have to prefix the command with ``sudo`` if it doesn't work
 Recommended packages
 --------------------
 
-A number of other packages are necessary for added functionality in astropysics (and all are recommended):
+A number of other packages are necessary for added functionality in astropysics (and all are recommended). 
+Some of these may be available and installable using your system's package management system, but the install commands below can be used if these are not present or are out-of-date.
+
     * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
         *highly recommended*, as it is necessary for all plotting (aside from the GUI applications). Install with::
         
@@ -84,7 +86,16 @@ A number of other packages are necessary for added functionality in astropysics 
         and if you have matplotlib, run as::
             
             ipython -pylab
-            
+        
+    * `NetworkX <http://networkx.lanl.gov/>`_
+        *recommended*, as it is used for a variety of internal purposes as well as any place where a network/graph is plotted. Install with::
+        
+            pip install networkx
+        
+        It might also be useful to have a closely related package for generating `graphviz <http://www.graphviz.org/>`_ graphs from networkx. Install with::
+    
+            pip install pygraphviz
+    
     * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
         Necessary for reading FITS files::
         
@@ -105,9 +116,6 @@ A number of other packages are necessary for added functionality in astropysics 
     
     * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
         Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://www.stsci.edu/trac/ssb/astrolib>`_ at the bottom of the page.
-        
-    * `pydot <http://code.google.com/p/pydot/>`_
-        A python interface for `graphviz <http://www.graphviz.org/>`_ . Used to generate diagrams of graphs in a few places in astropysics.
         
         
     Note that you can install all of these at once if you install astropysics using the following command::

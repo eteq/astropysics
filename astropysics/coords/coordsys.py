@@ -2615,8 +2615,19 @@ transformations. The defined transformation are shown in the diagram below.
     __doc__ = __doc__.replace('{transformdiagram}',transstr)
     del dotobj
 except ImportError:
-    #if pydot isn't present, just forget about the diagram
-    __doc__ = __doc__.replace('{transformdiagram}','')
+    #if pydot isn't present, drop the diagram but add a warning that it's missing
+    warningstr = """
+Builtin Coordinate System Transforms
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+.. warning::
+    A diagram showing the relationships between the pre-defined transformations
+    should be here, but this copy of the documentation was built without pydot
+    available to build the diagram. Please re-build this file after pydot is
+    installed to see the diagram.
+    """
+    __doc__ = __doc__.replace('{transformdiagram}',warningstr)
+    del warningstr
     
 #<--------------------------Convinience Functions------------------------------>
 
