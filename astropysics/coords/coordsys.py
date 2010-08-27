@@ -680,9 +680,18 @@ class _TransformerMethodDeco(object):
                         
 class CoordinateSystem(object):
     """
-    Base class of all coordinate systems.  Contains machinery for managing 
-    conversion between coordinate systems. Subclasses must override
-    :meth:`__init__`
+    Base class of all coordinate systems. This class also holds the static
+    methods that manage conversion between coordinate systems.
+    
+    *Subclassing*
+    
+    Subclasses of :class:`CoordinateSystem` must override :meth:`__init__` to
+    set initial values. Additionally, :class:`CoordinateSystem` objects are
+    intended to be quite small, so unless there is a reason to do otherwise,
+    subclasses should have a :attr:`__slots__` class attribute (see
+    `http://docs.python.org/reference/datamodel.html`_ for an explanation of
+    slots - it should be a sequence of all the valid attributes for the object).
+    
     """
     from collections import defaultdict as _defaultdict
     
@@ -1044,12 +1053,12 @@ class RectangularEclipticCoordinates(RectangularCoordinates):
 class _LatLongMeta(_CoosysMeta):
     def __init__(cls,name,bases,dct):
         _CoosysMeta.__init__(cls,name,bases,dct)
-        if cls._latlongnames_[0] is not None:
-            setattr(cls,cls._latlongnames_[0],cls.lat)
-            setattr(cls,cls._latlongnames_[0]+'err',cls.laterr)
-        if cls._latlongnames_[1] is not None:
-            setattr(cls,cls._latlongnames_[1],cls.long)
-            setattr(cls,cls._latlongnames_[1]+'err',cls.longerr)
+        if cls._longlatnames_[0] is not None:
+            setattr(cls,cls._longlatnames_[0],cls.long)
+            setattr(cls,cls._longlatnames_[0]+'err',cls.longerr)
+        if cls._longlatnames_[1] is not None:
+            setattr(cls,cls._longlatnames_[1],cls.lat)
+            setattr(cls,cls._longlatnames_[1]+'err',cls.laterr)
 
 class LatLongCoordinates(CoordinateSystem):
     """
@@ -1067,11 +1076,22 @@ class LatLongCoordinates(CoordinateSystem):
         def transform(incoord):
             ... compute the elements of a 3x3 transformation matrix...
             return np.mat([[a,b,c],[d,e,f],[g,h,i]])
+        
+    *Subclassing*
+    
+    Subclasses of :class:`LatLongCoordinates` can have the class attribute
+    :attr:`_longlatnames_` as a 2-tuple of strings (longname,latname), with
+    names for the two coordinates, e.g. ('ra','dec'). They can also include the
+    :attr:`_longrange_` attribute, which specifies the range of valid values for
+    the longitude (latitude is always -90 to 90 degrees), or None to place no
+    restriction. See :class:`CoordinateSystem` for additional subclassing
+    information.
+    
     
     """
     __slots__ = ('_lat','_long','_laterr','_longerr')
     __metaclass__ = _LatLongMeta
-    _latlongnames_ = ('latitude','longitude')
+    _longlatnames_ = ('longitude','latitude')
     _longrange_ = None
     
     hubcoosys = None #this is set to EquatorialCoordinatesCIRS below
@@ -1081,7 +1101,7 @@ class LatLongCoordinates(CoordinateSystem):
     :class:`EquatorialCoordinates`.
     """
     
-    def __init__(self,lat=0,long=0,laterr=None,longerr=None):
+    def __init__(self,long=0,lat=0,longerr=None,laterr=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
@@ -1171,7 +1191,7 @@ class LatLongCoordinates(CoordinateSystem):
     def __str__(self):
         lat,long = self._lat.d,self._long.d
         #lat,long = self._lat.getDmsStr(),self._long.getDmsStr()
-        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._latlongnames_,lat,long)
+        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._longlatnames_,long,lat)
     
     def getCoordinateString(self,sep=' ',labels=False,canonical=False,hmslong=False):
         coords = []
@@ -1179,9 +1199,9 @@ class LatLongCoordinates(CoordinateSystem):
             coords.append(self._long.getHmsStr(canonical=canonical,sign=False))
         else:
             coords.append(self._long.getDmsStr(canonical=canonical,sign=False))
-        coords[-1] = self._latlongnames_[1]+'='+coords[-1]
+        coords[-1] = self._longlatnames_[0]+'='+coords[-1]
         coords.append(self._lat.getDmsStr(canonical=canonical))
-        coords[-1] = self._latlongnames_[0]+'='+coords[-1]
+        coords[-1] = self._longlatnames_[1]+'='+coords[-1]
         return sep.join(coords)
     
     def __eq__(self,other):
@@ -1437,8 +1457,11 @@ class EpochalLatLongCoordinates(LatLongCoordinates):
     #: If True, this coordinate system uses Julian Epochs.  Otherwise, Besselian
     julianepoch = True 
     
-    def __init__(self,lat=0,long=0,laterr=None,longerr=None,epoch=None):
-        LatLongCoordinates.__init__(self,lat,long,laterr,longerr)
+    def __init__(self,long=0,lat=0,longerr=None,laterr=None,epoch=None):
+        """
+        See the associated attribute docstrings for the meaning of the inputs.  
+        """
+        LatLongCoordinates.__init__(self,long,lat,longerr,laterr)
         self._epoch = epoch
         
     
@@ -1527,7 +1550,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
     """
     
     __slots__ = ('_dpc',)
-    _latlongnames_ = ('dec','ra')
+    _longlatnames_ = ('ra','dec')
     _longrange_ = (0,360)
     
         
@@ -1656,7 +1679,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         kwargs.setdefault('decerr',None)
         kwargs.setdefault('epoch',2000)
         
-        EpochalLatLongCoordinates.__init__(self,kwargs['dec'],kwargs['ra'],kwargs['decerr'],kwargs['raerr'])
+        EpochalLatLongCoordinates.__init__(self,kwargs['ra'],kwargs['dec'],kwargs['raerr'],kwargs['decerr'])
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
         if 'distancepc' in kwargs:
@@ -2451,13 +2474,16 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     """
     
     __slots__ = ()
-    _latlongnames_ = ('beta','lamb')
+    _longlatnames_ = ('lamb','beta')
     _longrange_ = (0,360)
     
     obliqyear = 2006
     
-    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
-        EpochalLatLongCoordinates(beta,lamb,betaerr,lamberr,epoch)
+    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000):
+        """
+        See the associated attribute docstrings for the meaning of the inputs.  
+        """
+        EpochalLatLongCoordinates(lamb,beta,lamberr,betaerr,epoch)
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toEq(eclsc):
@@ -2487,22 +2513,24 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     through the ecliptic at the current epoch.
     
     Note that because the concept of the ecliptic can be complicated or even
-    ill-defined, ecliptic coordinates is astropysics are simply defined as
-    tied to a particular set of equatorial coordinates with a given obliquity
-    model.  For :class:`EclipticCoordinatesEquinox`, the equatorial 
-    coordinates are :class:`EquatorialCoordinatesEquinox` with obliquity given
-    by the IAU 1980 obliquity model (see
-    :func:`~astropysics.coords.funcs.obliquity`)
+    ill-defined, ecliptic coordinates is astropysics are simply defined as tied
+    to a particular set of equatorial coordinates with a given obliquity model.
+    For :class:`EclipticCoordinatesEquinox`, the equatorial coordinates are
+    :class:`EquatorialCoordinatesEquinox` with obliquity given by the IAU 1980
+    obliquity model (see :func:`~astropysics.coords.funcs.obliquity`)
     """
     
     __slots__ = ()
-    _latlongnames_ = ('beta','lamb')
+    _longlatnames_ = ('lamb','beta')
     _longrange_ = (0,360)
     
     obliqyear = 1980
     
-    def __init__(self,beta=0,lamb=0,betaerr=None,lamberr=None,epoch=2000):
-        EpochalLatLongCoordinates(beta,lamb,betaerr,lamberr,epoch)
+    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000):
+        """
+        See the associated attribute docstrings for the meaning of the inputs.  
+        """
+        EpochalLatLongCoordinates(lamb,beta,lamberr,betaerr,epoch)
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
     def _toEq(eclsc):
@@ -2527,7 +2555,7 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
-    _latlongnames_ = ('b','l')
+    _longlatnames_ = ('l','b')
     _longrange_ = (0,360)
     
     _ngp_J2000 = FK5Coordinates(192.859508, 27.128336,epoch=2000)
@@ -2539,7 +2567,7 @@ class GalacticCoordinates(LatLongCoordinates):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        LatLongCoordinates.__init__(self,b,l,berr,lerr)
+        LatLongCoordinates.__init__(self,l,b,lerr,berr)
     
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
@@ -2563,7 +2591,7 @@ class GalacticCoordinates(LatLongCoordinates):
         
 class SupergalacticCoordinates(LatLongCoordinates):   
     __slots__ = tuple()
-    _latlongnames_ = ('sgb','sgl')
+    _longlatnames_ = ('sgl','sgb')
     _longrange_ = (0,360)
     
     _nsgp_gal = FK4Coordinates(6.32,47.37,epoch=1950)
@@ -2591,8 +2619,14 @@ class HorizontalCoordinates(LatLongCoordinates):
     these corrections
     """  
     __slots__ = tuple()
-    _latlongnames_ = ('alt','az')
+    _longlatnames_ = ('az','alt')
     _longrange_ = (0,360)
+    
+    def __init__(self,alt=0,az=0,alterr=None,azerr=None):
+        """
+        See the associated attribute docstrings for the meaning of the inputs.  
+        """
+        LatLongCoordinates.__init__(az,alt,azerr,alterr)
     
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
     @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
