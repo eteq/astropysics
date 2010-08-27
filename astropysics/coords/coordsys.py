@@ -787,7 +787,9 @@ class CoordinateSystem(object):
                raise TypeError('to/from classes for registerTransform must be CoordinateSystems')
            
             if not overwrite and (toclass in CoordinateSystem._converters[fromclass]):
-                raise ValueError('function already exists to convert {0} to {1}'.format(fromclass,toclass))
+                #format requires 2.6
+                #raise ValueError('function already exists to convert {0} to {1}'.format(fromclass,toclass))
+                raise ValueError('function already exists to convert %s to %s'%(fromclass,toclass))
             
             if transtype is not None:
                 try:
@@ -978,8 +980,11 @@ class CoordinateSystem(object):
         try:
             return CoordinateSystem._converters[self.__class__][tosys](self)
         except KeyError:
-            strf = 'cannot convert coordinate system {0} to {1}'
-            raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+            #format requires 2.6
+            #strf = 'cannot convert coordinate system {0} to {1}'
+            #raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+            strf = 'cannot convert coordinate system %s to %s'
+            raise NotImplementedError(strf%(self.__class__.__name__,tosys))
 
 class EpochalCoordinates(CoordinateSystem):
     """
@@ -1042,7 +1047,12 @@ class EpochalCoordinates(CoordinateSystem):
     """)
     
     def _getEpochstr(self):
-        return '{0}{1}'.format('J' if self.julianepoch else 'B',self._epoch)
+        #format requires 2.6
+        #return '{0}{1}'.format('J' if self.julianepoch else 'B',self._epoch)
+        if self._epoch is None:
+            return ''
+        else:
+            return '%s%s'%('J' if self.julianepoch else 'B',self._epoch)
     def _setEpochstr(self,val):
         self.epoch = val
     epochstr = property(_getEpochstr,_setEpochstr,doc="""
@@ -1104,6 +1114,9 @@ class RectangularCoordinates(CoordinateSystem):
         self.x = d['x']
         self.y = d['y']
         self.z = d['z']
+        
+    def __str__(self):
+        return '%s: x=%f,y=%f,z=%f'%(self.__class__.__name__,self.x,self.y,self.z)
     
 CartesianCoordinates = RectangularCoordinates
     
@@ -1221,7 +1234,7 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             return self._dpc * auperpc
     def _setDistanceau(self,val):
-        from .constants import cmperau,pcpercm
+        from ..constants import cmperau,pcpercm
         pcperau = cmperau * pcpercm
             
         if val is None:
@@ -1300,7 +1313,9 @@ class LatLongCoordinates(CoordinateSystem):
     def __str__(self):
         lat,long = self._lat.d,self._long.d
         #lat,long = self._lat.getDmsStr(),self._long.getDmsStr()
-        return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._longlatnames_,long,lat)
+        #this requires 2.6 - switch later maybe
+        #return '{0}: {1[0]}={2},{1[1]}={3}'.format(self.__class__.__name__,self._longlatnames_,long,lat)
+        return '%s: %s=%f,%s=%f'%(self.__class__.__name__,self._longlatnames_[0],long,self._longlatnames_[1],lat)
     
     def getCoordinateString(self,sep=' ',labels=False,canonical=False,hmslong=False):
         coords = []
@@ -1398,8 +1413,11 @@ class LatLongCoordinates(CoordinateSystem):
                 else:
                     return conv.basetrans(self)
             except (KeyError,TypeError),e:
-                strf = 'cannot generate matrix to transform from {0} to {1}'
-                raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+                #format requires 2.5
+                #strf = 'cannot generate matrix to transform from {0} to {1}'
+                #raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+                strf = 'cannot generate matrix to transform from %s to %s'
+                raise NotImplementedError(strf%self.__class__.__name__,tosys)
         
     def matrixRotate(self,matrix,apply=True,fixrange=True,unitarycheck=False):
         """
@@ -1536,12 +1554,18 @@ class LatLongCoordinates(CoordinateSystem):
                 else: #not matrix transforms,but exit - do normal conversion
                     return self.convert(hubcoosys).convert(tosys)
             except Exception,e:
-                niestr = 'could not convert from {0} to {1} by way of {2}'
-                niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
+                #format requires 2.6
+                #niestr = 'could not convert from {0} to {1} by way of {2}'
+                #niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
+                niestr = 'could not convert from %s to %s by way of %s'
+                niestr = niestr%(self.__class__,tosys,self.hubcoosys)
                 raise NotImplementedError(niestr,e)
         else:
-            niestr = 'could not convert from {0} to {1}'
-            raise NotImplementedError(niestr.format(self.__class__,tosys))
+            #format requires 2.6
+            #niestr = 'could not convert from {0} to {1}'
+            #raise NotImplementedError(niestr.format(self.__class__,tosys))
+            niestr = 'could not convert from %s to %s'
+            raise NotImplementedError(niestr%(self.__class__,tosys))
         
     
 class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
@@ -1607,7 +1631,10 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
     def __str__(self):
         rastr = self.ra.getHmsStr(canonical=True)
         decstr = self.dec.getDmsStr(canonical=True)
-        return '{3}: {0} {1} ({2})'.format(rastr,decstr,self.epoch,self.__class__.__name__)
+        #2.6 required for format
+        #return '{3}: {0} {1} ({2})'.format(rastr,decstr,self.epoch,self.__class__.__name__)
+        return  '%s %f %f %s'%(self.__class__.__name__,rastr,decstr,self.epoch)
+    
     
     def __init__(self,*args,**kwargs):
         """
@@ -2470,12 +2497,12 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     
     obliqyear = 2006
     
-    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000,
+    def __init__(self,lamb=0,beta=0,lamberr=None,betaerr=None,epoch=2000,
                       distanceau=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        EpochalLatLongCoordinates(self,lamb,beta,lamberr,betaerr,epoch)
+        EpochalLatLongCoordinates.__init__(self,lamb,beta,lamberr,betaerr,epoch)
         self.distanceau = distanceau
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
@@ -2524,7 +2551,7 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        EpochalLatLongCoordinates(self,lamb,beta,lamberr,betaerr,epoch)
+        EpochalLatLongCoordinates.__init__(self,lamb,beta,lamberr,betaerr,epoch)
         self.distanceau = distanceau
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
@@ -2551,10 +2578,8 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
 class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoordinates):
     """
     Rectangular coordinates oriented so that the x-y plane lies in the plane of
-    the ecliptic at the specified epoch. Distances are in AU. Can be either
-    geocentric or heliocentric. For precision work, heliocentric here should be
-    taken to mean the barycenter of the *solar system*, while geocentric is 
-    the barycenter of the Earth.
+    the ecliptic at the specified epoch. Distances are in AU. Origin is at the
+    barycenter of the Earth.
     
     Note that the epoch should not be set directly - if precession is desired
     desired, convert to an Ecliptic coordinate system, do the precession, and
@@ -2564,7 +2589,7 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
     julianepoch = True
     
     def __init__(self,x,y,z,epoch=None):
-        RectangularCoordinates.__init__(x,y,z)
+        RectangularCoordinates.__init__(self,x,y,z)
         self._epoch = epoch
         
     def __getstate__(self):
@@ -2575,27 +2600,69 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
     def __setstate__(self,d):
         RectangularCoordinates.__setstate__(self,d)
         EpochalCoordinates.__setstate__(self,d)
+        
+    def __str__(self):
+        if self.epoch is None:
+            epochstr = ''
+        else:
+            epochstr = ' ('+self.epochstr+')'
+        return RectangularCoordinates.__str__(self) + epochstr
+        
+    def transformToEpoch(self,newepoch):
+        EpochalCoordinates.transformToEpoch(newepoch)
     
     @CoordinateSystem.registerTransform('self',EclipticCoordinatesCIRS)
     def _toEcC(rec):
-        x,y,z = rec.x,rec.y,rec.z
-        raise NotImplementedError
-        return EclipticCoordinatesCIRS(lamb,beta,epoch=rec.epoch)
+        from math import asin,atan2,degrees
+        
+        x,y,z = rec.x,rec.y,rec.z        
+        r = (x*x+y*y+z*z)**0.5
+        beta = degrees(asin(z/r))
+        lamb = degrees(atan2(y,x))
+        
+        return EclipticCoordinatesCIRS(lamb,beta,distanceau=r,epoch=rec.epoch)
+    
     @CoordinateSystem.registerTransform('self',EclipticCoordinatesEquinox)
     def _toEcQ(rec):
-        x,y,z = rec.x,rec.y,rec.z
-        raise NotImplementedError
-        return EclipticCoordinatesEquinox(lamb,beta,epoch=rec.epoch)
+        from math import asin,atan2,degrees
+        
+        x,y,z = rec.x,rec.y,rec.z        
+        r = (x*x+y*y+z*z)**0.5
+        beta = degrees(asin(z/r))
+        lamb = degrees(atan2(y,x))
+        
+        return EclipticCoordinatesEquinox(lamb,beta,distanceau=r,epoch=rec.epoch)
     
     @CoordinateSystem.registerTransform(EclipticCoordinatesCIRS,'self')    
     def _fromEcC(ec):
-        l,b = ec.lamb.d,ec.beta.d
-        raise NotImplementedError
+        from math import sin,cos,degrees
+        
+        l,b = ec.lamb.r,ec.beta.r
+        if ec.distanceau is None:
+            r = 1
+        else:
+            r = ec.distanceau
+            
+        x = r*cos(l)*cos(b)
+        y = r*sin(l)*cos(b)
+        z = r*sin(b)
+        
         return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
+    
     @CoordinateSystem.registerTransform(EclipticCoordinatesEquinox,'self')    
     def _fromEcQ(ec):
-        l,b = ec.lamb.d,ec.beta.d
-        raise NotImplementedError
+        from math import sin,cos,degrees
+        
+        l,b = ec.lamb.r,ec.beta.r
+        if ec.distanceau is None:
+            r = 1
+        else:
+            r = ec.distanceau
+            
+        x = r*cos(l)*cos(b)
+        y = r*sin(l)*cos(b)
+        z = r*sin(b)
+            
         return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
     
 class GalacticCoordinates(LatLongCoordinates):
