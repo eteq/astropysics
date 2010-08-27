@@ -487,9 +487,11 @@ def radec_str_to_decimal(*args):
     
     return np.array(ras),np.array(decs)
 
-def match_coords(a1,b1,a2,b2,eps=1,multi=False):
+def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     """
-    Match one coordinate array to another within a specified tolerance (`eps`).
+    Match one pair of coordinate :class:`arrays <numpy.ndarray>` to another
+    within a specified tolerance (`eps`).
+    
     Distance is determined by the cartesian distance between the two arrays,
     implying the small-angle approximation if the input coordinates are
     spherical. Units are arbitrary, but should match between all coordinates
@@ -507,20 +509,41 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
         The maximum seperation allowed for coordinate pairs to be considered
         matched.
     :type eps: float
-    :param multi:
+    :param mode:
         Determines behavior if more than one coordinate pair matches.  Can be:
         
-        * True: raise an exception if more than one match is found
-        * 'warn': a warning will be issued if more than one match is found
-        * 'print': a statement will be printed  if more than one match is found
-        * 'full': the 2D array with matches as booleans along the axes will be returned
-        * 'count': a count of matches will be returned instead of a mask
-        * 'index': a list of match indecies will be returned instead of a mask
-        * False: do nothing - just return if something matched
+        * 'mask'
+            Returns a 2-tuple of boolean arrays (mask1,mask2) where `mask1`
+            matches the shape of the first coordinate set (`a1` and `b1`), and
+            `mask2` matches second set (`a2` and `b2`). The mask value is True
+            if a match is found for that coordinate pair, otherwise, False.
+        * 'maskexcept' 
+            Retuns the same values as 'mask', and will raise an exception if
+            more than one match is found.
+        * 'maskwarn'
+            Retuns the same values as 'mask', and a warning will be issued if
+            more than one match is found. 
+        * 'count'
+            Like 'mask', but with counts of matches instead of a boolean
+            True/False mask.
+        * 'index'
+            Returns a 2-tuple of integer arrays (ind1,ind2) where `ind1` matches
+            the shape of the first coordinate set, and `ind2` matches the
+            second. The mask value is True if a match is found for that
+            coordinate pair, otherwise, False.
+        * 'match2D'
+            Returns a 2-dimensional bool array. The array element M[i,j] is True
+            if the ith coordinate of the first coordinate set
+            matches the jth coordinate of the second set.
+        * 'nearest'
+            Returns (nearestind,distance,match). `nearestind` is an int array
+            such that nearestind[i] is the index into the *second* set of
+            coordinates for the nearest object to the ith object in the first
+            coordinate set. `distance` is a float array of the same shape giving
+            the corresponding distance, and `match` is s boolean array that is
+            True if the distance is within `eps` .
     
-    :returns: 
-        Tuple (mask of matches for array 1, mask of matches for array 2) or as
-        described in the corresponding `multi` parameter value.
+    :returns: See `mode` for a description of return types.
     
     **Examples**
     
@@ -548,49 +571,61 @@ def match_coords(a1,b1,a2,b2,eps=1,multi=False):
         At = np.tile(A,(len(B),1))
         Bt = np.tile(B,(len(A),1))
         return At.T-Bt
-    sep1=find_sep(a1,a2)
-    sep2=find_sep(b1,b2)
+    sep1 = find_sep(a1,a2)
+    sep2 = find_sep(b1,b2)
+    sep = np.abs((sep1*sep1+sep2*sep2)**0.5 - eps)
     
-    matches = (sep1*sep1+sep2*sep2)**0.5 < eps
-    if multi:
-        if multi == 'full':
-            return matches.T
-        elif multi == 'count':
-            return np.sum(np.any(matches,axis=1)),np.sum(np.any(matches,axis=0)) 
-        elif multi == 'index':
-            return np.where(matches)
-        elif multi == 'warn':
-            s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
-            from warnings import warn
-            
-            for i in np.where(s1>1)[0]:
-                warn('1st index %i has %i matches!'%(i,s1[i]))
-            for j in np.where(s2>1)[0]:
-                warn('2nd index %i has %i matches!'%(j,s2[j]))
-            return s1>0,s2>0
-        elif multi == 'print':
-            s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
-            
-            for i in np.where(s1>1)[0]:
-                print '1st index',i,'has',s1[i],'matches!'
-            for j in np.where(s2>1)[0]:
-                print '2nd index',j,'has',s2[j],'matches!'
+    matches =  sep <= eps
+    
+    if mode == 'mask':
+        return np.any(matches,axis=1),np.any(matches,axis=0)
+    elif mode == 'maskexcept':
+        s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
+        if np.all(s1<2) and np.all(s2<2):
             return s1>0,s2>0
         else:
-            raise ValueError('unrecognized multi mode')
+            raise ValueError('match_coords found multiple matches')
+    elif mode == 'maskwarn':
+        s1,s2 = np.sum(matches,axis=1),np.sum(matches,axis=0) 
+        from warnings import warn
+        
+        for i in np.where(s1>1)[0]:
+            warn('1st index %i has %i matches!'%(i,s1[i]))
+        for j in np.where(s2>1)[0]:
+            warn('2nd index %i has %i matches!'%(j,s2[j]))
+        return s1>0,s2>0
+    elif mode == 'count':
+        return np.sum(np.any(matches,axis=1)),np.sum(np.any(matches,axis=0)) 
+    elif mode == 'index':
+        return np.where(matches)
+    elif mode == 'match2D':
+        return matches.T
+    elif mode == 'nearest':
+        match = np.sum(matches,axis=1)
+        distance = np.min(sep,axis=1)
+        nearestind = np.argmin(sep,axis=1)
+        return (nearestind,distance,match)
     else:
-        return np.any(matches,axis=1),np.any(matches,axis=0)
+        raise ValueError('unrecognized mode')
     
 def seperation_matrix(v,w=None,tri=False):
     """
-    This function takes a n(x?x?x?) array and produces an array given by
-    A[i][j] = v[i]-v[j]. if w is not None, it produces A[i][j] = v[i]-w[j]
+    Computes a matrix of the seperation between each of the components of the
+    first dimension of an array. That is, A[i,j] = v[i]-w[j]. 
     
-    If the input has more than 1 dimension, the first is assumed to be the 
-    one to expand
-    
-    If tri is True, the lower triangular part of the matrix is set to 0
-    (this is really only useful if w is None)
+    :param v: The first array with first dimension n
+    :param w: 
+        The second array with first dimension m, and all following dimensions
+        matched to `v`. If None, `v` will be treated as `w` (e.g. the seperation
+        matrix of `v` with itself will be returned).
+    :param bool tri: 
+        If True, the lower triangular part of the matrix is set to 0 (this is
+        really only useful if w is None) 
+        
+    :returns: 
+        Seperation matrix with dimension nXmX(whatever the remaining dimensions
+        are)
+        
     """
     if w is None:
         w = v
