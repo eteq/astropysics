@@ -601,7 +601,7 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     elif mode == 'match2D':
         return matches.T
     elif mode == 'nearest':
-        match = np.sum(matches,axis=1)
+        match = (np.sum(matches,axis=1)>0)
         distance = np.min(sep,axis=1)
         nearestind = np.argmin(sep,axis=1)
         return (nearestind,distance,match)
