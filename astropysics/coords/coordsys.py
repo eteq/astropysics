@@ -147,6 +147,10 @@ class AngularCoordinate(object):
             +2d30'00.00"
             >>> print AngularCoordinate(pi,radians=True)
             +180d00.00"
+            >>> print AngularCoordinate('1.1')
+            +1d6'00.00"
+            >>> print AngularCoordinate('1.1',radians=True)
+            +63d1'31.29"
             >>> print AngularCoordinate('12d25m12.5s')
             +12d25'12.50"
             >>> print AngularCoordinate('3:30:30',sghms=True)
@@ -198,14 +202,20 @@ class AngularCoordinate(object):
                 elif mark1 == 'radians' or mark1 == 'rad' or mark1 == 'rads' or mark1=='r':
                     self.radians = val
                 else:
-                    raise ValueError('invalid or ambiguous string input for AngularCoordinate')
+                    try:
+                        if radians:
+                            self.radians = float(val)
+                        else:
+                            self.degrees = float(val)
+                    except ValueError:
+                        raise ValueError('invalid string input for AngularCoordinate')
             else:
                 decm = self.__decregex.match(sinpt)
                 if decm:
                     if radians:
-                        self.r = float(decm.group(0))
+                        self.radians = float(decm.group(0))
                     else:
-                        self.d = float(decm.group(0))
+                        self.degrees = float(decm.group(0))
                 else:
                     raise ValueError('Invalid string input for AngularCoordinate: '+inpt)
             
