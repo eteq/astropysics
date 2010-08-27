@@ -82,7 +82,7 @@ if ops.summary:
                 print 'Problem summarizing file',fn+':',str(e)
 else:
     flat = ops.flat    
-    ext = ops.ext
+    ext = int(ops.ext)
     rec = ops.rec
     if rec is not None:
         if ops.coords:
