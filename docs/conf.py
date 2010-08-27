@@ -233,11 +233,12 @@ latex_logo = '../logo/logo.png'
 #latex_use_modindex = True
 
 
-intersphinx_mapping = {'http://docs.python.org/': None,
-                       'http://docs.scipy.org/doc/numpy/': None,
-                       'http://docs.scipy.org/doc/scipy/reference/': None,
-                       'http://matplotlib.sourceforge.net/': None,
-                       'http://pymc.googlecode.com/svn/doc/': None}
+intersphinx_mapping = {'python':('http://docs.python.org/',None),
+                       'numpy':('http://docs.scipy.org/doc/numpy/',None),
+                       'scipy':('http://docs.scipy.org/doc/scipy/reference/',None),
+                       'matplotlib':('http://matplotlib.sourceforge.net/',None),
+                       'pymc':('http://pymc.googlecode.com/svn/doc/',None),
+                       'networkx':('http://networkx.lanl.gov/',None)}
 
 autoclass_content = 'both'
 
