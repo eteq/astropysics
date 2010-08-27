@@ -2535,6 +2535,12 @@ class GalacticCoordinates(LatLongCoordinates):
     _ngp_B1950 = FK4Coordinates(192.25, 27.4,epoch=1950)
     _long0_B1950 = AngularCoordinate(123)
     
+    def __init__(self,l=0,b=0,lerr=None,berr=None):
+        """
+        See the associated attribute docstrings for the meaning of the inputs.  
+        """
+        LatLongCoordinates.__init__(self,b,l,berr,lerr)
+    
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
         return rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
