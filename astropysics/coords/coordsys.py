@@ -980,7 +980,105 @@ class CoordinateSystem(object):
         except KeyError:
             strf = 'cannot convert coordinate system {0} to {1}'
             raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
+
+class EpochalCoordinates(CoordinateSystem):
+    """
+    A base class for :class:`CoordinateSystem` classes that have epochs
+    associated with them. 
     
+    *Subclassing*
+    
+    Subclasses must implement these methods:
+    
+        * :meth:`__init__` from :class:`CoordinateSystem`
+        * :meth:`transformToEpoch` -- see the method's entry for details.
+        
+    Furthermore, subclasses should set :attr:`julianepoch` to determine if they
+    are Julian or Besselian.
+    
+    
+    """    
+    #TODO:figure out if there's a way to put this back in to save space - right
+    #now if two __slots__ classes are mixed together, this is thrown:
+    #TypeError: Error when calling the metaclass bases multiple bases have instance lay-out conflict
+    #__slots__ = ('_epoch',)
+    
+    julianepoch = True
+    """
+    If True, the epoch is Julian, otherwise, Besselian
+    """
+    
+    def __getstate__(self):
+        return {'_epoch':self._epoch}
+    
+    def __setstate__(self,d):
+        self._epoch = d['_epoch']
+    
+    def _getEpoch(self):
+        return self._epoch
+    def _setEpoch(self,val):
+        if val is None:
+            self._epoch = None
+        else:
+            if val == 'now':
+                from ..obstools import jd_to_epoch
+                val = jd_to_epoch(None,self.julianepoch)
+            if not hasattr(self,'_epoch') or self._epoch is None:
+                self._epoch = float(val)
+            else:
+                self.transformToEpoch(float(val))
+    epoch = property(_getEpoch,_setEpoch,doc="""
+    Epoch for this coordinate as a float. 
+    
+    Setting with the string 'now' will set the epoch to the time at the moment
+    the command is executed.
+    
+    If set, this coordinate will be transformed to the new epoch, unless the
+    current Epoch is None, in which case the epoch will be set with no
+    transformation. If transformation is *not* desired, first set the epoch to
+    None, and then set to the new epoch.
+    
+    Julian vs. Besselian is determined by the :attr:`julianepoch` attribute.
+    """)
+    
+    def _getEpochstr(self):
+        return '{0}{1}'.format('J' if self.julianepoch else 'B',self._epoch)
+    def _setEpochstr(self,val):
+        self.epoch = val
+    epochstr = property(_getEpochstr,_setEpochstr,doc="""
+    A string representation of the epoch of this object with a J or B prefixed
+    for julian or besselian epochs.
+    """)
+    
+    def _getJdepoch(self):
+        from ..obstools import epoch_to_jd
+        return epoch_to_jd(self._epoch,self.julianepoch)
+    def _setJdepoch(self,val):
+        from ..obstools import jd_to_epoch
+        self._epoch = jd_to_epoch(val,self.julianepoch)
+    jdepoch = property(_getJdepoch,_setJdepoch,doc="""
+    Julian Date of the epoch for this object.
+    """)
+    
+    def _getMjdepoch(self):
+        from ..obstools import epoch_to_jd
+        return epoch_to_jd(self._epoch,self.julianepoch,mjd=True)
+    def _setMjdepoch(self,val):
+        from ..obstools import jd_to_epoch
+        self._epoch = jd_to_epoch(val,self.julianepoch,mjd=True)
+    mjdepoch = property(_getMjdepoch,_setMjdepoch,doc="""
+    Modified Julian Date of the epoch for this object.
+    """)
+    
+    @abstractmethod
+    def transformToEpoch(self,newepoch):
+        """
+        Subclasses should implement this method to transform their coordinates
+        to a new epoch. At the end of this method after the necessary data
+        transformations are performed, subclasses should call
+        ``EpochalCoordinates.transformToEpoch(newepoch)``.
+        """
+        self._epoch = newepoch
 
 class RectangularCoordinates(CoordinateSystem):
     """
@@ -1008,46 +1106,6 @@ class RectangularCoordinates(CoordinateSystem):
         self.z = d['z']
     
 CartesianCoordinates = RectangularCoordinates
-
-class RectangularEclipticCoordinates(RectangularCoordinates):
-    """
-    Rectangular coordinates oriented so that the x-y plane lies in the plane of
-    the ecliptic at the specified epoch. Distances are in AU. Can be either
-    geocentric or heliocentric.
-    
-    Note that the epoch cannot be set directly - if precession is desired
-    desired, convert to some other coordinate system, set the epoch, and convert
-    back.
-    """
-    __slots__ = ('_geo','_epoch')
-    
-    def __init__(self,x,y,z,geocentric,epoch=None):
-        RectangularCoordinates.__init__(x,y,z)
-        self.geocentric = geocentric
-        self._epoch = epoch
-        
-    def _getGeocentric(self):
-        return self._geo
-    def _setGeocentric(self,val):
-        self._geo = bool(val)
-    geocentric = property(_getGeocentric,_setGeocentric,doc="""
-    True if the coordinate system origin is the Earth 
-    """)
-    
-    def _getHeliocentric(self):
-        return not self._geo
-    def _setHeliocentric(self,val):
-        self._geo = not bool(val)
-    heliocentric = property(_getHeliocentric,_setHeliocentric,doc="""
-    True if the coordinate system origin is the Sun 
-    """)
-    
-    @property
-    def epoch(self):
-        """
-        Epoch of observation
-        """
-        return self._epoch
     
 
 class _LatLongMeta(_CoosysMeta):
@@ -1062,9 +1120,9 @@ class _LatLongMeta(_CoosysMeta):
 
 class LatLongCoordinates(CoordinateSystem):
     """
-    This object represents an angular location on a unit sphere as represented
-    in spherical coordinates with a latitude and longitude.  Subclasses specify 
-    details such as transformations or epochs.
+    This object represents an angular location on a sphere as represented in
+    spherical coordinates with a latitude and longitude, and optionally a
+    distance. Subclasses specify details such as transformations or epochs.
     
     A :class:`LatLongCoordinate` system is designed to use the transformation
     type (see :meth:`CoordinateSystem.addTransType`) 'smatrix'. Thus, if the
@@ -1089,7 +1147,7 @@ class LatLongCoordinates(CoordinateSystem):
     
     
     """
-    __slots__ = ('_lat','_long','_laterr','_longerr')
+    __slots__ = ('_lat','_long','_laterr','_longerr','_dpc')
     __metaclass__ = _LatLongMeta
     _longlatnames_ = ('longitude','latitude')
     _longrange_ = None
@@ -1101,13 +1159,14 @@ class LatLongCoordinates(CoordinateSystem):
     :class:`EquatorialCoordinates`.
     """
     
-    def __init__(self,long=0,lat=0,longerr=None,laterr=None):
+    def __init__(self,long=0,lat=0,longerr=None,laterr=None,distancepc=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
         
         self._lat = AngularCoordinate(range=(-90,90,360))
         self._long = AngularCoordinate(range=self._longrange_)
+        self.distancepc = distancepc
         
         if hasattr(lat,'lat') and hasattr(lat,'long'):
             if long is 0 and laterr is None and longerr is None:
@@ -1129,6 +1188,56 @@ class LatLongCoordinates(CoordinateSystem):
     def __setstate__(self,d):
         for k in LatLongCoordinates.__slots__:
             setattr(k,d[k])
+            
+    _dpc = None #default distance should be infinity
+    def _getDistancepc(self):
+        if callable(self._dpc):
+            return self._dpc()
+        else:
+            return self._dpc
+    def _setDistancepc(self,val):
+        if val is None:
+            self._dpc = None
+        elif callable(val):
+            self._dpc = val
+        else:
+            try:
+                self._dpc = (float(val[0]),float(val[1]))
+            except TypeError:
+                self._dpc = (float(val),0)
+    distancepc = property(_getDistancepc,_setDistancepc,doc="""
+    Parallax distance to object in parsecs, or None to assume infinity. Set as
+    either a float, a 2-tuple (distance,distance_error), or a no-argument
+    callable that returns such a tuple. Getter always returns 2-tuple or None.
+    """)
+    
+    def _getDistanceau(self):
+        from .constants import aupercm,cmperpc
+        auperpc = cmperpc * aupercm
+        if self._dpcs is None:
+            return None
+        elif callable(self._dpc):
+            return self._dpc() * auperpc
+        else:
+            return self._dpc * auperpc
+    def _setDistanceau(self,val):
+        from .constants import cmperau,pcpercm
+        pcperau = cmperau * pcpercm
+            
+        if val is None:
+            self._dpc = None
+        elif callable(val):
+            self._dpc = lambda: val()*pcperau
+        else:
+            try:
+                self._dpc = (float(val[0])*pcperau,float(val[1])*pcperau)
+            except TypeError:
+                self._dpc = (float(val)*pcperau,0)
+    distanceau = property(_getDistanceau,_setDistanceau,doc="""
+    Parallax distance to object in AU, or None to assume infinity. Set as either
+    a float, a 2-tuple (distance,distance_error), or a no-argument callable that
+    returns such a tuple. Getter always returns 2-tuple or None.
+    """)
         
     def _getLat(self):
         return self._lat
@@ -1435,7 +1544,7 @@ class LatLongCoordinates(CoordinateSystem):
             raise NotImplementedError(niestr.format(self.__class__,tosys))
         
     
-class EpochalLatLongCoordinates(LatLongCoordinates):
+class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
     """
     A Coordinate system where the coordinates change as a function of time.
     The origin and orientation of some coordinate systems are tied to the motion
@@ -1448,78 +1557,26 @@ class EpochalLatLongCoordinates(LatLongCoordinates):
     coordinate should be transformed to :class:`ICRSCoordinates` , update the
     epoch, and transform back to :class:`TIRSCoordinates` .
     
-    Subclasses *must* implement the :meth:`transformToEpoch` method -- see the
-    method's entry for details.
-    
     """
-    __slots__ = ('_epoch',)
-    
-    #: If True, this coordinate system uses Julian Epochs.  Otherwise, Besselian
+    __slots__ = tuple()
     julianepoch = True 
     
-    def __init__(self,long=0,lat=0,longerr=None,laterr=None,epoch=None):
+    def __init__(self,long=0,lat=0,longerr=None,laterr=None,epoch=None,distancepc=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        LatLongCoordinates.__init__(self,long,lat,longerr,laterr)
+        LatLongCoordinates.__init__(self,long,lat,longerr,laterr,distancepc)
         self._epoch = epoch
         
     
     def __getstate__(self):
         d = LatLongCoordinates.__getstate__(self)
-        d['_epoch'] = self._epoch
+        d.update(EpochalCoordinates.__getstate__(self))
         return d
     
     def __setstate__(self,d):
         LatLongCoordinates.__setstate__(self,d)
-        self._epoch = d['_epoch']
-    
-    def _getEpoch(self):
-        return self._epoch
-    def _setEpoch(self,val):
-        if val is None:
-            self._epoch = None
-        else:
-            if val == 'now':
-                from ..obstools import jd_to_epoch
-                val = jd_to_epoch(None)
-            if not hasattr(self,'_epoch') or self._epoch is None:
-                self._epoch = float(val)
-            else:
-                self.transformToEpoch(float(val))
-    epoch = property(_getEpoch,_setEpoch,doc="""
-    Epoch for this coordinate as a float. 
-    
-    Setting with the string 'now' will set the epoch to the time at the moment
-    the command is executed.
-    
-    If set, this coordinate will be transformed to the new epoch, unless the
-    current Epoch is None, in which case the epoch will be set with no
-    transformation. If transformation is *not* desired, first set the epoch to
-    None, and then set to the new epoch.
-    
-    Julian vs. Besselian is determined by the :attr:`julianepoch` attribute.
-    """)
-    
-    def _getEpochstr(self):
-        return '{0}{1}'.format('J' if self.julianepoch else 'B',self._epoch)
-    def _setEpochstr(self,val):
-        self.epoch = val
-    epochstr = property(_getEpochstr,_setEpochstr,doc="""
-    A string representation of the current Epoch with a J or B prefixed for
-    julian or besselian epochs.
-    """)
-    
-    def _getJdepoch(self):
-        from ..obstools import epoch_to_jd
-        return epoch_to_jd(self._epoch,self.julianepoch)
-    def _setJdepoch(self,val):
-        from ..obstools import jd_to_epoch
-        self._epoch = jd_to_epoch(val,self.julianepoch)
-    jdepoch = property(_getJdepoch,_setJdepoch,doc="""
-    Julian Date of the current epoch.  If set, it is assumed to be a Julian
-    Epoch.
-    """)
+        EpochalCoordinates.__setstate__(self,d)
     
     def convert(self,tosys):
         res = LatLongCoordinates.convert(self,tosys)
@@ -1527,15 +1584,6 @@ class EpochalLatLongCoordinates(LatLongCoordinates):
             res._epoch = self._epoch
         return res
     convert.__doc__ = LatLongCoordinates.convert.__doc__
-    
-    @abstractmethod
-    def transformToEpoch(self,newepoch):
-        """
-        Subclasses should implement this method to transform their coordinates
-        to a new epoch.  Subclasses should always call this method *after* the
-        transformation is performed.
-        """
-        self._epoch = newepoch
         
 
 class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
@@ -1544,12 +1592,14 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
     right ascension and declination.  Some of the subclasses are not strictly 
     speaking equatorial, but they are close, or are tied to the equatorial 
     position of a particular epoch.
-    
-    This is a superclass for all other Equatorial Coordinate systems - particular
-    reference systems implement the :meth:`transformToEpoch` method.
+        
+    This is a superclass for all other Equatorial Coordinate systems -
+    particular reference systems implement the :meth:`transformToEpoch` method.
+    See the docstring for :class:`EpochalLatLongCoordinates` for subclassing
+    suggestions.
     """
     
-    __slots__ = ('_dpc',)
+    __slots__ = tuple()
     _longlatnames_ = ('ra','dec')
     _longrange_ = (0,360)
     
@@ -1558,65 +1608,6 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         rastr = self.ra.getHmsStr(canonical=True)
         decstr = self.dec.getDmsStr(canonical=True)
         return '{3}: {0} {1} ({2})'.format(rastr,decstr,self.epoch,self.__class__.__name__)
-    
-    _dpc = None #default distance should be infinity
-    def _getDistancepc(self):
-        if callable(self._dpc):
-            return self._dpc()
-        else:
-            return self._dpc
-    def _setDistancepc(self,val):
-        if val is None:
-            self._dpc = None
-        elif callable(val):
-            self._dpc = val
-        else:
-            try:
-                self._dpc = (float(val[0]),float(val[1]))
-            except TypeError:
-                self._dpc = (float(val),0)
-    distancepc = property(_getDistancepc,_setDistancepc,doc="""
-    Parallax distance to object in parsecs, or None to assume infinity. Set as
-    either a float, a 2-tuple (distance,distance_error), or a no-argument
-    callable that returns such a tuple. Getter always returns 2-tuple or None.
-    """)
-    
-    def _getDistanceau(self):
-        from .constants import aupercm,cmperpc
-        auperpc = cmperpc * aupercm
-        if self._dpcs is None:
-            return None
-        elif callable(self._dpc):
-            return self._dpc() * auperpc
-        else:
-            return self._dpc * auperpc
-    def _setDistanceau(self,val):
-        from .constants import cmperau,pcpercm
-        pcperau = cmperau * pcpercm
-            
-        if val is None:
-            self._dpc = None
-        elif callable(val):
-            self._dpc = lambda: val()*pcperau
-        else:
-            try:
-                self._dpc = (float(val[0])*pcperau,float(val[1])*pcperau)
-            except TypeError:
-                self._dpc = (float(val)*pcperau,0)
-    distanceau = property(_getDistanceau,_setDistanceau,doc="""
-    Parallax distance to object in AU, or None to assume infinity. Set as either
-    a float, a 2-tuple (distance,distance_error), or a no-argument callable that
-    returns such a tuple. Getter always returns 2-tuple or None.
-    """)
-    
-    def __getstate__(self):
-        d = EpochalLatLongCoordinates.__getstate__(self)
-        d['_dpc'] = self._dpc
-        return d
-    
-    def __setstate__(self,d):
-        EpochalLatLongCoordinates.__setstate__(self,d)
-        self._dpc = d['_dpc']
     
     def __init__(self,*args,**kwargs):
         """
@@ -2479,11 +2470,13 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     
     obliqyear = 2006
     
-    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000):
+    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000,
+                      distanceau=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        EpochalLatLongCoordinates(lamb,beta,lamberr,betaerr,epoch)
+        EpochalLatLongCoordinates(self,lamb,beta,lamberr,betaerr,epoch)
+        self.distanceau = distanceau
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toEq(eclsc):
@@ -2526,11 +2519,13 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     
     obliqyear = 1980
     
-    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000):
+    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000,
+                      distanceau=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        EpochalLatLongCoordinates(lamb,beta,lamberr,betaerr,epoch)
+        EpochalLatLongCoordinates(self,lamb,beta,lamberr,betaerr,epoch)
+        self.distanceau = distanceau
         
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
     def _toEq(eclsc):
@@ -2552,6 +2547,56 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
             self._laterr._decval = newval._lat._decval
             self._longerr._decval = newval._longerr._decval
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
+        
+class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoordinates):
+    """
+    Rectangular coordinates oriented so that the x-y plane lies in the plane of
+    the ecliptic at the specified epoch. Distances are in AU. Can be either
+    geocentric or heliocentric. For precision work, heliocentric here should be
+    taken to mean the barycenter of the *solar system*, while geocentric is 
+    the barycenter of the Earth.
+    
+    Note that the epoch should not be set directly - if precession is desired
+    desired, convert to an Ecliptic coordinate system, do the precession, and
+    convert back.
+    """
+    __slots__ = tuple()
+    julianepoch = True
+    
+    def __init__(self,x,y,z,epoch=None):
+        RectangularCoordinates.__init__(x,y,z)
+        self._epoch = epoch
+        
+    def __getstate__(self):
+        d = RectangularCoordinates.__getstate__(self)
+        d.update(EpochalCoordinates.__getstate__(self))
+        return d
+    
+    def __setstate__(self,d):
+        RectangularCoordinates.__setstate__(self,d)
+        EpochalCoordinates.__setstate__(self,d)
+    
+    @CoordinateSystem.registerTransform('self',EclipticCoordinatesCIRS)
+    def _toEcC(rec):
+        x,y,z = rec.x,rec.y,rec.z
+        raise NotImplementedError
+        return EclipticCoordinatesCIRS(lamb,beta,epoch=rec.epoch)
+    @CoordinateSystem.registerTransform('self',EclipticCoordinatesEquinox)
+    def _toEcQ(rec):
+        x,y,z = rec.x,rec.y,rec.z
+        raise NotImplementedError
+        return EclipticCoordinatesEquinox(lamb,beta,epoch=rec.epoch)
+    
+    @CoordinateSystem.registerTransform(EclipticCoordinatesCIRS,'self')    
+    def _fromEcC(ec):
+        l,b = ec.lamb.d,ec.beta.d
+        raise NotImplementedError
+        return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
+    @CoordinateSystem.registerTransform(EclipticCoordinatesEquinox,'self')    
+    def _fromEcQ(ec):
+        l,b = ec.lamb.d,ec.beta.d
+        raise NotImplementedError
+        return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
@@ -2563,11 +2608,11 @@ class GalacticCoordinates(LatLongCoordinates):
     _ngp_B1950 = FK4Coordinates(192.25, 27.4,epoch=1950)
     _long0_B1950 = AngularCoordinate(123)
     
-    def __init__(self,l=0,b=0,lerr=None,berr=None):
+    def __init__(self,l=0,b=0,lerr=None,berr=None,distancepc=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        LatLongCoordinates.__init__(self,l,b,lerr,berr)
+        LatLongCoordinates.__init__(self,l,b,lerr,berr,distancepc)
     
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
@@ -2622,11 +2667,11 @@ class HorizontalCoordinates(LatLongCoordinates):
     _longlatnames_ = ('az','alt')
     _longrange_ = (0,360)
     
-    def __init__(self,alt=0,az=0,alterr=None,azerr=None):
+    def __init__(self,alt=0,az=0,alterr=None,azerr=None,distancepc=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
         """
-        LatLongCoordinates.__init__(az,alt,azerr,alterr)
+        LatLongCoordinates.__init__(self,az,alt,azerr,alterr,distancepc)
     
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
     @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
