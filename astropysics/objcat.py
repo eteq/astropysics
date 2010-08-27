@@ -3613,17 +3613,23 @@ class TableTextAction(ActionNode):
         return tabtxt
 
 
-class PydotGraphAction(ActionNode):
+class GraphAction(ActionNode):
     """
-    This :class:`ActionNode` will generate a pydot.Dot object representing the
-    node and its children. Note that :mod:`pydot` must be installed for this to
-    work.
+    This :class:`ActionNode` will generate a :class:`networkx.DiGraph` object
+    representing the node and its children. Note that :mod:`networkx` must be
+    installed for this to work.
     
-    if `graphfields` is True, this includes the fields as a record style 
-    graphviz graph
     """
-    def __init__(self,parent,nodename='Pydot Graphing Node',graphfields=False,
-                      traversal='preorder',savefile=None,prog=None):
+    
+    #set the default drawlayout - special because it depends on whether or not
+    #pygraphviz is present - if so we use dot, otherwise one of networkx's
+    try:
+        import pygraphviz
+        dldef = 'dot'
+    except ImportError:
+        from networkx.layout import spring_layout as dldef
+    def __init__(self,parent,nodename='Graphing Node',traversal='preorder',
+                      drawlayout=dldef,drawkwargs={},show='draw',savefile=None):
         ActionNode.__init__(self,parent,nodename) 
         
         self.savefile = savefile
@@ -3631,21 +3637,34 @@ class PydotGraphAction(ActionNode):
         A string specifying the file name to save the graph to when the node is
         called.  If None, the graph will not be saved.
         """
-        self.prog = prog
+        self.show = show
         """
-        The graphviz processing tool to use to generate the graph if the file 
-        is saved with pydot.
-        """
-        self.graphfields = graphfields
-        """
-        If True, the fields are included as a record style graphviz graph.
+        If True, :func:`matplotlib.pyplot.show` will be called after the graph
+        is drawn.  If it is 'draw', :func:`~matplotlib.pyplot.show` will not be
+        called, but :func:`matplotlib.pyplot.draw` will.  If False, neither are
+        called.
         """
         self.traversal = traversal
         """
         Sets the traversal type for generating the graph - is any valid
         :meth:`CatalogNode.visit` `traversal` argument.
         """
-        
+        self.drawlayout = drawlayout
+        """
+        Sets the layout used in drawing the graph. If a string, it specified a
+        graphviz program name (e.g. 'dot','neato','twopi') use to position the
+        graph nodes. It can also be a callable, in which case it will be called
+        with the graph as the first argument to get the positions. This is
+        intended to be used with :mod:`networkx.layout` functions, but a
+        user-provided callable should work fine, too assuming it outputs correct
+        positions.
+        """
+        self.drawkwargs = drawkwargs
+        """
+        A dictionary of keywords that are passed into :func:`networkx.draw` when
+        drawing the graph.
+        """
+    del dldef    
         
     def __call__(self,node=None):
         """
@@ -3655,42 +3674,49 @@ class PydotGraphAction(ActionNode):
             The node at which to generate the graph. If None, the parent will be
             used.
             
-        :returns: A :class:`pydot.Dot` object
+        :returns: A :class:`networkx.DiGraph` object
         
         """
-        import pydot
+        import networkx as nx
         
         if node is None:
             node = self.parent
         
         nodeidtopdnode={}
         def visitfunc(node):
-            pdnode = pydot.Node(id(node),label=str(node))
-            if isinstance(node,FieldNode):
-                if self.graphfields:
-                    pdnode.set_shape('record')
-                    fieldstr = '|'.join([f.strCurr().replace(':',':') for f in node.fields()])
-                    pdnode.set_label('"{%s| | %s}"'%(node,fieldstr))
-                else:
-                    pdnode.set_shape('box')
-            nodeidtopdnode[id(node)] = pdnode
-            try:
-                edge = pydot.Edge(nodeidtopdnode[id(node.parent)],pdnode)
-            except KeyError:
-                edge = None
-            return pdnode,edge
+            return node,None if node.parent is None else (node.parent,node)
         nelist = node.visit(visitfunc,traversal=self.traversal)
         
-        g = pydot.Dot()
+        g = nx.DiGraph()
         g.add_node(nelist[0][0])
         for node,edge in nelist[1:]:
             g.add_node(node)
             g.add_edge(edge)
-        
-        if self.savefile:
-            from os.path import splitext
-            ext = splitext(self.savefile)[1][1:]
-            g.write(self.savefile,prog=self.prog,format=ext)
+        try:
+            from matplotlib import pyplot as plt
+            isinter = plt.isinteractive()
+            try:
+                if isinstance(self.drawlayout,basestring):
+                    pos = nx.pygraphviz_layout(g,prog=self.drawlayout)
+                elif callable(self.drawlayout):
+                    pos = self.drawlayout(g)
+                else:
+                    pos = self.drawlayout
+                
+                nx.draw(g,pos,**self.drawkwargs)
+                
+                if self.show:
+                    plt.draw()
+                    if self.show != 'draw':
+                        plt.show()
+                if self.savefile:
+                    plt.savefig(self.savefile)
+            finally:
+                plt.interactive(isinter)
+        except ImportError,e:
+            if self.savefile or self.show:
+                from warnings import warn
+                warn('matplotlib not present, so networkx graph could not be drawn or saved')
         
         return g
         
