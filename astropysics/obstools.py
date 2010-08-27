@@ -138,10 +138,9 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
         will be Julian. If None, it will be assumed to switch over on October
         4/15 1582.
     :type gregorian: bool or None 
-    :param mjd:
+    :param bool mjd:
         If True, the input is interpreted as a modified julian date instead of a
         standard julian date.
-    :type mjd: bool
     
     :returns: 
         The calendar date and time in a format determined by the `output`
@@ -320,10 +319,9 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
         Otherwise, it will be Julian. If None, it will be assumed to switch over
         on October 4/15, 1582.
     :type gregorian: bool or None
-    :param mjd: 
+    :param bool mjd: 
         If True, a modified julian date is returned instead of the standard
         julian date.
-    :type mjd: bool
     
     :returns: JD as a float, or a sequence of JDs if sequences were input.
     
@@ -473,24 +471,25 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
         return res
     
 
-def jd_to_epoch(jd,julian=True,asstring=False):
+def jd_to_epoch(jd,julian=True,asstring=False,mjd=False):
     """
     Converts a Julian Date to a Julian or Besselian Epoch expressed in decimal
     years.
     
     :param jd: Julian Date for computing the epoch, or None for current epoch.
     :type jd: scalar, array-like, or None
-    :param julian: 
+    :param bool julian: 
         If True, a Julian Epoch will be used (the year is exactly 365.25 days
         long). Otherwise, the epoch will be Besselian (assuming a tropical year
         of 365.242198781 days).
-    :type julian: bool
-    :param asstring: 
+    :param bool asstring: 
         If True, a string of the form 'J2000.0' will be returned. If it is an
         integer, the number sets the number of significant figures in the output
         string Otherwise, scalars are returned (an int if a whole year, float if
         not).
-    :type asstring: bool
+    :param bool mjd:
+        If True, a modified julian date is returned instead of the standard
+        julian date.
     
     :returns: 
         The epoch as a string (or list of strings if `jd` was array-like) if
@@ -504,6 +503,9 @@ def jd_to_epoch(jd,julian=True,asstring=False):
         jd = calendar_to_jd(None)
     else:
         jd = np.array(jd,copy=False)
+        
+    if mjd:
+        jd += mjdoffset
     
     if julian:
         epoch = 2000.0 + (jd - 2451545.0)/365.25
@@ -531,19 +533,21 @@ def jd_to_epoch(jd,julian=True,asstring=False):
         else:
             return epoch
 
-def epoch_to_jd(epoch,julian=True):
+def epoch_to_jd(epoch,julian=True,mjd=False):
     """
     Converts a Julian or Besselian Epoch to a Julian Day.
     
     :param epoch: The epoch as a decimal year.
     :type epoch: string, scalar, or array-like
-    :param julian: 
+    :param bool julian: 
         If True, a Julian Epoch will be used (the year is exactly 365.25 days
         long). Otherwise, the epoch will be Besselian (assuming a tropical year
         of 365.242198781 days). If `epoch` is a string and starts with 'B' or
         'J', this parameter will be ignored, and the 'B' or 'J' specifies the
         epoch type.
-    :type julian: bool
+    :param bool mjd:
+        If True, a modified julian date is returned instead of the standard
+        julian date.
     
     :returns: The Julian Day as a float or array (if `epoch` is array-like)
     
@@ -562,10 +566,16 @@ def epoch_to_jd(epoch,julian=True):
         if epoch.dtype.kind == 'S':
             return np.array([epoch_to_jd(e,julian) for e in epoch])
     
+    
     if julian:
-        return (epoch - 2000)*365.25 + 2451545.0
+        res = (epoch - 2000)*365.25 + 2451545.0
     else:
-        return (epoch - 1900)*365.242198781 + 2415020.31352
+        res = (epoch - 1900)*365.242198781 + 2415020.31352
+    
+    if mjd:
+        return res - mjdoffset
+    else:
+        return res
 
     
 def delta_AT(jdutc,usett=False):
