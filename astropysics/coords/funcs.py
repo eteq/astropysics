@@ -446,25 +446,46 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
         
     return (pos1-pos2).seperation3d(d1,d2)
 
-def radec_str_to_decimal(ra,dec):
-    if isinstance(ra,basestring):
-        if not isinstance(dec,basestring):
-            raise ValueError('either both ra and dec must be a strings or neither')
-        
-        ra = AngularCoordinate(ra,sghms=True).d
-        dec = AngularCoordinate(dec,sghms=False).d
-    else:
-        if isinstance(dec,basestring):
-            raise ValueError('either both ra and dec must be a strings or neither')   
+def radec_str_to_decimal(*args):
+    """
+    Convert a sequence of string coordinate specifiers to decimal degree arrays.
+    
+    Two input forms are accepted:
+    
+    * `radec_str_to_decimal(rastrs,decstrs)`
+        In this form, `rastrs` and `decstrs` are sequences of strings with the
+        RA and Dec, respectively.  
+    * `radec_str_to_decimal(radecstrs)`
+        In this form, `radecstrs` is a sequence of strings in any form accepted
+        by the :class:`EquatorialCoordinatesBase` constructor. (typically
+        canonical from like 17:43:54.23 +32:23:12.3)
+    
+    :returns: 
+        (ras,decs) where `ras` and `decs` are  :class:`ndarrays <numpy.ndarray>`
+        specifying the ra and dec in decimal degrees.
+    
+    """
+    from .coordsys import AngularCoordinate,ICRSCoordinates
+    from itertools import izip
+    
+    if len(args)==1:
+        for s in args[0]:
+            c = ICRSCoordinates(s)
+            ras.append(c.ra.d)
+            decs.append(c.dec.d)
+    elif len(args)==2:
+        ra,dec = args
         if len(ra) != len(dec):
             raise ValueError("length of ra and dec don't match")
         
         ras,decs=[],[]
-        for r,d in zip(ra,dec):
+        for r,d in izip(ra,dec):
             ras.append(AngularCoordinate(r,sghms=True).d)
             decs.append(AngularCoordinate(d,sghms=False).d)
-        ra,dec = ras,decs
-    return ra,dec
+    else:
+        raise ValueError('radec_str_to_decimal only accepts (rastr,decstr) or (radecstr)')
+    
+    return np.array(ras),np.array(decs)
 
 def match_coords(a1,b1,a2,b2,eps=1,multi=False):
     """
