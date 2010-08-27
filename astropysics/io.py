@@ -67,7 +67,7 @@ def _get_package_data(dataname):
 
 #<-----------------------General IO utilities---------------------------------->
 
-def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
+def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,updatedict=None,**kwargs):
     """
     Load a text file into a structured numpy array where the field names and
     types are inferred from a line (typically the first) in the file.
@@ -93,14 +93,22 @@ def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
     :type fn: string
     :param fieldline: The line number that has the field information. 
     :type fieldline: int
-    :param asrecarray: 
+    :param bool asrecarray: 
         If True, returns a :class:`numpy.recarray`. Otherwise, returns a regular
         :class:`numpy.ndarray` with a structured dtype.
-    :type asrecarray: 
+    :param updatedict: 
+        A dictionary that will be updated with the loaded data such that the
+        keys are the field names and the values are arrays with the data. If
+        None, this will be ignored. 
+    :type updatedict: dict or None
     
     extra keywords are passed into :func:`numpy.loadtxt`
     
     :returns: A numpy record array or regular array with data from the text file.
+    
+    .. note::
+        The `updatedict` parameter is seful for injecting the loaded file into
+        the local namespace: ``loadtxt_text_fields(...,updatedict=locals())``.
     
     """
     
@@ -156,6 +164,10 @@ def loadtxt_text_fields(fn,fieldline=1,asrecarray=True,**kwargs):
         
     for fin,expr in exprd.iteritems():
         arr[fin] = eval(expr,globals(),ldict)
+        
+    if updatedict is not None:
+        d = dict([(fi,arr[fi]) for fi in arr.dtype.names])
+        updatedict.update(d)
     
     if asrecarray:
         return arr.view(np.recarray)
@@ -439,11 +451,27 @@ class FixedColumnDataParser(object):
 @_add_docs(FixedColumnDataParser)   
 def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
                                 columnsep=None,maxcols=None,oneindexed=True,
-                                maskedarray=False):
+                                maskedarray=False,updatedict=None):
     """
     Loads a fixed column data file using :class:`FixedColumnDataParser`. 
     
-    If `fncol` is None, it will assumed to be the same as `fn`.
+    :param fncol: 
+        The file from which to load the column data. If None, it will assumed to
+        be the same as `fn`.
+    
+    :param updatedict:
+        A dictionary that will be updated with the loaded data such that the
+        keys are the field names and the values are arrays with the data. If
+        None, it will be ignored.
+        
+    For other arguments see extra documentation below and
+    :class:`FixedColumnDataParser`.
+    
+    Additional keywords are passed into :func:`numpy.loadtxt`.
+    
+    :returns: 
+        :class:`~numpy.recarray` or a regular :class:`~numpy.ndarray` with data
+        loaded from the text file.
     
     :meth:`FixedColumnDataParser.parseFile` describes the return types and 
     `maskedarray` parameter:
@@ -453,14 +481,19 @@ def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnline
     :meth:`FixedColumnDataParser.addColumnsFromFile`:
     {docstr:addColumnsFromFile}
     
-    For other arguments see :class:`FixedColumnDataParser`
+    
     
     """
     if fncol is None:
         fncol = fn
     fcp = FixedColumnDataParser(skiprows,oneindexed,comments)
     fcp.addColumnsFromFile(fncol,columnlinestart,columnsep,True,maxcols)
-    return fcp.parseFile(fn,maskedarray=maskedarray)
+    
+    arr = fcp.parseFile(fn,maskedarray=maskedarray)
+    if updatedict is not None:
+        d = dict([(fi,arr[fi]) for fi in arr.dtype.names])
+        updatedict.update(d)
+    return arr
 
 def load_tipsy_format(fn):
     """
