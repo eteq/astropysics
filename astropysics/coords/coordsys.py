@@ -1202,7 +1202,6 @@ class LatLongCoordinates(CoordinateSystem):
         for k in LatLongCoordinates.__slots__:
             setattr(k,d[k])
             
-    _dpc = None #default distance should be infinity
     def _getDistancepc(self):
         if callable(self._dpc):
             return self._dpc()
