@@ -1632,7 +1632,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         decstr = self.dec.getDmsStr(canonical=True)
         #2.6 required for format
         #return '{3}: {0} {1} ({2})'.format(rastr,decstr,self.epoch,self.__class__.__name__)
-        return  '%s %f %f %s'%(self.__class__.__name__,rastr,decstr,self.epoch)
+        return  '%s: %s %s %s'%(self.__class__.__name__,rastr,decstr,self.epochstr)
     
     
     def __init__(self,*args,**kwargs):
