@@ -524,8 +524,8 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
             Retuns the same values as 'mask', and a warning will be issued if
             more than one match is found. 
         * 'count'
-            Like 'mask', but with counts of matches instead of a boolean
-            True/False mask.
+            Returns a 2-tuple (nmatch1,nmatch2) with the number of objects that
+            matched for each of the two sets of coordinate systems.
         * 'index'
             Returns a 2-tuple of integer arrays (ind1,ind2) where `ind1` matches
             the shape of the first coordinate set, and `ind2` matches the
