@@ -573,7 +573,7 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
         return At.T-Bt
     sep1 = find_sep(a1,a2)
     sep2 = find_sep(b1,b2)
-    sep = np.abs((sep1*sep1+sep2*sep2)**0.5 - eps)
+    sep = np.hypot(sep1,sep2)
     
     matches =  sep <= eps
     
