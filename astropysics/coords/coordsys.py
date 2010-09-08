@@ -79,8 +79,10 @@ class AngularCoordinate(object):
     import re as _re
     __slots__=('_decval','_range')
     
+    #this disturbingly complex RE matches anything that looks like a standard sexigesimal or similar string
     __acregex = _re.compile(r'(?:([+-])?(\d+(?:[.]\d*)?)(hours|h|degrees|d|radians|rads|rad|r| |:(?=\d+:\d+[.]?\d*$)))?(?:(\d+(?:[.]\d*)?)(m|\'|[:]| ))?(?:(\d+(?:[.]\d*)?)(s|"|$))?$')
-    __decregex = _re.compile(r'[+-]\d+([.]\d*)') 
+    #and this one matches all things that look like raw numbers
+    __decregex = _re.compile(r'[+-]?\d+([.]\d*)?$') 
     
     def __init__(self,inpt=None,sghms=None,range=None,radians=False):
         """
@@ -177,45 +179,46 @@ class AngularCoordinate(object):
             self._decval = 0
         elif isinstance(inpt,basestring):
             sinpt = inpt.strip()
-            acm = self.__acregex.match(sinpt)
-            if acm:
-                sgn,dec1,mark1,dec2,mark2,dec3,mark3 = acm.group(1,2,3,4,5,6,7)
-                val = (0 if dec1 is None else float(dec1)) + \
-                      (0 if dec2 is None else float(dec2)/60) + \
-                      (0 if dec3 is None else float(dec3)/3600)
-                if sgn == '-':
-                    val *= -1
-                if mark1 == ':' or mark1 == ' ':
-                    if sghms is None:
-                        if sgn is None:
-                            self.hours = val
-                        else: #'+' or '-'
-                            self.degrees = val
-                    elif sghms:
-                        self.hours = val
-                    else:
-                        self.degrees = val
-                elif mark1 == 'hours' or mark1 == 'h':
-                    self.hours = val
-                elif mark1 == 'degrees' or mark1 == 'd':
-                    self.degrees = val
-                elif mark1 == 'radians' or mark1 == 'rad' or mark1 == 'rads' or mark1=='r':
-                    self.radians = val
+            
+            decm = self.__decregex.match(sinpt)
+            if decm:
+                if radians:
+                    self.radians = float(decm.group(0))
                 else:
-                    try:
-                        if radians:
-                            self.radians = float(val)
-                        else:
-                            self.degrees = float(val)
-                    except ValueError:
-                        raise ValueError('invalid string input for AngularCoordinate')
+                    self.degrees = float(decm.group(0))
             else:
-                decm = self.__decregex.match(sinpt)
-                if decm:
-                    if radians:
-                        self.radians = float(decm.group(0))
+                acm = self.__acregex.match(sinpt)
+                if acm:
+                    sgn,dec1,mark1,dec2,mark2,dec3,mark3 = acm.group(1,2,3,4,5,6,7)
+                    val = (0 if dec1 is None else float(dec1)) + \
+                          (0 if dec2 is None else float(dec2)/60) + \
+                          (0 if dec3 is None else float(dec3)/3600)
+                    if sgn == '-':
+                        val *= -1
+                    if mark1 == ':' or mark1 == ' ':
+                        if sghms is None:
+                            if sgn is None:
+                                self.hours = val
+                            else: #'+' or '-'
+                                self.degrees = val
+                        elif sghms:
+                            self.hours = val
+                        else:
+                            self.degrees = val
+                    elif mark1 == 'hours' or mark1 == 'h':
+                        self.hours = val
+                    elif mark1 == 'degrees' or mark1 == 'd':
+                        self.degrees = val
+                    elif mark1 == 'radians' or mark1 == 'rad' or mark1 == 'rads' or mark1=='r':
+                        self.radians = val
                     else:
-                        self.degrees = float(decm.group(0))
+                        try:
+                            if radians:
+                                self.radians = float(val)
+                            else:
+                                self.degrees = float(val)
+                        except ValueError:
+                            raise ValueError('invalid string input for AngularCoordinate')
                 else:
                     raise ValueError('Invalid string input for AngularCoordinate: '+inpt)
             
