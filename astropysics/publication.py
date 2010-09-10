@@ -36,6 +36,10 @@ Module API
 
 """
 
+#TODO: accept things after first document env
+#TODO: get \cmd[]{a}{b} syntax right
+#TODO:prep functions
+
 from __future__ import division,with_statement
 import re as _re
 
@@ -71,18 +75,15 @@ class TeXNode(object):
         self.parent = parent
         self.children = []
     
-    def getChildrenText(self):
-        """
-        Returns the text for the child nodes (or empty string if leaf)
-        """
-        txt = [c() for c in self.children]
-        return ''.join(txt)
-    
     @abstractmethod
     def getSelfText(self):
         """
         Subclass implementations must return a 2-tuple of strings such that
-        the child text goes in between the tuple elements.
+        the child text goes in between the tuple elements. Alternatively, it can
+        return a 3-tuple (before,between,after), and the resulting text will be
+        "<beforetext><childtext1><between><childtext2>...<after>". Or, if
+        n-tuple where n>3, n must equal nchildren+1, and will be used as the
+        strings to join all the children (in order).
         """
         raise NotImplementedError
     
@@ -91,9 +92,24 @@ class TeXNode(object):
         Returns the text associated with this node, composed by combining 
         the self text and children text
         """
-        st1,st2 = self.getSelfText()
-        return st1 + self.getChildrenText() + st2
-    
+        st = self.getSelfText()
+        if len(st) == 2:
+            st1,st2 = st
+            return st1 + ''.join([c() for c in self.children]) + st2
+        elif len(st) == 3:
+            st1,btwn,st3 = st
+            return st1 + btwn.join([c() for c in self.children]) + st2
+        elif len(st) == len(self.children)+1:
+            strlst = []
+            for s,cobj in zip(st,self.children):
+                strlst.append(s)
+                strlst.append(cobj())
+            strlst.append(st[-1])
+            return ''.join(strlist)
+        else:
+            raise TypeError('Self text for node '+str(self)+' is invalid length')
+        
+        
     def isLeaf(self):
         """
         Returns True if this node is a leaf (has no children)
@@ -124,9 +140,22 @@ class TeXFile(TeXNode):
         """
         if isinstance(f,basestring):
             f = f.split('\n')
+        
+        preamblecontent = []
+        doccontent = None
         for l in f:
-            
-            raise NotImplementedError
+            if docontent is None:
+                if '\begin{document}' in l:
+                    doccontent = [l]
+                else:
+                    preamblecontent.append(l)
+            else:
+                doccontent.append(l)
+        preamblestr = '\n'.join(preamblecontent)+'\n'
+        docstr = '\n'.join(doccontent)+'\n'
+        
+        self.children.append(Preamble(self,preamblestr))
+        self.children.append(Document(self,docstr))
     
     def save(fn):
         with open(fn,'w') as f:
@@ -155,34 +184,29 @@ class Newline(TeXt):
     def __init__(self,parent):
         self.parent = parent
     
-class Preamble(TeXNode):
-    """
-    TODO:DOC
-    """
-    def __init__(self,parent,content):
-        self.parent = parent
-        self.children = []
-        
-        raise NotImplementedError
-    
-    
+#<-----------------Useful regexes for parsing documents------------------------>
+#this finds anything that begins with \begin{<name>} and ends with \end{<name}
+#group 1 is the whole env, 2 is the name, 3 is the content
+_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
+#This finds anthing like \command{...}{...}... w/ group 1  is the command name
+#and 2 the arguments including all braces (or a whitespace) 
+_commandre = _re.compile(r'\\(.*?)((?:{.*})|\W)')
+ 
 class Environment(TeXNode):
     """
     A LaTex environment.  
     
     *Subclassing*
-    Subclasses should implement the :meth:`parse` method - see the method for 
-    syntax.  They must also be registered with the :meth:`registerEnvironment` 
+    Subclasses must implement the :meth:`parse` method - see the method for 
+    syntax.  They should also be registered with the :meth:`registerEnvironment` 
     static method to have them be parsed with the default :class:`TeXFile` 
-    parser.
+    parser. Generally, they should also have a class attribute named `envname`
+    that gives the name of the environment (this name will be automatically used
+    to determine which environments the subclass represents)
     
     """
     
-    #this finds anything that begins with \begin{<name>} and ends with \end{<name}
-    #group 1 is the whole env, 2 is the name, 3 is the content
-    _envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
-    #This finds anthing like \command{...}{...}... w/ group 1 the whole command
-    _commandre = _re.compile(r'(\\.*?(?:{.*})*)\W') 
+    
     
     def __init__(self,parent,content,envname=None):
         """
@@ -192,7 +216,7 @@ class Environment(TeXNode):
         self.children = c = []
         
         if envname is not None:
-            self.envname = envname
+            self.name = name
         elif not hasattr(self,'name'):
             raise ValueError('Environment must have a name')
         
@@ -200,11 +224,13 @@ class Environment(TeXNode):
         #now split out nested environments and commands and build them 
         splitenv = self._envre.split(content) 
         envstrs = splitenv[1::4]
-        for i,txts in eumerate(slitenv[::4]):
-            #for each text chunk, split out the command nodes
+        for i,txts in eumerate(slpitenv[::4]):
+            #for each text chunk, split out the command nodes and then add
+            #the chunks back to the contentlist
             splitcomm = _commandre.split(txts)
-            for i in range(1,len(splitcomm),2):
-                splitcomm[i] = command_factory(self,splitcomm[i])
+            for j in reversed(range(1,len(splitcomm),3)):
+                splitcomm[j] = Command(self,(splitcomm[j],splitcomm[j+1]))
+                del splitcomm[j+1]
             contentl.extend(splitcomm)
             if i < len(envstrs):
                 contentl.append(environment_factory(self,envstrs[i]))
@@ -228,22 +254,24 @@ class Environment(TeXNode):
     def parse(self,contentlist):
         """
         This method should be overridden in subclasses to add particular 
-        children or functionality.  
+        children or other functionality.  It is called when the class is 
+        initially created from some text content.
         
         :param contentlist: 
             A list of :class:`Command` nodes, :class:`Environment` nodes, and/or
             strings that contain the in-order content of this environment.
         :returns: 
-            A list of :class:`TeXNode` objects possibly interspersed with strings. Strings will be
-            automatically converted to :class:`TeXt` nodes.
+            A list of :class:`TeXNode` objects possibly interspersed with
+            strings. These strings will be converted to :class:`TeXt` nodes in
+            the resulting environment.
         
         """
         
         return contentlist
     
     def getSelfText(self):
-        b = '\\begin{'+self.envname+'}'
-        e = '\\end{'+self.envname+'}'
+        b = '\\begin{'+self.name+'}'
+        e = '\\end{'+self.name+'}'
         return (b,e)
     
     #used for static functions on the registry
@@ -255,17 +283,21 @@ class Environment(TeXNode):
         Registers the provided `envclass` in the environment registry.  Also
         returns the class to allow use as a decorator.
         
+        :param envclass: 
+            The :class:`Environment` object to be registered.
+        
         :except TypeError: 
             If the provided class is not a :class:`Environment` subclass. 
         :except ValueError: 
-            If the :attr:`envname` attribute matches one already in the registry.
+            If the :attr:`name` attribute of `envclass` matches one already in 
+            the registry.
         """
         if not issubclass(envclass,Environment):
             raise TypeError('envclass must be an Environment subclass')
         for e in Environment._registry:
-            if envclass.envname in Environment._registry:
-                raise ValueError('envname %s already present in class %s'%(envclass.envname,e))
-        Environment._registry[envclass.envname] = envclass
+            if envclass.name in Environment._registry:
+                raise ValueError('Environment name %s already present in class %s'%(envclass.name,e))
+        Environment._registry[envclass.name] = envclass
         return envclass
     
     @staticmethod
@@ -276,15 +308,15 @@ class Environment(TeXNode):
         
         :param envclass: 
             The :class:`Environment` object to be removed, or its associated
-            envname.
+            name.
         """
         if isinstance(envclass,basestring):
             del Environment._registry[envclass]
         else:
-            regclass = Environment._registry.pop(envclass.envname)
+            regclass = Environment._registry.pop(envclass.name)
             if regclass is not envclass:
-                Environment._registry[envclass.envname] = regclass
-                raise KeyError("envname %s found, but doesn't match class %s"%(envclass.envname,envclass))
+                Environment._registry[envclass.name] = regclass
+                raise KeyError("Environment name %s found, but doesn't match class %s"%(envclass.name,envclass))
         
     @staticmethod
     def getEnvironments():
@@ -311,23 +343,80 @@ def environment_factory(parent,texstr):
     
 @Environment.registerEnvironment
 class Document(Environment):
-    envname = 'document'
+    name = 'document'
 
 @Environment.registerEnvironment
 class Figure(Environment):
-    envname = 'figure'
+    name = 'figure'
 
 class Command(TeXNode):
+    """
+    A LaTeX command (anything with leading backslash and possible arguments
+    that isn't an environment)
+    """
+    children = None #A command is always a leaf
+    def __init__(self,parent,content):
+        """
+        Content can either be a string with the command text, or a (name,args)
+        tuple where args is a sequence of strings or a string '{arg1}{arg2}...'
+        """
+        if isinstance(content,basestring):
+            if not content.startswith('\\'):
+                raise ValueError("Tried to make a Command that doesn't start with a backslash")
+            curlyind = content[1:].find('{')
+            if curlyind > -1:
+                cmdname,args = content[1:curlyind],content[curlyind:]
+            else:
+                cmdname = content[1:]
+                args = tuple()
+        elif len(content)==2:
+            cmdname,args = content
+        else:
+            raise ValueError('Invalid content passed to Command')
+        
+        if isinstance(args,basestring):
+            if not (args.startswith('{') and args.endswith('}')):
+                raise ValueError('Invalid argument string')
+            args = args[1:-1].split('}{')
+        
+        self.parent = parent 
+        self.name = cmdname
+        self.arguments = args
+        
+    @property
+    def nargs(self):
+        return len(self.arguments)
+        
+    def getSelfText(self):
+        return ('\\'+self.name+'{','}{','}')
+        
+class Preamble(TeXNode):
     """
     TODO:DOC
     """
     def __init__(self,parent,content):
-        raise NotImplementedError 
-
-def command_factory(parent,texstr):
-    raise NotImplementedError 
+        #find and split out commands
+        contentl = _commandre.split(content)
+        for i in reversed(range(1,len(contentl),3)):
+            contentl[i] = Command(self,(contentl[i],contentl[i+1]))
+            del contentl[i+1]
+            
+        #Now populate with TeXt and newlines
+        for i in reversed(range(0,len(contentl),2)):
+            txt = contentl[i]
+            del contentl[i]
+            for subtxt in '\n'.split(txt):
+                if subtxt != '':
+                    contentl.insert(i,TeXt(self,subtxt))
+                    i+=1
+                contentl.insert(i,Newline(self))
+                i+=1
+            del contentl[i-1] #remove final Newline - split has them inbetween
+            
+        self.parent = parent
+        self.children = contentl
     
-    
+        
 #issue warning if abstract too long
 #strip comments
 #copy over bbl if necessary
