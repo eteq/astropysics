@@ -36,8 +36,6 @@ Module API
 
 """
 
-#TODO: accept things after first document env
-#TODO: get \cmd[]{a}{b} syntax right
 #TODO:prep functions
 
 from __future__ import division,with_statement
@@ -78,34 +76,33 @@ class TeXNode(object):
     @abstractmethod
     def getSelfText(self):
         """
-        Subclass implementations must return a 2-tuple of strings such that
-        the child text goes in between the tuple elements. Alternatively, it can
+        Subclass implementations must return a 2-tuple of strings such that the
+        child text goes in between the tuple elements. Alternatively, it can
         return a 3-tuple (before,between,after), and the resulting text will be
-        "<beforetext><childtext1><between><childtext2>...<after>". Or, if
-        n-tuple where n>3, n must equal nchildren+1, and will be used as the
-        strings to join all the children (in order).
+        "<beforetext><childtext1><between><childtext2>...<after>". It can also
+        be None, in which case just the strings from the children will be
+        returned. Otherwise, it can return a string, which will be returned as
+        the full text.
         """
         raise NotImplementedError
     
     def __call__(self):
         """
         Returns the text associated with this node, composed by combining 
-        the self text and children text
+        the self text and children text (or just the self text if 
+        :meth:`getSelfText` returns a string)
         """
         st = self.getSelfText()
-        if len(st) == 2:
+        if st is None:
+            return ''.join([c() for c in self.children])
+        elif isinstance(st,basestring):
+            return st
+        elif len(st) == 2:
             st1,st2 = st
             return st1 + ''.join([c() for c in self.children]) + st2
         elif len(st) == 3:
-            st1,btwn,st3 = st
+            st1,btwn,st2 = st
             return st1 + btwn.join([c() for c in self.children]) + st2
-        elif len(st) == len(self.children)+1:
-            strlst = []
-            for s,cobj in zip(st,self.children):
-                strlst.append(s)
-                strlst.append(cobj())
-            strlst.append(st[-1])
-            return ''.join(strlist)
         else:
             raise TypeError('Self text for node '+str(self)+' is invalid length')
         
@@ -124,7 +121,7 @@ class TeXNode(object):
     
 class TeXFile(TeXNode):
     """
-    TODO:DOC
+    A TeX Document loaded from a file.
     """
     def __init__(self,fn=None):
         self.parent = None
@@ -132,7 +129,7 @@ class TeXFile(TeXNode):
         if fn is not None:
             with open(fn) as f:
                 s = f.read()
-            self._parse(str)
+            self._parse(s)
     
     def _parse(self,f):
         """
@@ -142,22 +139,30 @@ class TeXFile(TeXNode):
             f = f.split('\n')
         
         preamblecontent = []
-        doccontent = None
+        content = None
         for l in f:
-            if docontent is None:
-                if '\begin{document}' in l:
-                    doccontent = [l]
+            if content is None:
+                if r'\begin{document}' in l:
+                    content = [l]
                 else:
                     preamblecontent.append(l)
             else:
-                doccontent.append(l)
+                content.append(l)
         preamblestr = '\n'.join(preamblecontent)+'\n'
-        docstr = '\n'.join(doccontent)+'\n'
+        contentstr = '\n'.join(content)+'\n'
         
-        self.children.append(Preamble(self,preamblestr))
-        self.children.append(Document(self,docstr))
-    
-    def save(fn):
+        self.preamble = Preamble(self,preamblestr)
+        self.children = _text_to_nodes(self,contentstr)
+        self.children.insert(0,self.preamble)
+    def getSelfText(self):
+        return None
+        
+    def save(self,fn):
+        """
+        Save the content of this object to a new file.
+        
+        :param str fn: The name of the file to save.
+        """
         with open(fn,'w') as f:
             f.write(self())
     
@@ -188,10 +193,12 @@ class Newline(TeXt):
 #this finds anything that begins with \begin{<name>} and ends with \end{<name}
 #group 1 is the whole env, 2 is the name, 3 is the content
 _envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
-#This finds anthing like \command{...}{...}... w/ group 1  is the command name
-#and 2 the arguments including all braces (or a whitespace) 
-_commandre = _re.compile(r'\\(.*?)((?:{.*})|\W)')
- 
+#This finds anthing like \command{...}{...}... w/ group 1  is the command name,
+# 2 the arguments
+_commandre = _re.compile(r'\\(.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|\s)')
+#_commandre = _re.compile(r'\\(.*?)(?:(?:((?:\[.*?\])*)((?:{.*?})+))|\s)') # group 1  is the command name, 2 the optional arguments, and 3 the required arguments (including all braces)
+#_commandre = _re.compile(r'\\(.*?)((?:{.*})|\W)')
+#_commandre = _re.compile(r'\\(.*?)((?:{.*})|(?:\[.*})|\s)')
 class Environment(TeXNode):
     """
     A LaTex environment.  
@@ -203,10 +210,7 @@ class Environment(TeXNode):
     parser. Generally, they should also have a class attribute named `envname`
     that gives the name of the environment (this name will be automatically used
     to determine which environments the subclass represents)
-    
     """
-    
-    
     
     def __init__(self,parent,content,envname=None):
         """
@@ -216,58 +220,14 @@ class Environment(TeXNode):
         self.children = c = []
         
         if envname is not None:
-            self.name = name
+            self.name = envname
         elif not hasattr(self,'name'):
             raise ValueError('Environment must have a name')
         
-        contentl = []
-        #now split out nested environments and commands and build them 
-        splitenv = self._envre.split(content) 
-        envstrs = splitenv[1::4]
-        for i,txts in eumerate(slpitenv[::4]):
-            #for each text chunk, split out the command nodes and then add
-            #the chunks back to the contentlist
-            splitcomm = _commandre.split(txts)
-            for j in reversed(range(1,len(splitcomm),3)):
-                splitcomm[j] = Command(self,(splitcomm[j],splitcomm[j+1]))
-                del splitcomm[j+1]
-            contentl.extend(splitcomm)
-            if i < len(envstrs):
-                contentl.append(environment_factory(self,envstrs[i]))
+        self.children = self.postParse(_text_to_nodes(self,content))
         
-        parsed = self.parse(contentl)
-        
-        #now add all the nodes to the child list, 
-        #transforming text into TeXt and maybe Newlines if present
-        for p in parsed:
-            if isinstance(p,basestring):
-                c.append(Newline(self))
-                for txt in p.split('\n'):
-                    c.append(TeXt(self,txt))
-                    c.append(Newline(self))
-                
-            elif isinstance(p,TeXNode):
-                c.append(p)
-            else:
-                raise TypeError('invalid item returned from parsing %s: %s'+(self.__class__,p))
-        
-    def parse(self,contentlist):
-        """
-        This method should be overridden in subclasses to add particular 
-        children or other functionality.  It is called when the class is 
-        initially created from some text content.
-        
-        :param contentlist: 
-            A list of :class:`Command` nodes, :class:`Environment` nodes, and/or
-            strings that contain the in-order content of this environment.
-        :returns: 
-            A list of :class:`TeXNode` objects possibly interspersed with
-            strings. These strings will be converted to :class:`TeXt` nodes in
-            the resulting environment.
-        
-        """
-        
-        return contentlist
+    def postParse(self,nodes):
+        return nodes
     
     def getSelfText(self):
         b = '\\begin{'+self.name+'}'
@@ -334,7 +294,7 @@ def environment_factory(parent,texstr):
     enstart = texstr.index('{')+1
     enend = texstr.index('}')
     envname = texstr[enstart:enend]
-    content = texstr[enend+1:textstr.rindex('\\end')]
+    content = texstr[enend+1:texstr.rindex('\\end')]
     if envname in Environment._registry:
         envcls = Environment._registry[envname]
         return envcls(parent,content)
@@ -349,73 +309,172 @@ class Document(Environment):
 class Figure(Environment):
     name = 'figure'
 
+class RequiredArgument(TeXNode):
+    """
+    An argument to a macro that is required (i.e. enclosed in curly braces)
+    """
+    children = None #arguments are always a leaf
+    def __init__(self,parent,text):
+        self.parent = parent
+        self.text = text
+        
+    def getSelfText(self):
+        return self.text
+    
+class OptionalArgument(TeXNode):
+    """
+    An argument to a macro that is required (i.e. enclosed in square brackets)
+    """
+    children = None #arguments are always a leaf
+    def __init__(self,parent,text):
+        self.parent = parent
+        self.text = text
+        
+    def getSelfText(self):
+        return self.text
+
+_cmdargsepre = _re.compile(r'}|\]')
 class Command(TeXNode):
     """
     A LaTeX command (anything with leading backslash and possible arguments
     that isn't an environment)
     """
-    children = None #A command is always a leaf
     def __init__(self,parent,content):
         """
         Content can either be a string with the command text, or a (name,args)
-        tuple where args is a sequence of strings or a string '{arg1}{arg2}...'
+        tuple where args is a sequence of strings or a string 
+        '{arg1}[oarg1]{arg2}...'
         """
         if isinstance(content,basestring):
             if not content.startswith('\\'):
                 raise ValueError("Tried to make a Command that doesn't start with a backslash")
-            curlyind = content[1:].find('{')
-            if curlyind > -1:
-                cmdname,args = content[1:curlyind],content[curlyind:]
+            curlyind = content.find('{')
+            squareind = content.find('[')
+            if curlyind==-1:
+                if squareind==-1:
+                    cmdname = content[1:]
+                    args = ''
+                else:
+                    cmdname = content[1:squareind]
+                    args = content[squareind:]
+            elif squareind==-1:
+                cmdname = content[1:curlyind]
+                args = content[curlyind:]
             else:
-                cmdname = content[1:]
-                args = tuple()
+                ind = min(curlyind,squareind)
+                cmdname = content[1:ind]
+                args = content[ind:]
         elif len(content)==2:
             cmdname,args = content
         else:
             raise ValueError('Invalid content passed to Command')
         
-        if isinstance(args,basestring):
-            if not (args.startswith('{') and args.endswith('}')):
-                raise ValueError('Invalid argument string')
-            args = args[1:-1].split('}{')
-        
         self.parent = parent 
         self.name = cmdname
-        self.arguments = args
+        
+        if args.strip() == '':
+            self.children = []
+        else:
+            argspl = _cmdargsepre.split(args)
+            argnodes = []
+            #last one should always be empty string
+            assert argspl[-1] == ''
+            argspl = argspl[:-1]
+            for a in argspl:
+                if a[0]=='{':
+                    argnodes.append(RequiredArgument(self,a[1:]))
+                elif a[0]=='[':
+                    argnodes.append(OptionalArgument(self,a[1:]))
+                else:
+                    raise ValueError('invalid set of arguments '+args)
+            
+            self.children = argnodes
         
     @property
-    def nargs(self):
-        return len(self.arguments)
+    def reqargs(self):
+        """
+        A list of strings with the text of the required arguments (arguments 
+        enclosed in curly braces).
+        """
+        return [c.text for c in self.children if isinstance(c,RequiredArgument)]
+        
+    @property
+    def optargs(self):
+        """
+        A list of strings with the text of the optional arguments (arguments 
+        enclosed in square brackets)
+        """
+        return [c.text for c in self.children if isinstance(c,OptionalArgument)]
         
     def getSelfText(self):
-        return ('\\'+self.name+'{','}{','}')
-        
+        args = ['\\',self.name]
+        for c in self.children:
+            if isinstance(c,RequiredArgument):
+                args.append('{'+c.text+'}')
+            elif isinstance(c,OptionalArgument):
+                args.append('['+c.text+']')
+            else:
+                raise TypeError('Command children should be RequiredArguments or OptionalArguments')
+        return ''.join(args)
+    
+    def __str__(self):
+        return 'Command@%i:%s'%(id(self),self.name)
+    
 class Preamble(TeXNode):
     """
-    TODO:DOC
+    The preamble of a TeX File (i.e. everything before \begin{document} )
     """
     def __init__(self,parent,content):
-        #find and split out commands
-        contentl = _commandre.split(content)
-        for i in reversed(range(1,len(contentl),3)):
-            contentl[i] = Command(self,(contentl[i],contentl[i+1]))
-            del contentl[i+1]
-            
-        #Now populate with TeXt and newlines
-        for i in reversed(range(0,len(contentl),2)):
-            txt = contentl[i]
-            del contentl[i]
-            for subtxt in '\n'.split(txt):
-                if subtxt != '':
-                    contentl.insert(i,TeXt(self,subtxt))
-                    i+=1
-                contentl.insert(i,Newline(self))
-                i+=1
-            del contentl[i-1] #remove final Newline - split has them inbetween
-            
         self.parent = parent
-        self.children = contentl
+        self.children = _text_to_nodes(self,content)
+        
+        self.docclass = None
+        self.packages = []
+        for c in self.children:
+            if isinstance(c,Command):
+                if c.name == 'documentclass':
+                    self.docclass = c.reqargs[0]
+                if c.name == 'usepackage':
+                    self.packages.append(c.reqargs[0])
+                
+    def getSelfText(self):
+        return None
+
+def _text_to_nodes(parent,txt):
+    """
+    Converts a string into a list of corresponding TeXNodes, splitting out
+    commands, environments, and Newlines.
+    """
+    txtl = []
+    #now split out nested environments and commands and build them 
+    splitenv = _envre.split(txt) 
+    envstrs = splitenv[1::4]
+    for i,txts in enumerate(splitenv[::4]):
+        #for each text chunk, split out the command nodes and then add
+        #the chunks back to the contentlist
+        splitcomm = _commandre.split(txts)
+        for j in reversed(range(1,len(splitcomm),3)):
+            splitcomm[j] = Command(parent,(splitcomm[j],splitcomm[j+1]))
+            del splitcomm[j+1]
+        txtl.extend(splitcomm)
+        if i < len(envstrs):
+            txtl.append(environment_factory(parent,envstrs[i]))
     
+    #now add all the nodes to the child list, 
+    #transforming text into TeXt and maybe Newlines if present
+    contentl = []
+    for t in txtl:
+        if isinstance(t,basestring):
+            for txt in t.split('\n'):
+                contentl.append(TeXt(parent,txt))
+                contentl.append(Newline(parent))
+            del contentl[-1] #extra newline
+        elif isinstance(t,TeXNode):
+            contentl.append(t)
+        else:
+            raise TypeError('invalid item %s returned from parsing text to nodes'%t)
+    
+    return contentl
         
 #issue warning if abstract too long
 #strip comments
