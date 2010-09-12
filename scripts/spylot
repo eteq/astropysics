@@ -16,6 +16,8 @@
 import warnings
 warnings.filterwarnings('ignore','PyArray_FromDimsAndDataAndDescr: use PyArray_NewFromDescr.*'.lower())
 warnings.filterwarnings('ignore','the sets module is deprecated')
+from numpy import seterr
+seterr(all='ignore')
 
 import sys,os
 from optparse import OptionParser
