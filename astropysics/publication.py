@@ -149,11 +149,12 @@ class TeXFile(TeXNode):
             else:
                 content.append(l)
         preamblestr = '\n'.join(preamblecontent)+'\n'
-        contentstr = '\n'.join(content)+'\n'
+        contentstr = '\n'.join(content)
         
         self.preamble = Preamble(self,preamblestr)
-        self.children = _text_to_nodes(self,contentstr)
+        self.children = text_to_nodes(self,contentstr)
         self.children.insert(0,self.preamble)
+        
     def getSelfText(self):
         return None
         
@@ -188,17 +189,8 @@ class Newline(TeXt):
     text = '\n'
     def __init__(self,parent):
         self.parent = parent
-    
-#<-----------------Useful regexes for parsing documents------------------------>
-#this finds anything that begins with \begin{<name>} and ends with \end{<name}
-#group 1 is the whole env, 2 is the name, 3 is the content
-_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
-#This finds anthing like \command{...}{...}... w/ group 1  is the command name,
-# 2 the arguments
-_commandre = _re.compile(r'\\(.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|\s)')
-#_commandre = _re.compile(r'\\(.*?)(?:(?:((?:\[.*?\])*)((?:{.*?})+))|\s)') # group 1  is the command name, 2 the optional arguments, and 3 the required arguments (including all braces)
-#_commandre = _re.compile(r'\\(.*?)((?:{.*})|\W)')
-#_commandre = _re.compile(r'\\(.*?)((?:{.*})|(?:\[.*})|\s)')
+        
+
 class Environment(TeXNode):
     """
     A LaTex environment.  
@@ -224,7 +216,7 @@ class Environment(TeXNode):
         elif not hasattr(self,'name'):
             raise ValueError('Environment must have a name')
         
-        self.children = self.postParse(_text_to_nodes(self,content))
+        self.children = self.postParse(text_to_nodes(self,content))
         
     def postParse(self,nodes):
         return nodes
@@ -308,30 +300,6 @@ class Document(Environment):
 @Environment.registerEnvironment
 class Figure(Environment):
     name = 'figure'
-
-class RequiredArgument(TeXNode):
-    """
-    An argument to a macro that is required (i.e. enclosed in curly braces)
-    """
-    children = None #arguments are always a leaf
-    def __init__(self,parent,text):
-        self.parent = parent
-        self.text = text
-        
-    def getSelfText(self):
-        return self.text
-    
-class OptionalArgument(TeXNode):
-    """
-    An argument to a macro that is required (i.e. enclosed in square brackets)
-    """
-    children = None #arguments are always a leaf
-    def __init__(self,parent,text):
-        self.parent = parent
-        self.text = text
-        
-    def getSelfText(self):
-        return self.text
 
 _cmdargsepre = _re.compile(r'}|\]')
 class Command(TeXNode):
@@ -420,13 +388,67 @@ class Command(TeXNode):
     def __str__(self):
         return 'Command@%i:%s'%(id(self),self.name)
     
+class RequiredArgument(TeXNode):
+    """
+    An argument to a macro that is required (i.e. enclosed in curly braces)
+    """
+    children = None #arguments are always a leaf
+    def __init__(self,parent,text):
+        self.parent = parent
+        self.text = text
+        
+    def getSelfText(self):
+        return self.text
+    
+class OptionalArgument(TeXNode):
+    """
+    An argument to a macro that is required (i.e. enclosed in square brackets)
+    """
+    children = None #arguments are always a leaf
+    def __init__(self,parent,text):
+        self.parent = parent
+        self.text = text
+        
+    def getSelfText(self):
+        return self.text
+    
+class EnclosedDeclaration(TeXNode):
+    """
+    A TeX construct of the form {\name content}. Note that declarations
+    terminated by the \end command will not be treated as this kind of object.
+    """
+    def __init__(self,parent,content):
+        """
+        Content can either be a (name,innercontent) tuple, or the full string 
+        including the outermost braces
+        """
+        if isinstance(content,basestring):
+            if not content.startswith('{\\'):
+                raise ValueError("Tried to make enclosed declaration that does't start with {\\")
+            if not content.endswith('}'):
+                raise ValueError("Tried to make enclosed declaration that does't end with }")
+        
+            name = content.split()[0]
+            innercontent = content[len(name):]
+        else:
+            if len(content) != 2:
+                raise ValueError('EnclosedDeclaration content is not length-2')
+            name,innercontent = content
+            
+        self.parent = parent
+        self.name = name
+        self.children = text_to_nodes(self,innercontent)
+        
+    def getSelfText(self):
+        return ('{\\%s '%self.name,'}')
+    
 class Preamble(TeXNode):
     """
     The preamble of a TeX File (i.e. everything before \begin{document} )
     """
     def __init__(self,parent,content):
         self.parent = parent
-        self.children = _text_to_nodes(self,content)
+        self.children = text_to_nodes(self,content)
         
         self.docclass = None
         self.packages = []
@@ -440,41 +462,68 @@ class Preamble(TeXNode):
     def getSelfText(self):
         return None
 
-def _text_to_nodes(parent,txt):
+#<------------------Useful regexes used in text_to_nodes----------------------->
+#this finds anything that begins with \begin{<name>} and ends with \end{<name}
+#group 1 is the whole env, 2 is the name, 3 is the content
+_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
+
+#This finds anthing like \command{...}{...}... w/ group 1  is the command name,
+# 2 the arguments
+_commandstr = r'\\(\w.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|\s)'
+_commandre = _re.compile(_commandstr)
+
+#Finds anything of the form {\cmd content} for enclosed declarations
+# group 1 is the command name, 2 the enclosed content, *including the first white space*
+_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})?.*?)*)}'
+_encdecre = _re.compile(_encdecstr)
+
+#last two combined
+_encdeccmdre = _re.compile('(?:%s)|(?:%s)'%(_encdecstr,_commandstr))
+
+def text_to_nodes(parent,txt):
     """
-    Converts a string into a list of corresponding TeXNodes, splitting out
-    commands, environments, and Newlines.
+    Converts a string into a list of corresponding TeXNodes.
     """
-    txtl = []
+    txtnodel = []
     #now split out nested environments and commands and build them 
     splitenv = _envre.split(txt) 
     envstrs = splitenv[1::4]
     for i,txts in enumerate(splitenv[::4]):
-        #for each text chunk, split out the command nodes and then add
+        #for each text chunk, split out the command or EnclosedDeclaration nodes and then add
         #the chunks back to the contentlist
-        splitcomm = _commandre.split(txts)
-        for j in reversed(range(1,len(splitcomm),3)):
-            splitcomm[j] = Command(parent,(splitcomm[j],splitcomm[j+1]))
-            del splitcomm[j+1]
-        txtl.extend(splitcomm)
+        splitedcms = _encdeccmdre.split(txts)
+        for j in range(0,len(splitedcms)-1,5):
+            txtnodel.append(splitedcms[j])
+            if splitedcms[j+1] is None: #means a command, not enclosed declaration
+                txtnodel.append(Command(parent,(splitedcms[j+3],splitedcms[j+4])))
+                #if no arguments are provided, fill in the white space matched 
+                #in the RE
+                if len(txtnodel[-1].children)==0:
+                    txtnodel.append(splitedcms[j+4]) 
+            else: #enclosed declaration
+                txtnodel.append(EnclosedDeclaration(parent,(splitedcms[j+1],splitedcms[j+2])))
+        #add in last one excluded from above
+        if len(splitedcms)>0:
+            txtnodel.append(splitedcms[-1])
+            
         if i < len(envstrs):
-            txtl.append(environment_factory(parent,envstrs[i]))
+            txtnodel.append(environment_factory(parent,envstrs[i]))
     
     #now add all the nodes to the child list, 
     #transforming text into TeXt and maybe Newlines if present
-    contentl = []
-    for t in txtl:
+    nodel = []
+    for t in txtnodel:
         if isinstance(t,basestring):
             for txt in t.split('\n'):
-                contentl.append(TeXt(parent,txt))
-                contentl.append(Newline(parent))
-            del contentl[-1] #extra newline
+                nodel.append(TeXt(parent,txt))
+                nodel.append(Newline(parent))
+            del nodel[-1] #extra newline
         elif isinstance(t,TeXNode):
-            contentl.append(t)
+            nodel.append(t)
         else:
             raise TypeError('invalid item %s returned from parsing text to nodes'%t)
     
-    return contentl
+    return nodel
         
 #issue warning if abstract too long
 #strip comments
