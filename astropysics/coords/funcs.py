@@ -425,12 +425,9 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     :param d2: distance to second object
     :type d2: scalar
     
-    .. testsetup::
-    
-        from astropysics.coords import sky_sep_to_3d_sep
     
     .. doctest::
-    
+        >>> from coordsys import LatLongCoordinates
         >>> p1 = LatLongCoordinates(0,0)
         >>> p2 = LatLongCoordinates(0,10)
         >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
@@ -439,6 +436,8 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
         '2.9375007333'
         
     """    
+    from .coordsys import LatLongCoordinates,EquatorialCoordinatesEquinox
+    
     if not isinstance(pos1,LatLongCoordinates):
         pos1 = EquatorialCoordinatesEquinox(pos1)
     if not isinstance(pos2,LatLongCoordinates):
@@ -527,10 +526,12 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
             Returns a 2-tuple (nmatch1,nmatch2) with the number of objects that
             matched for each of the two sets of coordinate systems.
         * 'index'
-            Returns a 2-tuple of integer arrays (ind1,ind2) where `ind1` matches
-            the shape of the first coordinate set, and `ind2` matches the
-            second. The mask value is True if a match is found for that
-            coordinate pair, otherwise, False.
+            Returns a 2-tuple of integer arrays (ind1,ind2). `ind1` is a set of
+            indecies into the first coordinate set, and `ind2` indexes the 
+            second.  The two arrays match in shape and each element is the 
+            index for a matched pair of coordinates - e.g. a1[ind1[i]] and 
+            a2[ind2[i]] will give the "a" coordinate for a matched pair
+            of coordinates.
         * 'match2D'
             Returns a 2-dimensional bool array. The array element M[i,j] is True
             if the ith coordinate of the first coordinate set
@@ -541,25 +542,20 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
             coordinates for the nearest object to the ith object in the first
             coordinate set. `distance` is a float array of the same shape giving
             the corresponding distance, and `match` is s boolean array that is
-            True if the distance is within `eps` .
+            True if the distance is within `eps` . Note that this is effectively
+            a wrapper around :func:`match_nearest_coords`.
     
     :returns: See `mode` for a description of return types.
     
     **Examples**
-    
-    .. testsetup::
-    
-        from astropysics.coords import match_coords
-        from numpy import array
-    
     .. doctest::
-    
+        >>> from numpy import array
         >>> ra1 = array([1,2,3,4])
         >>> dec1 = array([0,0,0,0])
-        >>> ra2 = array([7,6,5,4])
-        >>> dec2 = array([.5,.5,.5,.5])
+        >>> ra2 = array([4,3,2,1])
+        >>> dec2 = array([3.5,2.5,1.5,.5])
         >>> match_coords(ra1,dec1,ra2,dec2,1)
-        (array([False, False, False,  True], dtype=bool), array([False, False, 
+        (array([True, False, False, False], dtype=bool), array([False, False, 
         False,  True], dtype=bool))
     """
     a1 = np.array(a1,copy=False).ravel()
@@ -567,6 +563,11 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     a2 = np.array(a2,copy=False).ravel()
     b2 = np.array(b2,copy=False).ravel()
     
+    #bypass the rest for 'nearest', as it calls match_nearest_coords
+    if mode == 'nearest':
+        seps,i2 = match_nearest_coords((a1,b1),(a2,b2))
+        return i2,seps,(seps<=eps)
+        
     def find_sep(A,B):
         At = np.tile(A,(len(B),1))
         Bt = np.tile(B,(len(A),1))
@@ -601,12 +602,55 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     elif mode == 'match2D':
         return matches.T
     elif mode == 'nearest':
-        match = (np.sum(matches,axis=1)>0)
-        distance = np.min(sep,axis=1)
-        nearestind = np.argmin(sep,axis=1)
-        return (nearestind,distance,match)
+        assert False,"'nearest' should always return above this - code should be unreachable!"
     else:
         raise ValueError('unrecognized mode')
+    
+def match_nearest_coords(c1,c2):
+    """
+    :param c1: 
+        A 2 x N array with coordinate values (either as floats or
+        :class:`AngularPosition` objects) or a sequence of
+        :class:`LatLongCoordinates` objects for the first set of coordinates.
+    :param c2: 
+        A 2 x N array with coordinate values (either as floats or
+        :class:`AngularPosition` objects) or a sequence of
+        :class:`LatLongCoordinates` objects for the second set of coordinates.
+    
+    :returns: 
+        (seps,ind2) where both are arrays matching the shape of `c1`. `ind2` is
+        indecies into `c2` to find the nearest to the corresponding `c1`
+        coordinate, and `seps` are the distances.
+    """
+    try:
+        from scipy.spatial import cKDTree as KDTree
+    except ImportError:
+        from warnings import warn
+        warn('C-based scipy kd-tree not available - match_nearest_coords will be much slower!')
+        from scipy.spatial import KDTree
+    
+    c1,c2 = map(np.asarray,(c1,c2))
+    if c1.shape != c2.shape:
+        raise ValueError("c1 and c2 shapes don't match in match_nearest_coords")
+    
+    if len(c1.shape)==1:
+        a1 = np.empty(c1.size)
+        b1 = np.empty(c1.size)
+        a2 = np.empty(c1.size)
+        b2 = np.empty(c1.size)
+        for i in range(len(c1)):
+            a1[i] = c1[i].long.d
+            b1[i] = c1[i].lat.d
+            a2[i] = c2[i].long.d
+            b2[i] = c2[i].lat.d
+        c1 = np.array((a1,b1))
+        c2 = np.array((a2,b2))
+    elif len(c1.shape)!=2:
+        raise ValueError('Invalid shape for match_nearest_coords input')
+    
+    kdt = KDTree(c2.T)
+    return kdt.query(c1.T)
+        
     
 def seperation_matrix(v,w=None,tri=False):
     """
