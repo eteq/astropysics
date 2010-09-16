@@ -609,11 +609,11 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
 def match_nearest_coords(c1,c2):
     """
     :param c1: 
-        A 2 x N array with coordinate values (either as floats or
+        A D x N array with coordinate values (either as floats or
         :class:`AngularPosition` objects) or a sequence of
         :class:`LatLongCoordinates` objects for the first set of coordinates.
     :param c2: 
-        A 2 x N array with coordinate values (either as floats or
+        A D x N array with coordinate values (either as floats or
         :class:`AngularPosition` objects) or a sequence of
         :class:`LatLongCoordinates` objects for the second set of coordinates.
     
@@ -628,10 +628,9 @@ def match_nearest_coords(c1,c2):
         from warnings import warn
         warn('C-based scipy kd-tree not available - match_nearest_coords will be much slower!')
         from scipy.spatial import KDTree
-    
-    c1,c2 = map(np.asarray,(c1,c2))
-    if c1.shape != c2.shape:
-        raise ValueError("c1 and c2 shapes don't match in match_nearest_coords")
+        
+    c1 = np.array(c1,ndmin=1,copy=False)
+    c2 = np.array(c2,ndmin=1,copy=False)
     
     if len(c1.shape)==1:
         a1 = np.empty(c1.size)
@@ -646,7 +645,10 @@ def match_nearest_coords(c1,c2):
         c1 = np.array((a1,b1))
         c2 = np.array((a2,b2))
     elif len(c1.shape)!=2:
-        raise ValueError('Invalid shape for match_nearest_coords input')
+        raise ValueError('match_nearest_coords inputs have incorrect number of dimensions')
+    
+    if c1.shape[0] != c2.shape[0]:
+        raise ValueError("match_nearest_coords inputs don't match in first dimension")
     
     kdt = KDTree(c2.T)
     return kdt.query(c1.T)
