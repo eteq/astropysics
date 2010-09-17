@@ -413,7 +413,7 @@ class OptionalArgument(TeXNode):
         return self.text
     
 class EnclosedDeclaration(TeXNode):
-    """
+    r"""
     A TeX construct of the form {\name content}. Note that declarations
     terminated by the \end command will not be treated as this kind of object.
     """

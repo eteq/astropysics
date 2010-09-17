@@ -548,6 +548,7 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     :returns: See `mode` for a description of return types.
     
     **Examples**
+    
     .. doctest::
         >>> from numpy import array
         >>> ra1 = array([1,2,3,4])
@@ -1026,203 +1027,205 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     
 #<---------------------DEPRECATED transforms----------------------------------->
 
-#galactic coordate reference positions from IAU 1959 and wikipedia
-from astropysics.coords.coordsys import EquatorialCoordinatesEquinox as _EquatorialCoordinatesEquinox
-_galngpJ2000 = _EquatorialCoordinatesEquinox('12h51m26.282s','+27d07m42.01s')
-_galngpB1950 = _EquatorialCoordinatesEquinox('12h49m0s','27d24m0s')
-_gall0J2000=122.932
-_gall0B1950=123
+#These will be removed eventually
 
-def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True):
-    """
-    :deprecated:
+#galactic coordate reference positions from IAU 1959
+#from astropysics.coords.coordsys import EquatorialCoordinatesEquinox as _EquatorialCoordinatesEquinox
+#_galngpJ2000 = _EquatorialCoordinatesEquinox('12h51m26.282s','+27d07m42.01s')
+#_galngpB1950 = _EquatorialCoordinatesEquinox('12h49m0s','27d24m0s')
+#_gall0J2000=122.932
+#_gall0B1950=123
+
+#def celestial_transforms(ai,bi,transtype=1,epoch='J2000',degin=True,degout=True):
+#    """
+#    :deprecated:
     
-    Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
+#    Use this to transform between Galactic,Equatorial, and Ecliptic coordinates
     
-    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
-    'cg','cq','qc'
+#    transtype can be a number from the table below, or 'ge','eg','gq','qg','gc',
+#    'cg','cq','qc'
     
-    transtype   From           To       |  transtype    From         To
-        1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
-        2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
-        3     RA-Dec         Ecliptic   |     6       Galactic      Ecliptic
+#    transtype   From           To       |  transtype    From         To
+#        1     RA-Dec (2000)  Galactic   |     4       Ecliptic      RA-Dec    
+#        2     Galactic       RA-DEC     |     5       Ecliptic      Galactic  
+#        3     RA-Dec         Ecliptic   |     6       Galactic      Ecliptic
         
-    adapted from IDL procedure EULER 
-    (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
-    """
-    #   J2000 coordinate conversions are based on the following constants
-    #   (see the Hipparcos explanatory supplement).
-    #  eps = 23.4392911111d              Obliquity of the ecliptic
-    #  alphaG = 192.85948d               Right Ascension of Galactic North Pole
-    #  deltaG = 27.12825d                Declination of Galactic North Pole
-    #  lomega = 32.93192d                Galactic longitude of celestial equator  
-    #  alphaE = 180.02322d              Ecliptic longitude of Galactic North Pole
-    #  deltaE = 29.811438523d            Ecliptic latitude of Galactic North Pole
-    #  Eomega  = 6.3839743d              Galactic longitude of ecliptic equator   
+#    adapted from IDL procedure EULER 
+#    (http://astro.uni-tuebingen.de/software/idl/astrolib/astro/euler.html)
+#    """
+#    #   J2000 coordinate conversions are based on the following constants
+#    #   (see the Hipparcos explanatory supplement).
+#    #  eps = 23.4392911111d              Obliquity of the ecliptic
+#    #  alphaG = 192.85948d               Right Ascension of Galactic North Pole
+#    #  deltaG = 27.12825d                Declination of Galactic North Pole
+#    #  lomega = 32.93192d                Galactic longitude of celestial equator  
+#    #  alphaE = 180.02322d              Ecliptic longitude of Galactic North Pole
+#    #  deltaE = 29.811438523d            Ecliptic latitude of Galactic North Pole
+#    #  Eomega  = 6.3839743d              Galactic longitude of ecliptic equator   
     
-    from warnings import warn
-    warn('celestial_transforms function is deprecated - use general coordinate transform framework',DeprecationWarning)           
+#    from warnings import warn
+#    warn('celestial_transforms function is deprecated - use general coordinate transform framework',DeprecationWarning)           
 
-    if epoch == 'B1950':
-            psi   = ( 0.57595865315, 4.9261918136,0, 0,0.11129056012, 4.7005372834)     
-            stheta =( 0.88781538514,-0.88781538514, 0.39788119938,-0.39788119938, 0.86766174755,-0.86766174755)    
-            ctheta =( 0.46019978478, 0.46019978478,0.91743694670, 0.91743694670, 0.49715499774, 0.49715499774)    
-            phi =   ( 4.9261918136,  0.57595865315,  0, 0,  4.7005372834, 0.11129056012)
+#    if epoch == 'B1950':
+#            psi   = ( 0.57595865315, 4.9261918136,0, 0,0.11129056012, 4.7005372834)     
+#            stheta =( 0.88781538514,-0.88781538514, 0.39788119938,-0.39788119938, 0.86766174755,-0.86766174755)    
+#            ctheta =( 0.46019978478, 0.46019978478,0.91743694670, 0.91743694670, 0.49715499774, 0.49715499774)    
+#            phi =   ( 4.9261918136,  0.57595865315,  0, 0,  4.7005372834, 0.11129056012)
 
-    elif epoch == 'J2000':
-            psi   = ( 0.57477043300,4.9368292465,0,0,0.11142137093, 4.71279419371)     
-            stheta =( 0.88998808748,-0.88998808748,  0.39777715593,-0.39777715593, 0.86766622025,-0.86766622025)   
-            ctheta =( 0.45598377618, 0.45598377618, 0.91748206207, 0.91748206207,  0.49714719172, 0.49714719172)    
-            phi  =  ( 4.9368292465,  0.57477043300,  0, 0,        4.71279419371, 0.11142137093)
-    else:
-            raise ValueError('unknown epoch')
+#    elif epoch == 'J2000':
+#            psi   = ( 0.57477043300,4.9368292465,0,0,0.11142137093, 4.71279419371)     
+#            stheta =( 0.88998808748,-0.88998808748,  0.39777715593,-0.39777715593, 0.86766622025,-0.86766622025)   
+#            ctheta =( 0.45598377618, 0.45598377618, 0.91748206207, 0.91748206207,  0.49714719172, 0.49714719172)    
+#            phi  =  ( 4.9368292465,  0.57477043300,  0, 0,        4.71279419371, 0.11142137093)
+#    else:
+#            raise ValueError('unknown epoch')
             
-    from math import pi
-    from numpy import array,sin,cos,arcsin,arctan2
-    twopi   =   2.0*pi
-    fourpi  =   4.0*pi
-    deg_to_rad = 180.0/pi
+#    from math import pi
+#    from numpy import array,sin,cos,arcsin,arctan2
+#    twopi   =   2.0*pi
+#    fourpi  =   4.0*pi
+#    deg_to_rad = 180.0/pi
     
     
-    if degin:
-        ai,bi=array(ai),array(bi)
-    else:
-        ai,bi=np.degrees(ai),np.degrees(bi)
+#    if degin:
+#        ai,bi=array(ai),array(bi)
+#    else:
+#        ai,bi=np.degrees(ai),np.degrees(bi)
     
-    if type(transtype) == int:
-        i = transtype - 1
-    else:
-        transd={'ge':1,'eg':0,'gq':1,'qg':0,'gc':5,'cg':4,'cq':3,'qc':2}
-        i  = transd[transtype]
-    a  = ai/deg_to_rad - phi[i]
-    b = bi/deg_to_rad
-    sb = sin(b) 
-    cb = cos(b)
-    cbsa = cb * sin(a)
-    b  = -stheta[i] * cbsa + ctheta[i] * sb
-    try:
-            b[b>1.0]=1.0
-    except TypeError: #scalar
-            if b > 1:
-                    b=array(1.0)
-    bo = arcsin(b)*deg_to_rad
-    a =  arctan2( ctheta[i] * cbsa + stheta[i] * sb, cb * cos(a) )
-    ao = ( (a+psi[i]+fourpi) % twopi) * deg_to_rad
+#    if type(transtype) == int:
+#        i = transtype - 1
+#    else:
+#        transd={'ge':1,'eg':0,'gq':1,'qg':0,'gc':5,'cg':4,'cq':3,'qc':2}
+#        i  = transd[transtype]
+#    a  = ai/deg_to_rad - phi[i]
+#    b = bi/deg_to_rad
+#    sb = sin(b) 
+#    cb = cos(b)
+#    cbsa = cb * sin(a)
+#    b  = -stheta[i] * cbsa + ctheta[i] * sb
+#    try:
+#            b[b>1.0]=1.0
+#    except TypeError: #scalar
+#            if b > 1:
+#                    b=array(1.0)
+#    bo = arcsin(b)*deg_to_rad
+#    a =  arctan2( ctheta[i] * cbsa + stheta[i] * sb, cb * cos(a) )
+#    ao = ( (a+psi[i]+fourpi) % twopi) * deg_to_rad
     
-    if not degout:
-        ao,bo = np.radians(ao),np.radians(bo)
+#    if not degout:
+#        ao,bo = np.radians(ao),np.radians(bo)
     
-    return ao,bo
+#    return ao,bo
 
-_B1950toJ2000xyz=np.matrix([[0.999926,  -0.011179,  -0.004859],
-                            [0.011179,   0.999938,  -0.000027],
-                            [0.004859,   0.000027,   0.999988]])
+#_B1950toJ2000xyz=np.matrix([[0.999926,  -0.011179,  -0.004859],
+#                            [0.011179,   0.999938,  -0.000027],
+#                            [0.004859,   0.000027,   0.999988]])
 
-def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
-    """
-    :deprecated:
-    """
-    from warnings import warn
-    warn('epoch_transform function is deprecated - use general coordinate transform framework',DeprecationWarning)
+#def epoch_transform(ra,dec,inepoch='B1950',outepoch='J2000',degrees=True):
+#    """
+#    :deprecated:
+#    """
+#    from warnings import warn
+#    warn('epoch_transform function is deprecated - use general coordinate transform framework',DeprecationWarning)
     
-    if inepoch != 'B1950' and inepoch != 'J2000':
-        raise ValueError('unrecognized epoch '+inepoch)
-    if outepoch != 'B1950' and outepoch != 'J2000':
-        raise ValueError('unrecognized epoch '+outepoch)
-    if degrees:
-        ra,dec=np.radians(ra),np.radians(dec)
-    else:
-        ra,dec=np.array(ra),np.array(dec)
+#    if inepoch != 'B1950' and inepoch != 'J2000':
+#        raise ValueError('unrecognized epoch '+inepoch)
+#    if outepoch != 'B1950' and outepoch != 'J2000':
+#        raise ValueError('unrecognized epoch '+outepoch)
+#    if degrees:
+#        ra,dec=np.radians(ra),np.radians(dec)
+#    else:
+#        ra,dec=np.array(ra),np.array(dec)
     
-    if inepoch == outepoch:
-        trans=np.matrix(np.eye(3))
-    elif inepoch == 'B1950' and outepoch == 'J2000':
-        trans=_B1950toJ2000xyz
-    elif inepoch == 'J2000' and outepoch == 'B1950':
-        trans=_B1950toJ2000xyz.I
-    else:
-        raise ('unrecognized epochs')
+#    if inepoch == outepoch:
+#        trans=np.matrix(np.eye(3))
+#    elif inepoch == 'B1950' and outepoch == 'J2000':
+#        trans=_B1950toJ2000xyz
+#    elif inepoch == 'J2000' and outepoch == 'B1950':
+#        trans=_B1950toJ2000xyz.I
+#    else:
+#        raise ('unrecognized epochs')
     
-    x=np.cos(ra)*np.cos(dec)
-    y=np.sin(ra)*np.cos(dec)
-    z=np.sin(dec)
+#    x=np.cos(ra)*np.cos(dec)
+#    y=np.sin(ra)*np.cos(dec)
+#    z=np.sin(dec)
     
-    v=np.matrix((x,y,z))
-    xp,yp,zp=trans*v
+#    v=np.matrix((x,y,z))
+#    xp,yp,zp=trans*v
     
-    rap=np.arctan2(yp,xp)
-    decp=np.arcsin(zp)
+#    rap=np.arctan2(yp,xp)
+#    decp=np.arcsin(zp)
     
-    return rap,decp
+#    return rap,decp
 
-def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
-    """
-    :deprecated:
+#def galactic_to_equatorial(l,b,epoch='J2000',strout=None):
+#    """
+#    :deprecated:
     
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from warnings import warn
-    warn('galactic_to_equatorial function is deprecated - use general coordinate transform framework',DeprecationWarning)
+#    convinience function for celestial_transforms
+#    if strout is None, will automatically decide based on inputs
+#    """
+#    from warnings import warn
+#    warn('galactic_to_equatorial function is deprecated - use general coordinate transform framework',DeprecationWarning)
     
-    from operator import isSequenceType
+#    from operator import isSequenceType
     
-    if type(l) == str:
-        l=AngularCoordinate(l).degrees
-        if strout is None:
-            strout=True
-    if type(b) == str:
-        b=AngularCoordinate(b).degrees
-        if strout is None:
-            strout=True
-    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
-    if strout:
-        if not isSequenceType(ra):
-            ra=[ra]
-        if not isSequenceType(dec):
-            dec=[dec]
-        rao,deco=[],[]
-        for rai in ra:
-            rao.append(AngularCoordinate(rai).getHmsStr())
-        for deci in dec:
-            deco.append(AngularCoordinate(deci).getDmsStr())
-        return rao,deco
-    else:
-        return ra,dec
+#    if type(l) == str:
+#        l=AngularCoordinate(l).degrees
+#        if strout is None:
+#            strout=True
+#    if type(b) == str:
+#        b=AngularCoordinate(b).degrees
+#        if strout is None:
+#            strout=True
+#    ra,dec = celestial_transforms(l,b,transtype='ge',epoch=epoch)
+#    if strout:
+#        if not isSequenceType(ra):
+#            ra=[ra]
+#        if not isSequenceType(dec):
+#            dec=[dec]
+#        rao,deco=[],[]
+#        for rai in ra:
+#            rao.append(AngularCoordinate(rai).getHmsStr())
+#        for deci in dec:
+#            deco.append(AngularCoordinate(deci).getDmsStr())
+#        return rao,deco
+#    else:
+#        return ra,dec
     
     
-def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
-    """
-    :deprecated:
+#def equatorial_to_galactic(ra,dec,epoch='J2000',strout=None):
+#    """
+#    :deprecated:
     
-    convinience function for celestial_transforms
-    if strout is None, will automatically decide based on inputs
-    """
-    from warnings import warn
-    warn('equatorial_to_galactic function is deprecated - use general coordinate transform framework',DeprecationWarning)
+#    convinience function for celestial_transforms
+#    if strout is None, will automatically decide based on inputs
+#    """
+#    from warnings import warn
+#    warn('equatorial_to_galactic function is deprecated - use general coordinate transform framework',DeprecationWarning)
     
-    from operator import isSequenceType
+#    from operator import isSequenceType
     
-    if type(ra) == str:
-        ra=AngularCoordinate(ra).degrees
-        if strout is None:
-            strout=True
-    if type(dec) == str:
-        dec=AngularCoordinate(dec).degrees
-        if strout is None:
-            strout=True
-    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
-    if strout:
-        if not isSequenceType(l):
-            l=[l]
-        if not isSequenceType(b):
-            b=[b]
-        lo,bo=[],[]
-        for li in l:
-            lo.append(AngularCoordinate(li).getDmsStr())
-        for bi in b:
-            bo.append(AngularCoordinate(bi).getDmsStr())
-        return lo,bo
-    else:
-        return l,b
+#    if type(ra) == str:
+#        ra=AngularCoordinate(ra).degrees
+#        if strout is None:
+#            strout=True
+#    if type(dec) == str:
+#        dec=AngularCoordinate(dec).degrees
+#        if strout is None:
+#            strout=True
+#    l,b = celestial_transforms(ra,dec,transtype='eg',epoch=epoch)
+#    if strout:
+#        if not isSequenceType(l):
+#            l=[l]
+#        if not isSequenceType(b):
+#            b=[b]
+#        lo,bo=[],[]
+#        for li in l:
+#            lo.append(AngularCoordinate(li).getDmsStr())
+#        for bi in b:
+#            bo.append(AngularCoordinate(bi).getDmsStr())
+#        return lo,bo
+#    else:
+#        return l,b
     

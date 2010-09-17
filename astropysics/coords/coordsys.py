@@ -692,7 +692,7 @@ class CoordinateSystem(object):
     set initial values. Additionally, :class:`CoordinateSystem` objects are
     intended to be quite small, so unless there is a reason to do otherwise,
     subclasses should have a :attr:`__slots__` class attribute (see
-    `http://docs.python.org/reference/datamodel.html`_ for an explanation of
+    http://docs.python.org/reference/datamodel.html for an explanation of
     slots - it should be a sequence of all the valid attributes for the object).
     
     """

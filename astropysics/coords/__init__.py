@@ -72,11 +72,11 @@ imported into the base module. Thus, as an example,
 (:class:`~astropysics.coords.coordsys.ICRSCoordinates`).
 
 There are three submodules currently included. The
-:mod`~astropysics.coords.coordsys` module implements classes representing useful
-coordinate systems in astronomy and a framework to add additional coordinate
-systems as desired. It also implements standard transformations between the
-various celestial and terrestrial coordinates (although transformation to local
-horizontal coordinates is done with methods of
+:mod:`~astropysics.coords.coordsys` module implements classes representing
+useful coordinate systems in astronomy and a framework to add additional
+coordinate systems as desired. It also implements standard transformations
+between the various celestial and terrestrial coordinates (although
+transformation to local horizontal coordinates is done with methods of
 :class:`astropysics.obstools.Site`). :mod:`~astropysics.coords.ephems`
 implements ephemerides for solar system objects and proper motions. Finally,
 :mod:`~astropysics.coords.funcs` contains a range of utility functions including
