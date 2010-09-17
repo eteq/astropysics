@@ -1176,11 +1176,21 @@ class ArrayImage(CCDImage):
 class ImageBiasSubtractor(PipelineElement):
     """
     Subtracts a dark/bias frame or uses an overscan region to define a 
-    bias or bias curve to subtract
+    bias or bias curve to subtract. The order of operations is:
+    
+    1. Subtract any frame specified in :attr:`biasframe`
+    2. Subtract the overall bias level determined by :attr:`biasregion`
+    3. Subtract the bias determined by the overscan region specified in 
+       :attr:`overscan`
+    
+    Any of these operations may be ommitted if the necessary attribute are
+    set to None.
     
     * :attr:`biasframe`: an image matching the input's shape that will be 
-      subtracted or None to skip this step
-    * :attr:`biasregion`: a 4-tuple defining a region as (xmin,xmax,ymin,ymax)
+      subtracted or None to skip this step.  
+    * :attr:`biasregion`: 
+        A 4-tuple defining a region as (xmin,xmax,ymin,ymax) Or None to skip
+        this step.
     * :attr:`overscan`: an integer defining the edge of the overscal region, or 
       a 2-tuple of the form (edge,bool) where the boolean indicates if the it 
       is a left edge (True, default) or a right edge (False)
@@ -1190,10 +1200,21 @@ class ImageBiasSubtractor(PipelineElement):
     * :attr:`overscanfit`: sets the default fitting method for the overscan
       region (if used) or None to just use the combined value directly
     * :attr:`interactive`: if True, interactively fit the overscan curve
-    * :attr:`combinemethod`: method to 'mean','median','max','min' or a callable 
-      used to combine the overscan area
-    * :attr:`trim`: trim off the overscan region if it is specified 
-    * :attr:`save`:if True, stores 'lastimage' and 'lastcurve' as appropriate
+    * :attr:`combinemethod`:
+        The method used to combine the pixels in the bias region or overscan 
+        region to produce the overall subtraction value. Can be:
+        
+        * 'mean'
+        * 'median'
+        * 'max'
+        * 'min'
+        * A callable that takes a sequence of matched images and returns an
+          image of the size of the inputs.
+          
+    * :attr:`trim`: trim off the overscan region if it is specified *
+      :attr:`save`:if True, stores the final image and any fit curve as 
+      attributes :attr:`lastimage` or :attr:`lastcurve` on this object.
+      
     """
     
     def __init__(self):
@@ -1211,8 +1232,17 @@ class ImageBiasSubtractor(PipelineElement):
         
     def subtractFromImage(self,image):
         """
-        subtract the bias from the provided image
+        Subtract the bias frame and/or do the bias/overscan region subtraction.
+        
+        :param image: An array with the image data.
+        :type image: 2D :class:`~numpy.ndarray`
+        
+        :returns: 
+            A 2D numpy array of the image data with the subtractions applied.
+        
         """
+        from operator import isSequenceType
+        
         if self.biasframe is not None:
             image = image - self.biasframe
             
@@ -1324,17 +1354,25 @@ class ImageCombiner(PipelineElement):
     """
     Combines a sequence of images into a single image.
     
-    attributes that control combining are:
+    Attributes that control combining are:
     
-    * :attr:`method`: can be 'mean', 'median', 'sum', or a callable that takes a 
-      sequence of matched images and returns an image of the size
-      of the inputs
+    * :attr:`method`
+        Can be any of:
+        
+        * 'mean'
+        * 'median'
+        * 'sum'
+        * A callable that takes a sequence of matched images and returns an
+          image of the size of the inputs.
+        * A sequence of floats that will be used as weights - the images will
+          be added together with those weights.          
+          
     * :attr:`shifts`: a sequence of 2-tuples that are taken as the amount to 
       offset each image before combining (in pixels)
     * :attr:`shiftorder`: order of the spline interpolation used when images are
       shifted 
     * :attr:`trim`: if True, the image is trimmed based on the shifts to only 
-      include the pixels where the images overalap 
+      include the pixels where the images overlap 
     * :attr:`sigclip`: the number of standard deviations from the mean before a 
       point is rejected from the combination.  If None, no sigma clipping is
       performed
@@ -1347,6 +1385,8 @@ class ImageCombiner(PipelineElement):
     * :attr:`mask`: the mask of altered/rejected pixels from the last result
     
     """
+    from operator import isSequenceType
+    
     _plintype = Sequence
     
     def __init__(self):
@@ -1360,6 +1400,14 @@ class ImageCombiner(PipelineElement):
         self.lastimage = self.mask = None
         
     def combineImages(self,images):
+        """
+        Combines images into a single image.
+        
+        :param images:
+            A sequence of 2D numpy arrays with the image data to be combined.  
+        
+        :returns: A 2D numpy array of images produced by combining the inputs. 
+        """
         outshape = images[0].shape
         for im in images[1:]:
             if im.shape != outshape:
@@ -1379,6 +1427,7 @@ class ImageCombiner(PipelineElement):
             def shift_coords(coords,shift):
                 return (coords[0]-shift[0],coords[1]-shift[1])
             
+            #TODO: sinc shift?
             shiftedimages = []
             for i,im in enumerate(images):
                 newim = geometric_transform(im,partial(shift_coords,shift=shifts[i]),
@@ -1398,6 +1447,9 @@ class ImageCombiner(PipelineElement):
             op = np.max if self.sigclip is None else np.ma.max
         elif callable(self.method):
             op = self.method
+        elif isSequenceType(self.method):
+            weights = self.method
+            op = lambda ims:np.sum(ims*weights)
         else:
             raise ValueError('Incalid combining method %s'%self.method)
         
