@@ -1308,7 +1308,7 @@ class ImageBiasSubtractor(PipelineElement):
             else:
                 raise ValueError('invalid combinemethod %s'%self.combinemethod)
             
-            x = arange(len(overscan))
+            x = np.arange(len(overscan))
             if self.overscanfit:
                 if self.interactive:
                     from .gui import fit_data
