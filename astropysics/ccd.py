@@ -60,7 +60,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
     Sequence = None
     
-from .pipeline import PipelineElement
+from .pipeline import PipelineElement,PipelineError
 
 
 
@@ -1342,12 +1342,25 @@ class ImageBiasSubtractor(PipelineElement):
     
     def plProcess(self,data,pipeline,elemi):
         if self.interactive:
-            return None #interactive fit will occur in self
+            return None #interactive fit will occur in subtractFromImage
         else:
-            return self.subtractFromImage(data)
+            if isinstance(data,CCDImage):
+                newdata = self.subtractFromImage(data.data)
+                data.data[:] = newdata
+                data.applyChanges()
+            else:
+                return self.subtractFromImage(data)
     
     def plInteract(self,data,pipeline,elemi):
-        return self.subtractFromImage(data)
+        if self.interactive:
+            if isinstance(data,CCDImage):
+                newdata = self.subtractFromImage(data.data)
+                data.data[:] = newdata
+                data.applyChanges()
+            else:
+                return self.subtractFromImage(data)
+        else:
+            raise PipelineError('Tried to interact with a non-interactive pipeline')
 
 
 class ImageCombiner(PipelineElement):
@@ -1475,7 +1488,12 @@ class ImageCombiner(PipelineElement):
         return image
     
     def plProcess(self,data,pipeline,elemi):
-        return self.combineImages(data)
+        if isinstance(data,CCDImage):
+            newdata = self.combineImages(data.data)
+            data.data[:] = newdata
+            data.applyChanges()
+        else:
+            return self.combineImages(data)
     
     
 
@@ -1520,7 +1538,12 @@ class ImageFlattener(PipelineElement):
         return image
         
     def plProcess(self,data,pipeline,elemi):
-        return self.flattenImage(data)
+        if isinstance(data,CCDImage):
+            newdata = self.flattenImage(data.data)
+            data.data[:] = newdata
+            data.applyChanges()
+        else:
+            return self.flattenImage(data)
     
 def load_image_file(fn,**kwargs):
     """
