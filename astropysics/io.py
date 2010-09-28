@@ -203,13 +203,13 @@ class FixedColumnDataParser(object):
         self.firstcolindx = firstcolindx
         
     def _overlapcheck(self,lower,upper,exclude=None):
-        for n,(l,u,f) in self.cols.iteritems():
+        for n,(l,u,f,conv) in self.cols.iteritems():
             if n != exclude and lower <= u and upper >= l:
                 raise ValueError('input range %i-%i overlaps on column %s'%(lower,upper,n))
             
         
     
-    def addColumn(self,name,lower,upper,format=None):
+    def addColumn(self,name,lower,upper,format=None,converters=None):
         """
         :param name: Name of the column
         :type name: string
@@ -226,30 +226,35 @@ class FixedColumnDataParser(object):
         :param format: 
             Format for this column, or None to infer from the contents.
         :type format: input to :class:`numpy.dtype` or None
+        :param converters:
+            A dictionary mapping one string to another - all entries in the 
+            parsed data file with a key will be converted to the corresponding
+            value. If None, no conversion will take place.
+        :type converters: string dict or None
         
         """
         if format is not None: #check that its a valid format specifier
             format = np.dtype(format)
         self._overlapcheck(lower,upper,name)
-        self.cols[name] = (lower,upper,format)
+        self.cols[name] = (lower,upper,format,converters)
         
-    def addColumnsFromFile(self,fn,linestart=None,sep=None,useskiprows=True,
+    def addColumnsFromFile(self,fn,columnlinestart=None,sep=None,useskiprows=True,
                                 maxcols=100):
         """
         Adds columns parsed from a file (typicall a data file that will afterwards be read).
         
         The parsed file is expected to have lines that begin with the
-        `linestart` argument and the rest of the line should be able to be split
-        (using `sep`) into three or four columns in order
+        `columnlinestart` argument and the rest of the line should be able to be
+        split (using `sep`) into three or four columns in order
         name,lower,upper,format .
         
         
         :param fn: File name of the file to parse
         :type fn: string
-        :param linestart: 
+        :param columnlinestart: 
             String that indicates the line is a column line, or None to just use
             the first `maxcols` columns.
-        :type linestart: string or None
+        :type columnlinestart: string or None
         :param sep: 
             The seperator string to split the line or None for whitespace.
         :type sep: string or None
@@ -266,24 +271,24 @@ class FixedColumnDataParser(object):
         
         **Examples**
         
-        For a file that starts like: 
+        For a file that starts like:: 
         
         ID 0 3 int
         data 4 10 float
         moredata 11 15 int
         
-        use addColumnsFromFile('filename',linestart=None,sep=None,maxcols=3)
+        use addColumnsFromFile('filename',columnlinestart=None,sep=None,maxcols=3,firstcolindex=0)
         
-        And for a file with format specifier
+        And for a file with format specifier::
         
-        #: ID,0,3,int
-        #: data,4,10,float
-        #: moredata,11,15,int
+        #... ID,1,4,int
+        #... data,5,11,float
+        #... moredata,12,16,int
         
-        use addColumnsFromFile('filename',linestart='#: ',sep=',')
+        use addColumnsFromFile('filename',columnlinestart='#... ',sep=',')
         
         
-        """
+        """        
         #used below to properly re-adjust string dtypes
         def maybe_convert_string(linesplit):
             if linesplit[3] in ('a','S','string','str'):
@@ -299,21 +304,35 @@ class FixedColumnDataParser(object):
             icols = 0
             for l in f:
                 ls = l.strip()
-                if linestart is None:
+                if columnlinestart is None:
                     linesplit = ls.split(sep) if sep else ls.split()
                     linesplit[1] = int(linesplit[1])
                     linesplit[2] = int(linesplit[2])
                     if len(linesplit)>=4:
                         linesplit[3] = maybe_convert_string(linesplit)
+                    if len(linesplit)>=5:
+                        linesplit[4] = sep.join(linesplit[4:])
+                        linesplit = linesplit[:5]
+                        if isinstance(linesplit[4],basestring):
+                            linesplit[4] = eval(linesplit[4])
+                            if not isinstance(linesplit[4],dict):
+                                raise TypeError('5th column is not a dict string')
                     self.addColumn(*linesplit)
                     icols += 1
-                elif ls.startswith(linestart):
-                    lsr = ls.replace(linestart,'')
+                elif ls.startswith(columnlinestart):
+                    lsr = ls.replace(columnlinestart,'')
                     linesplit = (lsr.split(sep) if sep else lsr.split())
                     linesplit[1] = int(linesplit[1])
                     linesplit[2] = int(linesplit[2])
                     if len(linesplit)>=4:
                         linesplit[3] = maybe_convert_string(linesplit)
+                    if len(linesplit)>=5:
+                        linesplit[4] = sep.join(linesplit[4:])
+                        linesplit = linesplit[:5]
+                        if isinstance(linesplit[4],basestring):
+                            linesplit[4] = eval(linesplit[4])
+                            if not isinstance(linesplit[4],dict):
+                                raise TypeError('5th column is not a dict string')
                     self.addColumn(*linesplit)
                     icols += 1
                 if maxcols is not None and icols >= maxcols:
@@ -358,11 +377,16 @@ class FixedColumnDataParser(object):
                 rs = row.strip()
                 validrow = i >= self.skiprows and rs != '' and rs[0] not in self.commentchars
                 if validrow:
-                    for n,(l,u,f) in self.cols.iteritems():
-                        li,ui = l+addi,u+addi+1
-                        lists[n].append(row[li:ui])
+                    for n,(l,u,f,convs) in self.cols.iteritems():
+                        if convs is None:
+                            li,ui = l+addi,u+addi+1
+                            lists[n].append(row[li:ui])
+                        else:
+                            li,ui = l+addi,u+addi+1
+                            val = row[li:ui]
+                            lists[n].append(convs.get(val,val))
         
-        sorti = np.argsort([l for l,u,f in self.cols.values()])
+        sorti = np.argsort([l for l,u,f,convs in self.cols.values()])
         sortnames = np.array(self.cols.keys())[sorti]
         
         alist = []
@@ -372,7 +396,6 @@ class FixedColumnDataParser(object):
             f = self.cols[n][2]
             masks.append((n,np.array([l is not None and l is not '' for l in lst])))
             
-            
             if f is not None:
                 print 'converting field',n,'to type',f
                 if f.kind == 'i':
@@ -381,7 +404,8 @@ class FixedColumnDataParser(object):
                     arr = np.array(lst)
                 alist.append(arr.astype(f))
             else:
-                alist.append(np.array(lst))
+                arr = np.array(lst)
+                alist.append(arr)
         
         recarr = np.rec.fromarrays(alist,names=','.join(sortnames))
         masks = dict(masks)
@@ -449,9 +473,10 @@ class FixedColumnDataParser(object):
                 
 @_add_docs_and_sig(FixedColumnDataParser.parseFile,FixedColumnDataParser.addColumnsFromFile)       
 @_add_docs(FixedColumnDataParser)   
-def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnlinestart='#',
-                                columnsep=None,maxcols=None,oneindexed=True,
-                                maskedarray=False,updatedict=None):
+def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',
+                                columnlinestart='#:',columnsep=' ',maxcols=None,
+                                oneindexed=True,maskedarray=False,
+                                updatedict=None):
     """
     Loads a fixed column data file using :class:`FixedColumnDataParser`. 
     
@@ -472,6 +497,18 @@ def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',columnline
     :returns: 
         :class:`~numpy.recarray` or a regular :class:`~numpy.ndarray` with data
         loaded from the text file.
+        
+    To match the default format, data files to load should look like::
+    
+    #:col1 1 4 int
+    #:col2 6 6 bool
+    #:col3 8 10 S3
+    #:col4 12 16 float {'------':''}
+    # could have a comment here if you want
+    1239 1 abc 12.325
+    2489 0 zyx ------
+    9526 1 qwe 89632.
+    
     
     :meth:`FixedColumnDataParser.parseFile` describes the return types and 
     `maskedarray` parameter:
