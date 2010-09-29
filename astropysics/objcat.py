@@ -3061,8 +3061,8 @@ class SEDField(Field):
         
         colors is a tuple of colors as (spec,phot,specerr,photerr,other)
         """       
-        from matplotlib import pyplot as plt
         from .spec import HasSpecUnits
+        from .plotting import _mpl_context
         
         specs = self.specs
         phots = self.phots
@@ -3090,13 +3090,7 @@ class SEDField(Field):
         else:
             mny = min(mnx1,mnx2)
         
-        preint = plt.isinteractive()
-        try:
-            plt.interactive(False)
-
-            if clf:
-                plt.clf()
-                
+        with _mpl_context(clf=clf) as plt:                
             if 'x' in log and 'y' in log:
                 plt.loglog()
             elif 'x' in log:
@@ -3130,12 +3124,6 @@ class SEDField(Field):
             plt.xlabel('$%s/{\\rm %s}$'%xl)
             
             plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
-            
-            if preint:
-                plt.show()
-                plt.draw()
-        finally:
-            plt.interactive(preint)
 
 class AstronomicalObject(StructuredFieldNode):
     """
@@ -3629,7 +3617,7 @@ class GraphAction(ActionNode):
     except ImportError:
         from networkx.layout import spring_layout as dldef
     def __init__(self,parent,nodename='Graphing Node',traversal='preorder',
-                      drawlayout=dldef,drawkwargs={},show='draw',savefile=None):
+             drawlayout=dldef,drawkwargs={},show=False,savefile=None,clf=False):
         ActionNode.__init__(self,parent,nodename) 
         
         self.savefile = savefile
@@ -3640,9 +3628,12 @@ class GraphAction(ActionNode):
         self.show = show
         """
         If True, :func:`matplotlib.pyplot.show` will be called after the graph
-        is drawn.  If it is 'draw', :func:`~matplotlib.pyplot.show` will not be
-        called, but :func:`matplotlib.pyplot.draw` will.  If False, neither are
-        called.
+        is drawn.
+        """
+        self.clf = clf
+        """
+        If True, :func:`matplotlib.pyplot.clf` will be called before the graph
+        is drawn.
         """
         self.traversal = traversal
         """
@@ -3692,27 +3683,16 @@ class GraphAction(ActionNode):
         for node,edge in nelist[1:]:
             g.add_node(node)
             g.add_edge(edge)
-        try:
-            from matplotlib import pyplot as plt
-            isinter = plt.isinteractive()
-            try:
-                if isinstance(self.drawlayout,basestring):
-                    pos = nx.pygraphviz_layout(g,prog=self.drawlayout)
-                elif callable(self.drawlayout):
-                    pos = self.drawlayout(g)
-                else:
-                    pos = self.drawlayout
+        try:    
+            if isinstance(self.drawlayout,basestring):
+                pos = nx.pygraphviz_layout(g,prog=self.drawlayout)
+            elif callable(self.drawlayout):
+                pos = self.drawlayout(g)
+            else:
+                pos = self.drawlayout
+            
+            nx.draw(g,pos,**self.drawkwargs)
                 
-                nx.draw(g,pos,**self.drawkwargs)
-                
-                if self.show:
-                    plt.draw()
-                    if self.show != 'draw':
-                        plt.show()
-                if self.savefile:
-                    plt.savefig(self.savefile)
-            finally:
-                plt.interactive(isinter)
         except ImportError,e:
             if self.savefile or self.show:
                 from warnings import warn

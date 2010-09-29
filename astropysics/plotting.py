@@ -27,6 +27,9 @@ a mix of matplotlib_ and mayavi_ .
 .. _matplotlib: http://matplotlib.sourceforge.net/
 .. _mayavi: http://code.enthought.com/projects/mayavi/
 
+.. note::
+    In this module and all other places astropysics uses matplotlib, 
+
 .. todo:: examples
 
 Module API
@@ -38,20 +41,62 @@ from __future__ import division,with_statement
 import numpy as np
 
 try:
+    import matplotlib.pyplot as plt
+except ImportError:
+    from warnings import warn
+    warn('Matplotlib not found - most 2D plotting will not work')
+
+try:
     import enthought.mayavi
 except ImportError:
     from warnings import warn
-    warn('MayaVI 2 not found -3D plotting probably will not work')
+    warn('MayaVI 2 not found - most 3D plotting will not work')
     
-try:
-    import matplotlib
-except ImportError:
-    from warnings import warn
-    warn('Matplotlib not found -most 2D plotting probably will not work')
-
+from contextlib import contextmanager
 
 #<----------------------------------matplotlib--------------------------------->
-import matplotlib.pyplot as plt
+_mpl_show_default = False
+@contextmanager
+def mpl_context(show=None,clf=False,savefn=None):
+    """
+    Used for with statements containing matplotlib plots.  Usage::
+    
+    with _mpl_context() as plt:
+        plt.plot(x,y,...)
+        plt.scatter(xs,ys,...)
+        
+    :param bool show: 
+        If True,:func:`pyplot.show` will be called when plotting is completed.
+        This blocks execution until the user closes the plotting window.
+    :param bool clf: If True, the figure will be cleared before plotting.
+    :param savefn: 
+        A string to save the figure to via the :func:`matplotlib.pyplot.savefig`
+        function, or None to not save the figure.
+    """
+    if show is None:
+        show = _mpl_show_default
+    
+    isinter = plt.isinteractive()
+    try:
+        if isinter:
+            #TODO: figure out why this is necessary (probably an mpl/ipython problem)
+            plt.gcf()
+        plt.interactive(False)
+        if clf:
+            plt.clf()
+            
+        yield plt
+        
+    finally:
+        plt.interactive(isinter)
+        
+    if savefn:
+        plt.savefig(savefn)
+    if show:
+        plt.draw()
+        plt.show()
+    else:
+        plt.draw_if_interactive()
 
 def logerrplot(x,y,xerr=None,yerr=None,logaxes='y',boundscale=.5,**kwargs):
     """
@@ -280,11 +325,7 @@ def scatter4d(x,y,c,s,xe=None,ye=None,logax=(False,False,False,False),scaling=(1
     
     returns collection,maskinds
     """
-    preint = plt.isinteractive()
-    try:
-        if preint:
-            plt.gcf() #raises a window if it isn't present in interactive modes
-        plt.ioff()
+    with mpl_context() as plt:
         if c is None:
             c=np.ones(len(x))
         elif np.isscalar(c):
@@ -343,9 +384,7 @@ def scatter4d(x,y,c,s,xe=None,ye=None,logax=(False,False,False,False),scaling=(1
             cbo=plt.colorbar()
             if type(cb) == str:
                 cbo.ax.set_ylabel(cb)
-    finally:
-        plt.draw()
-        plt.interactive(preint)
+                
     return scat,inds
 
 def square_subplot_dims(n):
@@ -373,11 +412,7 @@ def scatter_panel(p,plims,x,y,c=None,s=20,xe=None,ye=None,logax=(False,False,Fal
     from operator import isMappingType
     from datanalysis import linear_lsq
     
-    preint = plt.isinteractive()
-    if preint:
-        plt.gcf()
-    try:
-        plt.ioff()
+    with mpl_context() as plt:
         if len(p)!=len(x):
             raise ValueError("p and data not same length")
         
@@ -552,9 +587,6 @@ def scatter_panel(p,plims,x,y,c=None,s=20,xe=None,ye=None,logax=(False,False,Fal
                 cbo=plt.colorbar(scats[-1])
             if type(cb) == str:
                 cbo.ax.set_ylabel(cb)
-    finally:
-        plt.interactive(preint)
-        plt.draw()
             
     return scats
 
@@ -574,38 +606,10 @@ def dual_value_plot(x,y1,y2,fmt='-o',yerrs=None,xerrs=None,**kwargs):
     if len(x) != len(y1) != len(y2) != len(yerrs) != len(xerrs):
         raise ValueError('All arrays not same length')
         
-    ##TODO:make faster/eliminate
-    #y2n=np.ndarray(len(y2))
-    #for i,y in enumerate(y2):
-    #    if y is None:
-    #        y2n[i]=y1[i]
-    #    else:
-    #        y2n[i]=y2[i]
-    #y2=y2n
-    pon=plt.isinteractive()
-    if pon:
-        plt.gcf() #raises window if it isn't present
-    try:
-        plt.ioff()
+    with mpl_context() as plt:
         for xi,y1i,y2i,yei,xei in zip(x,y1,y2,yerrs,xerrs):
             plt.errorbar((xi,xi),(y1i,y2i),yei,xei,'o-',**kwargs)
-        if pon:
-            plt.draw()
-    finally:
-        plt.interactive(pon)
         
-def square_axes(axes=None):
-    if axes is None:
-        axes=plt.gca()
-        
-    xl,yl=plt.xlim(),plt.ylim()
-    xtoy=np.abs((xl[0]-xl[1])/(yl[0]-yl[1]))
-    axes.set_aspect(xtoy,'box')
-    if plt.isinteractive():
-        plt.draw()
-            
-    
-    
 def scatter_select(*args,**kwargs):
     """
     quick scatter plot to lasso objects and return an object that will be
@@ -858,15 +862,7 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
         ms = ms | mi
         
     reses=[]
-    isinter = plt.isinteractive()
-    try:
-        plt.ioff()
-        
-        if clf:
-            plt.clf()
-        
-        
-        
+    with mpl_context(clf=clf) as plt:
         #norm=Normalize(vmin=threshold,vmax=np.max(n))
         #ckwargs['norm']=norm
         contours=np.linspace(threshold,np.max(n),ncontours)
@@ -907,10 +903,6 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
         plt.xlim(xe[0],xe[-1])    
         plt.ylim(ye[0],ye[-1])  
         
-        if isinter:    
-            plt.draw()
-    finally:
-        plt.interactive(isinter)
         
     return tuple(reses)
 
@@ -988,11 +980,7 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     else:
         pltfunc = plt.plot
     
-    preint = plt.isinteractive()
-    try:
-        if preint:
-            plt.gcf() #raises a window if it isn't present in interactive modes
-        plt.ioff()
+    with mpl_context() as plt:
         pltfunc(x,y,**kwargs)
         plt.xlabel(xlabel)
         ltgt = '<' if Nlt else '>'
@@ -1001,10 +989,6 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         else:
             plt.ylabel('N(%s%s)'%(ltgt,xlabel))
         
-        if preint:    
-            plt.draw()
-    finally:
-        plt.interactive(preint)
         
 def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
                      styles=None,edgename='',**kwargs):
@@ -1070,12 +1054,7 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
     lsmap = {'-':'solid','--':'dashed','-.':'dashdot',':':'dotted',
              'solid':'solid','dashed':'dashed','dashdot':'dashdot','dotted':'dotted'}
     
-    preint = plt.isinteractive()
-    try:
-        if preint:
-            plt.gcf()
-        if clf:
-            plt.clf()
+    with mpl_context(clf=clf) as plt:
             
         maxh = -1
         for i,v in enumerate(valslist):
@@ -1090,10 +1069,6 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
             
         plt.ylim(0,maxh)
         
-        if preint:    
-            plt.draw()
-    finally:
-        plt.interactive(preint)
         
         
 def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
@@ -1194,7 +1169,6 @@ def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
     
     #format string for frame count
     frmstr = '%0'+str(len(str(len(frames))))+'i'
-    print 'frmstr',frmstr,fn
     
     fig.canvas.draw()
     if fn is not None:
@@ -1536,3 +1510,6 @@ def make_movie(frfn,moviefn,framerate=30,bitrate='200k',inops=None,outops=None,
     if retcode != 0:
         raise ValueError('ffmpeg did not complete correctly - return code %i'%retcode)
     return ffmpegcall
+
+#clean up namespace
+del contextmanager

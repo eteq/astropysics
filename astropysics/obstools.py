@@ -1437,10 +1437,9 @@ class Site(object):
         `plotkwargs` will be provided as a keyword dictionary to
         :func:`matplotlib.pyplot.plot`, unless it is None
         """
-        import matplotlib.pyplot as plt
         from operator import isMappingType,isSequenceType
         from .coords import LatLongCoordinates,Sun,Moon
-        from .plotting import add_mapped_axis
+        from .plotting import add_mapped_axis,_mpl_context
         
         if isMappingType(coords):
             names = coords.keys()
@@ -1462,11 +1461,8 @@ class Site(object):
         elif plotkwargs is None:
             plotkwargs = [None for c in coords]
         
-        inter = plt.isinteractive()
-        try:
-            plt.ioff()
-            if clf:
-                plt.clf()
+        
+        with _mpl_context(clf=clf) as plt:
             oldright = None
             if plottype == 'altam' or plottype == 'alt' or plottype == 'am':   
                 if plottype == 'altam':
@@ -1489,9 +1485,7 @@ class Site(object):
                         y = ra.alt
                     plt.plot(x,y,**kw)
                 
-                
                 plt.title(str(ra.sitedate))
-                 
                 
                 if 'alt' in plottype:
                     if plt.ylim()[0] < 0:
@@ -1638,13 +1632,8 @@ class Site(object):
                     plt.legend(loc=0)
             else:
                 raise ValueError('unrecognized plottype {0}'.format(plottype))
-            if inter:
-                plt.show()
-                plt.draw()
-            if oldright is not None:
-                plt.gcf().subplotpars.right = oldright
-        finally:
-            plt.interactive(inter)
+        if oldright is not None:
+            plt.gcf().subplotpars.right = oldright
             
     def yearPlot(self,coords,startdate=None,n=13,months=12,sun=True,moon=True,
                       utc=False,clf=True,colors=None):
@@ -1676,13 +1665,12 @@ class Site(object):
         `colors` should be a sequence of :mod:`matplotlib` color specifiers, or
         None to use the default color cycle.
         """
-                      
-        import matplotlib.pyplot as plt
         import datetime
         from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter, \
                                      MONDAY,DayLocator,YearLocator
         from operator import isMappingType,isSequenceType
         from .coords import Sun,Moon
+        from .plotting import _mpl_context
         
         if isMappingType(coords):
             names = coords.keys()
@@ -1704,13 +1692,7 @@ class Site(object):
             center = 0
         cp12 = center + 12
         
-        inter = plt.isinteractive()
-        try:
-            plt.ioff()
-            
-            if clf:
-                plt.clf()
-                
+        with _mpl_context(clf=clf) as plt:
             if colors:
                 plt.gca().set_color_cycle(colors)
             for c,nm in zip(coords,names):
@@ -1812,12 +1794,6 @@ class Site(object):
             
             if any([nm!='' for nm in names]):
                 plt.legend(loc=0)
-
-            if inter:
-                plt.show()
-                plt.draw()
-        finally:
-            plt.interactive(inter)
         
 
 def __loadobsdb(sitereg):

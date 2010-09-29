@@ -1686,14 +1686,10 @@ class FunctionModel1D(FunctionModel):
             `zorder` to 0.
             
         """
-        from matplotlib import pyplot as plt
         from operator import isMappingType
+        from ..plotting import mpl_context 
         
-        isinter = plt.isinteractive()
-        try:
-            if isinter:
-                plt.gcf() #raises window instead of blocking if no window is present
-            plt.ioff()
+        with mpl_context(clf=clf) as plt:
             
             if data is 'auto':
                 if self.data:
@@ -1770,10 +1766,6 @@ class FunctionModel1D(FunctionModel):
             if self.yaxisname:
                 plt.ylabel(self.yaxisname)
                 
-            if isinter:
-                    plt.draw()
-        finally:
-            plt.interactive(isinter)
             
     def plotResiduals(self,x=None,y=None,clf=True,logplot='',**kwargs):
         """
@@ -1796,7 +1788,7 @@ class FunctionModel1D(FunctionModel):
         :func:`matplotlib.pyplot.scatter`. 
         
         """
-        from matplotlib import pyplot as plt
+        from ..plotting import mpl_context 
         
         if x is None:
             if self.data is None:
@@ -1807,10 +1799,7 @@ class FunctionModel1D(FunctionModel):
                 raise ValueError("No ydata provided and no fitted data present - can't plot residuals")
             y = self.data[1]
         
-        isinter = plt.isinteractive()
-        try:
-            if clf:
-                plt.clf()
+        with mpl_context(clf=clf) as plt:
             
             #apply log if necessary
             if 'x' in logplot and 'y' in logplot:
@@ -1824,10 +1813,6 @@ class FunctionModel1D(FunctionModel):
             kwargs.setdefault('c','r')    
             plt.scatter(x,y-ym,**kwargs)
                 
-            if isinter:
-                plt.draw()
-        finally:
-            plt.interactive(isinter)
         
     
     #Can Override:
@@ -2669,17 +2654,10 @@ class ModelSequence(object):
         
         kwargs are passed into the models' plot method (except for n)
         """
-        from matplotlib import pyplot as plt
+        from ..plotting import mpl_context 
         
-        isinter = plt.isinteractive()
-        try:
-            if isinter:
-                plt.gcf() #raises a window if it isn't present in interactive modes
-            plt.ioff()
-            if clf:
-                plt.clf()
-                
-              
+        with mpl_context(clf=clf) as plt:
+            
             if x1 is None:
                 x1 = [m._getInvertedRangehint()[0] for m in self.models if m._getInvertedRangehint() is not None]
                 if len(x1)>0:
@@ -2722,10 +2700,6 @@ class ModelSequence(object):
             if legend:
                 plt.legend()
             
-            if isinter:      
-                plt.draw()
-        finally:
-            plt.interactive(isinter)
 
 
 class InputCoordinateTransformer(object):
@@ -3108,12 +3082,10 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         :except ValueError: if data is not present and `datarange` is None
         
         """
-        from matplotlib import pyplot as plt
         from operator import isMappingType
+        from ..plotting import mpl_context 
         
-        isinter = plt.isinteractive()
-        try:
-            plt.ioff()
+        with mpl_context(clf=clf) as plt:
             if data == 'auto':
                 data = self.data or None
                 
@@ -3179,9 +3151,6 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             plt.xlim(datarange[0],datarange[1])
             plt.ylim(datarange[2],datarange[3])
             
-        finally:
-            plt.draw()
-            plt.interactive(isinter)
     def plot3d(self,datarange=None,nx=100,ny=100,clf=True,cb=True,data='auto',**kwargs):
         """
         Generate a 3D plot of the model using mayavi.
@@ -3267,10 +3236,9 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             instead of the absolute residuals.
         
         """
-        from matplotlib import pyplot as plt
+        from ..plotting import mpl_context 
         
-        isinter = plt.isinteractive()
-        try:
+        with mpl_context(clf=clf) as plt:
             x,y,res = self.residuals(x,y,retdata=True)
             if relative:
                 res = res/self(x)
@@ -3295,10 +3263,6 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
             plt.plot(xt,res,fmt)
             plt.axhline(0,color='k',ls=':')
             plt.xlabel(xaxis)
-            
-        finally:
-            plt.draw()
-            plt.interactive(isinter)
     
 class FunctionModel2DScalarAuto(FunctionModel2DScalar):
     """
