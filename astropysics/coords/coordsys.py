@@ -44,7 +44,7 @@ Module API
 from __future__ import division,with_statement
 
 from ..constants import pi
-from ..utils import rotation_matrix
+from ..utils import rotation_matrix,add_docs
 from ..io import _get_package_data
 import numpy as np
 _twopi = 2*pi
@@ -969,25 +969,51 @@ class CoordinateSystem(object):
             return regtrans(funcorname,typename)
         else:
             raise TypeError('funcorname is neither a callable nor a string')
+    
+    @staticmethod    
+    def getConversionPath(fromsys,tosys):
+        """
+        Determines the conversion path from one coordinate system to another.
         
+        :param fromsys: The starting coordinate system class
+        :param tosys: The target coordinate system class
+        :returns: 
+            A list of coordinate classes (not including `fromsys` and `tosys`) 
+            with the shortest path from `fromsys` to `tosys` or a callable with the 
+            transformation if a single-step direct transformation is available
+        
+        :except NotImplementedError: If no path can be found.
+        """
+        if tosys in CoordinateSystem._converters[self.__class__]:
+            return CoordinateSystem._converters[self.__class__][tosys]
+        else:
+            #TODO:implement networkx path-finder
+            strf = 'cannot convert coordinate system %s to %s'
+            raise NotImplementedError(strf%(fromsys.__name__,tosys.__name__))
+
     def convert(self,tosys):
         """
         converts the coordinate system from it's current system to a new 
         :class:`CoordinateSystem` object.
         
-        :param tosys: The new coordinate system 
-        :type tosys: A subclass of :class:`CoordinateSystem`
+        :param tosys: 
+            The new coordinate system class. Should be a subclass of
+            :class:`CoordinateSystem` .
+        :returns: A new object of a class determined by `tosys`
         
         :except: raises :exc:`NotImplementedError` if conversion is not present
         """
-        try:
-            return CoordinateSystem._converters[self.__class__][tosys](self)
-        except KeyError:
-            #format requires 2.6
-            #strf = 'cannot convert coordinate system {0} to {1}'
-            #raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
-            strf = 'cannot convert coordinate system %s to %s'
-            raise NotImplementedError(strf%(self.__class__.__name__,tosys))
+        
+        convpath = CoordinateSystem.getConversionPath(self.__class__,tosys)
+        
+        if callable(convpath):
+            return convpath(self)
+        else:
+            currobj = self
+            currsys = self.__class__
+            for intersys in convpath:
+                currobj = CoordinateSystem._converters[currsys][intersys](currobj)
+            return CoordinateSystem._converters[currsys][tosys](currobj)
 
 class EpochalCoordinates(CoordinateSystem):
     """
@@ -1168,12 +1194,6 @@ class LatLongCoordinates(CoordinateSystem):
     _longlatnames_ = ('longitude','latitude')
     _longrange_ = None
     
-    hubcoosys = None #this is set to EquatorialCoordinatesCIRS below
-    """
-    The coordinate system that :class:`LatLongCoordinates` try to transform 
-    to/from if no direct transformation is available.  If None, it defaults to
-    :class:`EquatorialCoordinates`.
-    """
     
     def __init__(self,long=0,lat=0,longerr=None,laterr=None,distancepc=None):
         """
@@ -1522,52 +1542,59 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             return latp,longp,dlatp,dlongp
     
-    def convert(self,tosys):
+    def convert(self,tosys,optimize=True):
         """
         Converts the coordinate system from it's current system to a new
-        :class:`CoordinateSystem` object. For :class:`LatLongCoordinate`
-        objects, if a converter is not available, a conversion to
-        :attr:`LatLongCoordinates.hubcoosys` (which by default is
-        :class:`EquatorialCoordinatesCIRS`) and then to the target system will be
-        applied.
+        :class:`CoordinateSystem` object possibly with optimizations for
+        matrix-based transformation of :class:`LatLongCoordinates` objects.
         
-        :param tosys: The new coordinate system 
-        :type tosys: A subclass of :class:`CoordinateSystem`
+        .. note::
+            The transformation optimizations here are only correct if the
+            conversion matricies are independent of the coordinate values
+            themselves (e.g. are linear) - set optimize to False if this is not
+            the case.
+        
+        :param tosys: 
+            The new coordinate system class. Should be a subclass of
+            :class:`CoordinateSystem` .
+        :param bool optimize: 
+            If True, speed up the transformation by composing matricies where
+            possible. If False, the standard transformation is performed.
+        :returns: A new object of a class determined by `tosys`
         
         :except: raises NotImplementedError if converters are not present
         """
-        convs = CoordinateSystem._converters[self.__class__]
-        hubcoosys = self.hubcoosys
-#        if hubcoosys is None:
-#            hubcoosys = EquatorialCoordinatesCIRS #this can be reassigned by user
-        
-        if not issubclass(tosys,CoordinateSystem):
-            raise TypeError('Coordinate system to convert to must be a subclass of CoordinateSystem ')
-        elif tosys in convs:
-            return CoordinateSystem.convert(self,tosys)
-        elif hubcoosys in convs:
-            try:
-                m1 = convs[hubcoosys](self) 
-                #calling hubcoosys->target conv w/self technically incorrect, but often gets the right result
-                m2 = CoordinateSystem._converters[hubcoosys][tosys](self)
-                if isinstance(m1,np.matrix) and isinstance(m2,np.matrix) and \
-                   m1.shape==(3,3) and m2.shape==(3,3): 
-                    return LatLongCoordinates._smatrix(m2*m1,self,tosys)
-                else: #not matrix transforms,but exit - do normal conversion
-                    return self.convert(hubcoosys).convert(tosys)
-            except Exception,e:
-                #format requires 2.6
-                #niestr = 'could not convert from {0} to {1} by way of {2}'
-                #niestr = niestr.format(self.__class__,tosys,self.hubcoosys)
-                niestr = 'could not convert from %s to %s by way of %s'
-                niestr = niestr%(self.__class__,tosys,self.hubcoosys)
-                raise NotImplementedError(niestr,e)
+        if optimize:
+            convpath = CoordinateSystem.getConversionPath(self.__class__,tosys)
+            
+            if callable(convpath):
+                return convpath(self)
+            else:
+                convclasses = convpath[:]
+                convclasses.insert(0,self.__class__)
+                convclasses.append(tosys)
+                convs = [CoordinateSystem._converters[c1][c2] for c1,c2 in zip(convclasses[:-1],convclasses[1:])]
+                
+                #contract convs by combining pairs of matricies but leaving non-matrix transforms alone
+                del convclasses[0]
+                for i,(m1,m2) in reversed(enumerate(zip(convs[:-1],convs[1:]))):
+                    if m1.convtype=='smatrix' and m2.convtype=='smatrix': 
+                        mc = m2(self)*m1(self)
+                        convs[i+1]= mcfunc = lambda x:mc
+                        mcfunc.convtype = 'smatrix'
+                        del convs[i]
+                        del convclasses[i]
+            
+            #TODO:check that the calling is right here
+            coord = self
+            for conv,sys in zip(convs,convclasses):
+                if conv.convtype=='smatrix':
+                    coord = LatLongCoordinates._smatrix(conv(self),coord,sys)
+                else:
+                    coord = conv(coord)
+            return curr
         else:
-            #format requires 2.6
-            #niestr = 'could not convert from {0} to {1}'
-            #raise NotImplementedError(niestr.format(self.__class__,tosys))
-            niestr = 'could not convert from %s to %s'
-            raise NotImplementedError(niestr%(self.__class__,tosys))
+            return CoordinateSystem.convert(self,tosys)
         
     
 class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
@@ -1604,8 +1631,10 @@ class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
         LatLongCoordinates.__setstate__(self,d)
         EpochalCoordinates.__setstate__(self,d)
     
-    def convert(self,tosys):
-        res = LatLongCoordinates.convert(self,tosys)
+    @add_docs(LatLongCoordinates.convert)
+    def convert(self,tosys,optimize=True):
+        ''
+        res = LatLongCoordinates.convert(self,tosys,optimize)
         if issubclass(tosys,EpochalLatLongCoordinates):
             res._epoch = self._epoch
         return res
@@ -1704,9 +1733,11 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
             self.epoch = kwargs['epoch']
         if 'distancepc' in kwargs:
             self.distancepc = kwargs['distancepc']
-            
-    def convert(self,tosys):
-        res = EpochalLatLongCoordinates.convert(self,tosys)
+    
+    @add_docs(EpochalLatLongCoordinates.convert)
+    def convert(self,tosys,optimize=True):
+        ''
+        res = EpochalLatLongCoordinates.convert(self,tosys,optimize)
         if self._dpc is not None:
             res._dpc = self._dpc
         return res
@@ -2091,9 +2122,6 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
     def _toICRS(cirssys):
         return EquatorialCoordinatesCIRS._CMatrix(icrsc.epoch).T
-    
-#set default hub coordinate system to EquatorialCoordinatesCIRS
-LatLongCoordinates.hubcoosys = EquatorialCoordinatesCIRS
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -2262,8 +2290,10 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
     
-    def convert(self,tosys):
-        res = EpochalLatLongCoordinates.convert(self,tosys)
+    @add_docs(EpochalLatLongCoordinates.convert)
+    def convert(self,tosys,optimize=True):
+        ''
+        res = EpochalLatLongCoordinates.convert(self,tosys,optimize)
         if self._dpc is not None:
             res._dpc = self._dpc
         return res
