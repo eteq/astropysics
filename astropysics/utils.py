@@ -645,7 +645,8 @@ def add_docs_and_sig(*args):
     Does the same thing as :func:`replace_docs`, but also adds the function
     signature of the argument function to the replaced (followed by a newline).
     Note that this requires that the argument object be a function (and not
-    anything with a `__name__` and `__doc__` attribute)
+    anything with a `__name__` and `__doc__` attribute).  This istypically
+    useful for functions that do f(*args,**kwargs) to wrap some other function.
     """
     from functools import partial
     from inspect import getargspec
