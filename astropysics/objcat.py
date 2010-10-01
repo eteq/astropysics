@@ -411,13 +411,27 @@ class ActionNode(object):
     The parent for these nodes should be a :class:`Catalog` object or None, as
     other :class:`CatalogNode` objects cannot store an :class:`ActionNode`. An
     :class:`ActionNode` generally assume that the :class:`Catalog` methods are
-    available if the parent is not None
+    available if the parent is not None.
     
     *Subclassing*
     
     * If :meth:`__init__` is defined in a subclass, :meth:`ActionNode.__init__` 
       must be called with a parent.
-    * Subclasses must override the abstract :meth:`__call__` method
+    * Subclasses must override the abstract :meth:`__call__` method to define
+      the action for the node. The first argument should be the node to act on
+      or None to use the parent - this first argument is not strictly required,
+      but is recommended.
+    
+    If an action is desired without inserting the :class:`ActionNode` into the
+    graph, the following technique is usually supported::
+        
+        output = SubActionNode(None)(targetnode)
+        
+    Or if the action does not support a node as the first argument::
+    
+        action = SubActionNode(targetnode)
+        output = action()
+        action.parent = None
     
     """
     
@@ -3616,6 +3630,7 @@ class GraphAction(ActionNode):
         dldef = 'dot'
     except ImportError:
         from networkx.layout import spring_layout as dldef
+        
     def __init__(self,parent,nodename='Graphing Node',traversal='preorder',
              drawlayout=dldef,drawkwargs={},show=False,savefile=None,clf=False):
         ActionNode.__init__(self,parent,nodename) 
