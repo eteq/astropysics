@@ -64,7 +64,7 @@ if apy_build_sphinx is not None:
 
 apyspkgs = find_packages()
 #extra/recommended packages
-_extras = ['matplotlib','pyfits','ipython','pydot']
+_extras = ['matplotlib','pyfits','ipython','networkx','pygraphviz']
 _guiextras = ['traits','traitsGUI','chaco']
 _gui3dextras = ['mayavi']
 

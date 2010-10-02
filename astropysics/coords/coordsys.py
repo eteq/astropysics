@@ -805,8 +805,11 @@ class CoordinateSystem(object):
                 lfunc.transtype = transtype
                 CoordinateSystem._converters[fromclass][toclass] = lfunc
             else:
-                func.transtype = transtype
+                func.transtype = None
                 CoordinateSystem._converters[fromclass][toclass] = func
+        
+        CoordinateSystem._invalidateTransformCache()
+        
         
     @staticmethod
     def getTransform(fromclass,toclass):
@@ -851,61 +854,12 @@ class CoordinateSystem(object):
             return []
         
     @staticmethod
-    def graphTransforms(writefile=None):
-        """
-        Returns a `Pydot <http://code.google.com/p/pydot/>` :class:`Dot` object
-        representing a graph of the registered coordinate systesm and the
-        transformations between them. 
-        
-        :param writefile: 
-            A filename to which the graph should be written. The format will be
-            inferred from the filename extension (default 'raw'). If None, no
-            file will be written.
-        :type writefile: string or None
-        
-        :except ImportError: If pydot is not installed.
-        
-        """
-        import pydot
-        
-        d = pydot.Dot()
-        ts = CoordinateSystem.listAllTransforms()
-        cs = set()
-        edges = []
-        
-        
-        for c1,c2 in ts:
-            cs.add(c1)
-            cs.add(c2)
-            if (c2,c1,False) in edges:
-                edges.remove((c2,c1,False))
-                edges.append((c2,c1,True))
-            else:
-                edges.append((c1,c2,False))
-                
-        for c in cs:
-            d.add_node(pydot.Node(c.__name__))
-        for c1,c2,bidir in edges:
-            e = pydot.Edge(c1.__name__,c2.__name__,dir=('both' if bidir else 'foreward'))
-            d.add_edge(e)
-            
-        if writefile is not None:
-            from os.path import splitext
-            base,ext = splitext(writefile)
-            if ext == '':
-                ext = 'raw'
-            else:
-                ext = ext.replace('.','')
-            d.write(writefile,format=ext)
-        
-        return d
-        
-    @staticmethod
     def delTransform(fromclass,toclass):
         """
         Deletes the transformation function to go from `fromclass` to `toclass`.
         """
         del CoordinateSystem._converters[fromclass][toclass]
+        CoordinateSystem._invalidateTransformCache()
         
     @staticmethod
     def addTransType(funcorname):
@@ -971,25 +925,67 @@ class CoordinateSystem(object):
             raise TypeError('funcorname is neither a callable nor a string')
     
     @staticmethod    
-    def getConversionPath(fromsys,tosys):
+    def getTransformPath(fromsys,tosys):
         """
         Determines the conversion path from one coordinate system to another.
         
         :param fromsys: The starting coordinate system class
         :param tosys: The target coordinate system class
         :returns: 
-            A list of coordinate classes (not including `fromsys` and `tosys`) 
-            with the shortest path from `fromsys` to `tosys` or a callable with the 
-            transformation if a single-step direct transformation is available
+            A list of coordinate classes with the shortest path from `fromsys`
+            to `tosys` (*including* `fromsys` and `tosys`) or a callable with
+            the transformation if a single-step direct transformation is
+            available
         
         :except NotImplementedError: If no path can be found.
         """
-        if tosys in CoordinateSystem._converters[self.__class__]:
-            return CoordinateSystem._converters[self.__class__][tosys]
+        if tosys in CoordinateSystem._converters[fromsys]:
+            return CoordinateSystem._converters[fromsys][tosys]
         else:
-            #TODO:implement networkx path-finder
-            strf = 'cannot convert coordinate system %s to %s'
-            raise NotImplementedError(strf%(fromsys.__name__,tosys.__name__))
+            failstr = 'cannot convert coordinate system %s to %s'%(fromsys.__name__,tosys.__name__)
+            try:
+                import networkx as nx
+                
+                g = CoordinateSystem.getTransformGraph()
+                path = nx.shortest_path(g,fromsys,tosys)
+                if not path:
+                    raise NotImplementedError(failstr+'; no transform path could be found')
+                return path
+            except ImportError,e:
+                if e2.args[0] == 'No module named networkx':
+                    raise NotImplementedError(failstr+'; networkx not installed')
+                else:
+                    raise
+        
+    _transgraph = None
+    @staticmethod
+    def getTransformGraph():
+        """
+        Returns a `networkx <http://networkx.lanl.gov/>` :class:`DiGraph` object
+        representing a graph of the registered coordinate systems and the
+        transformations between them.
+        
+        :except ImportError: If networkx is not installed.
+        
+        """
+        import networkx as nx
+        
+        if CoordinateSystem._transgraph is None:
+            CoordinateSystem._transgraph = g = nx.DiGraph()
+            g.add_edges_from(CoordinateSystem.listAllTransforms())
+            
+        return CoordinateSystem._transgraph.copy()
+    
+    
+    _transformcache = _defaultdict(dict)
+    @staticmethod
+    def _invalidateTransformCache():
+        """
+        Called when transforms are changed to invalidate the caches
+        """
+        from collections import defaultdict
+        CoordinateSystem._transformcache = defaultdict(dict)
+        CoordinateSystem._transgraph = None
 
     def convert(self,tosys):
         """
@@ -1004,7 +1000,7 @@ class CoordinateSystem(object):
         :except: raises :exc:`NotImplementedError` if conversion is not present
         """
         
-        convpath = CoordinateSystem.getConversionPath(self.__class__,tosys)
+        convpath = CoordinateSystem.getTransformPath(self.__class__,tosys)[1:-1]
         
         if callable(convpath):
             return convpath(self)
@@ -1565,36 +1561,72 @@ class LatLongCoordinates(CoordinateSystem):
         :except: raises NotImplementedError if converters are not present
         """
         if optimize:
-            convpath = CoordinateSystem.getConversionPath(self.__class__,tosys)
+            cache = CoordinateSystem._transformcache['smatrix']
             
-            if callable(convpath):
-                return convpath(self)
-            else:
-                convclasses = convpath[:]
-                convclasses.insert(0,self.__class__)
-                convclasses.append(tosys)
-                convs = [CoordinateSystem._converters[c1][c2] for c1,c2 in zip(convclasses[:-1],convclasses[1:])]
+            #add this object to the cache if its missing
+            if self.__class__ not in cache:
+                cache[self.__class__] = {}
                 
-                #contract convs by combining pairs of matricies but leaving non-matrix transforms alone
-                del convclasses[0]
-                for i,(m1,m2) in reversed(enumerate(zip(convs[:-1],convs[1:]))):
-                    if m1.convtype=='smatrix' and m2.convtype=='smatrix': 
-                        mc = m2(self)*m1(self)
-                        convs[i+1]= mcfunc = lambda x:mc
-                        mcfunc.convtype = 'smatrix'
-                        del convs[i]
-                        del convclasses[i]
-            
-            #TODO:check that the calling is right here
-            coord = self
-            for conv,sys in zip(convs,convclasses):
-                if conv.convtype=='smatrix':
-                    coord = LatLongCoordinates._smatrix(conv(self),coord,sys)
+            if tosys not in cache[self.__class__]:
+                convs = CoordinateSystem.getTransformPath(self.__class__,tosys)
+                
+                if callable(convs): #direct transform
+                    convs = [convs]
                 else:
-                    coord = conv(coord)
-            return curr
+                    convclasses = convs
+                    convfuncs = [CoordinateSystem._converters[c1][c2] for c1,c2 in zip(convclasses[:-1],convclasses[1:])]
+                    convs = []
+                    
+                    #now we populate convs with converter functions that are 
+                    #either multplied-together matricies if they are smatrix
+                    #converters or the actual converter function otherwise
+                    combinedmatrix = None
+                    lastcls = None
+                    for cls,cfunc in zip(convclasses[:-1],convfuncs):
+                        #note that cls here is the *previous* conversion's end 
+                        #class/current conversion's start class...
+                        if cfunc.transtype=='smatrix':
+                            if combinedmatrix is None:
+                                combinedmatrix = cfunc.basetrans(self)
+                            else:
+                                combinedmatrix *= cfunc.basetrans(self)
+                        else:
+                            if combinedmatrix is None:
+                                convs.append(cfunc)
+                            else:
+                                convs.append(_OptimizerSmatrixer(combinedmatrix,cls))
+                                convs.append(cfunc)
+                                
+                    if combinedmatrix is not None:
+                        convs.append(_OptimizerSmatrixer(combinedmatrix,convclasses[-1]))
+                
+                #now cache this transform for future use
+                cache[self.__class__][tosys] = convs
+                
+            else:
+                convs = cache[self.__class__][tosys]
+            
+            #now actually do the transforms
+            coord = self
+            for conv in convs:
+                coord = conv(coord)
+            return coord
+        
         else:
             return CoordinateSystem.convert(self,tosys)
+        
+class _OptimizerSmatrixer(object):
+    """
+    Used internally to do the optimization of :meth`LatLongCoordinates.convert`
+    """
+    transtype = 'smatrix'
+    def __init__(self,combinedmatrix,tocls):
+        self.combinedmatrix = combinedmatrix
+        self.tocls = tocls
+    def __call__(self,coord):
+        return LatLongCoordinates._smatrix(self.combinedmatrix,coord,self.tocls)
+    def basetrans(self,coords):
+        return self.combinedmatrix
         
     
 class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
@@ -2783,9 +2815,11 @@ class HorizontalCoordinates(LatLongCoordinates):
         raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
     
     
-#Now that all the coordinate systems have been made, add a diagram to the docs
+#Now that all the coordinate systems have been made, add the diagram to the docs
+#That shows the graph of the built-in transforms
 try:
-    dotobj = CoordinateSystem.graphTransforms()
+    from networkx import to_agraph,relabel_nodes
+    graph = to_agraph(relabel_nodes(CoordinateSystem.getTransformGraph(),lambda n:n.__name__))
     transstr="""
 Builtin Coordinate System Transforms
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -2795,23 +2829,26 @@ transformations. The defined transformation are shown in the diagram below.
 
 .. graphviz::
 
-    """+dotobj.to_string().replace('\n','\n    ')
+    """+graph.string().replace('\n','\n    ')
     __doc__ = __doc__.replace('{transformdiagram}',transstr)
-    del dotobj
+    del to_agraph,relabel_nodes,graph
 except ImportError:
-    #if pydot isn't present, drop the diagram but add a warning that it's missing
+    #if networkx or pygraphviz isn't present, drop the diagram but add a warning that it's missing
     warningstr = """
 Builtin Coordinate System Transforms
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 .. warning::
     A diagram showing the relationships between the pre-defined transformations
-    should be here, but this copy of the documentation was built without pydot
-    available to build the diagram. Please re-build this file after pydot is
-    installed to see the diagram.
+    should be here, but this copy of the documentation was built without
+    `networkx <http://networkx.lanl.gov/>` and `pygraphviz
+    <http://networkx.lanl.gov/pygraphviz/>` available to build the diagram.
+    Please re-build this file after those packages are installed to see the
+    diagram.
     """
     __doc__ = __doc__.replace('{transformdiagram}',warningstr)
     del warningstr
+    
     
 #<--------------------------Convinience Functions------------------------------>
 
