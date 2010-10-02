@@ -2781,6 +2781,8 @@ class SupergalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(GalacticCoordinates,'self',transtype='smatrix')
     def _fromGal(galcoords):
+        from warnings import warn
+        warn("supergalactic coordinates conversion has some probelm - don't trust it at the moment")
         latang = SupergalacticCoordinates._nsgp_gal.lat.d
         longang = SupergalacticCoordinates._nsgp_gal.long.d
         return rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
