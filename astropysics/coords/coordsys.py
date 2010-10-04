@@ -927,7 +927,8 @@ class CoordinateSystem(object):
     @staticmethod    
     def getTransformPath(fromsys,tosys):
         """
-        Determines the conversion path from one coordinate system to another.
+        Determines the transformation path from one coordinate system to another
+        for use with :meth:`convert`.
         
         :param fromsys: The starting coordinate system class
         :param tosys: The target coordinate system class
