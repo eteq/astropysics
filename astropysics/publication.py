@@ -69,14 +69,6 @@ _commandre = _re.compile(_commandstr)
 #this matches either '}' or ']' if it is followed by { or [ or the end of the string
 _cmdargsepre = _re.compile(r'(?:}|])(?=\s*?(?:$|{|\[))')
 
-##Finds anything of the form {\cmd content} for enclosed declarations
-## group 1 is the command name, 2 the enclosed content, *including the first white space*
-#_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})?.*?)*)}'
-#_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})*.*?)*)}'
-#_encdecre = _re.compile(_encdecstr)
-
-##last two combined
-#_encdeccmdre = _re.compile('(?:%s)|(?:%s)'%(_encdecstr,_commandstr))
 
 class TeXNode(object):
     """
@@ -429,6 +421,33 @@ class Command(TeXNode):
     def __str__(self):
         return 'Command@%i:%s'%(id(self),self.name)
     
+class TrailingCharCommand(Command):
+    r"""
+    A special command that allows a single trailing character of any type - 
+    used for '\left{' '\right]' and similar.
+    """
+    
+    children = tuple() #technically a leaf, but should be an iterable for compatibility w/:class:`Command`
+    
+    def __init__(self,parent,content):
+        """
+        `content` can be a (name,char) tuple, or a command string
+        """
+        if isinstance(content,basestring):
+            if not content.startswith('\\'):
+                raise ValueError("Tried to make a Command that doesn't start with a backslash")
+            name = content[1:-1]
+            tchar = content[-1]
+        else:
+            name,tchar = content
+            
+        self.parent = parent
+        self.name = name
+        self.trailingchar = tchar
+        
+    def getSelfText(self):
+        return '\\'+self.name+self.trailingchar
+        
 class RequiredArgument(TeXNode):
     """
     An argument to a macro that is required (i.e. enclosed in curly braces)
@@ -560,6 +579,38 @@ def text_to_nodes(parent,txt):
             
         if i < len(envstrs):
             txtnodel.append(environment_factory(parent,envstrs[i]))
+            
+    #Fix up any Command nodes that are \left or \right
+    for i in reversed(range(len(txtnodel))):
+        if isinstance(txtnodel[i],Command):
+            if txtnodel[i].name == 'left' and len(txtnodel[i].children)>0:
+                #this is for '\left{' and '\left[' because they match to the 
+                #command regular expression incorrectly
+                cmd = txtnodel[i]
+                txt = cmd()
+                tchar = txt[len(cmd.name)+1]
+                
+                tcmd = TrailingCharCommand(parent,(cmd.name,tchar))
+                toins = text_to_nodes(parent,txt[len(cmd.name)+2:])
+                
+                txtnodel[i] = tcmd
+                insi = i+1
+                for j,e in enumerate(toins):
+                    txtnodel.insert(i+j+1,e)
+            elif txtnodel[i].name in ('left','right') and \
+                    (i<len(txtnodel)-1) and \
+                    isinstance(txtnodel[i+1],basestring) and \
+                    not txtnodel[i+1][0].isspace():
+                     
+                nm = txtnodel[i].name 
+                tchar = txtnodel[i+1][0]
+                txtnodel[i] = TrailingCharCommand(parent,(nm,tchar))
+                newtxt = txtnodel[i+1][1:]
+                if newtxt == '':
+                    del txtnodel[i+1]
+                else:
+                    txtnodel[i+1] = newtxt
+            
             
     #now find Command nodes that are actually supposed to be EnclosedDeclarations
     todel = []
