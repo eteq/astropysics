@@ -91,6 +91,11 @@ class TeXNode(object):
     
     __metaclass__ = ABCMeta
     
+    #:The parent of this node in the node tree, or None if this is a root.
+    parent = None
+    #:A list of child nodes of this node.
+    children = tuple()
+    
     def __init__(self,parent):
         self.parent = parent
         self.children = []
@@ -145,6 +150,13 @@ class TeXFile(TeXNode):
     """
     A TeX Document loaded from a file.
     """
+    
+    #: The :class:`Preamble` object for this file
+    preamble = None
+    #: The first :class:`Document` environment in this file or None if there isn't one
+    document = None
+    
+    
     def __init__(self,fn=None):
         self.parent = None
         self.children = []
@@ -155,7 +167,7 @@ class TeXFile(TeXNode):
     
     def _parse(self,f):
         """
-        Parse the file - `f` can be a file object or a string w/newlines
+        Parse the file - `f` can be a file object or a string w/newlines.
         """
         if isinstance(f,basestring):
             f = f.split('\n')
@@ -177,6 +189,11 @@ class TeXFile(TeXNode):
         self.children = text_to_nodes(self,contentstr)
         self.children.insert(0,self.preamble)
         
+        for c in self.children:
+            if isinstance(c,Document):
+                self.document = c
+                break
+        
     def getSelfText(self):
         return None
         
@@ -193,6 +210,10 @@ class TeXt(TeXNode):
     """
     A node that stores generic text. This is always a leaf.
     """
+    
+    #: The text in this object
+    text = ''
+    
     def __init__(self,parent,text):
         self.parent = parent
         self.text = text
@@ -218,17 +239,20 @@ class Environment(TeXNode):
     A LaTex environment.  
     
     *Subclassing*
-    Subclasses must implement the :meth:`parse` method - see the method for 
-    syntax.  They should also be registered with the :meth:`registerEnvironment` 
-    static method to have them be parsed with the default :class:`TeXFile` 
-    parser. Generally, they should also have a class attribute named `envname`
-    that gives the name of the environment (this name will be automatically used
-    to determine which environments the subclass represents)
+    Subclasses must implement the :meth:`parse` method - see the method for
+    syntax. They should also be registered with the :meth:`registerEnvironment`
+    static method to have them be parsed with the default :class:`TeXFile`
+    parser. Generally, they should also have a class attribute named `name` that
+    gives the name of the environment (this name will be automatically used to
+    determine which environments the subclass represents)
     """
+    
+    #: The name of this environment.
+    name = ''
     
     def __init__(self,parent,content,envname=None):
         """
-        If envname is None, it will be taken from the class-level envname object
+        If `envname` is None, it will be taken from the class-level :attr:`name`
         """
         self.parent = parent
         self.children = c = []
@@ -410,6 +434,9 @@ class RequiredArgument(TeXNode):
     An argument to a macro that is required (i.e. enclosed in curly braces)
     """
     children = None #arguments are always a leaf
+    #: The text of this argument object
+    text = ''
+    
     def __init__(self,parent,text):
         self.parent = parent
         self.text = text
@@ -422,6 +449,8 @@ class OptionalArgument(TeXNode):
     An argument to a macro that is required (i.e. enclosed in square brackets)
     """
     children = None #arguments are always a leaf
+    
+    
     def __init__(self,parent,text):
         self.parent = parent
         self.text = text
@@ -434,6 +463,12 @@ class EnclosedDeclaration(TeXNode):
     A TeX construct of the form {\name{op}[op] content}. Note that declarations
     terminated by the \end command will not be treated as this kind of object.
     """
+    
+    #: Whitespace string between the opening brace and the command
+    padstr = ''
+    #: A :class:`Command` object with the command in the declaration
+    cmd = None
+    
     def __init__(self,parent,content):
         """
         Content can either be a (padstr,commandnode,innercontent) tuple where
@@ -464,11 +499,8 @@ class EnclosedDeclaration(TeXNode):
             padstr,cmd,innercontent = content
             cmd.parent = self
             
-        #The parent object
         self.parent = parent
-        #whitespace string between the opening brace and the command
         self.padstr = padstr
-        #A :class:`Command` object with the command in the declaration
         self.cmd = cmd
         #content after the command
         if isinstance(innercontent,basestring):
