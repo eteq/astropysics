@@ -55,6 +55,28 @@ except ImportError: #support for earlier versions
         __slots__=('__weakref__',) #support for weakrefs as necessary
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
+        
+#<----------Useful regular expressions, mostly used in text_to_nodes----------->
+#this finds anything that begins with \begin{<name>} and ends with \end{<name}
+#group 1 is the whole env, 2 is the name, 3 is the content
+_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
+
+#This finds anthing like \command{...}{...}... w/ group 1  as the command name,
+# 2 the arguments
+_commandstr = r'\\(\w.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|(?=\W))'
+_commandre = _re.compile(_commandstr)
+
+#this matches either '}' or ']' if it is followed by { or [ or the end of the string
+_cmdargsepre = _re.compile(r'(?:}|])(?=\s*?(?:$|{|\[))')
+
+##Finds anything of the form {\cmd content} for enclosed declarations
+## group 1 is the command name, 2 the enclosed content, *including the first white space*
+#_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})?.*?)*)}'
+#_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})*.*?)*)}'
+#_encdecre = _re.compile(_encdecstr)
+
+##last two combined
+#_encdeccmdre = _re.compile('(?:%s)|(?:%s)'%(_encdecstr,_commandstr))
 
 class TeXNode(object):
     """
@@ -301,7 +323,6 @@ class Document(Environment):
 class Figure(Environment):
     name = 'figure'
 
-_cmdargsepre = _re.compile(r'}|\]')
 class Command(TeXNode):
     """
     A LaTeX command (anything with leading backslash and possible arguments
@@ -339,14 +360,12 @@ class Command(TeXNode):
         
         self.parent = parent 
         self.name = cmdname
+        self.children = argnodes = []
         
-        if args.strip() == '':
-            self.children = []
-        else:
+        if args:
             argspl = _cmdargsepre.split(args)
-            argnodes = []
-            #last one should always be empty string
-            assert argspl[-1] == ''
+            if argspl[-1] != '':
+                raise ValueError('invalid argument string in Command:"'+args+'"')
             argspl = argspl[:-1]
             for a in argspl:
                 if a[0]=='{':
@@ -356,8 +375,6 @@ class Command(TeXNode):
                 else:
                     raise ValueError('invalid set of arguments '+args)
             
-            self.children = argnodes
-        
     @property
     def reqargs(self):
         """
@@ -414,33 +431,59 @@ class OptionalArgument(TeXNode):
     
 class EnclosedDeclaration(TeXNode):
     r"""
-    A TeX construct of the form {\name content}. Note that declarations
+    A TeX construct of the form {\name{op}[op] content}. Note that declarations
     terminated by the \end command will not be treated as this kind of object.
     """
     def __init__(self,parent,content):
         """
-        Content can either be a (name,innercontent) tuple, or the full string 
-        including the outermost braces
+        Content can either be a (padstr,commandnode,innercontent) tuple where
+        `padstr` is the string before the command, `commandnode` is a
+        :class:`Command` object with the command portion of the declaration, and
+        `innercontent` is the content after the command either as a string or a
+        list of nodes (possibly mixed with strings). Alternatively, it can be
+        the full string including the outermost braces.
         """
         if isinstance(content,basestring):
             if not content.startswith('{\\'):
                 raise ValueError("Tried to make enclosed declaration that does't start with {\\")
             if not content.endswith('}'):
                 raise ValueError("Tried to make enclosed declaration that does't end with }")
-        
-            name = content.split()[0]
-            innercontent = content[len(name):]
-        else:
-            if len(content) != 2:
-                raise ValueError('EnclosedDeclaration content is not length-2')
-            name,innercontent = content
             
+            content = content[1:-1] #remove braces
+            cmdspl = _commandre.search(content)
+            if cmdspl is None:
+                raise ValueError('Tried to make an enclosed declaration with no enclosed command')
+            padstr = content[:cmdspl.start()]
+            
+            innercontent = content[cmdspl.end():]
+            cmd = Command(self,cmdspl.group(1),'')
+
+        else:
+            if len(content) != 3:
+                raise ValueError('EnclosedDeclaration content tuple is not length-3')
+            padstr,cmd,innercontent = content
+            cmd.parent = self
+            
+        #The parent object
         self.parent = parent
-        self.name = name
-        self.children = text_to_nodes(self,innercontent)
+        #whitespace string between the opening brace and the command
+        self.padstr = padstr
+        #A :class:`Command` object with the command in the declaration
+        self.cmd = cmd
+        #content after the command
+        if isinstance(innercontent,basestring):
+            self.children = text_to_nodes(self,innercontent)
+        else:
+            self.children = children = []
+            for e in innercontent:
+                if isinstance(e,basestring):
+                    children.extend(text_to_nodes(self,e))
+                else:
+                    e.parent = self
+                    children.append(e)
         
     def getSelfText(self):
-        return ('{\\%s '%self.name,'}')
+        return ('{'+self.padstr+self.cmd(),'}')
     
 class Preamble(TeXNode):
     """
@@ -462,23 +505,7 @@ class Preamble(TeXNode):
     def getSelfText(self):
         return None
 
-#<------------------Useful regexes used in text_to_nodes----------------------->
-#this finds anything that begins with \begin{<name>} and ends with \end{<name}
-#group 1 is the whole env, 2 is the name, 3 is the content
-_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
 
-#This finds anthing like \command{...}{...}... w/ group 1  is the command name,
-# 2 the arguments
-_commandstr = r'\\(\w.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|\s)'
-_commandre = _re.compile(_commandstr)
-
-#Finds anything of the form {\cmd content} for enclosed declarations
-# group 1 is the command name, 2 the enclosed content, *including the first white space*
-_encdecstr = r'{\\(.*?)\s((?:.*?(?:{.*?})?.*?)*)}'
-_encdecre = _re.compile(_encdecstr)
-
-#last two combined
-_encdeccmdre = _re.compile('(?:%s)|(?:%s)'%(_encdecstr,_commandstr))
 
 def text_to_nodes(parent,txt):
     """
@@ -489,28 +516,75 @@ def text_to_nodes(parent,txt):
     splitenv = _envre.split(txt) 
     envstrs = splitenv[1::4]
     for i,txts in enumerate(splitenv[::4]):
-        #for each text chunk, split out the command or EnclosedDeclaration nodes and then add
+        #for each text chunk, split out the command  nodes and then add
         #the chunks back to the contentlist
-        splitedcms = _encdeccmdre.split(txts)
-        for j in range(0,len(splitedcms)-1,5):
+        splitedcms = _commandre.split(txts)
+        for j in range(0,len(splitedcms)-1,3):
             txtnodel.append(splitedcms[j])
-            if splitedcms[j+1] is None: #means a command, not enclosed declaration
-                txtnodel.append(Command(parent,(splitedcms[j+3],splitedcms[j+4])))
-                #if no arguments are provided, fill in the white space matched 
-                #in the RE
-                if len(txtnodel[-1].children)==0:
-                    txtnodel.append(splitedcms[j+4]) 
-            else: #enclosed declaration
-                txtnodel.append(EnclosedDeclaration(parent,(splitedcms[j+1],splitedcms[j+2])))
+            txtnodel.append(Command(parent,(splitedcms[j+1],splitedcms[j+2])))
         #add in last one excluded from above
         if len(splitedcms)>0:
             txtnodel.append(splitedcms[-1])
             
         if i < len(envstrs):
             txtnodel.append(environment_factory(parent,envstrs[i]))
+            
+    #now find Command nodes that are actually supposed to be EnclosedDeclarations
+    todel = []
+    for i in range(1,len(txtnodel)-1):
+        if isinstance(txtnodel[i],Command) and isinstance(txtnodel[i-1],basestring) and isinstance(txtnodel[i+1],basestring):
+            #an enclosed dec needs to be "{<maybewhitespace>\command<whitespace>"
+            prebracket = txtnodel[i-1].rstrip().endswith('{')
+            postwhitespace = len(txtnodel[i+1])>0 and txtnodel[i+1][0].isspace()
+            if prebracket and postwhitespace:
+                cmdnode = txtnodel[i]
+                
+                #search for the matched closing brace
+                nbraces = 1
+                encdeccontent = []
+                for j in range(1,len(txtnodel)-i):
+                    txtnode = txtnodel[i+j]
+                    if isinstance(txtnode,basestring):
+                        bracescount = txtnode.count('{') - txtnode.count('}')
+                        if (nbraces+bracescount)>1:
+                            encdeccontent.append(txtnode)
+                            nbraces += bracescount
+                            todel.append(i+j)
+                        else: #need to find exactly where it finishes
+                            for k,char in enumerate(txtnode): #find character that is '}' closer
+                                if char=='{':
+                                    nbraces+=1
+                                elif char=='}':
+                                    nbraces-=1
+                                if nbraces==0:
+                                    break
+                            if nbraces!=0:
+                                from warnings import warn
+                                warn('apparent EnclosedDeclaration has unbalanced braces, skipping')
+                                encdeccontent = None
+                                break
+                                #raise ValueError('apparent EnclosedDeclaration has unbalanced braces')
+                            
+                            encdeccontent.append(txtnode[:k])
+                            #replace the current node with the left-over text
+                            txtnodel[i+j] = txtnode[k+1:]
+                            break
+                    else: #everything else should be balanced, and hence should just get added to the encdec
+                        encdeccontent.append(txtnode)
+                        
+                if encdeccontent is not None:
+                    #remove starting '{' and determine the whitespace padding before the command
+                    braceind = txtnodel[i-1].rfind('{')
+                    padstr = txtnodel[i-1][braceind+1:]
+                    txtnodel[i-1] = txtnodel[i-1][:braceind]
+                    #add declaration
+                    txtnodel[i] = EnclosedDeclaration(parent,(padstr,cmdnode,encdeccontent))
+                
+    for i in reversed(todel):
+        del txtnode[i]
     
     #now add all the nodes to the child list, 
-    #transforming text into TeXt and maybe Newlines if present
+    #transforming remaining text into TeXt and maybe Newlines if present
     nodel = []
     for t in txtnodel:
         if isinstance(t,basestring):
@@ -535,9 +609,13 @@ def prep_for_arxiv_pub(texfile):
 #Tasks: redo figures into f##[l].eps and move the files
 #set class to aastex
 #strip comments
-#fix any deluxetable* -> deluxetable (and rotate)
+#fix any deluxetable* -> deluxetable (and add rotate where necessary, also remove [t!] and the like?)
 #issue warning if abstract too long
-#copy over bib and bbl if necessary
+#copy over bib or bbl if necessary
 #.tar.gz up with appropriate name and date
+#?test compilation?
+#remove \comment?
+#tablenotemark{$...$} warning?
 def prep_for_apj_pub(texfile,authorlast):
     raise NotImplementedError
+
