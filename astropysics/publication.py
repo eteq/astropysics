@@ -606,6 +606,7 @@ def text_to_nodes(parent,txt):
         for j in range(0,len(splitedcms)-1,3):
             txtnodel.append(splitedcms[j])
             txtnodel.append(Command(parent,(splitedcms[j+1],splitedcms[j+2])))
+            txtnodel[-1].origtext = splitedcms[j+2]
         #add in last one excluded from above
         if len(splitedcms)>0:
             txtnodel.append(splitedcms[-1])
@@ -623,16 +624,18 @@ def text_to_nodes(parent,txt):
                 #this is for '\left{' and '\left[' because they match to the 
                 #command regular expression incorrectly
                 cmd = txtnodel[i]
-                txt = cmd()
-                tchar = txt[len(cmd.name)+1]
+                txt = cmd.origtext
+                tchar = txt[0]
                 
                 tcmd = TrailingCharCommand(parent,(cmd.name,tchar))
-                toins = text_to_nodes(parent,txt[len(cmd.name)+2:])
+                toins = text_to_nodes(parent,txt[1:])
                 
                 txtnodel[i] = tcmd
                 insi = i+1
                 for j,e in enumerate(toins):
                     txtnodel.insert(i+j+1,e)
+                for c in txtnodel[i].children:
+                    print c()
             elif txtnodel[i].name in ('left','right') and \
                     (i<len(txtnodel)-1) and \
                     isinstance(txtnodel[i+1],basestring) and \
@@ -701,6 +704,11 @@ def text_to_nodes(parent,txt):
                 
     for i in reversed(todel):
         del txtnode[i]
+        
+    #remove origtxt from any nodes that have it
+    for n in txtnodel:
+        if hasattr(n,'origtext'):
+            del n.origtext 
     
     #now add all the nodes to the child list, 
     #transforming remaining text into TeXt and maybe Newlines if present
