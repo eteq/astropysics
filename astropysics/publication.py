@@ -59,7 +59,7 @@ except ImportError: #support for earlier versions
 #<----------Useful regular expressions, mostly used in text_to_nodes----------->
 #this finds anything that begins with \begin{<name>} and ends with \end{<name}
 #group 1 is the whole env, 2 is the name, 3 is the content
-_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})',_re.DOTALL)
+_envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})|(\${1,2}.*?\${1,2})',_re.DOTALL)
 
 #This finds anthing like \command{...}{...}... w/ group 1  as the command name,
 # 2 the arguments
@@ -231,7 +231,7 @@ class Environment(TeXNode):
     A LaTex environment.  
     
     *Subclassing*
-    Subclasses must implement the :meth:`parse` method - see the method for
+    Subclasses can implement the :meth:`postParse` method - see the method for
     syntax. They should also be registered with the :meth:`registerEnvironment`
     static method to have them be parsed with the default :class:`TeXFile`
     parser. Generally, they should also have a class attribute named `name` that
@@ -338,6 +338,39 @@ class Document(Environment):
 @Environment.registerEnvironment
 class Figure(Environment):
     name = 'figure'
+   
+class MathMode(TeXNode):
+    """
+    A math environment surrounded by $ symbols or $$ (for display mode)
+    """
+    name = ''
+    
+    #: determines if the MathMode is in display mode ($$) or not ($)
+    displaymode = False
+    
+    def __init__(self,parent,content):
+        """
+        `content` should be the full string (including $) or (displaymode,content)
+        """
+        if isinstance(content,basestring):
+            if content.startswith('$$'):
+                displaymode = True
+                content = content[2:-2]
+            elif content.startswith('$'):
+                displaymode = False
+                content = content[1:-1]
+            else:
+                raise ValueError('Tried to make MathMode object with no $')
+        else:
+            displaymode,content = content
+            
+        self.parent = parent
+        self.displaymode = displaymode
+        self.children = text_to_nodes(self,content)
+    
+    def getSelfText(self):
+        msymb = '$$' if self.displaymode else '$'
+        return (msymb,msymb)
 
 class Command(TeXNode):
     """
@@ -565,8 +598,8 @@ def text_to_nodes(parent,txt):
     txtnodel = []
     #now split out nested environments and commands and build them 
     splitenv = _envre.split(txt) 
-    envstrs = splitenv[1::4]
-    for i,txts in enumerate(splitenv[::4]):
+    envstrs = splitenv[1::5]
+    for i,txts in enumerate(splitenv[::5]):
         #for each text chunk, split out the command  nodes and then add
         #the chunks back to the contentlist
         splitedcms = _commandre.split(txts)
@@ -578,7 +611,10 @@ def text_to_nodes(parent,txt):
             txtnodel.append(splitedcms[-1])
             
         if i < len(envstrs):
-            txtnodel.append(environment_factory(parent,envstrs[i]))
+            if envstrs[i] is not None:
+                txtnodel.append(environment_factory(parent,envstrs[i]))
+            else:
+                txtnodel.append(MathMode(parent,splitenv[5*i+4]))
             
     #Fix up any Command nodes that are \left or \right
     for i in reversed(range(len(txtnodel))):
