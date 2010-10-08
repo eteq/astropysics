@@ -166,14 +166,16 @@ class TeXFile(TeXNode):
             f = f.read()
         flines = f.split('\n')
         
-        #populate comments 
-        comments = []
+        #determine a safe comment name by finding something that doesn't appear
+        #in the text
         commentcmdname = 'astppubcomment'
         i = 0
         while commentcmdname in f:
             commentcmdname = 'astppubcomment' + str(i)
             i += 1
             
+        #populate comments 
+        comments = []    
         for i,l in enumerate(flines):
             pind = l.find('%')
             if pind>-1:
@@ -274,7 +276,11 @@ class Environment(TeXNode):
     
     def __init__(self,parent,content,envname=None):
         """
-        If `envname` is None, it will be taken from the class-level :attr:`name`
+        :param parent: The parent node
+        :param content: The string between '\begin{...}' and '\end{...}'
+        :param envname: 
+            If a string, it will be taken as the environment name. If None, it
+            will be taken from the class-level :attr:`name`
         """
         self.parent = parent
         self.children = c = []
@@ -380,7 +386,10 @@ class MathMode(TeXNode):
     
     def __init__(self,parent,content):
         """
-        `content` should be the full string (including $) or (displaymode,content)
+        :param parent: The parent node
+        :param content: 
+            The full string (including $) or a tuple(displaymode,content) where
+            `displaymode` is a bool and `content` is a string
         """
         if isinstance(content,basestring):
             if content.startswith('$$'):
@@ -409,9 +418,10 @@ class Command(TeXNode):
     """
     def __init__(self,parent,content):
         """
-        Content can either be a string with the command text, or a (name,args)
-        tuple where args is a sequence of strings or a string 
-        '{arg1}[oarg1]{arg2}...'
+        :param parent: The parent node
+        :param conent:  
+            Either a string with the command text, or a (name,args) tuple where
+            args is a sequence of strings or a string '{arg1}[oarg1]{arg2}...'
         """
         if isinstance(content,basestring):
             if not content.startswith('\\'):
@@ -494,7 +504,8 @@ class TrailingCharCommand(Command):
     
     def __init__(self,parent,content):
         """
-        `content` can be a (name,char) tuple, or a command string
+        :param parent: The parent node
+        :param conent: A (name,char) tuple, or a command string
         """
         if isinstance(content,basestring):
             if not content.startswith('\\'):
@@ -553,12 +564,14 @@ class EnclosedDeclaration(TeXNode):
     
     def __init__(self,parent,content):
         """
-        Content can either be a (padstr,commandnode,innercontent) tuple where
-        `padstr` is the string before the command, `commandnode` is a
-        :class:`Command` object with the command portion of the declaration, and
-        `innercontent` is the content after the command either as a string or a
-        list of nodes (possibly mixed with strings). Alternatively, it can be
-        the full string including the outermost braces.
+        :param parent: The parent node
+        :param content: 
+            A (padstr,commandnode,innercontent) tuple where `padstr` is the
+            string before the command, `commandnode` is a :class:`Command`
+            object with the command portion of the declaration, and
+            `innercontent` is the content after the command either as a string
+            or a list of nodes (possibly mixed with strings). Alternatively, it
+            can be the full text string including the outermost braces.
         """
         if isinstance(content,basestring):
             if not content.startswith('{\\'):
@@ -605,6 +618,7 @@ class Preamble(TeXNode):
     """
     def __init__(self,parent,content):
         """
+        :param parent: The parent node
         :param string content: The text of the preamble
         """
         self.parent = parent
@@ -633,6 +647,7 @@ class Comment(TeXNode):
     
     def __init__(self,parent,ctext):
         """
+        :param parent: The parent node
         :param ctext: The comment text (with or without an initial %)
         """
         if len(ctext)>0 and ctext[0]=='%':
@@ -647,7 +662,12 @@ class Comment(TeXNode):
 
 def text_to_nodes(parent,txt):
     """
-    Converts a string into a list of corresponding TeXNodes.
+    Converts a string into a list of corresponding :class:`TeXNode` objects.
+    
+    :param parent: The parent node
+    :param txt: The text to parse
+    
+    :returns: A list of :class:`TeXNode` objects
     """
     txtnodel = []
     #now split out nested environments and commands and build them 
