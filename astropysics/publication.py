@@ -161,12 +161,28 @@ class TeXFile(TeXNode):
         """
         Parse the file - `f` can be a file object or a string w/newlines.
         """
-        if isinstance(f,basestring):
-            f = f.split('\n')
+        
+        if hasattr(f,'read'):
+            f = f.read()
+        flines = f.split('\n')
+        
+        #populate comments 
+        comments = []
+        commentcmdname = 'astppubcomment'
+        i = 0
+        while commentcmdname in f:
+            commentcmdname = 'astppubcomment' + str(i)
+            i += 1
+            
+        for i,l in enumerate(flines):
+            pind = l.find('%')
+            if pind>-1:
+                flines[i] = '%s\\%s{%i}'%(l[:pind],commentcmdname,len(comments))
+                comments.append(l[pind:])
         
         preamblecontent = []
         content = None
-        for l in f:
+        for l in flines:
             if content is None:
                 if r'\begin{document}' in l:
                     content = [l]
@@ -185,6 +201,8 @@ class TeXFile(TeXNode):
             if isinstance(c,Document):
                 self.document = c
                 break
+            
+        _addin_comments(self,comments,commentcmdname)
         
     def getSelfText(self):
         return None
@@ -197,6 +215,18 @@ class TeXFile(TeXNode):
         """
         with open(fn,'w') as f:
             f.write(self())
+            
+def _addin_comments(node,commentlist,commentcmdname):
+    for i,c in enumerate(node.children):
+        newnode = _addin_comments(c,commentlist,commentcmdname)
+        if newnode is not None:
+            node.children[i] = newnode
+            
+    if isinstance(node,Command):
+        if node.name == commentcmdname:
+            return Comment(node.parent,commentlist[int(node.reqargs[0])])
+    #returns None to do nothing at this node
+
     
 class TeXt(TeXNode):
     """
@@ -460,7 +490,7 @@ class TrailingCharCommand(Command):
     used for '\left{' '\right]' and similar.
     """
     
-    children = tuple() #technically a leaf, but should be an iterable for compatibility w/:class:`Command`
+    children = tuple() #always a leaf
     
     def __init__(self,parent,content):
         """
@@ -485,7 +515,7 @@ class RequiredArgument(TeXNode):
     """
     An argument to a macro that is required (i.e. enclosed in curly braces)
     """
-    children = None #arguments are always a leaf
+    children = tuple() #arguments are always a leaf
     #: The text of this argument object
     text = ''
     
@@ -500,7 +530,7 @@ class OptionalArgument(TeXNode):
     """
     An argument to a macro that is required (i.e. enclosed in square brackets)
     """
-    children = None #arguments are always a leaf
+    children = tuple() #arguments are always a leaf
     
     
     def __init__(self,parent,text):
@@ -574,6 +604,9 @@ class Preamble(TeXNode):
     The preamble of a TeX File (i.e. everything before \begin{document} )
     """
     def __init__(self,parent,content):
+        """
+        :param string content: The text of the preamble
+        """
         self.parent = parent
         self.children = text_to_nodes(self,content)
         
@@ -589,6 +622,27 @@ class Preamble(TeXNode):
     def getSelfText(self):
         return None
 
+class Comment(TeXNode):
+    """
+    A single-line comment of a TeX File
+    """
+    
+    #: The text of this comment (not including the initial %)
+    text = ''
+    children = tuple() #comments are always a leaf
+    
+    def __init__(self,parent,ctext):
+        """
+        :param ctext: The comment text (with or without an initial %)
+        """
+        if len(ctext)>0 and ctext[0]=='%':
+            ctext = ctext[1:]
+            
+        self.parent = parent
+        self.text = ctext
+        
+    def getSelfText(self):
+        return '%'+self.text
 
 
 def text_to_nodes(parent,txt):
@@ -725,6 +779,8 @@ def text_to_nodes(parent,txt):
             raise TypeError('invalid item %s returned from parsing text to nodes'%t)
     
     return nodel
+
+
         
 #issue warning if abstract too long
 #strip comments
