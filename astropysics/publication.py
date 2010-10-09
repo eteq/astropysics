@@ -806,7 +806,10 @@ def text_to_nodes(parent,txt):
 #strip comments
 #copy over bbl if necessary
 #.tar.gz up with appropriate name and date            
-def prep_for_arxiv_pub(texfile):
+def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False):
+    """
+    Takes a LaTeX file and prepares
+    """
     raise NotImplementedError
 
 #Tasks: redo figures into f##[l].eps and move the files
@@ -819,6 +822,6 @@ def prep_for_arxiv_pub(texfile):
 #?test compilation?
 #remove \comment?
 #tablenotemark{$...$} warning?
-def prep_for_apj_pub(texfile,authorlast):
+def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False):
     raise NotImplementedError
 

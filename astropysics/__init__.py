@@ -30,3 +30,7 @@ and visualizing astronomical data.
 * ccd: Functions and tools for processing CCD images.
 
 """
+
+#If True, the add_docs and similar functions will only replace with empty 
+#strings - this is used by sphinx to 
+_ignore_add_docs = False

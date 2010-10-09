@@ -558,7 +558,12 @@ def change_indentation(s,ind=0):
 def _add_docs_deco(nmdocs,func):
     """
     Decorator partialized for used in `add_docs` and similar.
+    
+    Note that if astropysics._ignore_add_docs is True, this actually just 
+    removes the section in question.
     """
+    from . import _ignore_add_docs
+    
     match = _find_dedent_regex.match(func.__doc__)
     if match is None:
         indent = 0
@@ -569,7 +574,7 @@ def _add_docs_deco(nmdocs,func):
         doc = ''
     for n,d in nmdocs:
         replstr = '{docstr:%s}'%n
-        d = change_indentation(d,indent)
+        d = change_indentation(d,indent) if not _ignore_add_docs else ''
         if replstr in doc:
             doc = doc.replace(replstr,d)
         else:
@@ -645,8 +650,9 @@ def add_docs_and_sig(*args):
     Does the same thing as :func:`replace_docs`, but also adds the function
     signature of the argument function to the replaced (followed by a newline).
     Note that this requires that the argument object be a function (and not
-    anything with a `__name__` and `__doc__` attribute).  This istypically
-    useful for functions that do f(*args,**kwargs) to wrap some other function.
+    anything with a `__name__` and `__doc__` attribute). This is typically
+    useful for functions that do ``f(*args,**kwargs)`` to wrap some other
+    function.
     """
     from functools import partial
     from inspect import getargspec

@@ -61,9 +61,9 @@ def mpl_context(show=None,clf=False,savefn=None):
     """
     Used for with statements containing matplotlib plots.  Usage::
     
-    with _mpl_context() as plt:
-        plt.plot(x,y,...)
-        plt.scatter(xs,ys,...)
+        with _mpl_context() as plt:
+            plt.plot(x,y,...)
+            plt.scatter(xs,ys,...)
         
     :param bool show: 
         If True,:func:`pyplot.show` will be called when plotting is completed.

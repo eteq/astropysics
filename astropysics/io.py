@@ -241,7 +241,8 @@ class FixedColumnDataParser(object):
     def addColumnsFromFile(self,fn,columnlinestart=None,sep=None,useskiprows=True,
                                 maxcols=100):
         """
-        Adds columns parsed from a file (typicall a data file that will afterwards be read).
+        Adds columns parsed from a file (typically a data file that will
+        afterwards be read).
         
         The parsed file is expected to have lines that begin with the
         `columnlinestart` argument and the rest of the line should be able to be
@@ -273,17 +274,17 @@ class FixedColumnDataParser(object):
         
         For a file that starts like:: 
         
-        ID 0 3 int
-        data 4 10 float
-        moredata 11 15 int
+            ID 0 3 int
+            data 4 10 float
+            moredata 11 15 int
         
         use addColumnsFromFile('filename',columnlinestart=None,sep=None,maxcols=3,firstcolindex=0)
         
         And for a file with format specifier::
         
-        #... ID,1,4,int
-        #... data,5,11,float
-        #... moredata,12,16,int
+            #... ID,1,4,int
+            #... data,5,11,float
+            #... moredata,12,16,int
         
         use addColumnsFromFile('filename',columnlinestart='#... ',sep=',')
         
@@ -500,25 +501,23 @@ def loadtxt_fixed_column_fields(fn,fncol=None,skiprows=0,comments='#',
         
     To match the default format, data files to load should look like::
     
-    #:col1 1 4 int
-    #:col2 6 6 bool
-    #:col3 8 10 S3
-    #:col4 12 16 float {'------':''}
-    # could have a comment here if you want
-    1239 1 abc 12.325
-    2489 0 zyx ------
-    9526 1 qwe 89632.
+        #:col1 1 4 int
+        #:col2 6 6 bool
+        #:col3 8 10 S3
+        #:col4 12 16 float {'------':''}
+        # could have a comment here if you want
+        1239 1 abc 12.325
+        2489 0 zyx ------
+        9526 1 qwe 89632.
     
     
     :meth:`FixedColumnDataParser.parseFile` describes the return types and 
-    `maskedarray` parameter:
+    `maskedarray` parameter.
     {docstr:parseFile}
     
     For details on arguments controlling how columns are inferred, See
-    :meth:`FixedColumnDataParser.addColumnsFromFile`:
+    :meth:`FixedColumnDataParser.addColumnsFromFile`.
     {docstr:addColumnsFromFile}
-    
-    
     
     """
     if fncol is None:
