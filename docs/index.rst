@@ -35,9 +35,9 @@ Installation
 
 Requirements
 ------------
-Before you touch astropysics, you'll need:
+Before you do anything with astropysics, you'll need:
 
-    * `Python <http://www.python.org/>`_ 2.5 or higher (2.6 highly recommended), although 3.x is not yet compatible with numpy or scipy.
+    * `Python <http://www.python.org/>`_ 2.5 or higher (2.6 highly recommended), although 3.x is not yet supported.
     * `numpy <http://numpy.scipy.org>`_ 
     * `scipy <http://www.scipy.org/>`_
     
@@ -57,7 +57,7 @@ or::
 
     easy_install astropysics
 
-If you are on Ubuntu or a similar linux distribution, you may need to prefix those commands with ``sudo`` e.g. ``sudo pip install astropysics``.
+If you are on Ubuntu or some other linux distributions, you will need to prefix those commands with ``sudo`` e.g. ``sudo pip install astropysics``.
 
 If you are installing from source code, instead, just do::
 
@@ -88,7 +88,7 @@ Some of these may be available and installable using your system's package manag
             ipython -pylab
         
     * `NetworkX <http://networkx.lanl.gov/>`_
-        *recommended*, as it is used for a variety of internal purposes as well as any place where a network/graph is plotted. Install with::
+        *highly recommended*, as it is used for a variety of internal purposes as well as any place where a network/graph is plotted. Install with::
         
             pip install networkx
         
@@ -115,7 +115,7 @@ Some of these may be available and installable using your system's package manag
             pip install mayavi
     
     * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
-        Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://www.stsci.edu/trac/ssb/astrolib>`_ at the bottom of the page.
+        Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://trac6.assembla.com/astrolib>`_ at the bottom of the page.
         
         
     Note that you can install all of these at once if you install astropysics using the following command::
@@ -137,26 +137,32 @@ Astropysics also includes pythonic wrappers around some astronomy-related tools 
 Development/Advanced Install
 ----------------------------
 
-If you want to be sure you have the most recent version (or want to help improve the code), you can pull the current development version from launchpad.  You must have `bazaar <http://bazaar.canonical.com/>`_ installed, and execute::
+If you want to be sure you have the most recent version (or want to help improve the code), you can pull the current development version from  the `google code page <http://code.google.com/p/astropysics/>`_.  
+Just install `mercurial <http://mercurial.selenic.com/>`_, and execute::
 
-    bzr branch lp:astropysics astropysics-dev
+    hg clone https://astropysics.googlecode.com/hg/ astropysics-dev
     
-and this will create a branch with the name 'astropysics-dev' containing the latest and greatest version of astropysics.  If at any time you want to update this version, go into the directory and do::
+This will create a directory with the name ``astropysics-dev`` containing the latest and greatest version of astropysics.  
+If at any time you want to update this version, go into the directory and do::
 
-    bzr update
+    hg pull
     
-and re-install following the directions above.  If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
+them re-install following the directions above.  If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
 
     python setup.py develop
 
 possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
 
+If you intend to regularly contribute changes or patches to astropysics, a more convinient way to submit changes is with a public clone of the main astropysics repository.
+Go to the `source tab  <http://code.google.com/p/astropysics/source/checkout>`_ of the google code project<http://code.google.com/p/astropysics>`_, and click on the ``create clone`` button.  
+Fill in the necessary information, and clone *that* repository on your computer instead of the main astropysics repository.  
+You can then use ``hg push`` to send changes back to your repository on google code, and those can easily be merged with the main.
    
 
 Bug Reports
 ===========
 
-The best place to report bugs is via the `launchpad bug tracker <https://bugs.launchpad.net/astropysics>`_.  That way they won't be forgotten unless an asteroid impact destroys all of humanity (or all the launchpad servers...).
+The best place to report bugs is via the `google code bug tracker <https://bugs.launchpad.net/astropysics>`_.  That way they won't be forgotten unless an asteroid impact destroys all of humanity (or all the launchpad servers...).
 
 Logo Image Credit
 =================
