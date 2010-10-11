@@ -154,7 +154,7 @@ them re-install following the directions above.  If you plan on editing the astr
 possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
 
 If you intend to regularly contribute changes or patches to astropysics, a more convinient way to submit changes is with a public clone of the main astropysics repository.
-Go to the `source tab  <http://code.google.com/p/astropysics/source/checkout>`_ of the google code project<http://code.google.com/p/astropysics>`_, and click on the ``create clone`` button.  
+Go to the `source tab  <http://code.google.com/p/astropysics/source/checkout>`_ of the `google code project <http://code.google.com/p/astropysics>`_, and click on the ``create clone`` button.  
 Fill in the necessary information, and clone *that* repository on your computer instead of the main astropysics repository.  
 You can then use ``hg push`` to send changes back to your repository on google code, and those can easily be merged with the main.
    
