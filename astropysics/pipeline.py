@@ -73,57 +73,90 @@ class PipelineError(Exception):
 
 class Pipeline(object):
     """
-    This class represents a pipeline, composed of :class:`PipelineElements
-    <PipelineElement>` joined together as a data analysis or reduction pipeline.
+    This class represents a pipeline, composed of a linear sequence of
+    :class:`PipelineElements <PipelineElement>` joined together.
     
-    Note that whenever stage numbers are used, they are 0-indexed 
-    (e.g. the 1st stage is stage 0)
+    Note that where stage numbers are mentioned in the documentation and inputs,
+    they are 0-indexed (e.g. the 1st stage is stage 0).
     
     """
-    def __init__(self,elements,joins=None,dochecks=True):
+    
+    
+    def __init__(self,elements=None):
         """
-        :param elements: Pipeline elements for this pipeline.
-        :type elements: :class:`PipelineElement` objects
-        
-        :param joins:
-            Used to populate the specified element's attribute by extracting
-            the output of the supplied pipeline.
-        :type joins: 
-            Sequence of 3-tuples (elementindex,attribute,Pipelineobject) 
-        
-        :param dochecks: If True, validates the inputs as the correct type.
-        :type dochecks: bool
+        :param elements: Initial pipeline elements for this pipeline.
+        :type elements: 
+            Sequence of :class:`PipelineElements <PipelineElement>` or None
+            
+        :except TypeError: If the input is not a :class:`PipelineElement`
         """
-        
         from collections import deque
         
-        if dochecks:
-            for e in elements:
-                if not isinstance(e,PipelineElement):
-                    raise ValueError('object %s is not a PipelineElement'%e)
-            if joins is not None:
-                for j in joins:
-                    elements[j[0]]
-                    if not isinstance(j[1],basestring):
-                        raise TypeError('joins %s does not have a proper attachment point'%j)
-                    if not isinstance(joins[2],Pipeline):
-                        raise ValeuError('joins %s does not have a Pipeline'%j)
+        if elements is None:
+            elements = tuple()
+        
+        for e in elements:
+            if not isinstance(e,PipelineElement):
+                raise TypeError('object %s is not a PipelineElement'%e)
                 
-        self.elements = list(elements)
-        self.cycles = [0 for i in range(len(elements))]
-        self.datadeques = [deque() for i in range(len(elements)+1)]
-        if joins is None:
-            self.joins = None
-        else:
-            self.joins = jdict = defaultdict(list)
-            for j in joins:
-                jdict[j[0]].append((j[1],j[2]))
+        self._elements = list(elements)
+        self._cycles = [0 for i in range(len(elements))]
+        self._datadeques = [deque() for i in range(len(elements)+1)]
+        
+    
+    @property
+    def elements(self):
+        """
+        A tuple containing the pipeline elements.
+        """
+        return tuple(self._elements)
+    
+    def addElement(self,stagenum,element):
+        """
+        Insert a :class:`PipelineElement` to the pipeline at the specified 
+        stage number. Later stages are pushed forward along with their current 
+        data.
+        
+        :param int stagenum: The stage number for the new element.
+        :param element: The :class:`PipelineElement` object to insert.
+        
+        :except TypeError: If the input is not a :class:`PipelineElement`
+        """
+        from collections import deque
+        
+        if not isinstance(e,PipelineElement):
+            raise TypeError('object %s is not a PipelineElement'%e)
+        
+        self._elements.insert(stagenum,element)
+        self._cycles.insert(stagenum,0)
+        self._datadeques.insert(stagenum,deque())
+    
+    def removeElement(self,stagenum,keepdata=False):
+        """
+        Remove the requested stage number. All later stages will move one stage
+        left to fill the gap.
+        
+        :param int stagenum: The stage number to remove.
+        :param bool keepdata: 
+            If True, any data waiting to be processed in the removed stage is
+            added to the next stage. Otherwise, the data is lost.
+        
+        
+        """
+        elem = self._elements.pop(stagenum)
+        data = self._datadeques.pop(stagenum)
+        if keepdata:
+            self._datadeques[stagenum].extend(data)
+            self._datadeques[stagenum].rotate(len(data))
+        del self._cycles[stagenum]
+        
+        return elem
                 
     def feed(self,data):
         """
         Feed an initial datum into the first stage of the pipeline.
         """
-        self.datadeques[0].appendleft(data)
+        self._datadeques[0].appendleft(data)
     
     def feedIter(self,dataiter):
         """
@@ -132,7 +165,7 @@ class Pipeline(object):
         the pipeline.
         """
         for dat in dataiter:
-            self.datadeques[0].appendleft(dat)
+            self._datadeques[0].appendleft(dat)
     
     
     def extract(self,extractall=False,autoprocess=False):
@@ -151,7 +184,7 @@ class Pipeline(object):
         
         :raises IndexError: If there is no data left to extract
         """              
-        d = self.datadeques[-1]
+        d = self._datadeques[-1]
           
         if autoprocess:
             self.processToStage(-1,True)
@@ -174,39 +207,28 @@ class Pipeline(object):
         :param stagenum: Stage number index to process
         :type stagenum: int
         """
-        st = self.elements[stagenum]
+        st = self._elements[stagenum]
         
-        #process the items to join into the stage if necessary
-        if self.joins is not None:
-            for attrname,joinpl in self.joins[stagenum]:
-                try:
-                    joinres = joinpl.extract(True,True)
-                    setattr(st,attrname,joinres)
-                except IndexError,e:
-                    if e.message=='pop from an empty deque':
-                        pass #empty pipeline
-                    else:
-                        raise
         
-        data = self.datadeques[stagenum].pop()
+        data = self._datadeques[stagenum].pop()
         try:
             check_type(st._plintype,data) #does nothing if st._plintype is None
             newdata = st.plProcess(data,self,stagenum)
             if newdata is None:
                 newdata = st.plInteract(data,self,stagenum)
                 if newdata is None:
-                    self.cycles[stagenum] += 1
+                    self._cycles[stagenum] += 1
                 else:
-                    self.datadeques[stagenum+1].appendleft(newdata)
-                    self.cycles[stagenum] = 0
+                    self._datadeques[stagenum+1].appendleft(newdata)
+                    self._cycles[stagenum] = 0
             else:
-                self.datadeques[stagenum+1].appendleft(newdata)
-                self.cycles[stagenum] = 0
+                self._datadeques[stagenum+1].appendleft(newdata)
+                self._cycles[stagenum] = 0
         except TypeError,e:
             #if type-checking fails, let the data disppear
             raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
         except:
-            self.datadeques[stagenum].append(data)
+            self._datadeques[stagenum].append(data)
             raise
     
     def process(self,repeat=False):
@@ -246,18 +268,18 @@ class Pipeline(object):
             The result of the full pipeline (it will *not* be left in the final
             stage).
         """
-        self.datadeques[0].append(input)
-        for stage in range(len(self.elements)):
+        self._datadeques[0].append(input)
+        for stage in range(len(self._elements)):
             self.processStage(stage)
-            while self.cycles[stage]:
-                if processinglimit and self.cycles[stage] >= processinglimit:
+            while self._cycles[stage]:
+                if processinglimit and self._cycles[stage] >= processinglimit:
                     if removefailed:
                         raise NotImplementedError
                     raise PipelineError('hit processing limit at stage %i'%stage)
                 self.processStage(stage)
-            self.datadeques[stage+1].append(self.datadeques[stage].popleft())
+            self._datadeques[stage+1].append(self._datadeques[stage].popleft())
                 
-        return self.datadeques[-1].pop()
+        return self._datadeques[-1].pop()
         
     def processToStage(self,stagenum,repeat=False):
         """
@@ -280,23 +302,23 @@ class Pipeline(object):
         if stagenum >= 0:
             stages = range(stagenum+1)
         else:
-            stages = range(len(self.datadeques)+stagenum)
+            stages = range(len(self._datadeques)+stagenum)
         counts = []    
         for st in stages:
-            dd = self.datadeques[st]
+            dd = self._datadeques[st]
             count=0
             if repeat:
                 while len(dd)>0:
                     self.processStage(st)
-                    while self.cycles[st]:
-                        if repeat is not True and self.cycles[st] >= repeat:
+                    while self._cycles[st]:
+                        if repeat is not True and self._cycles[st] >= repeat:
                             raise PipelineError('hit processing limit at stage %i'%st)
                         self.processStage(st)
                     count+=1   
             else:
                 if len(dd)>0:
                     self.processStage(st)
-                    if not self.cycles[st]:
+                    if not self._cycles[st]:
                         count=1
             counts.append(count)
         return counts
@@ -313,9 +335,9 @@ class Pipeline(object):
             stages=(stages,)
         
         if stages is None:
-            stages = range(len(self.elements)+1)
+            stages = range(len(self._elements)+1)
         for st in stages:
-            self.datadeques[st].clear()
+            self._datadeques[st].clear()
     
 class PipelineElement(object):
     """
@@ -340,95 +362,65 @@ class PipelineElement(object):
     @abstractmethod
     def plProcess(self,data,pipeline,elemi):
         """
-        this method should perform the data processing steps that 
-        this element of the pipeline is supposed to do.  
+        This method performs whatever data processing steps that this element of
+        the pipeline is supposed to do.
         
-        pipeline is the object that called the processing of this element,
-        and elemi is the index of this stage of the pipeline
+        :param data: 
+            The data massed in by the previous element of the pipeline. Type
+            and interpretation is left to this method to test.
+        :param :class:`Pipeline` pipeline: 
+            The :class:`Pipeline` object that called this element.
+        :param int elemi: The index of this stage of the pipeline.
         
-        this method should return None if processing was incomplete for any 
-        reason - otherwise, the return value will be passed to the next 
-        stage.
+        :returns:
+            None if processing was incomplete for any reason - otherwise, the
+            return value will be passed to the next stage.
         
-        Note that if this returns None and the data provided is not saved, it 
-        will disappear - the next processing attempt will feed in the next
-        piece of data.  If this is not the desired behavior, this method
-        should do the following:
-        pipeline.datadeques[elemi].append(data)
+        .. note:: 
+        
+            If this returns None and the data provided is not saved, it will
+            disappear - the next processing attempt will feed in the next piece
+            of data. If this is not the desired behavior, this method should do
+            the following:: 
+            
+            pipeline.datadeques[elemi].append(data)
+            
         """
         raise NotImplementedError
     
     def plInteract(self,data,pipeline,elemi):
         """
         called if :meth:`plProcess` returns None. Should return the data to be
-        passed into the next stage (if None, :meth:`plProcess` will be called
-        again)
+        passed into the next stage or None if the interaction was not completed.
+        In this case, the input will be run through :meth:`plProcess` again
         
-        arguments are the same as :meth:`plProcess`
+        Arguments are the same as :meth:`plProcess`
         """
         return None
-        
     
-
-class PipelineAccumulate(PipelineElement):
+class PipelineMessage(object):
     """
-    This pipeline element stores up everything that is fed into it until
-    a condition is met, and then emits a list of objects with all objects
-    previously stored.
-    
-    If accumsize is not None, if the number of objects stored ever 
-    reaches accumsize, the list will be emitted
-    
-    if stoponobj is True, and the input matches stopobj
-    (comparison uses "is" rather than "=="), the list will be emitted.  
-    If stoponobj is True, accumsize determines when the sequence is emitted 
-    
-    onempty determines the behavior when inputs run out: if it is 'exception',
-    an IndexError will be raised by the pipeline.  if 'block', nothing will be 
-    emitted but the pipeline will continue to process.  if 'pass', a shortened
-    sequence will be emitted (possibly empty if there are no inputs)
+    This class represents a message that is passed through the pipeline as though
+    it were data, but is never actually processed by the elements - instead, it
+    performs an action when it reaches a particular target(s).  Subclasses *must* implement call, which accepts
+    the element this message is to act on (see :meth:`__call__`).
     """
+    __metaclass__ = ABCMeta
     
-    def __init__(self,accumsize=None,stopobj=None,stoponobj=True,onempty='exception'):
-        self.accumsize = accumsize
-        self.stopobj = stopobj
-        self.stoponobj = stoponobj
-        self.onempty = onempty
-        
-        self._accum = []
-        
-        
-    def _getonempty(self):
-        return self._onempty
-    def _setonempty(self,val):
-        if val not in ('exception','block','pass'):
-            raise ValueError('invalid onempty "%s"'%val)
-        self._onempty = val
-    onempty = property(_getonempty,_setonempty)
+    def __init__(self,target):
+        """
+        :param target: Either a specific object hat thie
+        :class:`PipelineMessage` should be delivered to, or a class (in which
+        case the message will be called for any suitable matching element, and
+        will be passed through to the next stage, regardless.
+        """
+        self.target = target
     
-    def plProcess(self,data,pipeline,elemi):
-        self._accum.append(data)
+    @abstractmethod
+    def __call__(self,elem):
+        """
+        Perform whatever action this message is supposed to perform.  
+        """
+        raise NotImplementedError
         
-        if self.stoponobj and data == self.stopobj:
-            accumres = self._accum
-            self._accum = []
-            return accumres
-        
-        if self.accumsize is not None and len(self._accum) >= self.accumsize:
-            accumres = self._accum
-            self._accum = []
-            return accumres
-        
-        if len(pipeline.datadeques[elemi]) == 0:
-            if self._onempty == 'block':
-                pipeline.datadeques[elemi].append(self._accum.pop())
-            elif self._onempty == 'pass':
-                accumres = self._accum
-                self._accum = []
-                return accumres
-            elif self._onempty == 'exception':
-                pass
-            else:
-                raise RuntimeError('impossible value for onempty')
-            
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace

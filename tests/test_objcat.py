@@ -58,6 +58,7 @@ def test_sed():
     from astropysics.spec import Spectrum
     from astropysics.phot import PhotObservation
     from astropysics.models import BlackbodyModel
+    from astropysics.objcat import SEDField
     
     f = SEDField()
     scale = 1e-9
