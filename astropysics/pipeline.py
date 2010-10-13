@@ -158,13 +158,11 @@ class Pipeline(object):
         """
         self._datadeques[0].appendleft(data)
     
-    def feedIter(self,dataiter):
+    def feedMany(self,dataeq):
         """
-        Feed initial data into the first stage of the pipeline.  The input
-        will be treated as an iterator and each item will be added to
-        the pipeline.
+        Feed initial data into the first stage of the pipel
         """
-        for dat in dataiter:
+        for dat in dataeq:
             self._datadeques[0].appendleft(dat)
     
     
@@ -382,8 +380,9 @@ class PipelineElement(object):
         :param data: 
             The data massed in by the previous element of the pipeline. Type
             and interpretation is left to this method to test.
-        :param :class:`Pipeline` pipeline: 
+        :param pipeline: 
             The :class:`Pipeline` object that called this element.
+        :type pipeline: :class:`Pipeline`
         :param int elemi: The index of this stage of the pipeline.
         
         :returns:
@@ -397,7 +396,7 @@ class PipelineElement(object):
             of data. If this is not the desired behavior, this method should do
             the following:: 
             
-            pipeline.datadeques[elemi].append(data)
+                pipeline.datadeques[elemi].append(data)
             
         """
         raise NotImplementedError
@@ -433,11 +432,12 @@ class PipelineMessage(object):
     
     def __init__(self,target):
         """
-        :param target: Either a specific object hat thie
-        :class:`PipelineMessage` should be delivered to, or a class. If it is a
-        class, the message will be delivered to all of that class in the
-        pipeline, otherwise it will only reach the actual object specified as
-        the target.
+        :param target: 
+            Either a specific object that this :class:`PipelineMessage` should
+            be delivered to, or a class. If it is a class, the message will be
+            delivered to all of that class in the pipeline, otherwise it will
+            only reach the actual object specified as the target.
+            
         """
         self.target = target
         self.nprocessed = 0
@@ -476,9 +476,10 @@ class PipelineMessage(object):
         This method must be overridden in subclasses, defining the action to be
         performed on the pipeline element this message is targeted at. 
         
-        :param :class:`PipelineElement` elem: 
+        :param elem: 
             The element this message is to be delivered to. It is guaranteed to
             be an object :meth:`isTarget` method accept.
+        :type elem: :class:`PipelineElement`
         
         """
         raise NotImplementedError
