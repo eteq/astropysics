@@ -211,25 +211,39 @@ class Pipeline(object):
         
         
         data = self._datadeques[stagenum].pop()
-        try:
-            check_type(st._plintype,data) #does nothing if st._plintype is None
-            newdata = st.plProcess(data,self,stagenum)
-            if newdata is None:
-                newdata = st.plInteract(data,self,stagenum)
+        if isinstance(data,PipelineMessage):
+            msg = data
+            istarg = msg.isTarget(st)
+            
+            if istarg:
+                msg(st)
+                
+            if not istarg or istarg=='continue':
+                if stagenum == len(self._elements)-1:
+                    if not msg.nprocessed:
+                        raise PipelineError('message %s was never delivered to any element'%msg)
+                else:
+                    self._datadeques[stagenum+1].appendleft(msg)
+        else:
+            try:
+                check_type(st._plintype,data) #no-op if st._plintype is None
+                newdata = st.plProcess(data,self,stagenum)
                 if newdata is None:
-                    self._cycles[stagenum] += 1
+                    newdata = st.plInteract(data,self,stagenum)
+                    if newdata is None:
+                        self._cycles[stagenum] += 1
+                    else:
+                        self._datadeques[stagenum+1].appendleft(newdata)
+                        self._cycles[stagenum] = 0
                 else:
                     self._datadeques[stagenum+1].appendleft(newdata)
                     self._cycles[stagenum] = 0
-            else:
-                self._datadeques[stagenum+1].appendleft(newdata)
-                self._cycles[stagenum] = 0
-        except TypeError,e:
-            #if type-checking fails, let the data disppear
-            raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
-        except:
-            self._datadeques[stagenum].append(data)
-            raise
+            except TypeError,e:
+                #if type-checking fails, let the data disppear
+                raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
+            except:
+                self._datadeques[stagenum].append(data)
+                raise
     
     def process(self,repeat=False):
         """
@@ -400,27 +414,94 @@ class PipelineElement(object):
     
 class PipelineMessage(object):
     """
-    This class represents a message that is passed through the pipeline as though
-    it were data, but is never actually processed by the elements - instead, it
-    performs an action when it reaches a particular target(s).  Subclasses *must* implement call, which accepts
-    the element this message is to act on (see :meth:`__call__`).
+    This class represents a message that is passed through the pipeline as
+    though it were data, but is never actually processed by the elements -
+    instead, it performs an action when it reaches a particular target(s).
+    
+    **Subclassing**
+    
+    * Subclasses *must* implement :meth:`deliverMessage` (see
+      :meth:`deliverMessage` docs for details)
+    * Subclasses should call :meth:`PipelineMessage.__init__` if overridding 
+      :meth:`.__init__`.
+    * Subclasses can override :meth:`isTarget` to change how the message
+      determines what its target is. This can also be set to deliver the message
+      to multiple elements.
+    
     """
     __metaclass__ = ABCMeta
     
     def __init__(self,target):
         """
         :param target: Either a specific object hat thie
-        :class:`PipelineMessage` should be delivered to, or a class (in which
-        case the message will be called for any suitable matching element, and
-        will be passed through to the next stage, regardless.
+        :class:`PipelineMessage` should be delivered to, or a class. If it is a
+        class, the message will be delivered to all of that class in the
+        pipeline, otherwise it will only reach the actual object specified as
+        the target.
         """
         self.target = target
+        self.nprocessed = 0
     
-    @abstractmethod
     def __call__(self,elem):
         """
-        Perform whatever action this message is supposed to perform.  
+        Perform whatever action this message is supposed to perform on the
+        supplied pipeline element.  
+        """
+        self.nprocessed += 1
+        self.deliverMessage(elem)
+        
+    def isTarget(self,elem):
+        """
+        Identifies whether or not the supplied element is an intended target of
+        this message.
+        
+        :param elem: The element to be tested.
+        :returns: 
+            bool indicating whether or not `elem` is the target. It can also be
+            the string 'continue' if the message should be delivered to this
+            target but also passed further down the pipeline.
+        """
+        from inspect import isclass
+        
+        if isclass(self.target):
+            return 'continue' if elem.__class__ == self.target else False
+        else:
+            return elem is self.target
+            
+        
+        
+    @abstractmethod
+    def deliverMessage(self,elem):
+        """
+        This method must be overridden in subclasses, defining the action to be
+        performed on the pipeline element this message is targeted at. 
+        
+        :param :class:`PipelineElement` elem: 
+            The element this message is to be delivered to. It is guaranteed to
+            be an object :meth:`isTarget` method accept.
+        
         """
         raise NotImplementedError
+    
+class AttributeMessage(PipelineMessage):
+    """
+    This object is a :class:`PipelineMessage` that sets a specified set of
+    attributes when it reaches its target.
+    """
+    
+    def __init__(self,target,**attrs):
+        """
+        :param target:
+        
+        Other keyword arguments are taken as the attributes to be set on the
+        target. A dictionary can be passed in using
+        ``AttributeMessage(target,**attrdict)``.
+        """
+        PipelineMessage.__init__(self,target)
+        self.attrstoset = attrs
+        
+    def deliverMessage(self,elem):
+        for name,value in self.attrstoset.iteritems():
+            setattr(elem,name,value)
         
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
