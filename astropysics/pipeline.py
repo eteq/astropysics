@@ -18,9 +18,20 @@
 pipeline -- classes for data reduction and analysis pipelines
 =============================================================
 
-The :mod:`pipeline` module contains .
+The :mod:`pipeline` module contains classes and utilities for constructing data
+pipelines -- linear constructs of operations that process input data, passing it
+through all pipeline stages.
+
+Pipelines are represented by the :class:`Pipeline` class, which is composed of a
+sequence of :class:`PipelineElement` objects representing the processing stages.
+Astropysics includes a number of elements builtin, but :class:`PipelineElement`
+can also easily be subclassed to provide new pipeline stages.
+
+.. todo:: add list of pipelineelements to Sphinx docs
 
 .. todo:: examples/tutorials
+
+
 
 
 Classes and Inheritance Structure
