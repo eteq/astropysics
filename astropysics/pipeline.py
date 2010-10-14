@@ -24,12 +24,27 @@ through all pipeline stages.
 
 Pipelines are represented by the :class:`Pipeline` class, which is composed of a
 sequence of :class:`PipelineElement` objects representing the processing stages.
-Astropysics includes a number of elements builtin, but :class:`PipelineElement`
-can also easily be subclassed to provide new pipeline stages.
+Astropysics includes some pipeline elements built-in, but
+:class:`PipelineElement` can also easily be subclassed to provide cusotmized
+pipeline functionality.  
 
-.. todo:: add list of pipelineelements to Sphinx docs
+Once the pipeline is constructed, data can be queued into the first stage with
+the :meth:`Pipeline.feed` method (or :meth:`Pipeline.feedMany`), where the type
+of the data expected is determined by the :class:`PipelineElement` objects.
 
-.. todo:: examples/tutorials
+Special objects (subclasses of :class:`PipelineMessage`) can also be fed into
+pipelines to indicate to various pipeline elements to change how they behave.
+This allows a pipeline to adapt based on the data. e.g. If two different
+exposure times are being processed in a image reduction pipeline, after the
+images from the first set of exposure times are processed, a
+:class:`AccumulateMessage` can be added to provide a new set of darks before the
+second set of images are fed into the pipeline.
+
+.. todo:: replace above with example or add a stand-alone example
+
+.. todo:: add list of pipelineelements to Sphinx docs with types
+
+
 
 
 
@@ -206,7 +221,6 @@ class Pipeline(object):
         :type stagenum: int
         """
         st = self._elements[stagenum]
-        
         
         data = self._datadeques[stagenum].pop()
         if isinstance(data,PipelineMessage):
@@ -592,37 +606,94 @@ class CallMethodMessage(PipelineMessage):
         
     def deliverMessage(self,elem):
         self.retval.append(getattr(elem,self.methodname)(*args,**kwargs))
+      
+class _Accumulator(object):
+    """
+    A helper class left by an :class:`AccumulateMessage` at its target to do the 
+    actual accumulating
+    """
+    
+    def __init__(self,elem,naccum,setattrname,filterfunc):
+        self.naccum = naccum
+        self.setattrname = setattrname
+        self.filterfunc = filterfunc
+        
+        self.accum = []
+    
+        self.realPlProcess = elem.plProcess
+        self.realPlInteract = elem.plInteract
+        
+        #inject this in place of the real pipeline element - the finish method
+        #will put the right methods back in.
+        elem.plProcess = self.plProcess
+        elem.plInteract = self.plInteract
+        elem.accumulator = self
+        self.elem = elem
+    
+    def plProcess(self,data,pipeline,elemi):
+        accumi = len(self.accum)
+        assert accumi <= self.naccum,'Accumulator plProcess is being called after it should have finished'
+        
+        if accumi == self.naccum:
+            self.elem.resaveData(data,pipeline,elemi)
+            self.finish(data,pipeline,elemi)
+        else:
+            self.accum.append(data)
+            
+        return None #unneccessary, but explicit is better than implicit...
+        
+    def plInteract(self,data,pipeline,elemi):
+        return None
+    
+    def finish(self,data,pipeline,elemi):
+        try:
+            accum = self.accum
+            if self.filterfunc is not None:
+                accum = self.filterfunc(accum)
+            if self.setattrname is None:
+                self.elem.resaveData(accum,pipeline,elemi)
+            else:
+                setattr(self.elem,self.setattrname,accum)
+        finally:
+            self.elem.plProcess = self.realPlProcess 
+            self.elem.plInteract = self.realPlInteract
+            del self.elem.accumulator 
+            
+        
+        
         
 class AccumulateMessage(PipelineMessage):
     """
-    This object is a :class:`PipelineMessage` that calls a method on the target
-    pipeline element.
-    
-    The :attr:`retval` attribute stores the return value for the method call as 
-    a list (in the same order that the calls occur, if the message is passed to 
-    multiple elements).
+    This object is a :class:`PipelineMessage` that tells the target
+    :class:`PipelineElement` to accumulate the next `naccum` inputs from the
+    earlier stage as a list, and then either pass this list in as data to the
+    next stage, or set it to an attribute on the element.
     
     """
-    
-    def __init__(self,target,methodname,*args,**kwargs):
+    def __init__(self,target,naccum=1,setattrname=None,filterfunc=None):
         """
         :param target: The target pipeline element to receive this message.
-        :param string methodname: The name of the method that should be called.
-        
-        Further arguments and keyword arguments will be passed in as the 
-        arguments and keyword for the method call. Thus, ::
-            
-            pipeline = Pipeline([apipelineelement])
-            msg = CallMethodMessage(apipelineelement,'meth',arg1,kw2=val2)
-            pipeline.feed(msg)
-            pipeline.process()
-            
-        is equivalent to ::
-            
-            pipeline = Pipeline([apipelineelement])
-            apipelineelement.meth(arg1,kw2=val2)
-        
+        :param int naccum: 
+            The number of inputs to accumulate before continuing normal
+            operation of the pipeline element.
+        :param setattrname: 
+            The name of the attribute that the result of the accumulation should
+            be set to. Alternatively, it can be None, in which case the
+            accumulated list will be passed in as the next set of input data.
+        :param filterfunc: 
+            A callable that is called when as ``filterfunc(accum)`` where
+            `accum` is the accumulated list of data, and should return the
+            object to be set to the attribute `setattrname`. If None, this step
+            is not performed (e.g. a list with the accumulated data is the
+            result).
         """
+        
         PipelineMessage.__init__(self,target)
+        self.naccum = naccum
+        self.setattrname = setattrname
+        self.filterfunc = filterfunc
+        
+    def deliverMessage(self,elem):
+        _Accumulator(elem,self.naccum,self.setattrname,self.filterfunc)
         
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
