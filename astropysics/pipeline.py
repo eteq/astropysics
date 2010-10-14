@@ -298,14 +298,15 @@ class Pipeline(object):
         """
         self._datadeques[0].append(input)
         for stage in range(len(self._elements)):
+            datapreprocess = self._datadeques[stage][-1]
             self.processStage(stage)
             while self._cycles[stage]:
                 if processinglimit and self._cycles[stage] >= processinglimit:
-                    if removefailed:
-                        raise NotImplementedError
+                    if not removefailed:
+                        self._datadeques[stage].append(datapreprocess)
                     raise PipelineError('hit processing limit at stage %i'%stage)
                 self.processStage(stage)
-            self._datadeques[stage+1].append(self._datadeques[stage].popleft())
+            #TODO:add checks?
                 
         return self._datadeques[-1].pop()
         
