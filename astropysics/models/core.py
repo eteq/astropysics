@@ -3565,8 +3565,11 @@ def get_model_class(model,baseclass=None):
     """
     from inspect import isclass
     
-    if isinstance(model,basestring):    
-        res = __model_registry[model]
+    if isinstance(model,basestring):
+        if model not in __model_registry
+            res = __model_registry[model.lower()]
+        else:
+            res = __model_registry[model]
     elif isclass(model):
         if issubclass(model,ParametricModel):
             res = model
