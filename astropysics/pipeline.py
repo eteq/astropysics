@@ -202,7 +202,7 @@ class Pipeline(object):
         Process a particular stage once, possibly processing earlier stages
         if there is nothing in the request stage's input.
         
-        :param stagenum: Stage number index to process
+        :param stagenum: Stage number to process
         :type stagenum: int
         """
         st = self._elements[stagenum]
@@ -251,6 +251,8 @@ class Pipeline(object):
             If True, the pipeline will by processed continually. Otherwise, only
             one step through the pipeline will be run.
         :type repeat: bool
+        
+        :returns: A list with the number of times each stage was processed.
         
         """
         return self.processToStage(-1,repeat)
@@ -305,7 +307,9 @@ class Pipeline(object):
             times to attempt any given stage before a PipelineError is raised
         :type repeat: bool or int
         
-        :returns: The number of times all of the stages were fed and processed.
+        :returns: 
+            A list with the number of times each stage was processed (up to
+            stage `stagenum`).
         
         :except PipelineError: 
             If an element has not completed after `repeat` processing cycles
@@ -353,19 +357,24 @@ class Pipeline(object):
     
 class PipelineElement(object):
     """
-    This class represents an element in a Pipeline.  Implementing classes
-    must override the following method:
+    This class represents an element in a Pipeline. The :attr:`_plintype`
+    attribute may be set (on classes or instances) as a processing indicator.
+    See :func:`check_type` for valid types to use (it it is None, no checking is
+    performed)
+    
+    
+    **Subclassing**
+    
+    Implementing classes must override the following method:
     
     * :meth:`plProcess`
-        Process the data in whatever manner is appropriate.
     
-    This method may be overridden: 
+    This method should be overridden if this stage of the pipeline involves an
+    interactive step: 
     
     * :meth:`plInteract`    
-        Performs interactive stage. The :attr:`_plintype` attribute may be set
-        (on classes or instances) as a processing indicator. See
-        :func:`check_type` for valid types to use (it it is None, no checking is
-        performed)
+        
+        
     """
     __metaclass__ = ABCMeta
     
@@ -393,21 +402,41 @@ class PipelineElement(object):
         
             If this returns None and the data provided is not saved, it will
             disappear - the next processing attempt will feed in the next piece
-            of data. If this is not the desired behavior, this method should do
-            the following:: 
-            
-                pipeline.datadeques[elemi].append(data)
+            of data. If this is not the desired behavior, this method should 
+            call ``resaveData(data,pipeline,elemi)``
+                
             
         """
         raise NotImplementedError
     
+    def resaveData(self,data,pipeline,elemi):
+        """
+        This returns the data so that the next time this element is processed,
+        it will receive the same data. This is intended to be used inside
+        :meth:`plProcess` if it returns None and the data should be reprocessed
+        the next time the pipeline stage is run.
+        """
+        pipeline.datadeques[elemi].append(data)
+    
     def plInteract(self,data,pipeline,elemi):
         """
-        called if :meth:`plProcess` returns None. Should return the data to be
-        passed into the next stage or None if the interaction was not completed.
-        In this case, the input will be run through :meth:`plProcess` again
+        This method should be implemented if an interactive step is to be
+        performed by this element. In that case, :meth:`plProcess` should return
+        None, and this will be called after plProcess completes.
         
-        Arguments are the same as :meth:`plProcess`
+        :param data: 
+            The data massed in by the previous element of the pipeline. Type
+            and interpretation is left to this method to test.
+        :param pipeline: 
+            The :class:`Pipeline` object that called this element.
+        :type pipeline: :class:`Pipeline`
+        :param int elemi: The index of this stage of the pipeline.
+        
+        :returns:
+            The data to be passed into the next stage or None if the interaction
+            was not completed. In this case, the input will be run through
+            :meth:`plProcess` again
+        
         """
         return None
     
@@ -484,7 +513,7 @@ class PipelineMessage(object):
         """
         raise NotImplementedError
     
-class AttributeMessage(PipelineMessage):
+class SetAttributeMessage(PipelineMessage):
     """
     This object is a :class:`PipelineMessage` that sets a specified set of
     attributes when it reaches its target.
@@ -492,11 +521,31 @@ class AttributeMessage(PipelineMessage):
     
     def __init__(self,target,**attrs):
         """
-        :param target:
+        :param target: The target object to receive this message.
         
         Other keyword arguments are taken as the attributes to be set on the
-        target. A dictionary can be passed in using
-        ``AttributeMessage(target,**attrdict)``.
+        target.  Thus, ::
+            
+            pipeline = Pipeline([apipelineelement])
+            msg = SetAttributeMessage(apipelineelement,attr1=val1,attr2=val2)
+            pipeline.feed(msg)
+            pipeline.process()
+            
+        is equivalent to ::
+            
+            pipeline = Pipeline([apipelineelement])
+            apipelineelement.attr1 = val1
+            apipelineelement.attr2 = val2
+        
+        A dictionary can also be passed in as kwargs::
+            
+            pipeline = Pipeline([apipelineelement])
+            attrs = {'attr1':val1,'attr2':val2}
+            msg = SetAttributeMessage(apipelineelement,**attrs)
+            pipeline.feed(msg)
+            pipeline.process()
+            
+        
         """
         PipelineMessage.__init__(self,target)
         self.attrstoset = attrs
@@ -504,5 +553,76 @@ class AttributeMessage(PipelineMessage):
     def deliverMessage(self,elem):
         for name,value in self.attrstoset.iteritems():
             setattr(elem,name,value)
+            
+class CallMethodMessage(PipelineMessage):
+    """
+    This object is a :class:`PipelineMessage` that calls a method on the target
+    pipeline element.
+    
+    The :attr:`retval` attribute stores the return value for the method call as 
+    a list (in the same order that the calls occur, if the message is passed to 
+    multiple elements).
+    
+    """
+    
+    def __init__(self,target,methodname,*args,**kwargs):
+        """
+        :param target: The target pipeline element to receive this message.
+        :param string methodname: The name of the method that should be called.
+        
+        Further arguments and keyword arguments will be passed in as the 
+        arguments and keyword for the method call. Thus, ::
+            
+            pipeline = Pipeline([apipelineelement])
+            msg = CallMethodMessage(apipelineelement,'meth',arg1,kw2=val2)
+            pipeline.feed(msg)
+            pipeline.process()
+            
+        is equivalent to ::
+            
+            pipeline = Pipeline([apipelineelement])
+            apipelineelement.meth(arg1,kw2=val2)
+        
+        """
+        PipelineMessage.__init__(self,target)
+        self.methodname = methodname
+        self.methargs = args
+        self.methkwargs = kwargs
+        self.retval = []
+        
+    def deliverMessage(self,elem):
+        self.retval.append(getattr(elem,self.methodname)(*args,**kwargs))
+        
+class AccumulateMessage(PipelineMessage):
+    """
+    This object is a :class:`PipelineMessage` that calls a method on the target
+    pipeline element.
+    
+    The :attr:`retval` attribute stores the return value for the method call as 
+    a list (in the same order that the calls occur, if the message is passed to 
+    multiple elements).
+    
+    """
+    
+    def __init__(self,target,methodname,*args,**kwargs):
+        """
+        :param target: The target pipeline element to receive this message.
+        :param string methodname: The name of the method that should be called.
+        
+        Further arguments and keyword arguments will be passed in as the 
+        arguments and keyword for the method call. Thus, ::
+            
+            pipeline = Pipeline([apipelineelement])
+            msg = CallMethodMessage(apipelineelement,'meth',arg1,kw2=val2)
+            pipeline.feed(msg)
+            pipeline.process()
+            
+        is equivalent to ::
+            
+            pipeline = Pipeline([apipelineelement])
+            apipelineelement.meth(arg1,kw2=val2)
+        
+        """
+        PipelineMessage.__init__(self,target)
         
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
