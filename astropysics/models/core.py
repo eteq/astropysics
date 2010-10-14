@@ -2411,7 +2411,7 @@ class ModelSequence(object):
         from operator import isMappingType
         
         if len(models)==2 and isMappingType(models[1]):
-            modtype = get_model(models[0])
+            modtype = get_model_class(models[0])
             params = np.array(models[1].values())
             params = [dict([(models[1].keys()[i],v)] for v in t) for i,t in enumerate(params.T)]
             models = [modtype(**params[i]) for m in range(len(params))]
@@ -3496,8 +3496,8 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
 __model_registry={}
 def register_model(model,name=None,overwrite=False,stripmodel=True):
     """
-    Registers a model at the module package level for :func:`get_model` and
-    :func`list_model`.
+    Registers a model at the module package level for :func:`get_model_class`
+    and :func`list_model`.
     
     :param model: The model to register
     :type model: a class object that is a subclass of class:`ParametricModel`
@@ -3549,7 +3549,7 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     
     __model_registry[name]=model
     
-def get_model(model,baseclass=None):
+def get_model_class(model,baseclass=None):
     """
     Returns the class object for the requested model in the model registry
     
@@ -3607,7 +3607,7 @@ def get_model_instance(model,baseclass=None,**kwargs):
             setattr(model,k,v)
         return model
     else:
-        return get_model(model,baseclass)(**kwargs)
+        return get_model_class(model,baseclass)(**kwargs)
         
 
 def list_models(include=None,exclude=None,baseclass=None):
@@ -3628,8 +3628,8 @@ def list_models(include=None,exclude=None,baseclass=None):
     :type baseclass: a class or None
     
     :returns: 
-        A list of strings for the models that can be used with :func:`get_model`
-        or :func:`get_model_instance`.
+        A list of strings for the models that can be used with
+        :func:`get_model_class` or :func:`get_model_instance`.
     
     :except ValueError: if any provided model strings are not in the registry
     :except TypeError: if both include and exclude are not None

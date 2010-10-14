@@ -831,7 +831,7 @@ class Spectrum(HasSpecUnits):
         
         if model is None, the existing model will be used if present, 
         or if there is None, the default is 'uniformknotspline'.  Otherwise,
-        it may be any acceptable model (see `models.get_model`)
+        it may be any acceptable model (see :func:`models.get_model_class`)
         
         kwargs are passed into the constructor for the model
         
@@ -859,8 +859,8 @@ class Spectrum(HasSpecUnits):
                 model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
         else:
             if isinstance(model,basestring):
-                from .models import get_model
-                model = get_model(model)(**kwargs)
+                from .models import get_model_class
+                model = get_model_class(model)(**kwargs)
         
             if not (callable(model) and hasattr(model,'fitData')):
                 raise ValueError('provided model object cannot fit data')

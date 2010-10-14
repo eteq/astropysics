@@ -38,7 +38,8 @@ from enthought.enable.api import ColorTrait,ComponentEditor
 
 
 
-from ..models import FunctionModel1D,list_models,get_model,get_model_instance,binned_weights
+from ..models import FunctionModel1D,list_models,get_model_class, \
+                     get_model_instance,binned_weights
 
 class ColorMapperFixSingleVal(ColorMapper):
     coloratval = ColorTrait('black')
@@ -221,7 +222,7 @@ class NewModelSelector(HasTraits):
         if n == 'No Model':
             return None
         else:
-            return get_model(n)
+            return get_model_class(n)
         
     def _get_isvarargmodel(self):
         cls = self.selectedmodelclass

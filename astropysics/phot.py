@@ -1890,7 +1890,7 @@ class ModelPointSpreadFunction(PointSpreadFunction):
     def _getModel(self):
         return self._mod
     def _setModel(self,val):
-        from .model import get_model_instance,FunctionModel2DScalar
+        from .models import get_model_instance,FunctionModel2DScalar
         self._mod = get_model_instance(val,FunctionModel2DScalar)
         self._mod.incoordsys = 'polar'
     model = property(_getModel,_setModel,doc=None)
