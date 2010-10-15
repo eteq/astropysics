@@ -619,7 +619,7 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     else:
         raise ValueError('unrecognized mode')
     
-def match_nearest_coords(c1,c2):
+def match_nearest_coords(c1,c2,n=None):
     """
     :param c1: 
         A D x N array with coordinate values (either as floats or
@@ -629,12 +629,11 @@ def match_nearest_coords(c1,c2):
         A D x N array with coordinate values (either as floats or
         :class:`AngularPosition` objects) or a sequence of
         :class:`LatLongCoordinates` objects for the second set of coordinates.
-        
-    .. note::
-        If `c1` and `c2` are the same object (just equality is not enough - they
-        must actually be the same in-memory array), this will find the *second* 
-        closest neighbor - in that case the first nearest neighbor is always the
-        object itself.
+    :param int n: 
+        Specifies the nth nearest neighbor to be returned (1 means the closest
+        match). If None, it will default to 2 if `c1` and `c2` are the same
+        object (just equality is not enough - they must actually be the same
+        in-memory array), or 1 otherwise.
     
     :returns: 
         (seps,ind2) where both are arrays matching the shape of `c1`. `ind2` is
@@ -648,7 +647,8 @@ def match_nearest_coords(c1,c2):
         warn('C-based scipy kd-tree not available - match_nearest_coords will be much slower!')
         from scipy.spatial import KDTree
         
-    identical = c1 is c2
+    if n is None:    
+        n = 2 if c1 is c2 else 1
         
     c1 = np.array(c1,ndmin=1,copy=False)
     c2 = np.array(c2,ndmin=1,copy=False)
@@ -672,11 +672,12 @@ def match_nearest_coords(c1,c2):
         raise ValueError("match_nearest_coords inputs don't match in first dimension")
     
     kdt = KDTree(c2.T)
-    if identical:
-        dist,inds = kdt.query(c1.T,2)
-        return dist[:,1],inds[:,1]
-    else:
+    if n==1:
         return kdt.query(c1.T)
+    else:
+        dist,inds = kdt.query(c1.T,n)
+        return dist[:,1],inds[:,1]
+        
         
     
 def seperation_matrix(v,w=None,tri=False):
