@@ -577,7 +577,6 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
             t = (a1,b1)
             seps,i2 = match_nearest_coords(t,t)
         else:
-            print 'narg'
             seps,i2 = match_nearest_coords((a1,b1),(a2,b2))
         return i2,seps,(seps<=eps)
         
