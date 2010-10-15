@@ -676,7 +676,7 @@ def match_nearest_coords(c1,c2,n=None):
         return kdt.query(c1.T)
     else:
         dist,inds = kdt.query(c1.T,n)
-        return dist[:,1],inds[:,1]
+        return dist[:,n-1],inds[:,n-1]
         
         
     
