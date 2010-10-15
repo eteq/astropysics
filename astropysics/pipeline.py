@@ -220,6 +220,8 @@ class Pipeline(object):
         :param stagenum: Stage number to process
         :type stagenum: int
         """
+        from .utils import check_type
+        
         st = self._elements[stagenum]
         
         data = self._datadeques[stagenum].pop()
@@ -262,9 +264,13 @@ class Pipeline(object):
         Process the pipeline to the end.
         
         :param repeat: 
-            If True, the pipeline will by processed continually. Otherwise, only
-            one step through the pipeline will be run.
-        :type repeat: bool
+            If True, the pipeline will by processed continually. If False, only
+            one step through the pipeline will be run. If it is an integer the
+            pipeline will by processed continually, it will be taken as a
+            maximum number of times to attempt any given stage before a
+            PipelineError is raised.
+        :type repeat: bool or int
+         
         
         :returns: A list with the number of times each stage was processed.
         
