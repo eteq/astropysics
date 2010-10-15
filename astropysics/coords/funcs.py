@@ -538,15 +538,16 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
             matches the jth coordinate of the second set.
         * 'nearest'
             Returns (nearestind,distance,match). `nearestind` is an int array
-            such that nearestind[i] is the index into the *second* set of
+            such that nearestind holds indecies into the *second* set of
             coordinates for the nearest object to the ith object in the first
-            coordinate set. `distance` is a float array of the same shape giving
-            the corresponding distance, and `match` is s boolean array that is
-            True if the distance is within `eps` . Note that if a1 and b1 are
-            the same object (and a2 and b2), this finds the second-closest match
-            (because the first will always be the object itself if the
-            coordinate pairs are the same) This mode is a wrapper around
-            :func:`match_nearest_coords`.
+            coordinate set (hence, it's shape matches the *first* coordinate
+            set). `distance` is a float array of the same shape giving the
+            corresponding distance, and `match` is a boolean array that is True
+            if the distance is within `eps`, and is the same shape as the other
+            outputs. Note that if a1 and b1 are the same object (and a2 and b2),
+            this finds the second-closest match (because the first will always
+            be the object itself if the coordinate pairs are the same) This mode
+            is a wrapper around :func:`match_nearest_coords`.
     
     :returns: See `mode` for a description of return types.
     
