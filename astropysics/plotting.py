@@ -937,6 +937,7 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     kwargs are passed into :func:`matplotlib.pyplot.plot`
     
     """
+    from matplotlib import pyplot as plt
     
     #both ls and linestyle can be used to set the style, so we don't 
     #differentiate unless both are missing
