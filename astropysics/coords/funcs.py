@@ -854,7 +854,7 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
         res=integratevec(a0)
         intres,interr = res[0],res[1]        
         try:
-            if any(interr/intres > inttol):
+            if np.any(interr/intres > inttol):
                 raise Exception('Integral fractional error for one of the integrals is beyond tolerance')
         except ZeroDivisionError:
             pass
