@@ -1337,8 +1337,9 @@ class ImageBiasSubtractor(PipelineElement):
         else:
             if isinstance(data,CCDImage):
                 newdata = self.subtractFromImage(data.data)
-                data.data[:] = newdata
+                data._active = newdata
                 data.applyChanges()
+                return data
             else:
                 return self.subtractFromImage(data)
     
@@ -1346,8 +1347,9 @@ class ImageBiasSubtractor(PipelineElement):
         if self.interactive:
             if isinstance(data,CCDImage):
                 newdata = self.subtractFromImage(data.data)
-                data.data[:] = newdata
+                data._active = newdata
                 data.applyChanges()
+                return data
             else:
                 return self.subtractFromImage(data)
         else:
@@ -1481,8 +1483,9 @@ class ImageCombiner(PipelineElement):
     def plProcess(self,data,pipeline,elemi):
         if isinstance(data,CCDImage):
             newdata = self.combineImages(data.data)
-            data.data[:] = newdata
+            data._active = newdata
             data.applyChanges()
+            return data
         else:
             return self.combineImages(data)
     
@@ -1531,8 +1534,9 @@ class ImageFlattener(PipelineElement):
     def plProcess(self,data,pipeline,elemi):
         if isinstance(data,CCDImage):
             newdata = self.flattenImage(data.data)
-            data.data[:] = newdata
+            data._active = newdata
             data.applyChanges()
+            return data
         else:
             return self.flattenImage(data)
     
