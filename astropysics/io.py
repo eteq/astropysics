@@ -48,15 +48,23 @@ except ImportError:
     warn('pyfits not found - all FITS-related IO will not work')
     
     
-#<-----------------------Internal to package----------------------------------->
+#<-----------------------Data retrieval and caching---------------------------->
     
 def get_package_data(dataname):
     """
-    Use this function to load data files distributed with astropysics in the 
-    astropysics/data directory
+    Use this function to load data files distributed with the astropysics 
+    source code.
     
-    dataname is the file name of a file in the data directory, and a string
-    with the contents of the file will be returned
+    :param str dataname: 
+        The name of a file in the package data directory.
+    :returns: The content of the requested file as a string.
+    
+    .. note::
+        The data accessed by this function is distinct from the data accessed
+        via :func:`get_data`. Package data is crucial basic data included in the
+        astropysics source distribution, while standard data is for larger or
+        optional data files that are downloaded as needed.
+    
     """
     from . import __name__ as rootname
     from . import __file__ as rootfile
@@ -64,6 +72,83 @@ def get_package_data(dataname):
     from os.path import dirname
     path = dirname(rootfile)+'/data/'+dataname
     return get_loader(rootname).get_data(path)
+
+def get_data(dataurl,asfile=False,store=True,localfn=None):
+    """
+    Retrieves a data file from a remote source (usually the internet), and
+    optionally caches that data locally.
+    
+    :param str dataurl: The URL of the data to be retrieved.
+    :param bool asfile: 
+        If True, a file-like object is returned that can be used to access the
+        data. Otherwise, a string with the full content of the file is returned.
+    :param store: 
+        If True, the data file will only be downloaded if that URL is accessed
+        for the first time. If False, the data will always be retrieved from the
+        remote source and not saved. If it is the string 'refresh', the file is
+        downloaded regardless of whether or not it is present, but the
+        downloaded version will be used in future calls where it is True.
+    :param localfn: 
+        The filename to use for saving (or loading, if the file is present)
+        locally. If it is None, the filename will be inferred from the URL 
+        if possible. This file name is always relative to the astropysics data
+        directory (see :func:`astropysics.config.get_data_dir`).
+    
+        
+    :returns: A file-like object or a string (see `asfile`)
+    
+    .. note::
+        The data accessed by this function is distinct from the data accessed
+        via :func:`get_package_data`. Package data is crucial basic data
+        included in the astropysics source distribution, while standard data is
+        for larger or optional data files that are downloaded as needed.
+    """
+    import os,urlparse,urllib2,shelve,contextlib
+    from .config import get_data_dir
+    
+    if store:
+        datadir = get_data_dir()
+        with contextlib.closing(shelve.open(os.path.join(datadir,'urlmap'))) as url2fn:
+            #decide if the url needs to be retrieved
+            if dataurl not in url2fn or store=='refresh' or \
+              not os.path.exists(os.path.join(datadir,url2fn[dataurl])):
+                with contextlib.closing(urllib2.urlopen(dataurl)) as remote:
+                    rinfo = remote.info()
+                    urldata = None
+                    if localfn is None:
+                        #figure out the local name from the data/URL
+                        if 'Content-Disposition' in rinfo:
+                            #often URLs that redirect to a download provide the fielname in the header info
+                            localfn = rinfo['Content-Disposition'].split('filename=')[1]
+                        else:
+                            #otherwise fallback on the url filename
+                            localfn = urlparse.urlsplit[2].split('/')[-1]
+                            if localfn.strip()=='':
+                                #url does not have a path, so try to use the title of the page
+                                localfn = None
+                                if 'html' in rinfo['content-type']:
+                                    urldata = remote.read()
+                                    starttag = urldata.find('<title>')
+                                    endtag = urldata.find('<title>')
+                                    if startag>-1 and endtag>-1:
+                                        localfn = urldata[starttag:endtag]
+                        if localfn is None:
+                            raise urllib2.URLError('Could not determine local file name for the URL '+dataurl)
+                    if urldata is None:
+                        urldata = remote.read()
+                #now save the downloaded data
+                with open(os.path.join(datadir,localfn),'w') as f:
+                    f.write(urldata)
+                url2fn[dataurl] = localfn
+            
+            handle = open(os.path.join(datadir,url2fn[dataurl]),'r')
+    else:
+        handle = urllib2.urlopen(dataurl)
+        
+    if asfile:
+        return handle
+    else:
+        return handle.read()
 
 #<-----------------------General IO utilities---------------------------------->
 

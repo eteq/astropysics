@@ -99,19 +99,16 @@ def get_config_dir(create=True):
 
 def get_data_dir(create=True):
     """
-    Returns the directory name for data that astropysics downloads.  
-    
-    .. note::
-        The data from the directory returned by this function is distinct from
-        the *package* data, accessed via :func:`io.get_package_data`. Package
-        data is crucial basic data included in the astropysics source
-        distribution, while the data directory holds larger or optional data
-        files that are downloaded when needed.
+    Returns the directory name for data that astropysics downloads. See
+    :func`astropysics.io.get_data` to work with data in this directory.
     
     :param bool create: 
         If True, the directory will be created if it doesn't exist.
     :returns: The absolute path to the data directory as a string.
     """
     import os
-    return os.path.join(get_config_dir(create),'data')
+    datadir = os.path.join(get_config_dir(create),'data')
+    if create and not os.path.isdir(datadir):
+        os.mkdir(datadir)
+    return datadir
 
