@@ -3629,7 +3629,9 @@ class GraphAction(ActionNode):
         import pygraphviz
         dldef = 'dot'
     except ImportError:
-        from networkx.layout import spring_layout as dldef
+        from networkx import layout
+        dldef = layout.spring_layout
+        del layout #don't want to leave this in the namespace
         
     def __init__(self,parent,nodename='Graphing Node',traversal='preorder',
              drawlayout=dldef,drawkwargs={},show=False,savefile=None,clf=False):
