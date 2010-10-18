@@ -21,3 +21,4 @@ The modules forming the core of astropysics' functionality are documented below.
    pipeline
    publication
    utils
+   config
