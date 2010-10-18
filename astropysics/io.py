@@ -50,7 +50,7 @@ except ImportError:
     
 #<-----------------------Internal to package----------------------------------->
     
-def _get_package_data(dataname):
+def get_package_data(dataname):
     """
     Use this function to load data files distributed with astropysics in the 
     astropysics/data directory

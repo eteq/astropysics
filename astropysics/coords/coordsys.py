@@ -45,7 +45,7 @@ from __future__ import division,with_statement
 
 from ..constants import pi
 from ..utils import rotation_matrix,add_docs
-from ..io import _get_package_data
+from ..io import get_package_data
 import numpy as np
 _twopi = 2*pi
 _pio2 = pi/2
@@ -1884,7 +1884,7 @@ def _load_nutation_data(datafn,seriestype):
     else:
         raise ValueError('requested invalid nutation series type')
     
-    lines = [l for l in _get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
     
     lists = [[] for n in dtypes]
     for l in lines:
@@ -1980,7 +1980,7 @@ def _load_CIO_locator_data(datafn):
     returns polycoeffs,termsarr (starting with 0th)
     """
     
-    lines = [l for l in _get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
     coeffs = []
     sincs = []
     coscs = []

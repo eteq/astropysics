@@ -1720,13 +1720,13 @@ def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
     returns a list of KnownFeature objects 
     """
     from warnings import warn
-    from .io import _get_package_data
+    from .io import get_package_data
     
     if isinstance(lst,basestring):
         name = lst
         if name in ('galaxy','stellar'):
             #load builtin line list
-            f = _get_package_data(name+'_lines.dat').split('\n')
+            f = get_package_data(name+'_lines.dat').split('\n')
             fopen = False
         else:
             f = open(name)

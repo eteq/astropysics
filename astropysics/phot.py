@@ -852,14 +852,14 @@ def set_zeropoint_system(system,bands='all'):
         
     elif 'vega' in system.lower():
         from cPickle import loads
-        from .io import _get_package_data
+        from .io import get_package_data
         
         try:
             offset = float(system.lower().replace('vega',''))
         except ValueError:
             offset = 0
 
-        vegad = loads(_get_package_data('vega_k93.pydict'))['data']
+        vegad = loads(get_package_data('vega_k93.pydict'))['data']
         s = Spectrum(vegad['WAVELENGTH'],vegad['FLUX']*10**(offset/2.5))
         
         for b in bands:
@@ -3505,8 +3505,8 @@ def teff_to_color(teff,colorbands='g-r'):
 #TODO: check UBVRI/ugriz S function - energy or quantal?
 
 def __load_UBVRI():
-    from .io import _get_package_data
-    bandlines = _get_package_data('UBVRIbands.dat').split('\n')
+    from .io import get_package_data
+    bandlines = get_package_data('UBVRIbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#Source:','').strip()
     bandlines.pop(0)
@@ -3531,8 +3531,8 @@ def __load_UBVRI():
     return d
 
 def __load_JHK():
-    from .io import _get_package_data
-    bandlines = _get_package_data('JHKbands.dat').split('\n')
+    from .io import get_package_data
+    bandlines = get_package_data('JHKbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
     
@@ -3556,8 +3556,8 @@ def __load_JHK():
     return d
 
 def __load_ugriz():
-    from .io import _get_package_data
-    bandlines = _get_package_data('ugrizbands.dat').split('\n')
+    from .io import get_package_data
+    bandlines = get_package_data('ugrizbands.dat').split('\n')
     
     bandlines.pop(0)
     psrc = bandlines.pop(0).replace('#primes:','').strip()
@@ -3591,8 +3591,8 @@ def __load_ugriz():
     return d,dp
 
 def __load_washington():
-    from .io import _get_package_data
-    bandlines = _get_package_data('washingtonbands.dat').split('\n')
+    from .io import get_package_data
+    bandlines = get_package_data('washingtonbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
     
@@ -3616,8 +3616,8 @@ def __load_washington():
     return d
 
 def __load_human_eye():
-    from .io import _get_package_data
-    bandlines = _get_package_data('eyeresponse.dat').split('\n')
+    from .io import get_package_data
+    bandlines = get_package_data('eyeresponse.dat').split('\n')
     
     src = bandlines.pop(0).replace('#from','').strip()
     d={'cone_s':[],'cone_m':[],'cone_l':[]}
