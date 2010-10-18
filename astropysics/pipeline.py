@@ -219,6 +219,9 @@ class Pipeline(object):
         
         :param stagenum: Stage number to process
         :type stagenum: int
+        :returns: 
+            False if the stage didn't complete, True if it did, or the string
+            'message' if it delivered a message instead of data.
         """
         from .utils import check_type
         
@@ -238,6 +241,7 @@ class Pipeline(object):
                         raise PipelineError('message %s was never delivered to any element'%msg)
                 else:
                     self._datadeques[stagenum+1].appendleft(msg)
+            return 'message'
         else:
             try:
                 check_type(st._plintype,data) #no-op if st._plintype is None
@@ -246,12 +250,15 @@ class Pipeline(object):
                     newdata = st.plInteract(data,self,stagenum)
                     if newdata is None:
                         self._cycles[stagenum] += 1
+                        return False
                     else:
                         self._datadeques[stagenum+1].appendleft(newdata)
                         self._cycles[stagenum] = 0
+                        return True
                 else:
                     self._datadeques[stagenum+1].appendleft(newdata)
                     self._cycles[stagenum] = 0
+                    return True
             except TypeError,e:
                 #if type-checking fails, let the data disppear
                 raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
@@ -437,7 +444,7 @@ class PipelineElement(object):
         :meth:`plProcess` if it returns None and the data should be reprocessed
         the next time the pipeline stage is run.
         """
-        pipeline.datadeques[elemi].append(data)
+        pipeline._datadeques[elemi].append(data)
     
     def plInteract(self,data,pipeline,elemi):
         """
