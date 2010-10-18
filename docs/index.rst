@@ -28,6 +28,7 @@ Astropysics is divided into two major subcomponents - the core modules that perf
    
    coremods/intro
    gui/intro
+   develop
 
 
 Installation
@@ -47,7 +48,10 @@ Follow the instructions on those sites, or, far easier, install them as packages
 Install
 -------
 
-Once you have the requirements satisfied, you have a few options for installing astropysics.
+Once you have the requirements satisfied, you have a few options for installing astropysics.  
+
+.. note::
+    On most unix-like systems, you will need to either execute these commands as the root user, or preface them with ``sudo``.
 
 If you have `pip <http://pypi.python.org/pypi/pip>`_ (the new, better easy installer) or `easy_install/setuptools <http://pypi.python.org/pypi/setuptools>`_ (you should probably install pip...), just run either::
 
@@ -57,14 +61,13 @@ or::
 
     easy_install astropysics
 
-If you are on Ubuntu or some other linux distributions, you will need to prefix those commands with ``sudo`` e.g. ``sudo pip install astropysics``.
-
 If you are installing from source code, instead, just do::
 
     python setup.py install
-    
-where again, you may have to prefix the command with ``sudo`` if it doesn't work the first time.
 
+If you plan on editing the astropysics source code or using the most up-to-date version (see the :doc:`develop`), a useful way to immediately see changes without having to re-install every time is to use the command::
+
+    python setup.py develop
 
 
 Recommended packages
@@ -125,44 +128,21 @@ Some of these may be available and installable using your system's package manag
     or if there are problems installing the ETS tools, use::
     
         easy_install "astropysics[allnogui]"
-        
-    and as with all of these, you may need to prefix with ``sudo``.
     
 Astropysics also includes pythonic wrappers around some astronomy-related tools that need to be installed seperately if their functionality is desired:
 
     * `SExtractor <http://www.astromatic.net/software/sextractor>`_
     * `Kcorrect <http://howdy.physics.nyu.edu/index.php/Kcorrect>`_
     
+Developer Guidelines
+====================
 
-Development/Advanced Install
-----------------------------
-
-If you want to be sure you have the most recent version (or want to help improve the code), you can pull the current development version from  the `google code page <http://code.google.com/p/astropysics/>`_.  
-Just install `mercurial <http://mercurial.selenic.com/>`_, and execute::
-
-    hg clone https://astropysics.googlecode.com/hg/ astropysics-dev
+If you are interested in contributing code (either new functionality or bugfixes), see the :doc:`develop`.
     
-This will create a directory with the name ``astropysics-dev`` containing the latest and greatest version of astropysics.  
-If at any time you want to update this version, go into the directory and do::
-
-    hg pull
-    
-them re-install following the directions above.  If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
-
-    python setup.py develop
-
-possibly prefixed with ``sudo`` depending on your OS.  This will install links to the source code directory instead of copying over the source code, so any changes you make to a module can be seen just be doing ``reload(module)``.
-
-If you intend to regularly contribute changes or patches to astropysics, a more convinient way to submit changes is with a public clone of the main astropysics repository.
-Go to the `source tab  <http://code.google.com/p/astropysics/source/checkout>`_ of the `google code project <http://code.google.com/p/astropysics>`_, and click on the ``create clone`` button.  
-Fill in the necessary information, and clone *that* repository on your computer instead of the main astropysics repository.  
-You can then use ``hg push`` to send changes back to your repository on google code, and those can easily be merged with the main.
-   
-
 Bug Reports
 ===========
 
-The best place to report bugs is via the `google code bug tracker <https://bugs.launchpad.net/astropysics>`_.  That way they won't be forgotten unless an asteroid impact destroys all of humanity (or all the launchpad servers...).
+The best place to report bugs is via the `google code bug tracker <http://code.google.com/p/astropysics/issues>`_.  That way they won't be forgotten unless an asteroid impact destroys all of google's servers.
 
 Logo Image Credit
 =================

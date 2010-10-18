@@ -22,11 +22,12 @@ The :mod:`config` module contains functions and prompts to manage and access the
 persistent astropysics configuration, as well as setup and installation actions.
 It also includes utilities to set up the suggested ipython environment.
 
-Classes and Inheritance Structure
----------------------------------
+.. add this back in if any classes are added
+    Classes and Inheritance Structure
+    ---------------------------------
 
-.. inheritance-diagram:: astropysics.config
-   :parts: 1
+    .. inheritance-diagram:: astropysics.config
+       :parts: 1
 
 Module API
 ----------
