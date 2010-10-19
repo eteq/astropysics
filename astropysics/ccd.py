@@ -1336,12 +1336,15 @@ class ImageBiasSubtractor(PipelineElement):
             return None #interactive fit will occur in subtractFromImage
         else:
             if isinstance(data,CCDImage):
+                print 'above',data.data
                 newdata = self.subtractFromImage(data.data)
+                print 'inhere',newdata
                 data._active = newdata
                 data.applyChanges()
                 return data
             else:
-                return self.subtractFromImage(data)
+                res = self.subtractFromImage(data)
+                return res
     
     def plInteract(self,data,pipeline,elemi):
         if self.interactive:
@@ -1414,6 +1417,8 @@ class ImageCombiner(PipelineElement):
         
         :returns: A 2D numpy array of images produced by combining the inputs. 
         """
+        from operator import isSequenceType
+        
         outshape = images[0].shape
         for im in images[1:]:
             if im.shape != outshape:

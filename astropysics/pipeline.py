@@ -231,9 +231,11 @@ class Pipeline(object):
         if isinstance(data,PipelineMessage):
             msg = data
             istarg = msg.isTarget(st)
+            retcode = ''
             
             if istarg:
                 msg(st)
+                retcode += 'message_delivered'
                 
             if not istarg or istarg=='continue':
                 if stagenum == len(self._elements)-1:
@@ -241,10 +243,15 @@ class Pipeline(object):
                         raise PipelineError('message %s was never delivered to any element'%msg)
                 else:
                     self._datadeques[stagenum+1].appendleft(msg)
-            return 'message'
+                retcode += ('' if retcode=='' else ',')+'message_passed'
+            return retcode
         else:
             try:
                 check_type(st._plintype,data) #no-op if st._plintype is None
+            except TypeError,e:
+                #if type-checking fails, let the data disppear
+                raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
+            try:
                 newdata = st.plProcess(data,self,stagenum)
                 if newdata is None:
                     newdata = st.plInteract(data,self,stagenum)
@@ -259,9 +266,7 @@ class Pipeline(object):
                     self._datadeques[stagenum+1].appendleft(newdata)
                     self._cycles[stagenum] = 0
                     return True
-            except TypeError,e:
-                #if type-checking fails, let the data disppear
-                raise TypeError('TypeError in stage %i(%s), removing invalid data '%(stagenum,e))
+            
             except:
                 self._datadeques[stagenum].append(data)
                 raise
@@ -279,7 +284,9 @@ class Pipeline(object):
         :type repeat: bool or int
          
         
-        :returns: A list with the number of times each stage was processed.
+        :returns:
+             A list with the return value of :func:`processStage` if `repeat` is
+            False, or a list of lists if `repeat` is True.
         
         """
         return self.processToStage(-1,repeat)
@@ -336,8 +343,8 @@ class Pipeline(object):
         :type repeat: bool or int
         
         :returns: 
-            A list with the number of times each stage was processed (up to
-            stage `stagenum`).
+            A list with the return value of :func:`processStage` if `repeat` is
+            False, or a list of lists if `repeat` is True.
         
         :except PipelineError: 
             If an element has not completed after `repeat` processing cycles
@@ -347,25 +354,24 @@ class Pipeline(object):
             stages = range(stagenum+1)
         else:
             stages = range(len(self._datadeques)+stagenum)
-        counts = []    
+        results = []    
         for st in stages:
             dd = self._datadeques[st]
-            count=0
+            
             if repeat:
+                result = []
                 while len(dd)>0:
                     self.processStage(st)
                     while self._cycles[st]:
                         if repeat is not True and self._cycles[st] >= repeat:
                             raise PipelineError('hit processing limit at stage %i'%st)
-                        self.processStage(st)
-                    count+=1   
+                        result.append(self.processStage(st))
+            elif len(dd)>0:
+                result = self.processStage(st)
             else:
-                if len(dd)>0:
-                    self.processStage(st)
-                    if not self._cycles[st]:
-                        count=1
-            counts.append(count)
-        return counts
+                result = False
+            results.append(result)
+        return results
     
     def clear(self,stages=None):
         """
@@ -645,18 +651,14 @@ class _Accumulator(object):
         self.elem = elem
     
     def plProcess(self,data,pipeline,elemi):
-        accumi = len(self.accum)
-        assert accumi <= self.naccum,'Accumulator plProcess is being called after it should have finished'
-        
-        if accumi == self.naccum:
-            self.elem.resaveData(data,pipeline,elemi)
-            self.finish(data,pipeline,elemi)
-        else:
-            self.accum.append(data)
-            
+        assert len(self.accum) < self.naccum,'Accumulator plProcess is being called after it should have finished'
+        self.accum.append(data)
         return None #unneccessary, but explicit is better than implicit...
         
     def plInteract(self,data,pipeline,elemi):
+        #Finishing is done here so the pipeline doesn't try to do the real interaction step
+        if len(self.accum) == self.naccum:
+            self.finish(data,pipeline,elemi)
         return None
     
     def finish(self,data,pipeline,elemi):
