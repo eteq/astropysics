@@ -1418,6 +1418,7 @@ class ImageCombiner(PipelineElement):
         :returns: A 2D numpy array of images produced by combining the inputs. 
         """
         from operator import isSequenceType
+        images = [im.data if isinstance(im,CCDImage) else im for im in images]
         
         outshape = images[0].shape
         for im in images[1:]:
@@ -1459,8 +1460,9 @@ class ImageCombiner(PipelineElement):
         elif callable(self.method):
             op = self.method
         elif isSequenceType(self.method):
-            weights = self.method
-            op = lambda ims:np.sum(ims*weights)
+            weights = np.array(self.method)
+            #this multiplies the image arrays by weights, and then adds them together
+            op = lambda ims:np.sum(np.array(ims,copy=False)*weights.reshape((weights.size,1,1)),axis=0)
         else:
             raise ValueError('Incalid combining method %s'%self.method)
         
@@ -1486,13 +1488,7 @@ class ImageCombiner(PipelineElement):
         return image
     
     def plProcess(self,data,pipeline,elemi):
-        if isinstance(data,CCDImage):
-            newdata = self.combineImages(data.data)
-            data._active = newdata
-            data.applyChanges()
-            return data
-        else:
-            return self.combineImages(data)
+        return self.combineImages(data)
     
     
 
