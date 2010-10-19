@@ -960,8 +960,37 @@ for o in locals().values():
 
             
 class FitsImage(CCDImage):
-    def __init__(self,fn,range=None,scaling=None,hdu=0,memmap=0):
+    """
+    A :class:`CCDImage` representation of a FITS file. Note that this class
+    requires `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`
+    to work at all.
+    """
+    def __init__(self,fnordata,range=None,scaling=None,hdu=0,memmap=0):
+        """
+        :param fnordata:
+            The filename or data to use to create this object.  Can be:
+            
+                * A string
+                    Specifies a file name to a fits file that will be used as
+                    the image data source.
+                * An array
+                    Will be used to create a single-HDU fits file with a 
+                    default header.
+                * (array,)
+                
+                    
+        :param range: The initial value for the :attr:`range` attribute.
+        :param scaling: The initial value for the :attr:`scaling` attribute.
+        :param int hdu: 
+            The HDU to use initially as the current data for this
+            :class:`CCDImage`.
+        :param memmap: 
+            If True/1, the loaded file will be memory-mapped to drive instead of
+            being loaded into memory. Passed into :func:`pyfits.open` if
+            `fnordata` is a filename, and otherwise ignored.
+        """
         import pyfits
+        fn = fnordata
         
         fnl = fn.lower()
         if fnl.endswith('fit') or fnl.endswith('fits'):
@@ -1336,9 +1365,7 @@ class ImageBiasSubtractor(PipelineElement):
             return None #interactive fit will occur in subtractFromImage
         else:
             if isinstance(data,CCDImage):
-                print 'above',data.data
                 newdata = self.subtractFromImage(data.data)
-                print 'inhere',newdata
                 data._active = newdata
                 data.applyChanges()
                 return data
