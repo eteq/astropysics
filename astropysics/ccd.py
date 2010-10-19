@@ -230,6 +230,7 @@ class CCDImage(object):
         self._zpt = None
         self.band = None
         
+        
         #internal variables
         self.__examcid = None
         self._changed = False
@@ -240,6 +241,7 @@ class CCDImage(object):
         self._invscalefunc = self._scaling.invtransform
         self.applyChangesOnActivate = False#True #TODO:check this out for consistency
         
+        self._directaccess = False #overrides any smartness for saving 
         self._rng = range
         
         self.setScaling(scaling) #implicitly calls activateRange and will NotImplementedError if not overridden
@@ -305,7 +307,7 @@ class CCDImage(object):
     def applyChanges(self):
         if not self._invscalefunc:
             raise Exception('No inverse function available')
-        if self.scaling.name == 'linear': #directly applied if linear mapping 
+        if self.scaling.name == 'linear' and self._directaccess: #directly applied if linear mapping 
             pass
         else:
             self._applyArray(self._rng,self._invscalefunc(self._active))
@@ -976,7 +978,19 @@ class FitsImage(CCDImage):
                 * An array
                     Will be used to create a single-HDU fits file with a 
                     default header.
-                * (array,)
+                * A list of arrays
+                    Will be used to create a multi-HDU fits file with all
+                    default headers. Not that it must be a list and not any
+                    other type of sequence.
+                * (hdr,array)
+                    Array is a numpy array, and hdr is a :class:`pyfits.Header`
+                    object or a dictionary that will be used to populate the
+                    header entries. This will create a single HDU with the
+                    provided array and header.
+                * (hdrs,arrays)
+                    Same as the previous form, but arrays and hdrs must be
+                    lists, *not* any other sequence type, and must be the same
+                    length.  They will be used to create multiple HDUs.
                 
                     
         :param range: The initial value for the :attr:`range` attribute.
@@ -990,30 +1004,61 @@ class FitsImage(CCDImage):
             `fnordata` is a filename, and otherwise ignored.
         """
         import pyfits
-        fn = fnordata
-        
-        fnl = fn.lower()
-        if fnl.endswith('fit') or fnl.endswith('fits'):
-            self.fitsfile = pyfits.open(fn,memmap=memmap)
-        else:
-            raise IOError('unrecognized file type')
+        from operator import isSequenceType,isMappingType
+        try:
+            if isinstance(fnordata,basestring):
+                fnl = fnordata.lower()
+                if fnl.endswith('fit') or fnl.endswith('fits'):
+                    self.fitsfile = pyfits.open(fnordata,memmap=memmap)
+                else:
+                    raise IOError('unrecognized file type')
+            elif isinstance(fnordata,np.ndarray): #array form
+                phdu = pyfits.PrimaryHDU(data=fnordata)
+                self.fitsfile = pyfits.HDUList([phdu])
+            elif isinstance(fnordata,list): #mult-HDU array form
+                hdus = [pyfits.PrimaryHDU(data=fnordata[0])]
+                for arr in fnordata[1:]:
+                    hdus.append(pyfits.ImageHDU(data=arr))
+                self.fitsfile = pyfits.HDUList(hdus)
+            elif len(fnordata)==2: #assume one of the hdr,array forms
+                hdr,arr = fnordata
+                if isSequenceType(hdr) and not isMappingType(hdr) : #multi-HDU form
+                    if len(hdr) != len(arr):
+                        raise ValueError('headers and arrays not the same size in FitsImage constructor')
+                    hdus = [pyfits.PrimaryHDU(data=arr[0],header=FitsImage._hdr_conv(hdr[0]))]
+                    for hdri,arri in zip(hdr,arr)[1:]:
+                        hdus.append(pyfits.ImageHDU(data=arri,header=FitsImage._hdr_conv(hdri)))
+                else: #single HDU
+                    hdus = [pyfits.PrimaryHDU(data=arr,header=FitsImage._hdr_conv(hdr))]
+                self.fitsfile = pyfits.HDUList(hdus)
+            else:
+                raise TypeError
+        except TypeError:
+            raise TypeError('invalid object passed into FitsImage constructor')
         
         self._chdu = None
         self._newhdu = hdu 
         
         CCDImage.__init__(self,range=range,scaling=scaling)
+        self._directaccess = False
         #self._updateFromHeader()#called implicity in CCDImage.__init__ through activateRange
         
     def save(self,fn,**kwargs):
         """
         Save this image to a new fits file.  kwargs will be passed to
         `pyfits.HDUList.writeto`
+        
+        Be default, this will overwrite a file of the same name - if this is not
+        desired, set the `clobber` keyword to False.
         """
         self._updateToHeader()
+        kwargs.setdefault('clobber',True)
         self.fitsfile.writeto(fn,**kwargs)
         
     def close(self):
         """
+        Closes the file associated with this FitsImage.  Many operations will
+        fail after this occurs.
         """
         self.fitsfile.close()
     
@@ -1058,20 +1103,17 @@ class FitsImage(CCDImage):
         return im
     
     
-    def _applyArray(self,range,imdata):        
-        if self._invscalefunc is self._scalefunc: #linear mapping so changes already applied
-            pass
+    def _applyArray(self,range,imdata):
+        if range is None:
+            self.fitsfile[self._chdu].data = imdata.T
+        elif len(range) == 4:
+            xl,xu,yl,yu = range
+            ny,nx = self.fitsfile[self._chdu]._dimShape() #fits files are flipped TODO:find out if _dimShape isn't supposed to be used
+            if xl < 0 or xu > nx or yl < 0 or yu > ny:
+                raise IndexError('Attempted range %i,%i;%i,%i on image of size %i,%i!'%(xl,xu,yl,yu,nx,ny))
+            self.fitsfile[self._chdu].data[yl:yu,xl:xu] = imdata
         else:
-            if range is None:
-                self.fitsfile[self._chdu].data = imdata
-            elif len(range) == 4:
-                xl,xu,yl,yu = range
-                ny,nx = self.fitsfile[self._chdu]._dimShape() #fits files are flipped TODO:find out if _dimShape isn't supposed to be used
-                if xl < 0 or xu > nx or yl < 0 or yu > ny:
-                    raise IndexError('Attempted range %i,%i;%i,%i on image of size %i,%i!'%(xl,xu,yl,yu,nx,ny))
-                self.fitsfile[self._chdu].data[yl:yu,xl:xu] = imdata
-            else:
-                raise ValueError('Unregonized form for range')
+            raise ValueError('Unregonized form for range')
         
     def _updateFromHeader(self):
         d = dict(self.fitsfile[self._chdu].header.items())
@@ -1105,6 +1147,20 @@ class FitsImage(CCDImage):
             d['ZEROPOINT'] = self.zeropoint
         elif 'ZEROPT' in d:
             d['ZEROPT'] = self.zeropoint
+            
+    @staticmethod
+    def _hdr_conv(hdr):
+        """
+        Converts the provided header or dictionary into a :class:`pyfits.Header`
+        """
+        import pyfits
+        if isinstance(hdr,pyfits.Header):
+            return hdr
+        elif isinstance(hdr,pyfits.CardList) or isinstance(hdr,list):
+            return pyfits.Header(hdr)
+        else: #assume dictionary-like
+            cl = [pyfits.Card(k,v) for k,v in hdr.iteritems()]
+            return pyfits.Header(pyfits.CardList(cl))
     
     def _getHdu(self):
         return self._chdu
@@ -1141,7 +1197,8 @@ class ArrayImage(CCDImage):
         if ival is not None:
             self._array[:] = ival
             
-        super(ArrayImage,self).__init__(range,scaling)
+        CCDImage.__init__(self,range,scaling)
+        self._directaccess = True
         
     def _extractArray(self,range):
         if range is None:
@@ -1211,9 +1268,9 @@ class ImageBiasSubtractor(PipelineElement):
     * :attr:`biasregion`: 
         A 4-tuple defining a region as (xmin,xmax,ymin,ymax) Or None to skip
         this step.
-    * :attr:`overscan`: an integer defining the edge of the overscal region, or 
+    * :attr:`overscan`: an integer defining the edge of the overscan region, or 
       a 2-tuple of the form (edge,bool) where the boolean indicates if the it 
-      is a left edge (True, default) or a right edge (False)
+      is a left edge/starting at 0 (True, default) or a right edge (False)
     * :attr:`overscanaxis`: sets the axis along which the overscan
       region is defined (typcally the readout axis): 'x'/0 or 'y'/1,
       assumed for the overscan
@@ -1357,7 +1414,6 @@ class ImageBiasSubtractor(PipelineElement):
         if self.save:
             self.lastimage = image
             self.lastcurve = fitcurve
-            
         return image
     
     def plProcess(self,data,pipeline,elemi):
@@ -1367,7 +1423,7 @@ class ImageBiasSubtractor(PipelineElement):
             if isinstance(data,CCDImage):
                 newdata = self.subtractFromImage(data.data)
                 data._active = newdata
-                data.applyChanges()
+                data.applyChanges() 
                 return data
             else:
                 res = self.subtractFromImage(data)
