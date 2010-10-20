@@ -1086,7 +1086,7 @@ def plot_histogram(nbin,binedges,**kwargs):
     """
     clf = kwargs.pop('clf',False)
     with mpl_context(clf=clf) as plt:
-        kwargs.setdefault('ls','steps')
+        kwargs.setdefault('drawstyle','steps')
         plt.plot(np.concatenate((binedges,[binedges[-1]])),
                  np.concatenate(([0],nbin,[0])),**kwargs)
         
