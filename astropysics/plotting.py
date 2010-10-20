@@ -1070,7 +1070,25 @@ def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
             
         plt.ylim(0,maxh)
         
-        
+def plot_histogram(nbin,binedges,**kwargs):
+    """
+    Uses the 'steps' line style to make histograms from bin data like that
+    output from :func:`numpy.histogram`. While similar in functionality to
+    :func:`matplotlib.pyplot.hist`, it allows the histogram data to be modfied
+    instead of being computed in the function and accepts keywords like
+    :func:`matplotlib.pyplot.plot`.
+    
+    :param nbin: Number of histogram items in each bin.
+    :param binedges: Edge values for bins, should be of size len(nbin)+1.
+    
+    Additional keywords are passed into :func:`matplotlib.pyplot.plot`.
+    
+    """
+    clf = kwargs.pop('clf',False)
+    with mpl_context(clf=clf) as plt:
+        kwargs.setdefault('drawstyle','steps')
+        plt.plot(np.concatenate((binedges,[binedges[-1]])),
+                 np.concatenate(([0],nbin,[0])),**kwargs)
         
 def ax3d_animate(azels,nframes,fn,fig=None,initazel=None,relative=True,
                  predelete=False,verbose=False,savekwargs={}):
