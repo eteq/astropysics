@@ -1528,7 +1528,8 @@ class ImageCombiner(PipelineElement):
                 newim = geometric_transform(im,partial(shift_coords,shift=shifts[i]),
                     output_shape=outshape,order=self.shiftorder)
                 shiftedimages.append(newim)
-            images = shiftedimages
+            images = np.array(shiftedimages,copy=False)
+            del shiftedimages
         
         if self.method == 'median':
             op = np.median if self.sigclip is None else np.ma.median
