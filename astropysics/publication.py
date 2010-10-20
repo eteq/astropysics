@@ -125,6 +125,43 @@ class TeXNode(object):
         else:
             raise TypeError('Self text for node '+str(self)+' is invalid length')
         
+    def prune(self,prunechildren=True):
+        """
+        Removes this node from the tree.
+        
+        :param prunechildren: 
+            If True, all the children of this node will be pruned (recursively).
+            This is not strictly necessary, but will speed up garbage collection
+            and probably prevent memory leaks. 
+        """
+        if self.parent is not None:
+            self.parent.children.remove(self)
+            self.parent = None
+        if prunechildren and self.children is not None:
+            for c in self.children:
+                c.parent = None
+                c.prune(True)
+            self.children = None
+        
+    def visit(self,func):
+        """
+        Visits all the nodes in the tree (depth-first) and calls the supplied 
+        function on those nodes.  
+        
+        :param func: 
+            The function to call on the nodes - should only accept the node as
+            an argument.
+            
+        :returns: A sequence of the return values of the function.
+        """
+        if self.isLeaf():
+            return [func(self)]
+        else:
+            res = []
+            for c in self.children:
+                res.extend(c.visit(func))
+            return res 
+                
         
     def isLeaf(self):
         """

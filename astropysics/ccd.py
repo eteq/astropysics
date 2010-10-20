@@ -1105,7 +1105,7 @@ class FitsImage(CCDImage):
     
     def _applyArray(self,range,imdata):
         if range is None:
-            self.fitsfile[self._chdu].data = imdata.T
+            self.fitsfile[self._chdu].data = imdata.T.view(np.ndarray)
         elif len(range) == 4:
             xl,xu,yl,yu = range
             ny,nx = self.fitsfile[self._chdu]._dimShape() #fits files are flipped TODO:find out if _dimShape isn't supposed to be used
@@ -1224,8 +1224,17 @@ class ArrayImage(CCDImage):
         try:
             #first pull array out of object so that it goes explicitly in the file as saved
             self._array = None
+            #MaskedArrays don't save right - pull out the mask and view as a regular array
+            
+            if isinstance(arr,np.ma.MaskedArray):
+                mask = arr.mask
+                self._hasmask = True
+                arr = arr.view(np.ndarray)
+            else:
+                mask = None
+                self._hasmask = False
             #save in npz format
-            np.savez(fn,arr=arr,imobj=self)
+            np.savez(fn,arr=arr,imobj=self,mask=mask)
             #rename from .npz to .aspec format
             if fn.endswith('.npz'):
                 fn = fn[:-4]
@@ -1240,6 +1249,13 @@ class ArrayImage(CCDImage):
         try:
             arr = f['arr']
             imobj = f['imobj'].item()
+            mask = f['mask']
+            if imobj._hasmask:
+                arr = np.ma.MaskedArray(f['arr'],f['mask'])
+            else:
+                arr = f['arr']
+            del imobj._hasmask            
+                
         except KeyError:
             raise KeyError('Could not find - not an arrim file?')
         finally:
@@ -1248,6 +1264,17 @@ class ArrayImage(CCDImage):
         imobj._array = arr
         
         return imobj
+    
+class HDF5Image(CCDImage):
+    """
+    A :class:`CCDImage` with an HDF5 file as the backing store.  
+    
+    .. warning::
+        This class is a work in progress and may not work right now
+        
+    """
+    def __init__(self):
+        raise NotImplementedError('HDF5Image not ready yet')
     
     
 class ImageBiasSubtractor(PipelineElement):
@@ -1569,7 +1596,7 @@ class ImageCombiner(PipelineElement):
             
         if self.save:
             self.lastimage = image
-            self.mask = None
+            self.mask = image.mask if isinstance(image,np.ma.MaskedArray) else None
         return image
     
     def plProcess(self,data,pipeline,elemi):
