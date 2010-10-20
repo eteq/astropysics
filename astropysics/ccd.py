@@ -1553,6 +1553,7 @@ class ImageCombiner(PipelineElement):
         if self.sigclip is not None:
             sds = (images-np.mean(images,axis=0))/np.std(images,axis=0)
             images = np.ma.masked_where(sds>self.sigclip,images)
+            del sds
         
         try:
             image = op(images,axis=0)
