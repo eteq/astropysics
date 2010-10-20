@@ -1501,7 +1501,7 @@ class ImageCombiner(PipelineElement):
         :returns: A 2D numpy array of images produced by combining the inputs. 
         """
         from operator import isSequenceType
-        images = [im.data if isinstance(im,CCDImage) else im for im in images]
+        images = np.array([im.data if isinstance(im,CCDImage) else im for im in images],copy=False)
         
         outshape = images[0].shape
         for im in images[1:]:
