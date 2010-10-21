@@ -152,15 +152,18 @@ class TeXNode(object):
             The function to call on the nodes - should only accept the node as
             an argument.
             
-        :returns: A sequence of the return values of the function.
+        :returns: 
+            A sequence of the return values of the function.  If the `func` 
+            returns None, it is not included in the returned list.
         """
         if self.isLeaf():
-            return [func(self)]
+            res = func(self)
+            return [None] if res is None else [res]
         else:
-            res = []
+            retvals = []
             for c in self.children:
-                res.extend(c.visit(func))
-            return res 
+                retvals.extend(c.visit(func))
+            return retvals
                 
         
     def isLeaf(self):
@@ -278,6 +281,19 @@ class TeXt(TeXNode):
     def __init__(self,parent,text):
         self.parent = parent
         self.text = text
+        
+    def countWords(self,sep=None):
+        """
+        Returns the number of words in this object.
+        
+        :param sep: The seperator between words.  If None, use any whitespace.
+        
+        :returns: The number of words in this :class:`TeXt` object.
+        """
+        if sep is None:
+            return len(self.text.split())
+        else:
+            return len(self.text.split(sep))
         
     @property
     def children(self):
@@ -407,6 +423,21 @@ def environment_factory(parent,texstr):
 @Environment.registerEnvironment
 class Document(Environment):
     name = 'document'
+    
+    #: The abstract environment for this document or None if one does not exist
+    abstract = None
+    #: A dictionary mapping section names to the associated index into 
+    # :attr:`children` to give the :class:`Command` with the section 
+    sections = {}
+    
+    def __init__(self,parent,content,envname=None):
+        Environment.__init__(self,parent,content,envname)
+        self.sections = {}
+        for i,c in enumerate(self.children):
+            if isinstance(c,Environment) and c.name=='abstract':
+                self.abstract = c
+            elif isinstance(c,Command) and c.name=='section':
+                self.sections[c.reqargs[0]] = i
 
 @Environment.registerEnvironment
 class Figure(Environment):
@@ -838,16 +869,103 @@ def text_to_nodes(parent,txt):
     return nodel
 
 
+_arxiv_max_abstract_words = 250 #TODO: determine if this is the right limit
+def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
+    r"""
+    Takes a LaTeX file and prepares it for posting to `arXiv
+    <http://arxiv.org/>`_.  This includes the following actions:
+    
+        1. Removes all comments from .tex file.
+        2. Checks that the abstract is within the ArXiv word limit and issues a 
+           warning if it is not (will require abridging during submission).
+        3. Makes the directory for the files.
+        4. Saves the .tex and copies over all necessary .eps files.
+        5. Copies over .bbl or .bib files if \bibliography is present.
+        6. Creates a .tar.gz file with the containing the files and places it 
+           in the directory.
+           
+    :param str texfn: The filename of the .tex file to be submitted. 
+    :param newdir: The directory to save the publication files to.
+    :param overwritedir: 
+        If True the directory specified by `newdir` will be overwritten if it is
+        present. Otherwise, if `newdir` is present, the directory name will be
+        ``newdir_#`` where # is the first number (starting from 2) that is not
+        already present as a directory.
+    :param verbose: 
+        If True, information will be printed when the each action is taken.
+        Otherwise, only warnings will be issued when there is a problem.
+    
+    :returns: The altered :class:`TexFile` object
+    """
+    import os,shutil
+    from warnings import warn
+    
+    if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
+        texfn = texfn+'.tex'
         
-#issue warning if abstract too long
-#strip comments
-#copy over bbl if necessary
-#.tar.gz up with appropriate name and date            
-def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False):
-    """
-    Takes a LaTeX file and prepares
-    """
-    raise NotImplementedError
+    f = TexFile(texfn)
+    doc = f.document
+    
+    #remove all comments
+    ncomm = len(f.visit(lambda n:(n.prune() is None) if isinstance(n,publication.Comment) else None))
+    if verbose:
+        print 'Stripped',ncomm,'Comments'
+    #check abstract length
+    if doc.abstract is not None:
+        wc = 0
+        for c in doc.abstract.children:
+            if hasattr(c,'countWords'):
+                wc += c.countWords()
+        if wc > _arxiv_max_abstract_words:
+            warn('Abstract is %i words long, should be <=%i'%(wc,_arxiv_max_abstract_words))
+        elif verbose:
+            print 'Abstract within word limit'
+            
+    #Find directory and delete existing if necessary
+    if newdir.endswith(os.sep):
+        newdir = newdir[:-1]
+    if os.path.exists(newdir):
+        if not os.path.isdir(newdir):
+            raise IOError(newdir+' is a file - Aborting!')
+        if overwritedir:
+            if verbose:
+                print 'Removing',newdir 
+            shutil.rmtree(newdir)
+        else:
+            idir = 2
+            while os.path.exists(newdir+'_'+str(idir)):
+                idir += 1
+            newdir = newdir+'_'+str(idir)
+    os.mkdir(newdir)
+    
+    #save .tex file
+    f.save(os.path.join(newdir,os.path.split(texfn)[-1]))
+     
+    #copy over all necessary .eps files
+    raise NotImplementedError('copy over all necessary .eps files')
+
+    #copy over bbl file if \bibliography is present
+    bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,Command) and n.name=='bibliography' else None)
+    if len(bibs)>1:
+        warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
+    elif len(bibs)==1:
+        bibfn,bblfn = bibs[0]+'.bib',bibs[0]+'.bbl'
+        if os.path.exists(bblfn):
+            if verbose:
+                print 'Copying ',bblfn,'to',newdir
+            shutil.copy(bblfn,newdir)
+        elif os.path.exists(bibfn):
+            warn(r'\bibliography present, but no .bbl file found - copying .bib instead (not recommended by arXiv)')
+            shutil.copy(bibfn,newdir)
+        else:
+            warn(r'\bibliography present, but no .bbl or .bib files found - skipping bibliography')
+                
+    elif verbose:
+        print r'No \bibliography entry found - skipping bibliography'
+    
+    #make .tar.gz file from directory and place in directory
+    raise NotImplementedError('make .tar.gz file from directory and place in directory')
+        
 
 #Tasks: redo figures into f##[l].eps and move the files
 #set class to aastex
