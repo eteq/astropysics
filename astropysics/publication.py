@@ -69,6 +69,9 @@ _commandre = _re.compile(_commandstr)
 #this matches either '}' or ']' if it is followed by { or [ or the end of the string
 _cmdargsepre = _re.compile(r'(?:}|])(?=\s*?(?:$|{|\[))')
 
+#matches a '%' if it is not preceded by backapace
+_commentre = _re.compile(r'(?<!\\)%')
+
 
 class TeXNode(object):
     """
@@ -141,7 +144,8 @@ class TeXNode(object):
             for c in self.children:
                 c.parent = None
                 c.prune(True)
-            self.children = None
+            if not self.isLeaf():
+                self.children = None
         
     def visit(self,func):
         """
@@ -156,14 +160,12 @@ class TeXNode(object):
             A sequence of the return values of the function.  If the `func` 
             returns None, it is not included in the returned list.
         """
-        if self.isLeaf():
-            res = func(self)
-            return [None] if res is None else [res]
-        else:
-            retvals = []
+        res = func(self)
+        retvals = [] if res is None else [res]
+        if not self.isLeaf():
             for c in self.children:
                 retvals.extend(c.visit(func))
-            return retvals
+        return retvals
                 
         
     def isLeaf(self):
@@ -217,10 +219,11 @@ class TeXFile(TeXNode):
         #populate comments 
         comments = []    
         for i,l in enumerate(flines):
-            pind = l.find('%')
-            if pind>-1:
-                flines[i] = '%s\\%s{%i}'%(l[:pind],commentcmdname,len(comments))
-                comments.append(l[pind:])
+            commatch = _commentre.search(l)
+            if commatch is not None:
+                cind = commatch.start()
+                flines[i] = '%s\\%s{%i}'%(l[:cind],commentcmdname,len(comments))
+                comments.append(l[cind:])
         
         preamblecontent = []
         content = None
@@ -259,11 +262,30 @@ class TeXFile(TeXNode):
             f.write(self())
             
 def _addin_comments(node,commentlist,commentcmdname):
+    todel = []
     for i,c in enumerate(node.children):
+        if i<1:
+            last2 = last = None
+        elif i<2:
+            last = node.children[i-1]
+            last2 = None
+        else:
+            last = node.children[i-1]
+            last2 = node.children[i-2]
+            
+        if isinstance(last,Comment) and isinstance(c,TeXt) and c.text=='':
+            todel.append(i)
+        elif isinstance(last2,Comment) and isinstance(last,TeXt) and isinstance(c,Newline):
+            todel.append(i)
+            last2.children = (Newline(last2),)
+            
         newnode = _addin_comments(c,commentlist,commentcmdname)
+        
         if newnode is not None:
             node.children[i] = newnode
-            
+        
+    for i in reversed(todel):
+        del node.children[i]
     if isinstance(node,Command):
         if node.name == commentcmdname:
             return Comment(node.parent,commentlist[int(node.reqargs[0])])
@@ -373,10 +395,16 @@ class Environment(TeXNode):
         """
         if not issubclass(envclass,Environment):
             raise TypeError('envclass must be an Environment subclass')
-        for e in Environment._registry:
-            if envclass.name in Environment._registry:
-                raise ValueError('Environment name %s already present in class %s'%(envclass.name,e))
-        Environment._registry[envclass.name] = envclass
+        
+        if isinstance(envclass.name,basestring):
+            names = [envclass.name]
+        else: #if not a string, should be a sequence of possible names
+            names = envclass.name
+            
+        for n in names:
+            if n in Environment._registry:
+                raise ValueError('Environment name %s already present as class %s'%(n,Environment._registry[n]))
+            Environment._registry[n] = envclass
         return envclass
     
     @staticmethod
@@ -416,7 +444,7 @@ def environment_factory(parent,texstr):
     content = texstr[enend+1:texstr.rindex('\\end')]
     if envname in Environment._registry:
         envcls = Environment._registry[envname]
-        return envcls(parent,content)
+        return envcls(parent,content,envname)
     else:
         return Environment(parent,content,envname)
     
@@ -441,7 +469,21 @@ class Document(Environment):
 
 @Environment.registerEnvironment
 class Figure(Environment):
-    name = 'figure'
+    name = ['figure','figure*']
+    
+    #: The names of the files (usually .eps) in this figure.
+    filenames = tuple()
+    
+    def __init__(self,parent,content,envname=None):
+        Environment.__init__(self,parent,content,envname)
+        self.filenames = files = []
+        for c in self.children:
+            if isinstance(c,Command):
+                if c.name in ('plotone','plotfiddle','includegraphics'):
+                    files.append(c.reqargs[0])
+                elif c.name=='plottwo':
+                    files.append(c.reqargs[0])
+                    files.append(c.reqargs[1])
    
 class MathMode(TeXNode):
     """
@@ -706,14 +748,14 @@ class Preamble(TeXNode):
 
 class Comment(TeXNode):
     """
-    A single-line comment of a TeX File
+    A single-line comment of a TeX File.  Note that unlike most 
     """
     
     #: The text of this comment (not including the initial %)
     text = ''
-    children = tuple() #comments are always a leaf
+    children = tuple() #comments are usually a leaf, but sometimes have a single Newline
     
-    def __init__(self,parent,ctext):
+    def __init__(self,parent,ctext,endswithnewline=False):
         """
         :param parent: The parent node
         :param ctext: The comment text (with or without an initial %)
@@ -722,10 +764,14 @@ class Comment(TeXNode):
             ctext = ctext[1:]
             
         self.parent = parent
-        self.text = ctext
+        if ctext.endswith('\n'):
+            self.text = ctext[:-1]
+            self.children = (Newline(),)
+        else:
+            self.text = ctext
         
     def getSelfText(self):
-        return '%'+self.text
+        return ('%'+self.text,'')
 
 
 def text_to_nodes(parent,txt):
@@ -868,20 +914,23 @@ def text_to_nodes(parent,txt):
     
     return nodel
 
-
-_arxiv_max_abstract_words = 250 #TODO: determine if this is the right limit
+#TODO: determine the actual limit used
+_arxiv_abstract_max_words = 250 
+_arxiv_abstract_max_lines = 20 
+_arxiv_abstract_char_per_line = 80 
 def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     r"""
     Takes a LaTeX file and prepares it for posting to `arXiv
     <http://arxiv.org/>`_.  This includes the following actions:
     
-        1. Removes all comments from .tex file.
-        2. Checks that the abstract is within the ArXiv word limit and issues a 
+        1. Removes all text after \end{document} from the .tex file
+        2. Removes all comments from .tex file.
+        3. Checks that the abstract is within the ArXiv word limit and issues a 
            warning if it is not (will require abridging during submission).
-        3. Makes the directory for the files.
-        4. Saves the .tex and copies over all necessary .eps files.
-        5. Copies over .bbl or .bib files if \bibliography is present.
-        6. Creates a .tar.gz file with the containing the files and places it 
+        4. Makes the directory for the files.
+        5. Saves the .tex and copies over all necessary .eps files.
+        6. Copies over .bbl or .bib files if \bibliography is present.
+        7. Creates a .tar.gz file with the containing the files and places it 
            in the directory.
            
     :param str texfn: The filename of the .tex file to be submitted. 
@@ -897,29 +946,63 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     
     :returns: The altered :class:`TexFile` object
     """
-    import os,shutil
+    import os,shutil,tarfile
+    from contextlib import closing
     from warnings import warn
     
     if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
         texfn = texfn+'.tex'
         
-    f = TexFile(texfn)
+    f = TeXFile(texfn)
     doc = f.document
+    fnodes = f.children
+    
+    #remove everything after \document
+    docind = fnodes.index(doc)
+    nnls = [isinstance(n,Newline) for n in fnodes[docind+1:]].count(True)
+    del fnodes[docind+1:]
+    #add a final newline andter \emd{document}
+    fnodes.append(Newline(f))
+    if verbose:
+        print 'Stripped',nnls,'Lines after \end{document}'
     
     #remove all comments
-    ncomm = len(f.visit(lambda n:(n.prune() is None) if isinstance(n,publication.Comment) else None))
+    ncomm = len(f.visit(lambda n:(n.prune() is None) if isinstance(n,Comment) else None))
     if verbose:
         print 'Stripped',ncomm,'Comments'
+        
     #check abstract length
     if doc.abstract is not None:
-        wc = 0
-        for c in doc.abstract.children:
-            if hasattr(c,'countWords'):
-                wc += c.countWords()
-        if wc > _arxiv_max_abstract_words:
-            warn('Abstract is %i words long, should be <=%i'%(wc,_arxiv_max_abstract_words))
-        elif verbose:
-            print 'Abstract within word limit'
+        #word check
+        if _arxiv_abstract_max_words is not None:
+            wc = 0
+            for c in doc.abstract.children:
+                if hasattr(c,'countWords'):
+                    wc += c.countWords()
+            if wc > _arxiv_abstract_max_words:
+                warn('Abstract is %i words long, should be <=%i'%(wc,_arxiv_abstract_max_words))
+            elif verbose:
+                print 'Abstract within word limit'
+        #line check
+        if _arxiv_abstract_max_lines is not None:
+            abstxt = doc.abstract().replace(r'\begin{abstract}','').replace(r'\end{abstract}','').strip()
+            
+            lines = []
+            line = []
+            wcline = -1
+            for word in abstxt.split():
+                if len(word)+wcline+1 > _arxiv_abstract_char_per_line:
+                    lines.append(' '.join(line))
+                    line = []
+                    wcline = -1
+                line.append(word)
+                wcline += len(word)+1
+                
+            if len(lines)>_arxiv_abstract_max_lines:
+                warn('Abstract is %i lines, should be <=%i'%(len(lines),_arxiv_abstract_max_lines))
+            elif verbose:
+                print 'Abstract within line limit'
+            
             
     #Find directory and delete existing if necessary
     if newdir.endswith(os.sep):
@@ -941,18 +1024,35 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     #save .tex file
     f.save(os.path.join(newdir,os.path.split(texfn)[-1]))
      
-    #copy over all necessary .eps files
-    raise NotImplementedError('copy over all necessary .eps files')
+    #copy over all necessary figure files
+    filenames = []
+    # look through all Figure environments and add the figure filenames in them
+    for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
+        filenames.extend(figenv.filenames)
+    exts = ('.eps','.png')
+    for fn in filenames:
+        copies = False
+        for ext in exts:
+            fne = fn+ext
+            if os.path.exists(fne):
+                if verbose:
+                    print 'Copying',fne,'to',newdir+os.sep
+                shutil.copy(fne,newdir)
+                copied = True
+        if not copied:
+            warn("File %s%s does not exist - skipping"%(fn,exts))
+        
 
     #copy over bbl file if \bibliography is present
     bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,Command) and n.name=='bibliography' else None)
+    
     if len(bibs)>1:
         warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
     elif len(bibs)==1:
         bibfn,bblfn = bibs[0]+'.bib',bibs[0]+'.bbl'
         if os.path.exists(bblfn):
             if verbose:
-                print 'Copying ',bblfn,'to',newdir
+                print 'Copying',bblfn,'to',newdir+os.sep
             shutil.copy(bblfn,newdir)
         elif os.path.exists(bibfn):
             warn(r'\bibliography present, but no .bbl file found - copying .bib instead (not recommended by arXiv)')
@@ -964,7 +1064,11 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         print r'No \bibliography entry found - skipping bibliography'
     
     #make .tar.gz file from directory and place in directory
-    raise NotImplementedError('make .tar.gz file from directory and place in directory')
+    tfn = os.path.join(newdir,newdir+'.tar.gz')
+    print 'writing file',tfn,'with',newdir,'contents'
+    with closing(tarfile.open(tfn,'w:gz')) as tf:
+        for fn in os.listdir(newdir):
+            tf.add(os.path.join(newdir,fn),fn)
         
 
 #Tasks: redo figures into f##[l].eps and move the files
