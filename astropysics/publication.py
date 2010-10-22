@@ -476,14 +476,33 @@ class Figure(Environment):
     
     def __init__(self,parent,content,envname=None):
         Environment.__init__(self,parent,content,envname)
-        self.filenames = files = []
+        self._filecmds = filecmds = []
         for c in self.children:
             if isinstance(c,Command):
-                if c.name in ('plotone','plotfiddle','includegraphics'):
-                    files.append(c.reqargs[0])
-                elif c.name=='plottwo':
-                    files.append(c.reqargs[0])
-                    files.append(c.reqargs[1])
+                if c.name in ('plotone','plottwo','plotfiddle','includegraphics'):
+                    filecmds.append(c)
+                    
+    def _getFilenames(self):
+        fns = []
+        for c in self._filecmds:
+            fns.append(c.reqargs[0])
+            if c.name=='plottwo':
+                fns.append(c.reqargs[1])  
+        return fns
+    def _setFilenames(self,val):
+        if len(val) != len(self._getFilenames()):
+            raise ValueError('filenames input does not match number of pre-existing filenames')
+        
+        newfns = list(val)
+        i = 0
+        for c in self._filecmds:
+            for child in c.children:
+                if isinstance(child,RequiredArgument):
+                    child.text = newfns[i]
+                    i += 1
+        
+    filenames = property(_getFilenames,_setFilenames,doc=None)
+    
    
 class MathMode(TeXNode):
     """
@@ -574,22 +593,41 @@ class Command(TeXNode):
                 else:
                     raise ValueError('invalid set of arguments '+args)
             
-    @property
-    def reqargs(self):
-        """
+    def _getReqargs(self):
+        return [c.text for c in self.children if isinstance(c,RequiredArgument)]
+    def _setReqargs(self,val):
+        oldargs = [c for c in self.children if isinstance(c,RequiredArgument)]
+        if len(oldargs) == len(val):
+            for i,a in enumerate(oldargs):
+                a.text = val[i]
+        else:
+            newargs = [RequiredArgument(self,v) for v in val]
+            for a in oldargs:
+                self.children.remove(a)
+            self.children.extend(newargs)
+    reqargs = property(_getReqargs,_setReqargs,doc="""
         A list of strings with the text of the required arguments (arguments 
         enclosed in curly braces).
-        """
-        return [c.text for c in self.children if isinstance(c,RequiredArgument)]
+        """)
         
-    @property
-    def optargs(self):
-        """
+        
+    def _getOptargs(self):
+        return [c.text for c in self.children if isinstance(c,OptionalArgument)]
+    def _setOptargs(self,val):
+        oldargs = [c for c in self.children if isinstance(c,OptionalArgument)]
+        if len(oldargs) == len(val):
+            for i,a in enumerate(oldargs):
+                a.text = val[i]
+        else:
+            newargs = [OptionalArgument(self,v) for v in val]
+            for a in oldargs:
+                self.children.remove(a)
+            self.children.extend(newargs)
+    optargs = property(_getOptargs,_setOptargs,doc="""
         A list of strings with the text of the optional arguments (arguments 
         enclosed in square brackets)
-        """
-        return [c.text for c in self.children if isinstance(c,OptionalArgument)]
-        
+        """)
+    
     def getSelfText(self):
         args = ['\\',self.name]
         for c in self.children:
@@ -726,6 +764,11 @@ class Preamble(TeXNode):
     """
     The preamble of a TeX File (i.e. everything before \begin{document} )
     """
+    
+    #: The document class of the tex file as a string
+    docclass = ''
+    #: 
+    
     def __init__(self,parent,content):
         """
         :param parent: The parent node
@@ -734,17 +777,58 @@ class Preamble(TeXNode):
         self.parent = parent
         self.children = text_to_nodes(self,content)
         
-        self.docclass = None
+        self._classcmd = None
         self.packages = []
         for c in self.children:
             if isinstance(c,Command):
                 if c.name == 'documentclass':
+                    self._classcmd = c
                     self.docclass = c.reqargs[0]
+                    self.docclassopts = c.optargs
                 if c.name == 'usepackage':
                     self.packages.append(c.reqargs[0])
                 
     def getSelfText(self):
         return None
+    
+    def _getDocclass(self):
+        if self._classcmd is None:
+            return None
+        else:
+            return self._classcmd.reqargs[0]
+    def _setDocclass(self,val):
+        if self._classcmd is not None:
+            assert len(self._classcmd.reqargs)==1,'documentclass has multiple arguments!'
+            self._classcmd.reqargs = [val]
+    docclass = property(_getDocclass,_setDocclass,doc="""
+    The document class of the tex file as a string.
+    """)
+    
+    def _getDocclassopts(self):
+        assert len(self._classcmd.optargs)<=1,'documentclass has multiple options!'
+        return self._classcmd.optargs[0] if len(self._classcmd.optargs)==1 else ''
+    def _setDocclassopts(self,val):
+        if not isinstance(val,basestring):
+            val = ','.join(val)
+        assert len(self._classcmd.optargs)<=1,'documentclass has multiple options!'
+        if val.strip()=='':
+            self._classcmd.optargs = []
+        else:
+            self._classcmd.optargs = [val]
+        #ensure the Required Argument is always at the end
+        for i,c in enumerate(self._classcmd.children):
+            if isinstance(c,RequiredArgument):
+                reqi = i
+                break
+        else:
+            reqi = None
+        if reqi != len(self._classcmd.children)-1:
+            self._classcmd.children.append(self._classcmd.children.pop(reqi))
+    docclassopts = property(_getDocclassopts,_setDocclassopts,doc="""
+    The document class options for the tex file as a comma-seperated string.
+    """)
+    
+    
 
 class Comment(TeXNode):
     """
@@ -928,10 +1012,11 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         3. Checks that the abstract is within the ArXiv word limit and issues a 
            warning if it is not (will require abridging during submission).
         4. Makes the directory for the files.
-        5. Saves the .tex and copies over all necessary .eps files.
-        6. Copies over .bbl or .bib files if \bibliography is present.
-        7. Creates a .tar.gz file with the containing the files and places it 
-           in the directory.
+        5. Copies over all necessary .eps files.
+        6. Copies .bbl (or .bib if no .bbl) file if \bibliography is present.
+        7. Creates the modified .tex file.
+        8. Creates a .tar.gz file containing the files and places it in the 
+           `newdir` directory.
            
     :param str texfn: The filename of the .tex file to be submitted. 
     :param newdir: The directory to save the publication files to.
@@ -1020,9 +1105,6 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
                 idir += 1
             newdir = newdir+'_'+str(idir)
     os.mkdir(newdir)
-    
-    #save .tex file
-    f.save(os.path.join(newdir,os.path.split(texfn)[-1]))
      
     #copy over all necessary figure files
     filenames = []
@@ -1031,7 +1113,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         filenames.extend(figenv.filenames)
     exts = ('.eps','.png')
     for fn in filenames:
-        copies = False
+        copied = False
         for ext in exts:
             fne = fn+ext
             if os.path.exists(fne):
@@ -1042,9 +1124,16 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         if not copied:
             warn("File %s%s does not exist - skipping"%(fn,exts))
         
-
     #copy over bbl file if \bibliography is present
     bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,Command) and n.name=='bibliography' else None)
+    
+    #save .tex file
+    texfn = os.path.join(newdir,os.path.split(texfn)[-1])
+    if not texfn.endswith('.tex'):
+        texfn += '.tex'
+    if verbose:
+        print 'Saving',texfn
+    f.save(texfn)
     
     if len(bibs)>1:
         warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
@@ -1055,10 +1144,10 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
                 print 'Copying',bblfn,'to',newdir+os.sep
             shutil.copy(bblfn,newdir)
         elif os.path.exists(bibfn):
-            warn(r'\bibliography present, but no .bbl file found - copying .bib instead (not recommended by arXiv)')
+            warn(r'\bibliography present, but no %s file found - copying %s instead (not recommended by arXiv)'%(bblfn,bibfn))
             shutil.copy(bibfn,newdir)
         else:
-            warn(r'\bibliography present, but no .bbl or .bib files found - skipping bibliography')
+            warn(r'\bibliography present, but no %s or %s files found - skipping bibliography'%(bibfn,bblfn))
                 
     elif verbose:
         print r'No \bibliography entry found - skipping bibliography'
@@ -1069,18 +1158,186 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     with closing(tarfile.open(tfn,'w:gz')) as tf:
         for fn in os.listdir(newdir):
             tf.add(os.path.join(newdir,fn),fn)
-        
+    
+    return f
 
-#Tasks: redo figures into f##[l].eps and move the files
-#set class to aastex
-#strip comments
-#fix any deluxetable* -> deluxetable (and add rotate where necessary, also remove [t!] and the like?)
-#issue warning if abstract too long
-#copy over bib or bbl if necessary
-#.tar.gz up with appropriate name and date
-#?test compilation?
+#issue warning if abstract too long???
 #remove \comment?
 #tablenotemark{$...$} warning?
-def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False):
-    raise NotImplementedError
+def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
+    r"""
+    Takes a LaTeX file and prepares it for submission to `The Astrophysical
+    Journal <http://iopscience.iop.org/0004-637X>`_. This involves the following
+    actions:
+    
+        1. Removes all text after \end{document} from the .tex file
+        2. Removes all comments from .tex file.
+        3. Sets the document class to aastex.
+        4. Converts deluxetable* environments to deluxetable.
+        5. Removes \epsscale{?} from all figures
+        6. Makes the directory for the files.
+        7. Renames the figures to the 'f1.eps','f2a.eps', etc. convention for
+           ApJ, and copies the appropriate files over.
+        8. Copies .bib (or .bbl if no .bib) file if \bibliography is present.
+        9. Saves the .tex file as "ms.tex"
+        10. Creates ms.tar.gz file containing the files and places it in the
+            `newdir` directory.
+           
+    :param str texfn: The filename of the .tex file to be submitted. 
+    :param newdir: The directory to save the publication files to.
+    :param overwritedir: 
+        If True the directory specified by `newdir` will be overwritten if it is
+        present. Otherwise, if `newdir` is present, the directory name will be
+        ``newdir_#`` where # is the first number (starting from 2) that is not
+        already present as a directory.
+    :param verbose: 
+        If True, information will be printed when the each action is taken.
+        Otherwise, only warnings will be issued when there is a problem.
+    
+    :returns: The altered :class:`TexFile` object
+    """
+    import os,shutil,tarfile
+    from contextlib import closing
+    from warnings import warn
+    
+    if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
+        texfn = texfn+'.tex'
+        
+    f = TeXFile(texfn)
+    doc = f.document
+    fnodes = f.children
+    
+    #remove everything after \document
+    docind = fnodes.index(doc)
+    nnls = [isinstance(n,Newline) for n in fnodes[docind+1:]].count(True)
+    del fnodes[docind+1:]
+    #add a final newline andter \emd{document}
+    fnodes.append(Newline(f))
+    if verbose:
+        print 'Stripped',nnls,'Lines after \end{document}'
+    
+    #remove all comments
+    ncomm = len(f.visit(lambda n:(n.prune() is None) if isinstance(n,Comment) else None))
+    if verbose:
+        print 'Stripped',ncomm,'Comments'
+        
+    #replace document class with aastex
+    f.preamble.docclass = 'aastex'
+    f.preamble.docclassopts = 'manuscript'
+    
+    #deluxetable* -> deluxetable, rotate, and remove location hints
+    dts = 0
+    dtlochintre = _re.compile(r'(\{.*\})(\[.*?\])')
+    for dt in f.visit(lambda n:n if isinstance(n,Environment) and n.name=='deluxetable*' else None):
+        dts += 1
+        dt.name = 'deluxetable'
+        nls = [i for i,c in enumerate(dt.children) if isinstance(c,Newline)]
+        if len(nls)>0:
+            insi = nls[0]+1
+        else:
+            insi = len(nls)
+        dt.children.insert(insi,Newline(dt))
+        dt.children.insert(insi,Command(dt,('rotate',[])))
+        #remove location hints if they are present
+        if hasattr(dt.children[0],'text'):
+            print 'in',dt.children[0].text
+            m = dtlochintre.match(dt.children[0].text)
+            if m is not None:
+                dt.children[0].text = m.group(1)
+        
+    if verbose:
+        print 'Replaced deluxetable* with deluxetable',dts,'times'
+    
+    #Remove epsscale from figures
+    epssrmcnt = 0
+    for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
+        for c in figenv.children[:]:
+            if isinstance(c,Command) and c.name == 'epsscale':
+                c.prune()
+                epssrmcnt += 1
+    if verbose:
+        print 'Removed epsscale',epssrmcnt,'times'
+    
+    #Find directory and delete existing if necessary
+    if newdir.endswith(os.sep):
+        newdir = newdir[:-1]
+    if os.path.exists(newdir):
+        if not os.path.isdir(newdir):
+            raise IOError(newdir+' is a file - Aborting!')
+        if overwritedir:
+            if verbose:
+                print 'Removing',newdir 
+            shutil.rmtree(newdir)
+        else:
+            idir = 2
+            while os.path.exists(newdir+'_'+str(idir)):
+                idir += 1
+            newdir = newdir+'_'+str(idir)
+    os.mkdir(newdir)
+     
+    #copy over all necessary figure files, rename to f#c.*, etc
+    filenamemap = {}
+    
+    # look through all Figure environments and change them to the apj form, recording the mapping as we go
+    for i,figenv in enumerate(f.visit(lambda n:n if isinstance(n,Figure) else None)):
+        fignumstr = str(i+1)
+        oldfns = figenv.filenames
+        if len(oldfns)==1:
+            figenv.filenames = newfns = ['f'+fignumstr]
+        else:
+            figenv.filenames = newfns = ['f'+fignumstr+chr(97+i) for i in range(len(oldfns))]
+        filenamemap.update(dict(zip(oldfns,newfns)))
+        
+    exts = ('.eps','.png')
+    for oldfn,newfn in filenamemap.iteritems():
+        copied = False
+        for ext in exts:
+            fne = oldfn+ext
+            if os.path.exists(fne):
+                if verbose:
+                    print 'Copying',fne,'to',os.path.join(newdir,newfn+ext)
+                shutil.copy(fne,os.path.join(newdir,newfn+ext))
+                copied = True
+        if not copied:
+            warn("File %s%s does not exist - skipping"%(oldfn,exts))
+        
 
+    #copy over bib file (or bbl) if \bibliography is present
+    bibs = f.visit(lambda n:n if isinstance(n,Command) and n.name=='bibliography' else None)
+    
+    if len(bibs)>1:
+        warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
+    elif len(bibs)==1:
+        bibfn,bblfn = bibs[0].reqargs[0]+'.bib',bibs[0].reqargs[0]+'.bbl'
+        newbibfn = os.path.join(newdir,'ms.bib')
+        newbblfn = os.path.join(newdir,'ms.bbl')
+        if os.path.exists(bibfn):
+            if verbose:
+                print 'Copying',bibfn,'to',newbibfn
+            shutil.copy(bibfn,newbibfn)
+        elif os.path.exists(bblfn):
+            warn(r'\bibliography present, but no %s file found - copying %s to %s'%(bibfn,bblfn,newbblfn))
+            shutil.copy(bblfn,newbblfn)
+        else:
+            warn(r'\bibliography present, but no .bbl or .bib files found - skipping bibliography')
+        #Change the bibliography text to reference 'ms.bib'/'ms.bbl'
+        bibs[0].children[0].text = 'ms'
+                
+    elif verbose:
+        print r'No \bibliography entry found - skipping bibliography'
+    
+    #save .tex file
+    if verbose:
+        print 'Saving',os.path.join(newdir,'ms.tex')
+    f.save(os.path.join(newdir,'ms.tex'))
+    
+    #make .tar.gz file from directory and place in directory
+    tfn = os.path.join(newdir,'ms.tar.gz')
+    print 'writing file',tfn,'with',newdir,'contents'
+    with closing(tarfile.open(tfn,'w:gz')) as tf:
+        for fn in os.listdir(newdir):
+            tf.add(os.path.join(newdir,fn),fn)
+    
+    return f
+
+#latex,bibtex,latex,latex,latex
