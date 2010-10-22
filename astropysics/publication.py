@@ -1317,15 +1317,19 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
         bibfn,bblfn = bibs[0].reqargs[0]+'.bib',bibs[0].reqargs[0]+'.bbl'
         newbibfn = os.path.join(newdir,'ms.bib')
         newbblfn = os.path.join(newdir,'ms.bbl')
+        bblcp = bibcl = False
         if os.path.exists(bibfn):
             if verbose:
                 print 'Copying',bibfn,'to',newbibfn
             shutil.copy(bibfn,newbibfn)
-        elif os.path.exists(bblfn):
-            warn(r'\bibliography present, but no %s file found - copying %s to %s'%(bibfn,bblfn,newbblfn))
+            bibcp = True
+        if os.path.exists(bblfn):
+            if verbose:
+                print 'Copying',bibfn,'to',newbblfn
             shutil.copy(bblfn,newbblfn)
-        else:
-            warn(r'\bibliography present, but no .bbl or .bib files found - skipping bibliography')
+        if not bibcp and not bblcp:
+            warn(r'\bibliography present, but no .bbl or .bib files found - not copying biliography files')
+        
         #Change the bibliography text to reference 'ms.bib'/'ms.bbl'
         bibs[0].children[0].text = 'ms'
                 
