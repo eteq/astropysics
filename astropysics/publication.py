@@ -1115,7 +1115,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     # look through all Figure environments and add the figure filenames in them
     for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
         filenames.extend(figenv.filenames)
-    exts = ('.eps','.png')
+    exts = ('.eps','.pdf')
     for fn in filenames:
         copied = False
         for ext in exts:
@@ -1294,7 +1294,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
             figenv.filenames = newfns = ['f'+fignumstr+chr(97+i) for i in range(len(oldfns))]
         filenamemap.update(dict(zip(oldfns,newfns)))
         
-    exts = ('.eps','.png')
+    exts = ('.eps','.pdf')
     for oldfn,newfn in filenamemap.iteritems():
         copied = False
         for ext in exts:
@@ -1344,6 +1344,6 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
         for fn in os.listdir(newdir):
             tf.add(os.path.join(newdir,fn),fn)
     
-    return f
+    return f,newdir
 
 #latex,bibtex,latex,latex,latex

@@ -58,13 +58,24 @@ else:
     print 'Unrecognized format "'+fmt+'", exiting with no action'
 
 if ops.compile:
+    def ecode_check(ecode,prog='latex'):
+        if  ecode!=0:
+            print prog,'failed with exit code',ecode,'... aborting compilation!'
+            sys.exit(ecode)
+    
     cwd = os.path.join(os.path.abspath('.'),dir)
     if not ops.quiet:
         print 'Compiling file ',os.path.join(cwd,f.lastsavefn)
     
-    if len(glob.glob(os.path.join(dir,'*.bib')))>0:
-        Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
-        Popen(['bibtex',f.lastsavefn.replace('.tex','')],'bibtex',cwd=cwd).wait()
-    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
-    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
-    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
+    texfn = os.path.split(f.lastsavefn)[-1]
+    bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,publication.Command) and n.name=='bibliography' else None)
+    bibfn = os.path.join(cwd,bibs[0]+'.bib')
+    
+    if os.path.exists(bibfn):
+        ecode_check(Popen(['latex',texfn],executable='latex',cwd=cwd).wait())
+        ecode_check(Popen(['bibtex',texfn.replace('.tex','')],executable='bibtex',cwd=cwd).wait(),'bibtex')
+    ecode_check(Popen(['latex',texfn],executable='latex',cwd=cwd).wait())
+    ecode_check(Popen(['latex',texfn],executable='latex',cwd=cwd).wait())
+    ecode_check(Popen(['latex',texfn],executable='latex',cwd=cwd).wait())
+    
+    
