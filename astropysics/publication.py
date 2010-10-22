@@ -1000,8 +1000,7 @@ def text_to_nodes(parent,txt):
     
     return nodel
 
-#TODO: determine the actual limit used
-_arxiv_abstract_max_words = 250 
+
 _arxiv_abstract_max_lines = 20 
 _arxiv_abstract_char_per_line = 80 
 def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
@@ -1011,7 +1010,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     
         1. Removes all text after \end{document} from the .tex file
         2. Removes all comments from .tex file.
-        3. Checks that the abstract is within the ArXiv word limit and issues a 
+        3. Checks that the abstract is within the ArXiv line limit and issues a 
            warning if it is not (will require abridging during submission).
         4. Makes the directory for the files.
         5. Copies over all necessary .eps files.
@@ -1060,37 +1059,25 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     if verbose:
         print 'Stripped',ncomm,'Comments'
         
-    #check abstract length
-    if doc.abstract is not None:
-        #word check
-        if _arxiv_abstract_max_words is not None:
-            wc = 0
-            for c in doc.abstract.children:
-                if hasattr(c,'countWords'):
-                    wc += c.countWords()
-            if wc > _arxiv_abstract_max_words:
-                warn('Abstract is %i words long, should be <=%i'%(wc,_arxiv_abstract_max_words))
-            elif verbose:
-                print 'Abstract within word limit'
-        #line check
-        if _arxiv_abstract_max_lines is not None:
-            abstxt = doc.abstract().replace(r'\begin{abstract}','').replace(r'\end{abstract}','').strip()
+    #check abstract number of lines
+    if doc.abstract is not None and _arxiv_abstract_max_lines is not None:
+        abstxt = doc.abstract().replace(r'\begin{abstract}','').replace(r'\end{abstract}','').strip()
+        
+        lines = []
+        line = []
+        wcline = -1
+        for word in abstxt.split():
+            if len(word)+wcline+1 > _arxiv_abstract_char_per_line:
+                lines.append(' '.join(line))
+                line = []
+                wcline = -1
+            line.append(word)
+            wcline += len(word)+1
             
-            lines = []
-            line = []
-            wcline = -1
-            for word in abstxt.split():
-                if len(word)+wcline+1 > _arxiv_abstract_char_per_line:
-                    lines.append(' '.join(line))
-                    line = []
-                    wcline = -1
-                line.append(word)
-                wcline += len(word)+1
-                
-            if len(lines)>_arxiv_abstract_max_lines:
-                warn('Abstract is %i lines, should be <=%i'%(len(lines),_arxiv_abstract_max_lines))
-            elif verbose:
-                print 'Abstract within line limit'
+        if len(lines)>_arxiv_abstract_max_lines:
+            warn('Abstract is %i lines, should be <=%i'%(len(lines),_arxiv_abstract_max_lines))
+        elif verbose:
+            print 'Abstract within line limit'
             
             
     #Find directory and delete existing if necessary
@@ -1165,9 +1152,8 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     
     return f
 
-#issue warning if abstract too long???
 #remove \comment?
-#tablenotemark{$...$} warning?
+_apj_abstract_max_words = 250 
 def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     r"""
     Takes a LaTeX file and prepares it for submission to `The Astrophysical
@@ -1176,15 +1162,17 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     
         1. Removes all text after \end{document} from the .tex file
         2. Removes all comments from .tex file.
-        3. Sets the document class to aastex.
-        4. Converts deluxetable* environments to deluxetable.
-        5. Removes \epsscale{?} from all figures
-        6. Makes the directory for the files.
-        7. Renames the figures to the 'f1.eps','f2a.eps', etc. convention for
+        3. Checks that the abstract is within the ApJ word limit and issues a
+           warning if it is not.
+        4. Sets the document class to aastex.
+        5. Converts deluxetable* environments to deluxetable.
+        6. Removes \epsscale{?} from all figures
+        7. Makes the directory for the files.
+        8. Renames the figures to the 'f1.eps','f2a.eps', etc. convention for
            ApJ, and copies the appropriate files over.
-        8. Copies .bib (or .bbl if no .bib) file if \bibliography is present.
-        9. Saves the .tex file as "ms.tex"
-        10. Creates ms.tar.gz file containing the files and places it in the
+        9. Copies .bib (or .bbl if no .bib) file if \bibliography is present.
+        10. Saves the .tex file as "ms.tex"
+        11. Creates ms.tar.gz file containing the files and places it in the
             `newdir` directory.
            
     :param str texfn: The filename of the .tex file to be submitted. 
@@ -1226,6 +1214,17 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     ncomm = len(f.visit(lambda n:(n.prune() is None) if isinstance(n,Comment) else None))
     if verbose:
         print 'Stripped',ncomm,'Comments'
+        
+    #check abstract word length
+    if doc.abstract is not None and _apj_abstract_max_words is not None:
+        wc = 0
+        for c in doc.abstract.children:
+            if hasattr(c,'countWords'):
+                wc += c.countWords()
+        if wc > _apj_abstract_max_words:
+            warn('Abstract is %i words long, should be <=%i'%(wc,_apj_abstract_max_words))
+        elif verbose:
+            print 'Abstract within word limit'
         
     #replace document class with aastex
     f.preamble.docclass = 'aastex'
