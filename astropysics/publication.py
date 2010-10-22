@@ -193,6 +193,7 @@ class TeXFile(TeXNode):
     
     def __init__(self,fn=None):
         self.parent = None
+        self.lastsavefn = None
         self.children = []
         if fn is not None:
             with open(fn) as f:
@@ -260,6 +261,7 @@ class TeXFile(TeXNode):
         """
         with open(fn,'w') as f:
             f.write(self())
+        self.lastsavefn = fn
             
 def _addin_comments(node,commentlist,commentcmdname):
     todel = []
@@ -1029,7 +1031,9 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
     
-    :returns: The altered :class:`TexFile` object
+    :returns: 
+        (file,dir) where `file` is the altered :class:`TexFile` object and `dir`
+        is the directory used for the publication materials.
     """
     import os,shutil,tarfile
     from contextlib import closing
@@ -1194,7 +1198,9 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
     
-    :returns: The altered :class:`TexFile` object
+    :returns: 
+        (file,dir) where `file` is the altered :class:`TexFile` object and `dir`
+        is the directory used for the publication materials.
     """
     import os,shutil,tarfile
     from contextlib import closing

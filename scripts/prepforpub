@@ -13,16 +13,58 @@
 #   See the License for the specific language governing permissions and
 #   limitations under the License.
 
-from sys import argv
-from astropysics.publication import *
+import sys,os,glob
+from subprocess import Popen
+from optparse import OptionParser
+from astropysics import version,publication
 
-if len(argv) > 1:
-    al=argv[1].lower()
-    if al == 'apj':
-        print 'prepping for apj publication'
-        prep_for_apj_pub()
-    elif al == 'arxiv':
-        print 'prepping for arXiv publication'
-        prep_for_arxiv_pub()
-    else:
-        print 'unrecognized journal type, doing nothing'
+
+vstr = '%prog '+version.version
+parser = OptionParser(usage='%prog [options] texfile format',version=vstr)
+parser.description="""Prepares a LaTeX papers for a variety of different
+publication locations. Currently supported format: 'arxiv'(prepares publication
+for posting to arXiv.org), 'apj'(prepares publication for submission to the
+Astrophysical Journal)
+"""
+parser.add_option("-d", "--directory", dest="directory",metavar="FILE",default='',
+                  help="Specifies a directory for the files to be published.")
+parser.add_option("-q", "--quiet",action="store_true", dest="quiet",
+                  default=False,help="Supresses messages about actions taken.")
+parser.add_option("-w", "--overwrite",action="store_true", dest="overwrite", 
+                  default=False,help="Overwrite the directory instead of making a new one.")
+parser.add_option("-c", "--compile",action="store_true", dest="compile", 
+                  default=False,help="Attempt to compile using latex and possibly bibtex.")
+
+ops, args = parser.parse_args()
+
+if len(args) != 2:
+    parser.print_usage()
+    sys.exit(1)
+texfn,fmt = args
+
+kwargs = dict(overwritedir=ops.overwrite,verbose=not ops.quiet)
+if ops.directory != '':
+    kwargs['newdir'] = ops.directory
+
+if fmt == 'arxiv':
+    if not ops.quiet:
+        print 'Preparing for arXiv publication'
+    f,dir = publication.prep_for_arxiv_pub(texfn,**kwargs)
+elif fmt == 'apj':
+    if not ops.quiet:
+        print 'Preparing for ApJ publication'
+    f,dir = publication.prep_for_apj_pub(texfn,**kwargs)
+else:
+    print 'Unrecognized format "'+fmt+'", exiting with no action'
+
+if ops.compile:
+    cwd = os.path.join(os.path.abspath('.'),dir)
+    if not ops.quiet:
+        print 'Compiling file ',os.path.join(cwd,f.lastsavefn)
+    
+    if len(glob.glob(os.path.join(dir,'*.bib')))>0:
+        Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
+        Popen(['bibtex',f.lastsavefn.replace('.tex','')],'bibtex',cwd=cwd).wait()
+    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
+    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
+    Popen(['latex',f.lastsavefn],'latex',cwd=cwd).wait()
