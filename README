@@ -2,8 +2,8 @@ Astropysics
 ===========
 
 A python library for astronomy/astrophysics calculations and data analysis.
-
-http://physics.uci.edu/~etolleru/software.html
+Web Page: http://packages.python.org/Astropysics/
+License: Apache License v2.0
 
 Installation
 ------------
@@ -19,8 +19,19 @@ sudo python setup.py install
 Documentation
 -------------
 
-Documentation (in the "docs" directory) is meant to be used with sphinx (http://sphinx.pocoo.org).  Typical usage is
+Documentation (in the "docs" directory) is meant to be used with sphinx (http://sphinx.pocoo.org).  Typical usage is::
 
 python setup.py build_sphinx
 
-to build html documentation and place it in docs/_build/html.  Note that this requires Sphinx 1.0 (in beta as of this writing)
+to build html documentation and place it in docs/_build/html.  Note that this requires Sphinx >=1.0
+
+Source Distribution Directory Structure
+---------------------------------------
+astropysics/ - source code for all astropysics modules
+docs/ - Sphinx documentation and example code
+logo/ - astropysics logo in various forms
+licenses/ - copyright/license notices for all open source code
+scripts/ - command-line scripts installed with astropysics
+tests/ - unit tests (for use with Nose) and related scripts
+experiments/ - algorithm and science experimentation/validation
+
