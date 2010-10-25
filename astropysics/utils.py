@@ -720,27 +720,44 @@ def estimate_background(arr,method='median'):
 
 def moments(arr,ms,axes=None,bgmethod=None,norm=True,std=False):
     """
-    Compute moments of the provided n-d array arr.
+    Compute the moments of the provided n-d array.  That is 
     
-    The desired order of moment is given by the ms argument, which can
-    be a scalar, or a sequence of length equal to the input's dimensions.
-    If scalar, a sequence of moments (size equal to the number of input 
-    dimensions)
+    :param arr: The input array for which the moments are desired.
+    :param ms: 
+        The desired order of the moment to be returned.  Can be:
+            
+            * A scalar
+                The same order will be used for each dimension, and the return 
+                type will be an array of the moment along each dimension.
+            * A sequence 
+                The sequence must match the number of dimensions in `arr`, and
+                specifies the order along each dimension.  e.g. for a 3D 
+                cartesian array, ms=[1,3,2] means the moemnt comupted will be
+                :math:`x^1 y^3 z^2`.
+    :param axes: 
+        If None, the spatial axes are taken to be 0,1,2...,nd-1 for each of the
+        dimenstions in the input. Otherwise, `axes` must be a seqence of arrays
+        specifying the spatial locations along each axis. This sequence must be
+        of length matching the number of dimensions in the input, and Each
+        element must be of the same length as the corresponding input array
+        dimension.
+    :param bgmethod: 
+        A background-estimation method (see :func:`estimate_background` for
+        options), a scalar to subtract from the array, or None to do no
+        subtraction.
+    :param bool norm: 
+        If True, the moment will be normalized - i.e. ``sum(x^m*arr)/sum(arr)``
+        instead of just ``sum(x^m*arr)``
+    :param bool std: 
+        If True, the output will be standardized (mth moment divided by standard
+        deviation to the mth power)
     
-    If axes are None, the output axes will be in 0-based pixels.  Otherwise,
-    this should be a seqence of arrays where each element is of the same 
-    length as the corresponding input array dimension.
+    :returns: 
+        Either the computed moment if `ms` is a sequence, or a 1D array of
+        moments for each dimension if `ms` is a scalar.
     
-    If bgmethod is not None, a background estimate will be subtracted before
-    the moments are computed - see `estimate_background` method keywork 
-    for useable values.
-    
-    if norm is True, the moment will be normalized - i.e.
-    sum(x^m*arr)/sum(arr) instead of just sum(x^m*arr)
-    
-    if std is True, the output will be standardized (mth moment divided 
-    by standard deviation to the mth power)
     """
+   
     arr = np.array(arr,copy=False)
     if bgmethod:
         arr = arr - estimate_background(arr,bgmethod)
@@ -785,13 +802,23 @@ def moments(arr,ms,axes=None,bgmethod=None,norm=True,std=False):
 
 def centroid(val,axes=None,offset=None):
     """
-    Convinience function calling `moments`  to get just the first
+    Convinience function calling :func:`moments`  to get just the first
     normalized moment (e.g. the centroid).
     
     :param val: n-d array for which to compute the centroid.
     :type val: array-like
+    :param axes: 
+        None to use default 0-based location scheme (see :func:`moments`) or an
+        array of poisition values for the centriod (must have as many elements
+        as the dimension of `val`)
+    :type axes: array-like or None
+    :param offset: 
+        A fixed offset to subtract from the data before centroiding, or a
+        `bgmethod` like those accepted by :func:`estimate_background`.
     """
-    return moments(val,1,None if axes is None else (axes,),offset,True,False)
+    if axes is not None and np.isscalar(axes[0]):
+        axes = (axes,)
+    return moments(val,1,axes,offset,True,False)
 
 def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
     """
