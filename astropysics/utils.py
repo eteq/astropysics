@@ -699,11 +699,11 @@ def estimate_background(arr,method='median'):
     
     if method is None:
         res = 0
-    elif np.isscalar(method):
+    elif np.isscalar(method) or (hasattr(method,'shape') and method.shape is tuple()):
         res = method
     elif callable(method):
         res = method(arr)
-    if method == 'median':
+    elif method == 'median':
         res = np.median(arr)
     elif method == 'mean':
         res = np.mean(arr)
