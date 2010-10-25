@@ -1983,7 +1983,7 @@ class FunctionModel1D(FunctionModel):
     def pixelize(self,xorxl,xu=None,n=None,edge=False,sampling=None):
         """
         This method integrates over the model for a number of ranges
-        to get a 1D "pixelized" version of the model.  
+        to get a 1D "pixelized" (i.e. discretized) version of the model.  
         
         :param xoroxl: 
             If array, specifies the location of each of the pixels. If float,
@@ -2881,7 +2881,7 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
     def gradient(self,x):
         raise NotImplementedError
     
-    def pixelize(self,xl,xu,yl,yu,nx=100,ny=100,sampling=None):
+    def pixelize(self,xl,xu,yl,yu,nx=None,ny=None,sampling=None):
         """
         Generates a 2D array of the model smoothed/integrated over a certain
         pixel size.
@@ -2894,10 +2894,14 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         :type yl: float
         :param yu: upper edge of pixelized region
         :type yu: float
-        :param nx: number of horizontal pixels
-        :type nx: int
-        :param ny: number of vertical pixels
-        :type ny: int
+        :param nx: 
+            Number of horizontal pixels. If None, assumes `xl` and `xu` are in
+            nearest pixel numbers.
+        :type nx: int or None
+        :param ny: 
+            Number of vertical pixels. If None, assumes `yl` and `yu` are in
+            nearest pixel numbers.
+        :type ny: int or None
         :param sampling: 
             If None, each pixel will be computed by integrating the model over
             the area of the pixel. Otherwise, sampling gives the factor to
@@ -2918,6 +2922,20 @@ class FunctionModel2DScalar(FunctionModel,InputCoordinateTransformer):
         import scipy.integrate as itg
         
         oldcoordsys = self.incoordsys
+        
+        if nx is None:
+            if int(xu)!=xu or int(xl)!=xl:
+                raise ValueError("Can't infer pixel size for x-coordinate if xu or xl aren't integers.")
+            nx = int(xu-xl)+1
+            xu = int(xu)+.5
+            xl = int(xl)-.5
+        if ny is None:
+            if int(yu)!=yu or int(yl)!=yl:
+                raise ValueError("Can't infer pixel size for y-coordinate if yu or yl aren't integers.")
+            ny = int(yu-yl)+1
+            yu = int(yu)+.5
+            yl = int(yl)-.5
+            
         try:
             self.incoordsys = 'cartesian'        
             
