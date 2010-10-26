@@ -275,19 +275,21 @@ class Pipeline(object):
         """
         Process the pipeline to the end.
         
-        :param repeat: 
+        :param repeat:
+            
             If True, the pipeline will by processed continually. If False, only
             one step through the pipeline will be run. If it is an integer the
             pipeline will by processed continually, it will be taken as a
             maximum number of times to attempt any given stage before a
             PipelineError is raised.
+            
         :type repeat: bool or int
-         
+        
+        :except PipelineError: If a stage is repeated `repeat` or more times.
         
         :returns:
-             A list with the return value of :func:`processStage` if `repeat` is
+            A list with the return value of :func:`processStage` if `repeat` is
             False, or a list of lists if `repeat` is True.
-        
         """
         return self.processToStage(-1,repeat)
     
