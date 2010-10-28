@@ -33,15 +33,54 @@ Fill in the necessary information, and clone *your* repository to your computer 
 Make your changes, using ``hg commit -m "a message"`` to describe changes as you make them.
 You can then use ``hg push`` to send changes back to your repository on google code, and those can easily be merged with the main repository with a pull request.
    
-Style Guidelines
-----------------
+Coding Style Guidelines
+-----------------------
 
-For coding style, `PEP8 <http://www.python.org/dev/peps/pep-0008/>` provides the standard coding style, with one exception: PEP8 call for methods (i.e. functions that are in the scope of a class) to use the ``lower_case_with_underscores`` convention. 
-Astropysics instead uses ``camelCase`` (e.g. first letter of each word upper case, first letter of the method lower case) for method names.  Functions that are not methods (i.e. directly in a module scope) remain ``lower_case_with_underscores``.
-This allows methods and functions to be easily distinguished (but keeps method names distinct from class names, for which the first letter is always upper case).
+Naming Conventions
+^^^^^^^^^^^^^^^^^^
+
+For general coding style, `PEP8 <http://www.python.org/dev/peps/pep-0008/>`_ provides the main coding style for astropysics, with an important exception: PEP8 calls for methods (i.e. functions that are in the scope of a class) to use the ``lower_case_with_underscores`` convention. 
+Astropysics instead uses ``camelCase`` (e.g. first letter of each word upper case, first letter of the method lower case) for method names.  Functions that are not methods (i.e. directly in a module scope) remain ``lowercase_with_underscores``.
+This allows methods and functions to be easily distinguished (but keeps method names distinct from class names, for which the first letter is always upper case).  This could change in the future to be fully PEP8 compliant, but for now, given the already existing codebase, ``camelCase`` it is.  
+
+To summarize, the naming conventions are:
+
+* Module names are always ``lowercase``.
+* Class names are always ``CamelCaseFirstLetterUppercase``.
+* Methods (including static methods and class methods) are always ``camelCaseFirstLetterLowercase``.
+* Functions are always ``lowercase_with_underscore``.
+* Variables and class attributes should be ``lowercase`` and kept to a single word if possible.
+* Private/internal functions, methods, or variables should be ``_leadingUnderscore`` with the appropriate convention for the type.  Python and sphinx both know to hide these unless you specifically request them.  Python also supports ``__doubleLeadingUnderscore`` for private class methods (the double-underscore is `mangled <http://docs.python.org/tutorial/classes.html#private-variables>`_), but this generally just leads to confusion if you're not careful, so it should be avoided unless there's some very good reason.
+
+
+Documentation Standards
+^^^^^^^^^^^^^^^^^^^^^^^
 
 Documentation should be provided with every object, using `sphinx <http://sphinx.pocoo.org/>`_ REStructuredText markup. 
-Functions and methods should use `info field lists <http://sphinx.pocoo.org/domains.html#info-field-lists>` To specify input parameters, return values, and exceptions (where relevant).
+Functions and methods should use `info field lists <http://sphinx.pocoo.org/domains.html#info-field-lists>`_ To specify input parameters, return values, and exceptions (where relevant). Below is an example of the standard format::
+
+    def a_function(arg1,arg2=None,flag=False):
+        """
+        A short description of the function.
+        
+        Multiple paragraphs if necessary, i.e. background is needed.
+        
+        :param arg1: 
+            This argument is important input data, although I'm not specifying
+            exactly what it's type is (maybe it'd duck-typed?)  Also, the 
+            description is more than one line, so it has to start underneath
+            and indented.
+        :param arg2: This argument is an optional input.
+        :type arg2: You can specify a type here if you want.
+        :param bool flag: You can also give the type in param if it fits.
+        
+        :except ValueError: 
+            If you raise an exception, specify here what type it is and why.
+            
+        :returns: A description of the return value, if there is one.
+        """
+
+
 Classes with public attributes can document using the sphinx construct for documenting class attributes::
 
     class MyClass(object):
