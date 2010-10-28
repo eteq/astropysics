@@ -936,6 +936,8 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     
     kwargs are passed into :func:`matplotlib.pyplot.plot`
     
+    :returns: (val,N) i.e. the x and y values of the resulting plot. 
+    
     """
     from matplotlib import pyplot as plt
     
@@ -989,6 +991,8 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
             plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
         else:
             plt.ylabel('N(%s%s)'%(ltgt,xlabel))
+            
+        return x,y
         
         
 def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
