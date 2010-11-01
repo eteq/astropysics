@@ -25,30 +25,90 @@ available fitting algorithms are those from :mod:`scipy.optimize` or the `PyMC
 
 The aim of these classes are mostly for easily and quickly generating a range of
 models. There are classes in :mod:`~astropysics.models.core` for various
-dimensionalities, and all that is necessary is to subclass one of the base
+dimensionalities, and helper classes to make it trivial to implement one of
+these classes. Further, the module includes a model registry to easily access
+the builtin models and any others the user wishes to implement. See the examples
+below for details.
+
+
+all that is necessary is to subclass one of the base
 classes that end in "Auto" and implement just a function :meth:`f` describing a
 parameterized model. The parameters will be automatically inferred from the
 :meth:`f` function and fitting, plotting, and the :mod:`astropysics.gui.fitgui`
 gui will be available.
 
-The module includes a model registry to easily access the builtin models and any
-others the user wishes to implement. Given a subclass `MyModel`, the following
-will register it::
+Examples
+--------
+
+Accessing Models
+^^^^^^^^^^^^^^^^
+
+To access a builtin model and any custom models that have been registered, the
+:func:`get_model_instance` function is the way to get a new instance of a model
+using the model's name::
+
+    >>> linmod = get_model_instance('linear')
+    >>> linmod.m = 1.25
+    >>> linmod.b = 3
+    >>> linmod([0,1,2])
+    array([ 3.  ,  4.25,  5.5 ])
+    >>> linmod.__class__
+    <class 'astropysics.models.builtins.LinearModel'>
+    
+Alternatively, a new instance can be directly instantianted from the class
+itself::
+    
+    linmod = LinearModel(m=1.25,b=3)
+    
+A list of available models can be obtained with the :func:`list_models`, and
+this list can be used to get only models of a specific dimensionality. The two
+examples below are for scalar->scalar models, and 2D vector->scalar models)::
+
+    list_models(baseclass=FunctionModel1D)
+    list_models(baseclass=FunctionModel2DScalar)
+
+
+Creating a Custom Model
+^^^^^^^^^^^^^^^^^^^^^^^
+
+While a custom model can be written by directly subclassing
+:class:`FunctionModel` subclasses of various dimensionality, the much easier way
+is to inherit from one of the models that ends in 'Auto'::
+
+    from astropysics.model import FunctionModel1DAuto
+    class CuberootLinearModel(FunctionModel1DAuto):
+        def f(self,x,a=1,b=5,c=0):
+            return a*x**(1/3) + b*x + c
+        
+The 'Auto' classes take care of assigning the parameter names and defaults based
+on the signature of the `f` function. The resulting class thus represents a
+mixed cubed-root/linear model, and all of the model-fitting, plotting, and
+related tools are immediately available simply by doing::
+
+    model = CuberootLinearModel()
+
+Registering a Custom Model
+^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+While the the `CuberootLinearModel` model from above can be used as-is with
+standard python class syntax, for it to be visible in astropysics for tools like
+the :mod:`fitgui` GUI interface, it must be registered with astropysics using
+the :func:`register_model` function::
 
     from astropysics.model import register_model
-    register_model(MyModel,[name])
+    register_model(CuberootLinearModel)
     
-and it will subsequently be available as a model under whatever name you
-provided (or a default name based on the class name with "Model" removed) in any
-place where a model needs to be specified in :mod:`astropysics`.
+The model will now be available in the :func:`get_model_class` and
+:func:`get_model_instance` functions under the name 'cuberootlinear' (the
+default name can be changed using the `name` parameter of
+:func:`register_model`). Thus, the new model will be visible to anything in
+astropysics that uses functional models (e.g. spectral line fitting forms,
+fitgui, etc.).
 
-.. todo:: more specific examples
 
 
-
-
-Overview
---------
+Module Organization
+-------------------
 
 The :mod:`~astropysics.models` module is composed of two submodules that are
 both imported into the main module. The first, :mod:`~astropysics.models.core`
