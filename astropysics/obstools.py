@@ -152,21 +152,15 @@ def jd_to_calendar(jd,rounding=1000000,output='datetime',gregorian=None,mjd=Fals
     
     **Examples**
     
-    .. testsetup::
-    
-        from astropysics.obstools import jd_to_calendar
-    
-    .. doctest::
-        
-        >>> jd_to_calendar(2451545)
-        datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
-        >>> jd_to_calendar(2305812.5)
-        datetime.datetime(1600, 12, 31, 0, 0, tzinfo=tzutc())
-        >>> jd_to_calendar([2415020.5,2305447.5],output='array')
-        array([[1900,    1,    1,    0,    0,    0,    0],
-               [1600,    1,    1,    0,    0,    0,    0]])
-        >>> jd_to_calendar(0.0,output='fracarray')
-        array([[ -4.71200000e+03,   1.00000000e+00,   1.50000000e+00]])
+    >>> jd_to_calendar(2451545)
+    datetime.datetime(2000, 1, 1, 12, 0, tzinfo=tzutc())
+    >>> jd_to_calendar(2305812.5)
+    datetime.datetime(1600, 12, 31, 0, 0, tzinfo=tzutc())
+    >>> jd_to_calendar([2415020.5,2305447.5],output='array')
+    array([[1900,    1,    1,    0,    0,    0,    0],
+           [1600,    1,    1,    0,    0,    0,    0]])
+    >>> jd_to_calendar(0.0,output='fracarray')
+    array([[ -4.71200000e+03,   1.00000000e+00,   1.50000000e+00]])
         
     """
     import datetime
@@ -328,25 +322,19 @@ def calendar_to_jd(caltime,tz=None,gregorian=True,mjd=False):
     
     **Examples**
     
-    .. testsetup::
-    
-        from astropysics.obstools import calendar_to_jd
-        import datetime,dateutil
-    
-    .. doctest::
-        
-        >>> calendar_to_jd((2010,1,1))
-        2455198.0
-        >>> calendar_to_jd(datetime.datetime(2000,12,21,3,0,0))
-        2451899.625
-        >>> calendar_to_jd([2004,3,(5,6)])
-        array([ 2453070.,  2453071.])
-        >>> dates = [datetime.datetime(2004,3,5),datetime.datetime(2004,3,9)]
-        >>> calendar_to_jd(dates)
-        array([ 2453069.5,  2453073.5])
-        >>> tz = dateutil.tz.tzoffset('2',3*3600)
-        >>> calendar_to_jd((2010,1,1),tz)
-        2455197.875
+    >>> import datetime,dateutil
+    >>> calendar_to_jd((2010,1,1))
+    2455198.0
+    >>> calendar_to_jd(datetime.datetime(2000,12,21,3,0,0))
+    2451899.625
+    >>> calendar_to_jd([2004,3,(5,6)])
+    array([ 2453070.,  2453071.])
+    >>> dates = [datetime.datetime(2004,3,5),datetime.datetime(2004,3,9)]
+    >>> calendar_to_jd(dates)
+    array([ 2453069.5,  2453073.5])
+    >>> tz = dateutil.tz.tzoffset('2',3*3600)
+    >>> calendar_to_jd((2010,1,1),tz)
+    2455197.875
 
         
     """

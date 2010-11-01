@@ -978,25 +978,27 @@ def fit_data(*args,**kwargs):
         
     **Examples**
         
-    >>> from astropysics.gui.fitgui import fit_data
-    >>> from numpy.random import randn,rand
-    >>> fit_data(randn(100),randn(100))
+    >>> from numpy.random import randn
+    >>> fit_data(randn(100),randn(100)) #doctest: +SKIP 
     
     This will bring up 100 normally-distributed points with no initial fitting
     model.
     
-    >>> fit_data(randn(100),randn(100),'linear')
+    >>> from numpy.random import randn
+    >>> fit_data(randn(100),randn(100),'linear') #doctest: +SKIP
     
     This will bring up 100 normally-distributed points with a best-fit linear
     model.
     
-    >>> fit_data(randn(100),randn(100),'linear',weights=rand(100))
+    >>> from numpy.random import randn
+    >>> fit_data(randn(100),randn(100),'linear',weights=rand(100)) #doctest: +SKIP
     
     This will bring up 100 normally-distributed points with a best-fit linear
     model with the points weighted by uniform random values.
     
     >>> from numpy import tile
-    >>> fit_data(randn(100),randn(100),'linear',weights=tile(rand(100),2).reshape((2,10)),fittype='yerr')
+    >>> from numpy.random import randn,rand
+    >>> fit_data(randn(100),randn(100),'linear',weights=tile(rand(100),2).reshape((2,10)),fittype='yerr') #doctest: +SKIP
     
     This will bring up 100 normally-distributed points with a linear model with
     the points weighted by a uniform random number (interpreted as inverse
@@ -1034,6 +1036,7 @@ def fit_data(*args,**kwargs):
         return fg.getModelObject()
     else:
         return None
+
 try:
     from enthought.tvtk.pyface.scene_editor import SceneEditor 
     from enthought.mayavi.tools.mlab_scene_model import MlabSceneModel

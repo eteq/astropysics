@@ -426,14 +426,13 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     :type d2: scalar
     
     
-    .. doctest::
-        >>> from coordsys import LatLongCoordinates
-        >>> p1 = LatLongCoordinates(0,0)
-        >>> p2 = LatLongCoordinates(0,10)
-        >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
-        '6.3397355613'
-        >>> '%.10f'%sky_sep_to_3d_sep('0h0m0s +0:0:0','10:20:30 +0:0:0',1,2)
-        '2.9375007333'
+    >>> from coordsys import LatLongCoordinates
+    >>> p1 = LatLongCoordinates(0,0)
+    >>> p2 = LatLongCoordinates(0,10)
+    >>> '%.10f'%sky_sep_to_3d_sep(p1,p2,20,25)
+    '6.3397355613'
+    >>> '%.10f'%sky_sep_to_3d_sep('0h0m0s +0:0:0','10:20:30 +0:0:0',1,2)
+    '2.9375007333'
         
     """    
     from .coordsys import LatLongCoordinates,EquatorialCoordinatesEquinox
@@ -553,15 +552,13 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     
     **Examples**
     
-    .. doctest::
-        >>> from numpy import array
-        >>> ra1 = array([1,2,3,4])
-        >>> dec1 = array([0,0,0,0])
-        >>> ra2 = array([4,3,2,1])
-        >>> dec2 = array([3.5,2.5,1.5,.5])
-        >>> match_coords(ra1,dec1,ra2,dec2,1)
-        (array([True, False, False, False], dtype=bool), array([False, False, 
-        False,  True], dtype=bool))
+    >>> from numpy import array
+    >>> ra1 = array([1,2,3,4])
+    >>> dec1 = array([0,0,0,0])
+    >>> ra2 = array([4,3,2,1])
+    >>> dec2 = array([3.5,2.5,1.5,.5])
+    >>> match_coords(ra1,dec1,ra2,dec2,1)
+    (array([ True, False, False, False], dtype=bool), array([False, False, False,  True], dtype=bool))
     """
     
     identical = a1 is a2 and b1 is b2
@@ -761,36 +758,31 @@ def cosmo_z_to_dist(z,zerr=None,disttype=0,inttol=1e-6,normed=False,intkwargs={}
     
     In these examples we are assuming the WMAP7 BAOH0 cosmological parameters.   
      
-    .. testsetup::
+    >>> from astropysics.constants import choose_cosmology
+    >>> cosmo = choose_cosmology('wmap7baoh0')
     
-        from astropysics.constants import choose_cosmology
-        choose_cosmology('wmap7baoh0')
-        from astropysics.coords import cosmo_z_to_dist
-    
-    .. doctest::
-    
-        >>> '%.6f'%cosmo_z_to_dist(0.03)
-        '126.964723'
-        >>> '%.6f'%cosmo_z_to_dist(0.2)
-        '815.469170'
-        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype=1)
-        '978.563004'
-        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='luminosity')
-        '978.563004'
-        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular')
-        '679.557642'
-        >>> '%.3f'%cosmo_z_to_dist(1,disttype='lookback')
-        '7.789'
-        >>> '%.2f'%cosmo_z_to_dist(0.5,disttype='distmod')
-        '42.27'
-        >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular',normed=True)
-        '0.382326'
-        >>> '%.6f'%cosmo_z_to_dist(0.8,disttype='angular',normed=True)
-        '0.879027'
-        >>> '%.6f'%cosmo_z_to_dist(1.64,disttype='angular',normed=True)
-        '1.000000'
-        >>> '%.6f'%cosmo_z_to_dist(2.5,disttype='angular',normed=True)
-        '0.956971'
+    >>> '%.6f'%cosmo_z_to_dist(0.03)
+    '126.964723'
+    >>> '%.6f'%cosmo_z_to_dist(0.2)
+    '815.469170'
+    >>> '%.6f'%cosmo_z_to_dist(0.2,disttype=1)
+    '978.563004'
+    >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='luminosity')
+    '978.563004'
+    >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular')
+    '679.557642'
+    >>> '%.3f'%cosmo_z_to_dist(1,disttype='lookback')
+    '7.789'
+    >>> '%.2f'%cosmo_z_to_dist(0.5,disttype='distmod')
+    '42.27'
+    >>> '%.6f'%cosmo_z_to_dist(0.2,disttype='angular',normed=True)
+    '0.382326'
+    >>> '%.6f'%cosmo_z_to_dist(0.8,disttype='angular',normed=True)
+    '0.879027'
+    >>> '%.6f'%cosmo_z_to_dist(1.64,disttype='angular',normed=True)
+    '1.000000'
+    >>> '%.6f'%cosmo_z_to_dist(2.5,disttype='angular',normed=True)
+    '0.956971'
         
     """
     from operator import isSequenceType

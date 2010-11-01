@@ -43,7 +43,6 @@ except ImportError,e:
     else:
         raise
         
-    
 #Use lines below as imports for new gui apps
 #from __future__ import division
 #from enthought.traits.api import HasTraits

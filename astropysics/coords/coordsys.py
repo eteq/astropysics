@@ -135,36 +135,30 @@ class AngularCoordinate(object):
         
         **Examples**
         
-        .. testsetup::
-        
-            from astropysics.coords import AngularCoordinate
-            from math import pi
-        
-        .. doctest::
-        
-            >>> ac = AngularCoordinate(2.5)
-            >>> print ac
-            +2d30'00.00"
-            >>> print AngularCoordinate(ac)
-            +2d30'00.00"
-            >>> print AngularCoordinate(pi,radians=True)
-            +180d00.00"
-            >>> print AngularCoordinate('1.1')
-            +1d6'00.00"
-            >>> print AngularCoordinate('1.1',radians=True)
-            +63d1'31.29"
-            >>> print AngularCoordinate('12d25m12.5s')
-            +12d25'12.50"
-            >>> print AngularCoordinate('3:30:30',sghms=True)
-            +52d37'30.00"
-            >>> print AngularCoordinate('3:30:30',sghms=False)
-            +3d30'30.00"
-            >>> print AngularCoordinate('-3:30:30',sghms=None)
-            -3d30'30.00"
-            >>> print AngularCoordinate('+3:30:30',sghms=None)
-            +3d30'30.00"
-            >>> print AngularCoordinate('3:30:30',sghms=None)
-            +52d37'30.00"
+        >>> from math import pi
+        >>> ac = AngularCoordinate(2.5)
+        >>> print ac
+        +2d30'00.00"
+        >>> print AngularCoordinate(ac)
+        +2d30'00.00"
+        >>> print AngularCoordinate(pi,radians=True)
+        +180d00.00"
+        >>> print AngularCoordinate('1.1')
+        +1d6'00.00"
+        >>> print AngularCoordinate('1.1',radians=True)
+        +63d1'31.29"
+        >>> print AngularCoordinate('12d25m12.5s')
+        +12d25'12.50"
+        >>> print AngularCoordinate('3:30:30',sghms=True)
+        +52d37'30.00"
+        >>> print AngularCoordinate('3:30:30',sghms=False)
+        +3d30'30.00"
+        >>> print AngularCoordinate('-3:30:30',sghms=None)
+        -3d30'30.00"
+        >>> print AngularCoordinate('+3:30:30',sghms=None)
+        +3d30'30.00"
+        >>> print AngularCoordinate('3:30:30',sghms=None)
+        +52d37'30.00"
         
         """
         from operator import isSequenceType

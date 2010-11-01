@@ -78,6 +78,16 @@ Functions and methods should use `info field lists <http://sphinx.pocoo.org/doma
             If you raise an exception, specify here what type it is and why.
             
         :returns: A description of the return value, if there is one.
+    
+        **Examples**
+        
+        If an examples are needed, they should go here, ideally in doctest 
+        format so that they can be used as tests:
+    
+        >>> inpt = 'something for a_function'
+        >>> a_function(inpt,flag=True)
+        'whatever a_function should output'
+        
         """
 
 
@@ -91,4 +101,24 @@ Classes with public attributes can document using the sphinx construct for docum
         def __init__(self,value):
             self.value = value
         
+Testing Astropysics
+-------------------
+
+There is a test suite that should be periodically run to ensure everything that has tests is still working correctly.  It requires `nose <http://pypi.python.org/pypi/nose>`_.
+It can be run from the astropysics source directory (where setup.cfg lives) with the command::
+
+    nosetests
+
+Note that this is also set up to easily debug in the event that some of the tests fail.  Simply do::
+
+    nosetest --failed
+
+And nose will only run those tests that failed the last time around.  If you want to run a particular test, do::
+
+    nostest --with-id 3
+
+Where the '3' can be replaced by whatever number test you want.
+
+When writing  functionality in astropysics, it's a good idea to add tests.  These should go in the 'tests' directory, and should have module names with the word 'test' in them, along with the function names themselves.
+This naming is necessary to allow nose to find all the tests.  Alternatively, snippets of code as they would appear on the python interpreter (*with* output) can be placed directly in the docstrings, and they will be automatically included in the tests.
         

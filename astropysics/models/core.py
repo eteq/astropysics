@@ -1477,19 +1477,14 @@ class FunctionModel1D(FunctionModel):
         
         These examples use Newton's, Brent's, and Ridder's method, respectively.
         
-        .. testsetup::
-            
-            from astropysics.models.builtins import QuadraticModel
-        
-        .. doctest::
-        
-            >>> m = QuadraticModel()
-            >>> '%.2f'%m.inv(2)
-            '1.41'
-            >>> '%.2f'%m.inv(9,2,4)
-            '3.00'
-            >>> '%.2f'%m.inv(16,3,5,method='ridder')
-            '4.00'
+        >>> from astropysics.models.builtins import QuadraticModel
+        >>> m = QuadraticModel()
+        >>> '%.2f'%m.inv(2)
+        '1.41'
+        >>> '%.2f'%m.inv(9,2,4)
+        '3.00'
+        >>> '%.2f'%m.inv(16,3,5,method='ridder')
+        '4.00'
         
         """    
         import scipy.optimize
@@ -3512,7 +3507,7 @@ class FunctionModel2DScalarDeformedRadial(FunctionModel2DScalar):
         
 #<-------------------------------Module functions ----------------------------->  
 __model_registry={}
-def register_model(model,name=None,overwrite=False,stripmodel=True):
+def register_model(model,name=None,overwrite=False):
     """
     Registers a model at the module package level for :func:`get_model_class`
     and :func`list_model`.
@@ -3520,17 +3515,14 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
     :param model: The model to register
     :type model: a class object that is a subclass of class:`ParametricModel`
     :param name: 
-        The name to assign to this model (lower case class name will be used if
-        this is None)
+        The name to assign to this model.  If None, the model name will be 
+        taken as the *all lowercase* version of the `model` class name, with
+        the substring 'model' removed if it is present in the name.
     :type name: string or None
     :param overwrite:
         If True, if a model already exists with the provided name, it will be
         silently overwritten. Otherwise a KeyError will be raised.
     :type overwrite: bool
-    :param stripmodel:
-        If True, the characters 'model' will be stripped from the name before
-        the model is assigned.
-    :type stripmodel: bool
     
     :except KeyError: 
         If `overwrite` is False and a model already exists with the name
@@ -3538,30 +3530,30 @@ def register_model(model,name=None,overwrite=False,stripmodel=True):
         
     **Example**
     
-    .. testsetup::
-    
-        from astropysics.models.core import register_model,list_models
-    
-    .. doctest::
-    
-        >>> register_model(MyFavoriteModel,name='mymodel',stripmode=True)
-        >>> list_models(include=[MyFavoriteModel])
-        ['mymodel']
-        >>> register_model(MyOtherFavoriteModel,name=None,stripmode=True)
-        >>> list_models(include=[MyFavoriteModel])
-        ['myotherfavorite']
-        >>> register_model(MyMostFavoriteModel,name=None,stripmode=False)
-        >>> list_models(include=[MyFavoriteModel])
-        ['mymostfavoritemodel']
+    >>> class MyFavoriteModel(ParametricModel):
+    ...     pass
+    >>> register_model(MyFavoriteModel)
+    >>> list_models(include=[MyFavoriteModel])
+    ['myfavorite']
+    >>> class MyOtherFavoriteModel(MyFavoriteModel):
+    ...     pass
+    >>> register_model(MyOtherFavoriteModel,name='myotherBestest')
+    >>> list_models(include=[MyOtherFavoriteModel])
+    ['myotherBestest']
+    >>> class MyMostFavoriteModel(MyFavoriteModel):
+    ...     pass
+    >>> register_model(MyMostFavoriteModel,name=None)
+    >>> list_models(include=[MyMostFavoriteModel])
+    ['mymostfavorite']
+    >>> list_models(baseclass=MyFavoriteModel)
+    ['myotherBestest', 'mymostfavorite', 'myfavorite']
+
     """
     if not issubclass(model,ParametricModel):
         raise TypeError('Supplied model is not a Model')
     if name is None:
-        name = model.__name__.lower()
-    else:
-        name = name.lower()
-    if stripmodel:
-        name = name.replace('model','')
+        name = model.__name__.lower().replace('model','')
+        
     if overwrite and name in __model_registry:
         raise KeyError('Model %s already exists'%name)
     
@@ -3637,8 +3629,8 @@ def list_models(include=None,exclude=None,baseclass=None):
     constraints.
     
     :param include:
-        A sequence of model names to include in the list (e.g. the function will
-        just validate that they are valid models and return the strings)
+        A sequence of model names or class objects for which to include names in
+        the list (e.g. strings will just be validated as correct model names).
     :type include: sequence of strings or None
     :param exclude:
         A sequence of model names that should be excluded.
@@ -3655,8 +3647,11 @@ def list_models(include=None,exclude=None,baseclass=None):
     :except ValueError: if any provided model strings are not in the registry
     :except TypeError: if both include and exclude are not None
     
+    See the :func:`register_model` docstring for examples.
+    
     """
     from operator import isSequenceType
+    from inspect import isclass
     
     if baseclass is not None:
         res = [k for k,c in __model_registry.iteritems() if issubclass(c,baseclass)]
@@ -3670,19 +3665,44 @@ def list_models(include=None,exclude=None,baseclass=None):
             include = include.split(',')
         elif not isSequenceType(include):
             include = [include]
+        valid = []
         for m in include:
-            if m not in res:
-                raise ValueError('modelname to include %s not a valid model name'%m)
-            res = include
+            if isinstance(m,basestring):
+                if m not in res:
+                    raise ValueError('Model name to include %s not a valid model name of the requested type'%m)
+                valid.append(m)
+            elif isclass(m):
+                for nm,cls in __model_registry.iteritems():
+                    if m is cls:
+                        valid.append(nm)
+                        if nm not in res:
+                            raise ValueError('Model with name %s not a valid model of the requested type'%nm)
+                        break
+                else:
+                    raise ValueError('Model class to include %s not a valid model class'%m)
+            else:
+                ValueError('Model to include %s not a valid model name or class'%m)
+        res = valid
     elif exclude is not None:
         if isinstance(exclude,basestring):
             exclude = exclude.split(',')
         elif not isSequenceType(exclude):
             exclude = [exclude]
         for m in exclude:
-            if m not in res:
-                raise ValueError('modelname to exclude %s not a valid model name'%m)
-            res.remove(m)
+            if isinstance(m,basestring):
+                if m not in res:
+                    raise ValueError('Model name to exclude %s not a valid model name'%m)
+                res.remove(m)
+            elif isclass(m):
+                for nm,cls in __model_registry.iteritems():
+                    if m is cls:
+                        if nm not in res:
+                            raise ValueError('Model with name %s not a valid model of the requested type'%nm)
+                        res.remove(nm)
+            else:
+                ValueError('Model to exclude %s not a valid model name or class'%m)
+                
+            
     
     return res
 

@@ -594,51 +594,45 @@ def add_docs(*args):
     replace will be appended to the end of the decorated object's docstring.
     
     **Examples**   
-     
-    .. testsetup::
     
-        from astropysics.utils import add_docs
-    
-    .. doctest::    
-    
-        >>> def f1(x):
-        >>>     '''Docstring 1'''
-        >>>     pass
-        >>> def f2(x):
-        >>>     '''
-        >>>     Docstring 2
-        >>>     and more!
-        >>>     '''
-        >>>     pass
-        >>> @add_docs(f1)
-        >>> def f3(x):
-        >>>     '''
-        >>>     Docstring 3
-        >>>     '''
-        >>>     pass
-        >>> @add_docs(f2)
-        >>> def f4(x):
-        >>>     '''
-        >>>     Docstring 3
-        >>>     '''
-        >>>     pass
-        >>> @add_docs(f1)
-        >>> def f5(x):
-        >>>     '''
-        >>>     Docstrong 2 {docstr:f1}
-        >>>     '''
-        >>>     pass
-        >>> f1.__doc__
-        'Docstring 1'
-        >>> f2.__doc__
-        '\\n    Docstring 2\\n    and more!\\n    '
-        >>> f3.__doc__
-        '\\n    Docstring 3\\n    \\n    Docstring 1'
-        >>> f4.__doc__
-        '\\n    Docstring 3\\n    \\n    Docstring 2\\n    and more!'
-        >>> f5.__doc__
-        '\\n    Docstrong 2 Docstring 1\\n    '
-    
+    >>> def f1(x):
+    ...     '''Docstring 1'''
+    ...     pass
+    >>> def f2(x):
+    ...     '''
+    ...     Docstring 2
+    ...     and more!
+    ...     '''
+    ...     pass
+    >>> @add_docs(f1)
+    ... def f3(x):
+    ...     '''
+    ...     Docstring 3
+    ...     '''
+    ...     pass
+    >>> @add_docs(f2)
+    ... def f4(x):
+    ...     '''
+    ...     Docstring 3
+    ...     '''
+    ...     pass
+    >>> @add_docs(f1)
+    ... def f5(x):
+    ...     '''
+    ...     Docstrong 2 {docstr:f1}
+    ...     '''
+    ...     pass
+    >>> f1.__doc__
+    'Docstring 1'
+    >>> f2.__doc__
+    '\\n    Docstring 2\\n    and more!\\n    '
+    >>> f3.__doc__
+    '\\n    Docstring 3\\n    \\n    Docstring 1'
+    >>> f4.__doc__
+    '\\n    Docstring 3\\n    \\n    Docstring 2\\n    and more!'
+    >>> f5.__doc__
+    '\\n    Docstrong 2 Docstring 1\\n    '
+
     """
     from functools import partial
     
@@ -963,40 +957,35 @@ def crossmask(x,threshold=0,belowtoabove=True):
     :returns: A mask that is True where crossing occurs, False everywhere else.
     :rtype: bool :class:`~numpy.ndarray`
     
-    **Example**
+    **Examples**
     
-    .. testsetup::
+    >>> from numpy import array,where
     
-        from astropysics.utils import crossmask
-        from numpy import array,where
+    >>> xup = [-2,-1,0,1,2]
+    >>> xdn = [2,1,0,-1,-2]
     
-    .. doctest::
-        
-        >>> xup = [-2,-1,0,1,2]
-        >>> xdn = [2,1,0,-1,-2]
-        
-        >>> print crossmask(xup,0,True)
-        [False False  True False False]
-        >>> print crossmask(xup,-0.5,True)
-        [False False  True False False]
-        >>> print crossmask(xup,0.5,True)
-        [False False False  True False]
-        
-        >>> print crossmask(xdn,0,True)
-        [False False False False False]
-        
-        >>> print crossmask(xdn,0,False)
-        [False False  True False False]
-        >>> print crossmask(xdn,0.5,False)
-        [False False  True False False]
-        >>> print crossmask(xdn,-0.5,False)
-        [False False False  True False]
-        
-        >>> xupdnup = [-2,-1,0,1,2,1,0,-1,-2,-1,0,1,2]
-        >>> where(crossmask(xupdnup,0.5,True))
-        (array([ 3, 11]),)
-        >>> print array(xupdnup)[crossmask(xupdnup,0,True)]
-        [0 0]
+    >>> print crossmask(xup,0,True)
+    [False False  True False False]
+    >>> print crossmask(xup,-0.5,True)
+    [False False  True False False]
+    >>> print crossmask(xup,0.5,True)
+    [False False False  True False]
+    
+    >>> print crossmask(xdn,0,True)
+    [False False False False False]
+    
+    >>> print crossmask(xdn,0,False)
+    [False False  True False False]
+    >>> print crossmask(xdn,0.5,False)
+    [False False  True False False]
+    >>> print crossmask(xdn,-0.5,False)
+    [False False False  True False]
+    
+    >>> xupdnup = [-2,-1,0,1,2,1,0,-1,-2,-1,0,1,2]
+    >>> where(crossmask(xupdnup,0.5,True))
+    (array([ 3, 11]),)
+    >>> print array(xupdnup)[crossmask(xupdnup,0,True)]
+    [0 0]
 
 
         
