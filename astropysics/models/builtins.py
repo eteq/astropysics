@@ -2127,7 +2127,7 @@ class SersicModel(FunctionModel1DAuto):
     def f(self,r,Ae=1,re=1,n=4):
         #return EinastoModel.f(self,r,A,rs,1/n)
         #return A*np.exp(-(r/rs)**(1/n))
-        return Ae*np.exp(-self.bn(n)*((r/re)**(1.0/n)-1))
+        return Ae*np.exp(-self.getBn()*((r/re)**(1.0/n)-1))
     
     @property
     def rangehint(self):
@@ -2139,47 +2139,71 @@ class SersicModel(FunctionModel1DAuto):
         self.Ae *= val/self.f(0,self.Ae,self.re,self.n)
     A0 = property(_getA0,_setA0,doc='value at r=0')
     
-    def getBn(self):#,usecache=True):
+    _exactbn = True
+    _bncache = {}
+    def getBn(self):
         """
-        Computes :math:`b_n` for the current sersic index.
+        Computes :math:`b_n` for the current sersic index. If the
+        :attr:`SersicModel.exactbn` attribute is True, this is calculated using
+        incomplete gamma functions (:func:`bn_exact`), otherwise, it is
+        estimated based on MacArthur, Courteau, and Holtzman 2003
+        (:func:`bn_estimate`).
+        
+        """
+        n = self.n
+        if n in SersicModel._bncache:
+            return SersicModel._bncache[n]
+        else:
+            if SersicModel._exactbn:
+                bn = SersicModel.bn_exact(n)
+            else:
+                bn = SersicModel.bn_estimate(n)
+            SersicModel._bncache[n] = bn
+            return bn
+        
+    @staticmethod
+    def exactBn(val=None):
+        """
+        Sets whether the exact Bn calculation is used, or the estimate (see
+        :meth:`getBn`).
+        
+        :param val: 
+            If None, nothing will be set, otherwise, if True, the exact Bn
+            computation will be used, or if False, the estimate will be used.
+            
+        :returns: 
+            True if the exact computation is being used, False if the estimate. 
+        """
+        if val is not None:
+            SersicModel._exactbn = bool(val)
+            SersicModel._bncache = {}
+        return SersicModel._exactbn
+    
+    @staticmethod
+    def bn_exact(n):
+        """
+        Computes :math:`b_n` exactly for the current sersic index, using
+        incomplete gamma functions.
         """
         from scipy.special import gammaincinv
-        return gammaincinv(2*self.n,0.5)
+        
+        n = float(n) #sometimes 0d array gets passed in
+        return gammaincinv(2*n,0.5)
     
-    def getBn_estimate(self,usecache=True):
-        """
-        Computes :math:`b_n` for the current sersic index usint the estimate
-        of MacArthur, Courteau, and Holtzman 2003  instead of via an actual
-        gamma function like :meth:`getBn`.
-        """
-        return self.bn_estimate(self.n,usecache)
-    
-    _bncache={}
     _bnpoly1=np.poly1d([-2194697/30690717750,131/1148175,46/25515,4/405,-1/3])
     _bnpoly2=np.poly1d([13.43,-19.67,10.95,-0.8902,0.01945])
     @staticmethod
-    def bn_estimate(n,usecache=True):
+    def bn_estimate(n):
         """
         bn is used to get the half-light radius.  If n is 
         None, the current n parameter will be used
         
         The form is a fit from MacArthur, Courteau, and Holtzman 2003 
         and is claimed to be good to ~O(10^-5)
-        
-        :param usecache: 
-            If True, the cache will be searched, if False it will be saved but
-            not used, if None, ignored.
-        :type usecache: bool or None
         """
         n = float(n) #sometimes 0d array gets passed in
         
-        if n  in SersicModel._bncache and usecache:
-            val = SersicModel._bncache[n]
-        else:
-            val = (2*n+SersicModel._bnpoly1(1/n)) if n>0.36 else SersicModel._bnpoly2(n)
-            if usecache is not None:
-                SersicModel._bncache[n] = val
-        return val
+        return (2*n+SersicModel._bnpoly1(1/n)) if n>0.36 else SersicModel._bnpoly2(n)
         
     def sbfit(self,r,sb,zpt=0,**kwargs):
         """

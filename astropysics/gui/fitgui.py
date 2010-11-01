@@ -230,7 +230,7 @@ class NewModelSelector(HasTraits):
         if cls is None:
             return False
         else:
-            return cls._pars is None
+            return cls.isVarnumModel()
         
 #class WeightFillOverlay(AbstractOverlay):
 #    weightval = Float(0)

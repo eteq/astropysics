@@ -415,6 +415,17 @@ class FunctionModel(ParametricModel):
         """
         raise NotImplementedError
     
+    @classmethod
+    def isVarnumModel(cls):
+        """
+        Determines if the model represented by this class accepts a variable
+        number of parameters (i.e. number of parameters is set when the object
+        is created).
+        
+        :returns: True if this model has a variable number of parameters.
+        """
+        from inspect import getargspec
+        return bool(getargspec(cls.f)[1])
     
     def _filterfunc(self,*args,**kwargs):
         """
@@ -2348,7 +2359,7 @@ class DatacentricModel1D(FunctionModel1D):
     """
     def __call__(self,x):
         if self.data is None:
-            raise ValueError('DataModel1D must have data to execute')
+            raise ValueError('A datacentric model must have data to execute')
         arr = np.array(x,copy=False,dtype=float)
         res = self._filterfunc(arr.ravel(),*self.parvals)
         return res.reshape(arr.shape)
@@ -3542,8 +3553,9 @@ def register_model(model,name=None,overwrite=False):
         
     **Example**
     
-    >>> class MyFavoriteModel(ParametricModel):
-    ...     pass
+    >>> class MyFavoriteModel(FunctionModel1DAuto):
+    ...     def f(self,x,c=1):
+    ...         return x**2+c
     >>> register_model(MyFavoriteModel)
     >>> list_models(include=[MyFavoriteModel])
     ['myfavorite']
@@ -3608,7 +3620,7 @@ def get_model_class(model,baseclass=None):
         
     return res
 
-def get_model_instance(model,baseclass=None,**kwargs):
+def get_model_instance(model,baseclass=None,nvarparams=1,**kwargs):
     """
     Returns an instance of the supplied model - if the input is actually an 
     instance of a model, the same instance will be passed in - otherwise, 
@@ -3619,6 +3631,9 @@ def get_model_instance(model,baseclass=None,**kwargs):
         If not None, ensures that the instance is a subclass of the provided
         base class.
     :type baseclass: class or None
+    :param int nvarparams: 
+        The number of parameters to cerate if the model is a variable parameter
+        number model. Otherwise, this is ignored.
     
     kwargs will either be passed into the new model constructor or applied as
     attributes to an already-existing model object.
@@ -3632,13 +3647,15 @@ def get_model_instance(model,baseclass=None,**kwargs):
             setattr(model,k,v)
         return model
     else:
-        return get_model_class(model,baseclass)(**kwargs)
+        cls = get_model_class(model,baseclass)
+        args = (nvarparams,) if cls.isVarnumModel() else tuple()
+        return cls(*args,**kwargs)
         
 
-def list_models(include=None,exclude=None,baseclass=None):
+def list_models(include=None,exclude=None,baseclass=None,showabstract=False):
     """
     Lists the registered model objects in the package, possibly subject to
-    constraints.
+    constraints.  
     
     :param include:
         A sequence of model names or class objects for which to include names in
@@ -3651,6 +3668,9 @@ def list_models(include=None,exclude=None,baseclass=None):
         If not None, all models that are not subclasses of this class will be
         filtered out of the results.
     :type baseclass: a class or None
+    :param bool showabstract: 
+        If True, models that have abstract class objects will be included.
+        Otherwise, they will not appear in the list.
     
     :returns: 
         A list of strings for the models that can be used with
@@ -3663,12 +3683,11 @@ def list_models(include=None,exclude=None,baseclass=None):
     
     """
     from operator import isSequenceType
-    from inspect import isclass
+    from inspect import isclass,isabstract
     
-    if baseclass is not None:
-        res = [k for k,c in __model_registry.iteritems() if issubclass(c,baseclass)]
-    else:
-        res = __model_registry.keys()
+    res = [k for k,c in __model_registry.iteritems() 
+                     if (baseclass is None or issubclass(c,baseclass)) 
+                     if (showabstract or not isabstract(c))]
         
     if include is not None:
         if exclude is not None:
