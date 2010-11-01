@@ -1150,7 +1150,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         for fn in os.listdir(newdir):
             tf.add(os.path.join(newdir,fn),fn)
     
-    return f
+    return f,newdir
 
 #remove \comment?
 _apj_abstract_max_words = 250 
