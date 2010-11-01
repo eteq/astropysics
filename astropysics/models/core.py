@@ -1397,29 +1397,32 @@ class FunctionModel1D(FunctionModel):
     as python functions.
     
     **Subclassing**
-    The following method *must* be overridden in a subclass:
     
-    * f(self,x,...)
+    The :meth:`f` method *must* be overridden in a subclass as described in
+    :class:`FunctionModel`. The following methods may be overridden for speed of
+    some operations, with specific syntax described in the docstrings. In any of
+    these methods, parameters should be accessed as ``self.pardict``,
+    ``self.parvals``, or by properties/name, as they are not passed into the
+    function itself as in :meth:`f`.
     
-    The following methods may be overridden for speed of some operations - pars
-    should be accessed with self.pardict, self.parvals, or by properties/name:
-    
-    * integrate(self,lower,upper)
-        integrate the model from lower to upper
-    * derivative(self,x,dx)
-        derivative of the model at x, optinally using spacing dx
-    * inv(yval,*args,**kwargs)
-        inverse of the model at the requested yvalue
+    * :meth:`integrate`
+        Overwrite to anlytically compute a definite integral - default is
+        numerical.
+    * :meth:`derivative`
+        Overwrite to anlytically compute the derivative - default is numerical.
+    * :meth:`inv`
+        Inverse of the model at the requested y-value. This is by default
+        computed numerically, although for non 1-to-1 functions, this may give
+        unpredictable results.
     
     The following attributes may be set for additional information:
     
     * :attr:`xaxisname`
-        name of the input axis for this model
+        Name of the input axis for this model.
     * :attr:`yaxisname`
-        name of the output axis for this model
+        Name of the output axis for this model.
     * :attr:`rangehint`
-        a hint for the relevant range for this model as a (lower,upper) tuple
-        (or None if no particular range is relevant)
+        A hint for the relevant range for this model as a (lower,upper) tuple.
         
     """    
     defaultIntMethod = 'quad'
@@ -1850,8 +1853,12 @@ class FunctionModel1D(FunctionModel):
             
         .. note::
             If overridden in a subclass, the signature should be
-            integrate(self,lower,upper,*args,**kwargs), but the args and kwargs
-            will typically be ignored where an analytic solution is available.
+            integrate(self,lower,upper,method=None,**kwargs). if `method` is
+            anything other than None, it should fall back on this version. e.g.
+            the following should be at the top of the overriding method:: 
+            
+                if method is None:
+                    return FunctionModel1D.integrate(lower,upper,method,**kwargs)
             
         """
         
@@ -1961,9 +1968,14 @@ class FunctionModel1D(FunctionModel):
             values. Otherwise, it defaults to 1.
         
         .. note::
-            If overridden in a subclass, the signature should be
-            derivative(self,x,dx=1) , but dx will typically be ignored if an
-            analytic solution is available. 
+            If overridden in a subclass for efficient analytical computation,
+            the signature should be derivative(self,x,dx=None), such that if
+            `dx` is None, the analytical computation is used, and otherwise
+            this numerical technique is used.  i.e. all subclasses should have
+            this at the beginning::
+                
+                if dx is not None:
+                    return FunctionModel1D.integrate(self,x,dx)
             
         """
         if dx is None:
