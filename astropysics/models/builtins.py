@@ -41,10 +41,16 @@ class ConstantModel(FunctionModel1DAuto):
     def f(self,x,C=0):
         return C*np.ones_like(x)
     
-    def derivative(self,x,dx=1):
+    def derivative(self,x,dx=None):
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         return np.zeros_like(x)
     
-    def integrate(self,lower,upper,**kwargs):
+    def integrate(self,lower,upper,method=None,**kwargs):
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
         if 'jac' in kwargs and kwargs['jac'] is not None:
             return FunctionModel1D.integrate(self,lower,upper,**kwargs)
         else:
@@ -134,10 +140,16 @@ class LinearModel(FunctionModel1DAuto):
     _fittypes = {'basic':_linearFit,'yerr':_linearFit,'fiterrxy':_linearFit}
     fittype = 'basic'
     
-    def derivative(self,x,dx=1):
+    def derivative(self,x,dx=None):
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         return np.ones_like(x)*self.m
     
-    def integrate(self,lower,upper):
+    def integrate(self,lower,upper,method=None,**kwargs):
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
         m,b = self.m,self.b
         return m*upper*upper/2+b*upper-m*lower*lower/2+b*lower
     
@@ -407,10 +419,16 @@ class PolynomialModel(FunctionModel1DAuto):
     def f(self,x,*args): 
         return np.polyval(np.array(args)[::-1],x)
     
-    def derivative(self,x):
+    def derivative(self,x,dx=None):
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         return np.polyder(np.array(self.parvals)[::-1])(x)
 
-    def integrate(self,lower,upper):
+    def integrate(self,lower,upper,method=None,**kwargs):
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
         p = np.polyint(np.array(self.parvals)[::-1])
         return p(upper)-p(lower)
     
@@ -468,11 +486,17 @@ class GaussianModel(FunctionModel1DAuto):
     FWHM = property(_getFWHM,_setFWHM,doc='Full Width at Half Maximum')
     
         
-    def derivative(self,x,dx=1):
+    def derivative(self,x,dx=None):
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         sig=self.sig
         return self(x)*-x/sig/sig
     
-    def integrate(self,lower,upper,**kwargs):
+    def integrate(self,lower,upper,method=None,**kwargs):
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
         if len(kwargs)>0:
             return super(GaussianModel,self).integrate(lower,upper,**kwargs)
         else:
@@ -716,11 +740,17 @@ class SinModel(FunctionModel1DAuto):
     def f(self,x,A=1,k=2*pi,p=0):
         return A*np.sin(k*x+p)
     
-    def derivative(self,x,dx=1):
+    def derivative(self,x,dx=None):
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         A,k,p=self.A,self.k,self.p
         return A*k*np.cos(k*x+p)
     
-    def integrate(self,lower,upper):
+    def integrate(self,lower,upper,method=None,**kwargs):
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
         A,k,p=self.A,self.k,self.p
         return A*(np.cos(k*lower+p)-np.cos(k*upper+p))/k
     
@@ -1453,17 +1483,17 @@ class NFWModel(FunctionModel1DAuto):
                         None if self.data[2] is None else self.data[2].copy())
         return mod
     
-    def integrateSpherical(self,lower,upper,*args,**kwargs):
+    def integrateSpherical(self,lower,upper,method=None,**kwargs):
         """
         NFW Has an analytic form for the spherical integral - if the lower 
-        is not 0 or or if the keyword 'numerical' is True, this function will
-        fall back to FunctionModel1D.integrateSpherical 
-        """        
-        if kwargs.pop('numerical',False) or np.any(lower!=0):
-            return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
-        else:
-            x = upper/self.rc
-            return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
+        is not 0 or or if `method` is not None, this function will
+        fall back to the numerical version.
+        """    
+        if method is not None or np.any(lower!=0):
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+            
+        x = upper/self.rc
+        return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
     def setC(self,c,Rvir=None,Mvir=None,z=0):
         """
@@ -1800,29 +1830,29 @@ class NFWProjectedModel(FunctionModel1DAuto):
         return sig0*xterm/(2*pi*rc**2)
         #sig0=Mv*g
         
-    def integrateCircular(self,lower,upper,*args,**kwargs):
+    def integrateCircular(self,lower,upper,method=None,**kwargs):
         """
         NFW Has an analytic form for the spherical integral - if the lower 
         is not 0 or or if the keyword 'numerical' is True, this function will
         fall back to FunctionModel1D.integrateCircular 
         """        
-        if kwargs.pop('numerical',False) or np.any(lower!=0):
-            return FunctionModel1D.integrateSpherical(self,*args,**kwargs)
+        if method is not None or np.any(lower!=0):
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
+        x = upper/self.rc
+        xterm = None
+        
+        if x > 1:
+            Cinv = np.arccos(1/x)
+        elif x < 1:
+            Cinv = np.arccosh(1/x)
         else:
-            x = upper/self.rc
-            xterm = None
-            
-            if x > 1:
-                Cinv = np.arccos(1/x)
-            elif x < 1:
-                Cinv = np.arccosh(1/x)
-            else:
-                xterm = 1-np.log(2)
-            
-            if xterm is None:
-                xterm = Cinv*np.abs(x*x - 1)**-0.5 + np.log(x/2)
-                    
-            return self.sig0*xterm
+            xterm = 1-np.log(2)
+        
+        if xterm is None:
+            xterm = Cinv*np.abs(x*x - 1)**-0.5 + np.log(x/2)
+                
+        return self.sig0*xterm
         
     @property
     def rangehint(self):
@@ -1947,6 +1977,9 @@ class SchechterMagModel(FunctionModel1DAuto):
         """
         Analytically compute Schechter derivative for magnitude form.
         """
+        if dx is not None:
+            return FunctionModel1D.integrate(self,x,dx)
+        
         a = self.alpha
         Mstar = self.Mstar
         phistar = self.phistar
@@ -1954,7 +1987,7 @@ class SchechterMagModel(FunctionModel1DAuto):
         x = 10**(0.4*(Mstar-M))
         return -phistar*(x**(a-1)-x**a)*np.exp(-x)
     
-    def integrate(self,lower,upper,*args,**kwargs):
+    def integrate(self,lower,upper,method=None,**kwargs):
         """
         Analytically compute Schechter integral for magnitude form using
         incomplete gamma functions.
@@ -1963,6 +1996,10 @@ class SchechterMagModel(FunctionModel1DAuto):
         
         .. todo:: Test!
         """
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
+        
         from scipy.special import gammainc,gammaincc
             
         s = self.alpha+1
@@ -1993,20 +2030,23 @@ class SchechterLumModel(FunctionModel1DAuto):
     .. seealso:: :class:`SchechterMagModel`, Schechter 1976, ApJ 203, 297 
 
     """
+    
     xaxisname = 'L'
     yaxisname = 'phi'
     
     def f(self,L,Lstar=1e10,alpha=-1.0,phistar=1.0):
-        #from .phot import lum_to_mag as l2m
-        #M,Mstar=l2m(L),l2m(Lstar)
-        #return SchechterModel.f(self,M,Mstar,alpha,phistar)
         x = L/Lstar
         return phistar*(x**alpha)*np.exp(-x)/Lstar
     
     def derivative(self,L,dx=None):
         """
-        Analytically Compute Schechter derivative
+        Compute Schechter derivative.  if `dx` is not None, will fallback on the
+        numerical version.
         """
+        if dx is not None:
+            return FunctionModel1D.integrate(self,L,dx)
+        
+        
         a = self.alpha
         Lstar = self.Lstar
         phistar = self.phistar
@@ -2017,6 +2057,10 @@ class SchechterLumModel(FunctionModel1DAuto):
         """
         Analytically Compute Schechter integral using incomplete gamma functions
         """
+        if method is not None:
+            return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
+        
+        
         from scipy.special import gammainc,gammaincc
             
         s = self.alpha+1

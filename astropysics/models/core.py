@@ -1857,8 +1857,8 @@ class FunctionModel1D(FunctionModel):
             anything other than None, it should fall back on this version. e.g.
             the following should be at the top of the overriding method:: 
             
-                if method is None:
-                    return FunctionModel1D.integrate(lower,upper,method,**kwargs)
+                if method is not None:
+                    return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
             
         """
         
