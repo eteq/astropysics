@@ -56,6 +56,8 @@ except ImportError: #support for earlier versions
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
         
+
+        
 #<----------Useful regular expressions, mostly used in text_to_nodes----------->
 #this finds anything that begins with \begin{<name>} and ends with \end{<name}
 #group 1 is the whole env, 2 is the name, 3 is the content
@@ -955,8 +957,7 @@ def text_to_nodes(parent,txt):
                                 if nbraces==0:
                                     break
                             if nbraces!=0:
-                                from warnings import warn
-                                warn('apparent EnclosedDeclaration has unbalanced braces, skipping')
+                                _warn('apparent EnclosedDeclaration has unbalanced braces, skipping')
                                 encdeccontent = None
                                 break
                                 #raise ValueError('apparent EnclosedDeclaration has unbalanced braces')
@@ -996,10 +997,23 @@ def text_to_nodes(parent,txt):
         elif isinstance(t,TeXNode):
             nodel.append(t)
         else:
-            raise TypeError('invalid item %s returned from parsing text to nodes'%t)
+            terrstr = 'invalid item %s returned from parsing text to nodes'%t
+            raise TypeError(terrstr)
     
     return nodel
 
+#<----------------Tools to prepare a manuscrupt for publication---------------->
+
+    
+#: Can be False to hide, True to print, or 'builtin' to use the python warnings 
+#: mechanism
+print_warnings = True
+def _warn(*args):
+    if print_warnings == 'builtin':
+        from warnings import warn
+        warn(*args)
+    elif print_warnings:
+        print 'WARNING:',args[0]
 
 _arxiv_abstract_max_lines = 20 
 _arxiv_abstract_char_per_line = 80 
@@ -1036,7 +1050,6 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     """
     import os,shutil,tarfile
     from contextlib import closing
-    from warnings import warn
     
     if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
         texfn = texfn+'.tex'
@@ -1075,7 +1088,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
             wcline += len(word)+1
             
         if len(lines)>_arxiv_abstract_max_lines:
-            warn('Abstract is %i lines, should be <=%i'%(len(lines),_arxiv_abstract_max_lines))
+            _warn('Abstract is %i lines, should be <=%i'%(len(lines),_arxiv_abstract_max_lines))
         elif verbose:
             print 'Abstract within line limit'
             
@@ -1113,7 +1126,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
                 shutil.copy(fne,newdir)
                 copied = True
         if not copied:
-            warn("File %s%s does not exist - skipping"%(fn,exts))
+            _warn("File %s%s does not exist - skipping"%(fn,exts))
         
     #copy over bbl file if \bibliography is present
     bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,Command) and n.name=='bibliography' else None)
@@ -1127,7 +1140,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     f.save(texfn)
     
     if len(bibs)>1:
-        warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
+        _warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
     elif len(bibs)==1:
         bibfn,bblfn = bibs[0]+'.bib',bibs[0]+'.bbl'
         if os.path.exists(bblfn):
@@ -1135,17 +1148,18 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
                 print 'Copying',bblfn,'to',newdir+os.sep
             shutil.copy(bblfn,newdir)
         elif os.path.exists(bibfn):
-            warn(r'\bibliography present, but no %s file found - copying %s instead (not recommended by arXiv)'%(bblfn,bibfn))
+            _warn(r'\bibliography present, but no %s file found - copying %s instead (not recommended by arXiv)'%(bblfn,bibfn))
             shutil.copy(bibfn,newdir)
         else:
-            warn(r'\bibliography present, but no %s or %s files found - skipping bibliography'%(bibfn,bblfn))
+            _warn(r'\bibliography present, but no %s or %s files found - skipping bibliography'%(bibfn,bblfn))
                 
     elif verbose:
         print r'No \bibliography entry found - skipping bibliography'
     
     #make .tar.gz file from directory and place in directory
     tfn = os.path.join(newdir,newdir+'.tar.gz')
-    print 'writing file',tfn,'with',newdir,'contents'
+    if verbose:
+        print 'writing file',tfn,'with',newdir,'contents'
     with closing(tarfile.open(tfn,'w:gz')) as tf:
         for fn in os.listdir(newdir):
             tf.add(os.path.join(newdir,fn),fn)
@@ -1192,7 +1206,6 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     """
     import os,shutil,tarfile
     from contextlib import closing
-    from warnings import warn
     
     if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
         texfn = texfn+'.tex'
@@ -1222,7 +1235,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
             if hasattr(c,'countWords'):
                 wc += c.countWords()
         if wc > _apj_abstract_max_words:
-            warn('Abstract is %i words long, should be <=%i'%(wc,_apj_abstract_max_words))
+            _warn('Abstract is %i words long, should be <=%i'%(wc,_apj_abstract_max_words))
         elif verbose:
             print 'Abstract within word limit'
         
@@ -1304,14 +1317,14 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
                 shutil.copy(fne,os.path.join(newdir,newfn+ext))
                 copied = True
         if not copied:
-            warn("File %s%s does not exist - skipping"%(oldfn,exts))
+            _warn("File %s%s does not exist - skipping"%(oldfn,exts))
         
 
     #copy over bib file (or bbl) if \bibliography is present
     bibs = f.visit(lambda n:n if isinstance(n,Command) and n.name=='bibliography' else None)
     
     if len(bibs)>1:
-        warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
+        _warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
     elif len(bibs)==1:
         bibfn,bblfn = bibs[0].reqargs[0]+'.bib',bibs[0].reqargs[0]+'.bbl'
         newbibfn = os.path.join(newdir,'ms.bib')
@@ -1327,7 +1340,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
                 print 'Copying',bibfn,'to',newbblfn
             shutil.copy(bblfn,newbblfn)
         if not bibcp and not bblcp:
-            warn(r'\bibliography present, but no .bbl or .bib files found - not copying biliography files')
+            _warn(r'\bibliography present, but no .bbl or .bib files found - not copying biliography files')
         
         #Change the bibliography text to reference 'ms.bib'/'ms.bbl'
         bibs[0].children[0].text = 'ms'
@@ -1342,7 +1355,8 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     
     #make .tar.gz file from directory and place in directory
     tfn = os.path.join(newdir,'ms.tar.gz')
-    print 'writing file',tfn,'with',newdir,'contents'
+    if verbose:
+        print 'writing file',tfn,'with',newdir,'contents'
     with closing(tarfile.open(tfn,'w:gz')) as tf:
         for fn in os.listdir(newdir):
             tf.add(os.path.join(newdir,fn),fn)

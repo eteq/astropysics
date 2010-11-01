@@ -45,6 +45,8 @@ texfn,fmt = args
 kwargs = dict(overwritedir=ops.overwrite,verbose=not ops.quiet)
 if ops.directory != '':
     kwargs['newdir'] = ops.directory
+    
+publication.print_warnings = True
 
 if fmt == 'arxiv':
     if not ops.quiet:
