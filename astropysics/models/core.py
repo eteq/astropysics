@@ -1825,7 +1825,7 @@ class FunctionModel1D(FunctionModel):
         
     
     #Can Override:
-    def integrate(self,lower,upper,method=None,n=100,jac=None,**kwargs):
+    def integrate(self,lower,upper,method=True,n=100,jac=None,**kwargs):
         """
         Numerically compute the definite integral of the model using
         :mod:`scipy.integrate` functions. The integral computed is:
@@ -1842,7 +1842,7 @@ class FunctionModel1D(FunctionModel):
         :param upper: the upper limit of the integral
         :type upper: float
         :param method: 
-            The name of a function from :mod:`scipy.integrate`, or if None,
+            The name of a function from :mod:`scipy.integrate`, or if True,
             the class attribute :attr:`defaultIntMethod` will be used.
         :type method: string or None
         :param n: 
@@ -1873,10 +1873,10 @@ class FunctionModel1D(FunctionModel):
             
         """
         
-        #TODO:vectorize when needed
+        #TODO?: vectorize when needed
         
         import scipy.integrate as itg
-        if method is None:
+        if method is True:
             method=self.defaultIntMethod
         
         e,d=None,None
