@@ -43,7 +43,7 @@ class ConstantModel(FunctionModel1DAuto):
     
     def derivative(self,x,dx=None):
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         return np.zeros_like(x)
     
@@ -142,7 +142,7 @@ class LinearModel(FunctionModel1DAuto):
     
     def derivative(self,x,dx=None):
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         return np.ones_like(x)*self.m
     
@@ -421,7 +421,7 @@ class PolynomialModel(FunctionModel1DAuto):
     
     def derivative(self,x,dx=None):
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         return np.polyder(np.array(self.parvals)[::-1])(x)
 
@@ -488,7 +488,7 @@ class GaussianModel(FunctionModel1DAuto):
         
     def derivative(self,x,dx=None):
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         sig=self.sig
         return self(x)*-x/sig/sig
@@ -742,7 +742,7 @@ class SinModel(FunctionModel1DAuto):
     
     def derivative(self,x,dx=None):
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         A,k,p=self.A,self.k,self.p
         return A*k*np.cos(k*x+p)
@@ -1978,7 +1978,7 @@ class SchechterMagModel(FunctionModel1DAuto):
         Analytically compute Schechter derivative for magnitude form.
         """
         if dx is not None:
-            return FunctionModel1D.integrate(self,x,dx)
+            return FunctionModel1D.derivative(self,x,dx)
         
         a = self.alpha
         Mstar = self.Mstar
@@ -2044,14 +2044,11 @@ class SchechterLumModel(FunctionModel1DAuto):
         numerical version.
         """
         if dx is not None:
-            return FunctionModel1D.integrate(self,L,dx)
-        
+            return FunctionModel1D.derivative(self,L,dx)
         
         a = self.alpha
-        Lstar = self.Lstar
-        phistar = self.phistar
-        x = L/Lstar
-        return phistar*(x**(a-1)-x**a)*np.exp(-x)/Lstar
+        x = L/self.Lstar
+        return (self.phistar/self.Lstar)*(a*x**(a-1)-x**a)*np.exp(-x)
     
     def integrate(self,lower,upper,*args,**kwargs):
         """
