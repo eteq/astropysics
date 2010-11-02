@@ -1966,52 +1966,53 @@ class SchechterMagModel(FunctionModel1DAuto):
     xaxisname = 'M'
     yaxisname = 'phi'
     
-    def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0857362047581294):
+    from math import log
+    _frontfactor = log(10)*0.4
+    del log #hide this so as not to clutter the namespace
+    
+    def f(self,M,Mstar=-20.2,alpha=-1,phistar=1.0):
         from math import log #single-variable version
-        log10 = log(10)
-        
         x=10**(0.4*(Mstar-M))
-        return 0.4*log10*phistar*(x**(1+alpha))*np.exp(-x)
+        return SchechterMagModel._frontfactor*phistar*(x**(1+alpha))*np.exp(-x)
 
     def derivative(self,M,dx=None):
         """
-        Analytically compute Schechter derivative for magnitude form.
+        Compute Schechter derivative for magnitude form. if `dx` is not None,
+        will fallback on the numerical version.
         """
         if dx is not None:
-            return FunctionModel1D.derivative(self,x,dx)
+            return FunctionModel1D.derivative(self,M,dx)
         
         a = self.alpha
-        Mstar = self.Mstar
-        phistar = self.phistar
-        
-        x = 10**(0.4*(Mstar-M))
-        return -phistar*(x**(a-1)-x**a)*np.exp(-x)
+        x = 10**(0.4*(self.Mstar-M))
+        return -SchechterMagModel._frontfactor**2*self.phistar*np.exp(-x)*x**a*(a-x+1)
     
     def integrate(self,lower,upper,method=None,**kwargs):
         """
         Analytically compute Schechter integral for magnitude form using
-        incomplete gamma functions.
-        
-        Set lower = None to compute down to L = 0
-        
-        .. todo:: Test!
+        incomplete gamma functions. If `method` is not None, numerical
+        integration will be used. The gamma functions break down for alpha<=-1,
+        so numerical is used if that is the case.
         """
+        if self.alpha<=-1:
+            method = True #use default numerical method, because gamma functions fail for alpha<=-2
         if method is not None:
             return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
         
-        
-        from scipy.special import gammainc,gammaincc
-            
+        from scipy.special import gamma,gammainc,gammaincc
+    
         s = self.alpha+1
-        u = 10**(0.4*(Mstar-upper))
-        l = 10**(0.4*(Mstar-lower))
+        u = 10**(0.4*(self.Mstar-upper))
+        l = 10**(0.4*(self.Mstar-lower))
         
-        if u == np.inf:
-            I = gammaincc(s,l)
-        elif lower is None:
-            I = gammainc(s,u)
+        if upper==np.inf and lower<=0:
+            I = gamma(s)
+        elif upper==np.inf:
+            I = gammaincc(s,l)*gamma(s)
+        elif lower==0:
+            I = gammainc(s,u)*gamma(s)
         else:
-            I = gammainc(s,u) - gammainc(s,l)
+            I = (gammainc(s,u) - gammainc(s,l))*gamma(s)
 
         return -self.phistar*I
     
@@ -2048,28 +2049,35 @@ class SchechterLumModel(FunctionModel1DAuto):
         
         a = self.alpha
         x = L/self.Lstar
-        return (self.phistar/self.Lstar)*(a*x**(a-1)-x**a)*np.exp(-x)
+        return self.phistar*self.Lstar**-2*(a-x)*np.exp(-x)*x**(a-1)
     
-    def integrate(self,lower,upper,*args,**kwargs):
+    def integrate(self,lower,upper,method=None,**kwargs):
         """
-        Analytically Compute Schechter integral using incomplete gamma functions
+        Analytically Compute Schechter integral using incomplete gamma
+        functions. If `method` is not None, numerical integration will be used.
+        The gamma functions break down for alpha<=-1, so numerical is used if
+        that is the case.
         """
+        if self.alpha<=-1:
+            method = True #use default numerical method, because gamma functions fail for alpha<=-1
         if method is not None:
             return FunctionModel1D.integrate(self,lower,upper,method,**kwargs)
         
         
-        from scipy.special import gammainc,gammaincc
+        from scipy.special import gamma,gammainc,gammaincc
             
         s = self.alpha+1
         u = upper/self.Lstar
         l = lower/self.Lstar
         
-        if upper == np.inf:
-            I = gammaincc(s,l)
-        elif lower == 0:
-            I = gammainc(s,u)
+        if upper==np.inf and lower<=0:
+            I = gamma(s)
+        elif upper==np.inf:
+            I = gammaincc(s,l)*gamma(s)
+        elif lower==0:
+            I = gammainc(s,u)*gamma(s)
         else:
-            I = gammainc(s,u) - gammainc(s,l)
+            I = (gammainc(s,u) - gammainc(s,l))*gamma(s)
 
         return self.phistar*I
     
