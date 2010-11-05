@@ -908,20 +908,19 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
 
 
 def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
-                    logx=False,logy=False,**kwargs):
+                    logx=False,logy=False,doplot=True,**kwargs):
     """
     Plots a 1d sequence of data points as a cumulative count less than (or 
     greater than) a given value - i.e. the integrated histogram. 
     
     :param data: input data for plot
     :type data: array-like
-    :param Nlt: If True, produces N(<x) plot, otherwise N(>x).
-    :type Nlt: boolean
+    :param bool Nlt: If True, produces N(<x) plot, otherwise N(>x).
     :param frac: 
         If False, the raw N will be plotted. If True, the cumulative fraction
         will be plotted(e.g. it will always terminate at 1), or if a scalar, the
         fraction will be multiplied by that value.
-    :type frac: boolean or scalar
+    :type frac: bool or scalar
     :param xlabel: Label for the data value.
     :type xlabel: string
     :param edges: 
@@ -929,10 +928,12 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         lowest and highest of `data` will be used.  If data is below or above 
         these edges, it will be ignored.
     :type edges: tuple of scalars or Nones
-    :param logx: Logarithmic x-axis?
-    :type logx: boolean
-    :param logy: Logarithmic y-axis?
-    :type logy: boolean
+    :param bool logx: Logarithmic x-axis?
+    :param bool logy: Logarithmic y-axis?
+    :param bool doplot: 
+        If True, the plotting function is called. Otherwise no plot is made, but
+        the x and y values are still generated and returned (allowing for more
+        customized plots).
     
     kwargs are passed into :func:`matplotlib.pyplot.plot`
     
@@ -983,16 +984,17 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     else:
         pltfunc = plt.plot
     
-    with mpl_context() as plt:
-        pltfunc(x,y,**kwargs)
-        plt.xlabel(xlabel)
-        ltgt = '<' if Nlt else '>'
-        if '$' in xlabel:
-            plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
-        else:
-            plt.ylabel('N(%s%s)'%(ltgt,xlabel))
+    if doplot:
+        with mpl_context() as plt:
+            pltfunc(x,y,**kwargs)
+            plt.xlabel(xlabel)
+            ltgt = '<' if Nlt else '>'
+            if '$' in xlabel:
+                plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
+            else:
+                plt.ylabel('N(%s%s)'%(ltgt,xlabel))
             
-        return x,y
+    return x,y
         
         
 def split_histograms(vals,edgevals,edges,bins=None,clf=True,colors=None,
