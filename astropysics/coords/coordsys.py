@@ -2765,10 +2765,10 @@ class SupergalacticCoordinates(LatLongCoordinates):
     _longlatnames_ = ('sgl','sgb')
     _longrange_ = (0,360)
     
-    _nsgp_gal = FK4Coordinates(6.32,47.37,epoch=1950)
-    _sglong0_gal = 137.37
+    _nsgp_gal = GalacticCoordinates(47.47,6.32) #47.37?
+    _sglong0_gal = AngularCoordinate(137.37)
     _nsgp_J2000 = FK5Coordinates(283.75420420,15.70894043,epoch=2000)
-    _sglong0_J2000 = 42.30997710
+    _sglong0_J2000 = AngularCoordinate(42.30997710)
     
     @CoordinateSystem.registerTransform('self',GalacticCoordinates,transtype='smatrix')
     def _toGal(sgalcoords):
@@ -2778,9 +2778,13 @@ class SupergalacticCoordinates(LatLongCoordinates):
     def _fromGal(galcoords):
         from warnings import warn
         warn("supergalactic coordinates conversion has some probelm - don't trust it at the moment")
-        latang = SupergalacticCoordinates._nsgp_gal.lat.d
-        longang = SupergalacticCoordinates._nsgp_gal.long.d
-        return rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
+        return rotation_matrix(180 - SupergalacticCoordinates._sglong0_gal.d,'z') *\
+               rotation_matrix(90 - SupergalacticCoordinates._nsgp_gal.l.d,'y') *\
+               rotation_matrix(SupergalacticCoordinates._nsgp_gal.b.d,'z')
+        
+#        latang = SupergalacticCoordinates._nsgp_gal.lat.d
+#        longang = SupergalacticCoordinates._nsgp_gal.long.d
+#        return rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
     
 class HorizontalCoordinates(LatLongCoordinates):
     """
