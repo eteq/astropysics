@@ -33,10 +33,103 @@ Module API
 ----------
 
 """
-
-
-
 from __future__ import division,with_statement
+
+#recommended packages and associated import names
+_recpkgs = {'matplotlib':'matplotlib',
+            'pyfits':'pyfits',
+            'ipython':'IPython',
+            'networkx':'networkx',
+            'pygraphviz':'pygraphviz'}
+_guipkgs = {'traits':'enthought.traits',
+            'traitsGUI':'enthought.traits.ui.api',
+            'chaco':'enthought.chaco',
+            'mayavi':'enthought.mayavi'}
+
+def _check_if_installed(pkgs):
+    importable = {}
+    for name,mod in pkgs.iteritems():
+        try:
+            __import__(mod)
+            importable[name] = True
+        except ImportError:
+            importable[name] = False
+    return importable
+
+def install_package(pkgname):
+    """
+    Attempt to install the package with the provided name.  
+    
+    :param str pkgname: 
+        The name of the package to install. May include version requirement
+        (e.g. 'numpy>1.0').
+    
+    :returns: True if installation was sucessful, False if not
+    
+    """
+    raise NotImplementedError
+
+def run_install_tool():
+    """
+    Starts the console-based interactive installation tool.
+    """
+    try:
+        import numpy #should be impossible to even install, but better to check
+    except ImportError:
+        print 'Numpy not installed - get it (http://numpy.scipy.org/) before continuing.'
+    try:
+        import scipy
+    except ImportError:
+        print 'Scipy not installed - get it (http://www.scipy.org/) before continuing.'
+    
+    quit = False
+    while not quit:
+        recs = _check_if_installed(_recpkgs)
+        guis = _check_if_installed(_guipkgs)
+        pkgs = recs.keys()
+        insts = recs.values()
+        pkgs.extend(guis.keys())
+        insts.extend(guis.values())
+        
+        print 'Recommended packages:'
+        for n,i in recs.iteritems():
+            print '%i-%s: %s'%(pkgs.index(n)+1,n,'Installed' if i else 'NOT installed')
+        print '\nGUI packages:'
+        for n,i in guis.iteritems():
+            print '%i-%s: %s'%(pkgs.index(n)+1,n,'Installed' if i else 'NOT installed')
+            
+        if all(insts):
+            print '\nAll packages Installed - nothing left to do.\n'
+            quit = True
+        else:
+            inpt = None
+            while inpt is None:
+                inpt = raw_input("\nSelect individual package to install (#), all ('a'), or quit('q'):")
+                if inpt.strip()=='q':
+                    print ''
+                    quit = True
+                elif inpt.strip()=='a':
+                    for n in pkgs:
+                        _do_install(n)
+                else:
+                    try:
+                        inpt = int(inpt)-1
+                    except ValueError:
+                        print 'Invalid entry.'
+                        inpt=None
+                    _do_install(pkgs[inpt])
+    
+def run_ipython_setup():
+    """
+    Starts the console-based ipython setup tool.
+    """
+    try:
+        import IPython
+    except ImportError:
+        print 'IPython not installed - install it before running ipython setup.'
+        return
+    
+    raise NotImplementedError
 
 def get_config_dir(create=True):
     """

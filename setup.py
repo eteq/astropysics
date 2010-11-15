@@ -63,11 +63,7 @@ if apy_build_sphinx is not None:
  
 
 apyspkgs = find_packages()
-#extra/recommended packages
-_extras = ['matplotlib','pyfits','ipython','networkx','pygraphviz']
-_guiextras = ['traits','traitsGUI','chaco']
-_gui3dextras = ['mayavi']
-
+from astropysics.config import _recpkgs,_guipkgs
 scripts = glob('scripts/*')
 
 setup(name='Astropysics',
@@ -78,12 +74,10 @@ setup(name='Astropysics',
       package_data={'astropysics':['data/*']},
       scripts=scripts,
       requires=['numpy','scipy'],
-      install_requires=['numpy','scipy'],
+      install_requires=['numpy'],
       provides=['astropysics'],
-      extras_require={'all':_extras+_guiextras+_gui3dextras,
-                      'allnogui':_extras,
-                      'allno3d':_extras+_guiextras},
-      
+      extras_require={'all':_recpkgs.keys()+_guipkgs.keys(),
+                      'allnogui':_recpkgs.keys()},  
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
       license = 'Apache License 2.0',
