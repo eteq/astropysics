@@ -24,7 +24,30 @@ theirs and the builtin coordinate systems. This is implemented through the
 transformation registry static methods of the :class:`CoordinateSystem` class
 (e.g. :meth:`CoordinateSystem.registerTransform`).
 
-.. todo:: examples
+Examples
+^^^^^^^^
+A common task might be to convert coordinates from one standard coordinate
+system to another. The coords module makes this simple::
+
+    >>> from astropysics.coords import ICRSCoordinates,GalacticCoordinates
+    >>> gcoords = ICRSCoordinates('2h34m12.32s',12.3).convert(GalacticCoordinates)
+    >>> print gcoords
+    GalacticCoordinates: l=158.558650,b=-43.350066
+    >>> print '%.3f'%gcoords.l.degrees
+    158.559
+    >>> print '%.3f'%gcoords.l.radians
+    2.767
+    >>> print gcoords.b.getDmsStr(canonical=True)
+    -43:21:00.24
+    
+Note the initial input composed of an hours,minutes,seconds string input for the
+RA, and a float for the dec -- :class:`EquatorialCoordinate` objects contain a
+powerful parsing system that accepts most standard astronomical representations.
+The resulting :class:`GalacticCoordinates` object's coordinates can then be
+accessed in any of the various ways supported by the :class:`AngularCoordinate`
+object.
+
+
 
 {transformdiagram}
 Classes and Inheritance Structure
@@ -2790,19 +2813,37 @@ class HorizontalCoordinates(LatLongCoordinates):
     
 #Now that all the coordinate systems have been made, add the diagram to the docs
 #That shows the graph of the built-in transforms
+
+postbuiltin = """
+A similar diagram can be generated after the user has created and registered
+custom coordinates and transforms::
+    
+    from networkx import to_agraph,relabel_nodes,draw_networkx
+    from astropysics.coords import CoordinateSystem
+    graph = CoordinateSystem.getTransformGraph()
+    dotgraph = to_agraph(relabel_nodes(graph,lambda n:n.__name__))
+    dotgraph.write('mygraph.dot')
+    draw_networkx(graph)
+    
+This will save a graphviz dot file and displaying the graph with matplotlib,
+showing both builtin and custom-added coordinates and transforms.
+    
+"""
+
 try:
     from networkx import to_agraph,relabel_nodes
     graph = to_agraph(relabel_nodes(CoordinateSystem.getTransformGraph(),lambda n:n.__name__))
     transstr="""
-Builtin Coordinate System Transforms
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Built-in Transforms
+^^^^^^^^^^^^^^^^^^^
 
-A number of coordinate systems are provided, some of which have pre-defined
-transformations. The defined transformation are shown in the diagram below.
+A number of coordinate systems are provided built into astropysics. Most of
+these have pre-defined standard transformations. The built-in coordinate classes
+with defined transformation are shown in the diagram below.
 
 .. graphviz::
 
-    """+graph.string().replace('\n','\n    ')
+    """+graph.string().replace('\n','\n    ')+postbuiltin
     __doc__ = __doc__.replace('{transformdiagram}',transstr)
     del to_agraph,relabel_nodes,graph
 except ImportError:
@@ -2818,7 +2859,7 @@ Builtin Coordinate System Transforms
     <http://networkx.lanl.gov/pygraphviz/>` available to build the diagram.
     Please re-build this file after those packages are installed to see the
     diagram.
-    """
+    """+postbuiltin
     __doc__ = __doc__.replace('{transformdiagram}',warningstr)
     del warningstr
     
