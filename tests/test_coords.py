@@ -41,13 +41,14 @@ def test_gal():
 
     for l in s.split('\n'):
         ls = l.strip().split(',')
-        fk5s.append(FK5Coordinates(ls[0],ls[1]))
+        fk5s.append(FK5Coordinates(ls[0],ls[1],epoch=2000))
         gals.append(GalacticCoordinates(ls[2],ls[3]))
         fk2gals.append(fk5s[-1].convert(GalacticCoordinates))
         sgals.append(SupergalacticCoordinates(ls[4],ls[5]))
         gal2sgals.append(gals[-1].convert(SupergalacticCoordinates))
         fk2sgals.append(fk5s[-1].convert(SupergalacticCoordinates))
-        
+    
+    print 'gal2sgals-sgals','fk2gals-gals','fk2sgals-sgals'    
     for i in range(len(fk5s)):
         print (gal2sgals[i]-sgals[i]).arcsec,(fk2gals[i]-gals[i]).arcsec, (fk2sgals[i]-sgals[i]).arcsec
         assert (gal2sgals[i]-sgals[i]).arcsec < 1,'Gal->SGal not within 1 arcsec'

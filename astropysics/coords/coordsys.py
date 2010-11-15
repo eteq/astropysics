@@ -1547,10 +1547,15 @@ class LatLongCoordinates(CoordinateSystem):
                         #note that cls here is the *previous* conversion's end 
                         #class/current conversion's start class...
                         if cfunc.transtype=='smatrix':
+                            mt = cfunc.basetrans(self)
+                            
+                            if hasattr(mt,'nocache') and mt.nocache:
+                                cache = None
+                            
                             if combinedmatrix is None:
-                                combinedmatrix = cfunc.basetrans(self)
+                                combinedmatrix = mt
                             else:
-                                combinedmatrix = cfunc.basetrans(self) * combinedmatrix
+                                combinedmatrix = mt * combinedmatrix
                         else:
                             if combinedmatrix is None:
                                 convs.append(cfunc)
@@ -1561,8 +1566,9 @@ class LatLongCoordinates(CoordinateSystem):
                     if combinedmatrix is not None:
                         convs.append(_OptimizerSmatrixer(combinedmatrix,convclasses[-1]))
                 
-                #now cache this transform for future use
-                cache[self.__class__][tosys] = convs
+                #now cache this transform for future use unless it was banned above
+                if cache is not None:
+                    cache[self.__class__][tosys] = convs
                 
             else:
                 convs = cache[self.__class__][tosys]
@@ -2708,9 +2714,12 @@ class GalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
-        return rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
-               rotation_matrix(90 - GalacticCoordinates._ngp_J2000.dec.d,'y') *\
-               rotation_matrix(GalacticCoordinates._ngp_J2000.ra.d,'z')
+        mat = rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
+              rotation_matrix(90 - GalacticCoordinates._ngp_J2000.dec.d,'y') *\
+              rotation_matrix(GalacticCoordinates._ngp_J2000.ra.d,'z') *\
+              FK5Coordinates._precessionMatrixJ(fk5coords.epoch,2000)
+        mat.nocache = True #can't cache because of the need to get the epoch
+        return mat
     
     @CoordinateSystem.registerTransform('self',FK5Coordinates,transtype='smatrix')
     def _toFK5(galcoords):
@@ -2718,9 +2727,12 @@ class GalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(FK4Coordinates,'self',transtype='smatrix')
     def _fromFK4(fk4coords):
-        return rotation_matrix(180 - GalacticCoordinates._long0_B1950.d,'z') *\
-               rotation_matrix(90 - GalacticCoordinates._ngp_B1950.dec.d,'y') *\
-               rotation_matrix(GalacticCoordinates._ngp_B1950.ra.d,'z')
+        mat = rotation_matrix(180 - GalacticCoordinates._long0_B1950.d,'z') *\
+              rotation_matrix(90 - GalacticCoordinates._ngp_B1950.dec.d,'y') *\
+              rotation_matrix(GalacticCoordinates._ngp_B1950.ra.d,'z') *\
+              FK4Coordinates._precessionMatrixB(fk4coords.epoch,1950)
+        mat.nocache = True #can't cache because of the need to get the epoch
+        return mat
     
     @CoordinateSystem.registerTransform('self',FK4Coordinates,transtype='smatrix')
     def _toFK4(galcoords):
