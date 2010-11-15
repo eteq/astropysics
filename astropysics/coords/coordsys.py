@@ -1430,7 +1430,7 @@ class LatLongCoordinates(CoordinateSystem):
                 #strf = 'cannot generate matrix to transform from {0} to {1}'
                 #raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
                 strf = 'cannot generate matrix to transform from %s to %s'
-                raise NotImplementedError(strf%self.__class__.__name__,tosys)
+                raise NotImplementedError(strf%(self.__class__.__name__,tosys))
         
     def matrixRotate(self,matrix,apply=True,fixrange=True,unitarycheck=False):
         """
@@ -2765,10 +2765,8 @@ class SupergalacticCoordinates(LatLongCoordinates):
     _longlatnames_ = ('sgl','sgb')
     _longrange_ = (0,360)
     
-    _nsgp_gal = GalacticCoordinates(47.47,6.32) #47.37?
-    _sglong0_gal = AngularCoordinate(137.37)
-    _nsgp_J2000 = FK5Coordinates(283.75420420,15.70894043,epoch=2000)
-    _sglong0_J2000 = AngularCoordinate(42.30997710)
+    _nsgp_gal = GalacticCoordinates(47.37,6.32) #glactc is 47.47=WRONG
+    _sg0_gal = GalacticCoordinates(137.37,0)
     
     @CoordinateSystem.registerTransform('self',GalacticCoordinates,transtype='smatrix')
     def _toGal(sgalcoords):
@@ -2776,15 +2774,11 @@ class SupergalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(GalacticCoordinates,'self',transtype='smatrix')
     def _fromGal(galcoords):
-        from warnings import warn
-        warn("supergalactic coordinates conversion has some probelm - don't trust it at the moment")
-        return rotation_matrix(180 - SupergalacticCoordinates._sglong0_gal.d,'z') *\
-               rotation_matrix(90 - SupergalacticCoordinates._nsgp_gal.l.d,'y') *\
-               rotation_matrix(SupergalacticCoordinates._nsgp_gal.b.d,'z')
-        
-#        latang = SupergalacticCoordinates._nsgp_gal.lat.d
-#        longang = SupergalacticCoordinates._nsgp_gal.long.d
-#        return rotation_matrix(90-latang,'x')*rotation_matrix(90+longang,'z')
+        z1r = rotation_matrix(SupergalacticCoordinates._nsgp_gal.l.d,'z')
+        yr = rotation_matrix(90 - SupergalacticCoordinates._nsgp_gal.b.d,'y')
+        z2r = rotation_matrix(180 - SupergalacticCoordinates._sg0_gal.l.d +\
+                              SupergalacticCoordinates._nsgp_gal.l.d,'z')
+        return z2r*yr*z1r
     
 class HorizontalCoordinates(LatLongCoordinates):
     """
