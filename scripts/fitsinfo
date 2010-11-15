@@ -31,11 +31,10 @@ except ImportError:
 
 op = OptionParser()
 op.usage = '%prog [options] [filename(s)]'
-op.add_option('-e','--extension',dest='ext',help='Extension of fits file from which to read header',metavar='EXT',default=0)
+op.add_option('-e','--extension',dest='ext',help='Extension of fits file from which to read header.  If not specified, a summary will be shown.',metavar='EXT',default=None)
 op.add_option('-r','--record',dest='rec',help='Record names to lookup',metavar='REC')
 op.add_option('-c','--coords',dest='coords',help='Decimal coordinate lookup',action='store_true',default=False)
 op.add_option('-f','--flat',dest='flat',help='Flat listing for each entry',action='store_true',default=False)
-op.add_option('-s','--summary',dest='summary',help='Show file summary (ignores other options except record)',action='store_true',default=False)
 
 ops,args=op.parse_args()
 if len(args) < 1:
@@ -46,7 +45,7 @@ fns = []
 for a in args:
     fns.extend(glob(a))
     
-if ops.summary:
+if ops.ext is None:
     rec = ops.rec
     if rec is not None and ',' in rec:
         print "Can't show multiple records in summary mode"
