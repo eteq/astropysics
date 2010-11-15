@@ -1398,40 +1398,6 @@ class LatLongCoordinates(CoordinateSystem):
         newcoord.matrixRotate(m)
         return newcoord
         
-    def getConversionMatrix(self,tosys):
-        """
-        Generates and returns the rotation matrix to convert from this object's
-        coordinate system into the requested coordinate system class. Matrix
-        coordinate transforms are defined by use of the 'smatrix' transformation
-        type (see :class:`LatLongCoordinates` and
-        :meth:`CoordinateSystem.addTransType`).
-        
-        :param tosys: The target coordinate system
-        :type tosys: A subclass of :class:`LatLongCoordinates`
-        
-        :returns: 
-            A 3x3 rotation matrix or None if the conversion is not matrix-based
-        
-        :except NotImplementedError: 
-            If no conversion exists between these coordinates.
-            
-        """
-        if tosys is self.__class__:
-            return np.eye(3).view(np.matrix)
-        else:
-            try:
-                conv = CoordinateSystem._converters[self.__class__][tosys]
-                if conv.transtype != 'smatrix':
-                    return None
-                else:
-                    return conv.basetrans(self)
-            except (KeyError,TypeError),e:
-                #format requires 2.5
-                #strf = 'cannot generate matrix to transform from {0} to {1}'
-                #raise NotImplementedError(strf.format(self.__class__.__name__,tosys))
-                strf = 'cannot generate matrix to transform from %s to %s'
-                raise NotImplementedError(strf%(self.__class__.__name__,tosys))
-        
     def matrixRotate(self,matrix,apply=True,fixrange=True,unitarycheck=False):
         """
         Applies the supplied  unitary rotation matrix to these coordinates. 
@@ -1584,7 +1550,7 @@ class LatLongCoordinates(CoordinateSystem):
                             if combinedmatrix is None:
                                 combinedmatrix = cfunc.basetrans(self)
                             else:
-                                combinedmatrix *= cfunc.basetrans(self)
+                                combinedmatrix = cfunc.basetrans(self) * combinedmatrix
                         else:
                             if combinedmatrix is None:
                                 convs.append(cfunc)
