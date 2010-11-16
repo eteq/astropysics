@@ -45,6 +45,10 @@ _guipkgs = {'traits':'enthought.traits',
             'traitsGUI':'enthought.traits.ui.api',
             'chaco':'enthought.chaco',
             'mayavi':'enthought.mayavi'}
+            
+class VersionError(Exception): pass 
+class BuildError(Exception): pass
+class InstallError(Exception): pass 
 
 def _check_if_installed(pkgs):
     importable = {}
@@ -56,18 +60,122 @@ def _check_if_installed(pkgs):
             importable[name] = False
     return importable
 
-def install_package(pkgname):
+def install_package(pkgname,dldir=None):
     """
     Attempt to install the package with the provided name.  
     
     :param str pkgname: 
         The name of the package to install. May include version requirement
-        (e.g. 'numpy>1.0').
+        after name (e.g. 'numpy>1.0').
     
     :returns: True if installation was sucessful, False if not
     
     """
-    raise NotImplementedError
+    import os
+    
+    if dldir is None:
+        dldir = os.path.join(get_config_dir,'install_pkgs')
+        if not os.path.isdir(dldir):
+            if os.path.exists(dldir):
+                raise IOError(dldit+" is a file - can't make directory!")
+            os.mkdir(dldir)
+    
+    fn = _download_package(pkgname,dldir)
+    _do_install(fn,dldir)
+    
+def _download_package(pkgname,dldir):
+    import os,urllib,xmlrpclib
+    from pkg_resources import parse_version
+    
+    #parse out the version if it's in the package name     
+    reqvers = reqstr = None
+    for s in ('>=','<=','=','<','>'):
+        if s in pkgname:
+            pkgname = pkgname.split(s)
+            reqvers = pkgname[-1]
+            pkgname = pkgname[0]
+            reqstr = s
+                
+    client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
+    vers = client.package_releases(pkgname,True)
+    
+    #now identify the correct version
+    if reqvers is None:
+        ver = vers[0]
+    else:
+        preqvers = parse_version(reqvers)
+        if reqstr=='>=':
+            if parse_version(vers[0])<preqvers:
+                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+            ver = vers[0]
+        elif reqstr=='<=':
+            for v in vers:
+                if parse_version(v)<=preqvers:
+                    ver = v
+                    break
+            else:
+                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+        elif reqstr=='=':
+            for v in vers:
+                if parse_version(v)<=preqvers:
+                    ver = v
+                    break
+            else:
+                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+        elif reqstr=='>':
+            if parse_version(vers[0])<=preqvers:
+                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+            ver = vers[0]
+        elif reqstr=='<':
+            for v in vers:
+                if parse_version(v)<preqvers:
+                    ver = v
+                    break
+            else:
+                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+    
+    
+    for durl in client.release_urls(pkgname, ver):
+        if durl['packagetype']=='sdist':
+            url = durl['url']
+            fn = durl['filename']
+            break
+    else:
+        raise ValueError('Could not find a source distribution for %s %s'%(pkgname,ver))
+    
+    fn = os.path.join(dldir,fn)
+    print 'Downloading',url,'to',fn
+    urllib.urlretrieve(url,fn)
+    
+    return fn
+
+def _do_install(tgzfn,dldir):
+    import tarfile,subprocess
+    from contextlib import closing
+    
+    print 'Untarring',tgzfn,'to',dldir
+    with closing(tarfile.open(tgzfn)) as f:
+        m0 = f.getmembers()[0]
+        if not m0.isdir():
+            idir = os.path.join(dldir,tgzfn.replace('.tgz','').replace('.tar.gz'))
+            os.mkdir(idir)
+            f.extractall(idir)
+        else:
+            idir = os.path.join(dldir,m0.name)
+            f.extractall(dldir)
+            
+    print 'Building in',idir
+    pb = subprocess.Popen('python setup.py build',shell=True,cwd=idir)
+    bretcode = pb.wait()
+    if bretcode != 0:
+        raise BuildError('build of %s failed'%pkgname)
+    
+    print 'Installing in',idir
+    pi = subprocess.Popen('python setup.py install',shell=True,cwd=idir)
+    iretcode = pi.wait()
+    if iretcode != 0:
+        raise InstallError('install of %s failed'%pkgname)
+        
 
 def run_install_tool():
     """
