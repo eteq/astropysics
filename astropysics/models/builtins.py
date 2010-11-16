@@ -1764,7 +1764,7 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
             
         """
-        return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Mvir),z)
+        return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Vmax),z)
     
     @staticmethod
     def create_Mvir(Mvir,z=0):
