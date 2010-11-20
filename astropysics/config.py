@@ -60,13 +60,16 @@ def _check_if_installed(pkgs):
             importable[name] = False
     return importable
 
-def install_package(pkgname,dldir=None):
+def install_package(pkgname,dldir=None,overwrite=False):
     """
     Attempt to install the package with the provided name.  
     
     :param str pkgname: 
         The name of the package to install. May include version requirement
         after name (e.g. 'numpy>1.0').
+    :param bool overwrite: 
+        If True, downloaded package archives will be overwritten instead of
+        being re-used.
     
     :returns: True if installation was sucessful, False if not
     
@@ -74,16 +77,23 @@ def install_package(pkgname,dldir=None):
     import os
     
     if dldir is None:
-        dldir = os.path.join(get_config_dir,'install_pkgs')
+        dldir = os.path.join(get_config_dir(),'install_pkgs')
         if not os.path.isdir(dldir):
             if os.path.exists(dldir):
                 raise IOError(dldit+" is a file - can't make directory!")
             os.mkdir(dldir)
+            
+    try:
+        fn = _download_package(pkgname,dldir,overwrite)
+        _do_install(fn,dldir)
+    except IOError,e:
+        if 'CRC check failed' in e.args[0]:
+            print 'Problem with downloaded package fild',fn,'- re-downloading.'
+            install_package(pkgname,dldir,True)
+        else:
+            raise e
     
-    fn = _download_package(pkgname,dldir)
-    _do_install(fn,dldir)
-    
-def _download_package(pkgname,dldir):
+def _download_package(pkgname,dldir,overwrite=False):
     import os,urllib,xmlrpclib
     from pkg_resources import parse_version
     
@@ -144,13 +154,16 @@ def _download_package(pkgname,dldir):
         raise ValueError('Could not find a source distribution for %s %s'%(pkgname,ver))
     
     fn = os.path.join(dldir,fn)
-    print 'Downloading',url,'to',fn
-    urllib.urlretrieve(url,fn)
+    if not overwrite and os.path.exists(fn):
+        print fn,'already exists'
+    else:
+        print 'Downloading',url,'to',fn
+        urllib.urlretrieve(url,fn)
     
     return fn
 
 def _do_install(tgzfn,dldir):
-    import tarfile,subprocess
+    import tarfile,subprocess,os,sys,shutil
     from contextlib import closing
     
     print 'Untarring',tgzfn,'to',dldir
@@ -165,16 +178,20 @@ def _do_install(tgzfn,dldir):
             f.extractall(dldir)
             
     print 'Building in',idir
-    pb = subprocess.Popen('python setup.py build',shell=True,cwd=idir)
+    pb = subprocess.Popen(sys.executable+' setup.py build',shell=True,cwd=idir)
     bretcode = pb.wait()
     if bretcode != 0:
         raise BuildError('build of %s failed'%pkgname)
     
     print 'Installing in',idir
-    pi = subprocess.Popen('python setup.py install',shell=True,cwd=idir)
+    pi = subprocess.Popen(sys.executable+' setup.py install',shell=True,cwd=idir)
     iretcode = pi.wait()
-    if iretcode != 0:
+    if iretcode == 0:
+        print '\nInstall successful, deleting install directory.',idir,'\n'
+        shutil.rmtree(idir)
+    else:
         raise InstallError('install of %s failed'%pkgname)
+       
         
 
 def run_install_tool():
@@ -212,20 +229,22 @@ def run_install_tool():
         else:
             inpt = None
             while inpt is None:
-                inpt = raw_input("\nSelect individual package to install (#), all ('a'), or quit('q'):")
+                inpt = raw_input("\nSelect individual package to install (#),  'a' to install everything not yet installed, or 'q' to quit:")
                 if inpt.strip()=='q':
                     print ''
                     quit = True
                 elif inpt.strip()=='a':
-                    for n in pkgs:
-                        _do_install(n)
+                    for n,i in recs.iteritems():
+                        if not i:
+                            install_package(pkgs[inpt])
+                            
                 else:
                     try:
                         inpt = int(inpt)-1
                     except ValueError:
                         print 'Invalid entry.'
                         inpt=None
-                    _do_install(pkgs[inpt])
+                    install_package(pkgs[inpt])
     
 def run_ipython_setup():
     """
