@@ -241,6 +241,7 @@ def run_install_tool():
                                 install_package(n)
                             except Exception,e:
                                 print 'Installation of',n,'Failed:',e,'Skipping...'
+                    print '\n'
                 else:
                     try:
                         inpt = int(inpt)-1
@@ -250,7 +251,7 @@ def run_install_tool():
                     try:
                         install_package(pkgs[inpt])
                     except Exception,e:
-                        print 'Installation of',pkgs[inpt],'Failed:',e
+                        print 'Installation of',pkgs[inpt],'Failed:',e,'\n\n'
     
 def run_ipython_setup():
     """
