@@ -1645,10 +1645,11 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
             
         """
+        #Mvir = 10^12 Msun/h [Omega_0 Delta(z)/97.2] [Rvir(1+z)/203.4 kpc/h]^3
         from ..constants import get_cosmology
         c = get_cosmology()
         
-        return 1e12/c.h*(c.omega*c.deltavir(z)/97.2)*(Rvir*(1+z)/203.4/c.h)**3
+        return 1e12/c.h*(c.omega*c.deltavir(z)/97.2)*(Rvir*c.h*(1+z)/203.4)**3
     
     @staticmethod
     def Mvir_to_Rvir(Mvir,z=0):
@@ -1660,10 +1661,11 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
         
         """
+        #Rvir = 203.4 kpc/h [Omega_0 Delta(z)/97.2]^-1/3 [Mvir/10^12 h^-1 Msun]^1/3 (1+z)^-1 ~= 300 kpc [Mvir/10^12 h^-1 Msun]^1/3 (1+z)^-1
         from ..constants import get_cosmology
         c = get_cosmology()
         
-        return 203.4/c.h*(c.omega*c.deltavir(z)/97.2)**(-1/3)*(Mvir/1e12/c.h)**(1/3)/(1+z)
+        return 203.4/c.h*(c.omega*c.deltavir(z)/97.2)**(-1/3)*(Mvir*c.h/1e12)**(1/3)/(1+z)
     
     @staticmethod
     def Mvir_to_Vvir(Mvir,z=0):
@@ -1675,10 +1677,11 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
         
         """
+        #Vvir = 143.8 km/s [Omega_0 Delta(z)/97.2]^1/6 [Mvir/10^12 Msun/h]^1/3 (1+z)^1/2
         from ..constants import get_cosmology
         c = get_cosmology()
         
-        return 143.8*(c.omega*c.deltavir(z)/97.2)**(1/6)*(Mvir/1e12/c.h)**(1/3)*(1+z)**0.5
+        return 143.8*(c.omega*c.deltavir(z)/97.2)**(1/6)*(Mvir*c.h/1e12)**(1/3)*(1+z)**0.5
     
     @staticmethod
     def Vvir_to_Mvir(Vvir,z=0):
@@ -1693,7 +1696,7 @@ class NFWModel(FunctionModel1DAuto):
         from ..constants import get_cosmology
         c = get_cosmology()
         
-        return (c.omega*c.deltavir(z)/97.2)**-0.5*(1+z)**-1.5*c.h*1e12*(Vvir/143.8)**3
+        return ((c.omega*c.deltavir(z)/97.2)**-0.5*(1+z)**-1.5*1e12*(Vvir/143.8)**3)/c.h
     
     @staticmethod
     def Vvir_to_Vmax(Vvir):
@@ -1729,7 +1732,7 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
             
         """
-        cvir = 9.6*(Mvir/1e13)**-.13*(1+z)**-1
+        cvir = 9.6*(Mvir*(c.h/.72)/1e13)**-.13*(1+z)**-1
         return cvir if cvir>4 else 4.0
     
     @staticmethod
@@ -1742,7 +1745,7 @@ class NFWModel(FunctionModel1DAuto):
             These scalings are approximations.
             
         """
-        return 1e13*((Cvir/9.6)*(1+z))**(-1.0/.13)
+        return 1e13/(c.h/.72)*((Cvir/9.6)*(1+z))**(-1.0/.13)
     
     @staticmethod
     def Mvir_to_Vmax(Mvir,z=0):
@@ -1765,6 +1768,17 @@ class NFWModel(FunctionModel1DAuto):
             
         """
         return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Vmax),z)
+    
+    @staticmethod
+    def Vmax_to_Rvir(Vmax,z=0):
+        """
+        Convert vmax to virial radius using the scalings here.
+        
+        .. warning::
+            These scalings are approximations.
+            
+        """
+        return NFWModel.Mvir_to_Rvir(NFWModel.Vmax_to_Mvir(Vmax),z)
     
     @staticmethod
     def create_Mvir(Mvir,z=0):
