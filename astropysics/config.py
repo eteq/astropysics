@@ -49,6 +49,7 @@ _guipkgs = {'traits':'enthought.traits',
 class VersionError(Exception): pass 
 class BuildError(Exception): pass
 class InstallError(Exception): pass 
+class DownloadError(Exception): pass 
 
 def _check_if_installed(pkgs):
     importable = {}
@@ -88,10 +89,10 @@ def install_package(pkgname,dldir=None,overwrite=False):
         _do_install(fn,dldir)
     except IOError,e:
         if 'CRC check failed' in e.args[0]:
-            print 'Problem with downloaded package fild',fn,'- re-downloading.'
+            print 'Problem with downloaded package file',fn,'- re-downloading.'
             install_package(pkgname,dldir,True)
         else:
-            raise e
+            raise
     
 def _download_package(pkgname,dldir,overwrite=False):
     import os,urllib,xmlrpclib
@@ -151,7 +152,7 @@ def _download_package(pkgname,dldir,overwrite=False):
             fn = durl['filename']
             break
     else:
-        raise ValueError('Could not find a source distribution for %s %s'%(pkgname,ver))
+        raise DownloadError('Could not find a source distribution for %s %s'%(pkgname,ver))
     
     fn = os.path.join(dldir,fn)
     if not overwrite and os.path.exists(fn):
@@ -236,15 +237,20 @@ def run_install_tool():
                 elif inpt.strip()=='a':
                     for n,i in recs.iteritems():
                         if not i:
-                            install_package(pkgs[inpt])
-                            
+                            try:
+                                install_package(n)
+                            except Exception,e:
+                                print 'Installation of',n,'Failed:',e,'Skipping...'
                 else:
                     try:
                         inpt = int(inpt)-1
                     except ValueError:
                         print 'Invalid entry.'
                         inpt=None
-                    install_package(pkgs[inpt])
+                    try:
+                        install_package(pkgs[inpt])
+                    except Exception,e:
+                        print 'Installation of',pkgs[inpt],'Failed:',e
     
 def run_ipython_setup():
     """
