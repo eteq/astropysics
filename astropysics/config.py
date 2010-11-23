@@ -18,11 +18,11 @@
 config -- configuration and setup 
 =================================
 
-The :mod:`config` module contains functions and prompts to manage and access the
-persistent astropysics configuration, as well as setup and installation actions.
-It also includes utilities to set up the suggested ipython environment.
+The :mod:`config` module contains functions to manage and access the persistent
+astropysics configuration. It also includes utilities to install recommended
+packages and set up the ipython environment.
 
-.. add this back in if any classes are added
+.. add this back in if any class structure is added
     Classes and Inheritance Structure
     ---------------------------------
 
@@ -32,173 +32,237 @@ It also includes utilities to set up the suggested ipython environment.
 Module API
 ----------
 
+
 """
 from __future__ import division,with_statement
 
-#recommended packages and associated import names
-_recpkgs = {'matplotlib':'matplotlib',
-            'pyfits':'pyfits',
-            'ipython':'IPython',
-            'networkx':'networkx',
-            'pygraphviz':'pygraphviz'}
-_guipkgs = {'traits':'enthought.traits',
-            'traitsGUI':'enthought.traits.ui.api',
-            'chaco':'enthought.chaco',
-            'mayavi':'enthought.mayavi'}
-            
-class VersionError(Exception): pass 
-class BuildError(Exception): pass
+class VersionError(Exception): pass
 class InstallError(Exception): pass 
 class DownloadError(Exception): pass 
 
-def _check_if_installed(pkgs):
-    importable = {}
-    for name,mod in pkgs.iteritems():
-        try:
-            __import__(mod)
-            importable[name] = True
-        except ImportError:
-            importable[name] = False
-    return importable
-
-def install_package(pkgname,dldir=None,overwrite=False):
+#packages avaiable for install and the associated objects
+class PackageInstaller(object):
     """
-    Attempt to install the package with the provided name.  
-    
-    :param str pkgname: 
-        The name of the package to install. May include version requirement
-        after name (e.g. 'numpy>1.0').
-    :param bool overwrite: 
-        If True, downloaded package archives will be overwritten instead of
-        being re-used.
-    
-    :returns: True if installation was sucessful, False if not
-    
+    Represents a package to be downloaded and installed.
     """
-    import os
-    
-    if dldir is None:
-        dldir = os.path.join(get_config_dir(),'install_pkgs')
-        if not os.path.isdir(dldir):
-            if os.path.exists(dldir):
-                raise IOError(dldit+" is a file - can't make directory!")
-            os.mkdir(dldir)
-            
-    try:
-        fn = _download_package(pkgname,dldir,overwrite)
-        _do_install(fn,dldir)
-    except IOError,e:
-        if 'CRC check failed' in e.args[0]:
-            print 'Problem with downloaded package file',fn,'- re-downloading.'
-            install_package(pkgname,dldir,True)
-        else:
-            raise
-    
-def _download_package(pkgname,dldir,overwrite=False):
-    import os,urllib,xmlrpclib
-    from pkg_resources import parse_version
-    
-    #parse out the version if it's in the package name     
-    reqvers = reqstr = None
-    for s in ('>=','<=','=','<','>'):
-        if s in pkgname:
-            pkgname = pkgname.split(s)
-            reqvers = pkgname[-1]
-            pkgname = pkgname[0]
-            reqstr = s
-                
-    client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
-    vers = client.package_releases(pkgname,True)
-    
-    #now identify the correct version
-    if reqvers is None:
-        ver = vers[0]
-    else:
-        preqvers = parse_version(reqvers)
-        if reqstr=='>=':
-            if parse_version(vers[0])<preqvers:
-                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
-            ver = vers[0]
-        elif reqstr=='<=':
-            for v in vers:
-                if parse_version(v)<=preqvers:
-                    ver = v
-                    break
-            else:
-                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
-        elif reqstr=='=':
-            for v in vers:
-                if parse_version(v)<=preqvers:
-                    ver = v
-                    break
-            else:
-                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
-        elif reqstr=='>':
-            if parse_version(vers[0])<=preqvers:
-                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
-            ver = vers[0]
-        elif reqstr=='<':
-            for v in vers:
-                if parse_version(v)<preqvers:
-                    ver = v
-                    break
-            else:
-                raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
-    
-    
-    for durl in client.release_urls(pkgname, ver):
-        if durl['packagetype']=='sdist':
-            url = durl['url']
-            fn = durl['filename']
-            break
-    else:
-        raise DownloadError('Could not find a source distribution for %s %s'%(pkgname,ver))
-    
-    fn = os.path.join(dldir,fn)
-    if not overwrite and os.path.exists(fn):
-        print fn,'already exists'
-    else:
-        print 'Downloading',url,'to',fn
-        urllib.urlretrieve(url,fn)
-    
-    return fn
-
-def _do_install(tgzfn,dldir):
-    import tarfile,subprocess,os,sys,shutil
-    from contextlib import closing
-    
-    print 'Untarring',tgzfn,'to',dldir
-    with closing(tarfile.open(tgzfn)) as f:
-        m0 = f.getmembers()[0]
-        if not m0.isdir():
-            idir = os.path.join(dldir,tgzfn.replace('.tgz','').replace('.tar.gz'))
-            os.mkdir(idir)
-            f.extractall(idir)
-        else:
-            idir = os.path.join(dldir,m0.name)
-            f.extractall(dldir)
-            
-    print 'Building in',idir
-    pb = subprocess.Popen(sys.executable+' setup.py build',shell=True,cwd=idir)
-    bretcode = pb.wait()
-    if bretcode != 0:
-        raise BuildError('build of %s failed'%pkgname)
-    
-    print 'Installing in',idir
-    pi = subprocess.Popen(sys.executable+' setup.py install',shell=True,cwd=idir)
-    iretcode = pi.wait()
-    if iretcode == 0:
-        print '\nInstall successful, deleting install directory.',idir,'\n'
-        shutil.rmtree(idir)
-    else:
-        raise InstallError('install of %s failed'%pkgname)
-       
+    def __init__(self,name,importmod=None):
+        """
+        :param name: The name of the package.
+        :param importmod: 
+            The module name to import to test if the pacakge is installed. If
+            None, will be assumed to match `name`
         
+        """
+        self.name = name
+        if importmod is None:
+            self.importmod = name
+        else:
+            self.importmod = importmod
+        
+    def getUrl(self):
+        """
+        Override this to get a URL from somewhere other than PyPI.
+        
+        :returns: 
+            (url,fn) where `url` is the URL to the source distribution, and `fn`
+            is the filename to use locally if None, the end of the URL will be
+            used)
+            
+        """
+        return self._getUrlfromPyPI()
+    
+    def _getUrlfromPyPI(self):
+        import os,xmlrpclib
+        from pkg_resources import parse_version
+        
+        #TODO: version string in object
+        #parse out the version if it's in the package name     
+        reqvers = reqstr = None
+        for s in ('>=','<=','=','<','>'):
+            if s in pkgname:
+                pkgname = pkgname.split(s)
+                reqvers = pkgname[-1]
+                pkgname = pkgname[0]
+                reqstr = s
+                   
+        client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
+        vers = client.package_releases(pkgname,True)
+        
+        #now identify the correct version
+        if reqvers is None:
+            ver = vers[0]
+        else:
+            preqvers = parse_version(reqvers)
+            if reqstr=='>=':
+                if parse_version(vers[0])<preqvers:
+                    raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+                ver = vers[0]
+            elif reqstr=='<=':
+                for v in vers:
+                    if parse_version(v)<=preqvers:
+                        ver = v
+                        break
+                else:
+                    raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+            elif reqstr=='=':
+                for v in vers:
+                    if parse_version(v)<=preqvers:
+                        ver = v
+                        break
+                else:
+                    raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+            elif reqstr=='>':
+                if parse_version(vers[0])<=preqvers:
+                    raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+                ver = vers[0]
+            elif reqstr=='<':
+                for v in vers:
+                    if parse_version(v)<preqvers:
+                        ver = v
+                        break
+                else:
+                    raise VersionError('cannot get requested version %s of package %s'%(reqvers,pkgname))
+        
+        
+        for durl in client.release_urls(pkgname, ver):
+            if durl['packagetype']=='sdist':
+                url = durl['url']
+                fn = durl['filename']
+                break
+        else:
+            raise DownloadError('Could not find a source distribution for %s %s'%(pkgname,ver))
+        
+        return url,fn
+    
+    def isInstalled(self):
+        """
+        Test if the package is installed.
+        
+        :returns: True if the module is installed, otherwise False.
+        """
+        try:
+            __import__(self.importmod)
+            return True
+        except ImportError:
+            return False
+        
+    def download(self,dldir=None,overwrite=False):
+        """
+        Attempt to install the package with the provided name.  
+        
+        :param str dldir: 
+            The directory to download to.  If None, the standard configuration
+            directory will be used.
+        :param bool overwrite: 
+            If True, downloaded package archives will be overwritten instead of
+            being re-used.
+            
+        :returns: The full path to the downloaded file.
+        
+        :raises DownloadError: If the pacakge could not be located
+        """        
+        import os,urlparse,urllib
+        
+        pkgname = self.name
+        if dldir is None:
+            dldir = os.path.join(get_config_dir(),'install_pkgs')
+            if not os.path.isdir(dldir):
+                os.mkdir(dldir)
+        
+        url,fn = self.getUrl()
+        if fn is None:
+            fn = os.path.split(urlparse.urlparse(url).path)[-1]
+        
+        dlfn = os.path.join(dldir,fn)
+        if not overwrite and os.path.exists(dlfn):
+            print dlfn,'already exists - not overwriting.'
+        else:
+            print 'Downloading',url,'to',dlfn
+            urllib.urlretrieve(url,dlfn)
+        
+        return dlfn
+        
+        
+        
+    def install(self,dldir=None,overwrite=False):
+        
+        """
+        Download the package, if necessary, and install it.
+        
+        param str dldir: 
+            The directory to download to.  If None, the standard configuration
+            directory will be used.
+        :param bool overwrite: 
+            If True, downloaded package archives will be overwritten instead of
+            being re-used.
+        
+        :raises InstallError: If the install fails
+        """
+        import tarfile,subprocess,os,sys,shutil
+        from contextlib import closing
+                
+        fn = self.download(dldir,overwrite)
+        dldir,tgzfn = os.path.split(fn)[0]
+        
+        try:
+            print 'Untarring',tgzfn,'to',dldir
+            with closing(tarfile.open(tgzfn)) as f:
+                m0 = f.getmembers()[0]
+                if not m0.isdir():
+                    idir = os.path.join(dldir,tgzfn.replace('.tgz','').replace('.tar.gz'))
+                    os.mkdir(idir)
+                    f.extractall(idir)
+                else:
+                    idir = os.path.join(dldir,m0.name)
+                    f.extractall(dldir)
+                    
+            print 'Building in',idir
+            pb = subprocess.Popen(sys.executable+' setup.py build',shell=True,cwd=idir)
+            bretcode = pb.wait()
+            if bretcode != 0:
+                raise BuildError('build of %s failed'%pkgname)
+            
+            print 'Installing in',idir
+            pi = subprocess.Popen(sys.executable+' setup.py install',shell=True,cwd=idir)
+            iretcode = pi.wait()
+            if iretcode == 0:
+                print '\nInstall successful, deleting install directory.',idir,'\n'
+                shutil.rmtree(idir)
+            else:
+                raise InstallError('install of %s failed'%pkgname)
+        except IOError,e:
+            if 'CRC check failed' in e.args[0]:
+                print 'Problem with downloaded package file',fn,'- re-downloading.'
+                install_package(pkgname,dldir,True)
+            else:
+                raise
+            
+class _MatplotlibInstaller(PackageInstaller):
+    def __init__(self):
+        PackageInstaller.__init__(self,'matplotlib')
+        
+class _PyfitsInstaller(PackageInstaller):
+    def __init__(self):
+        PackageInstaller.__init__(self,'pyfits')
+    
 
+_recpkgs = [PackageInstaller('ipython','IPython'),
+            _MatplotlibInstaller(),
+            _PyfitsInstaller(),
+            PackageInstaller('networkx'),
+            PackageInstaller('pygraphviz')]
+_guipkgs = [PackageInstaller('traits','enthought.traits'),
+            PackageInstaller('traitsUI','enthought.traits.ui.api'),
+            PackageInstaller('chaco','enthought.chaco'),
+            PackageInstaller('mayavi','enthought.mayavi')]
+            
+            
 def run_install_tool():
     """
     Starts the console-based interactive installation tool.
     """
+    #TODO: remork guts for PackageInstaller class
+    
     try:
         import numpy #should be impossible to even install, but better to check
     except ImportError:
