@@ -908,7 +908,7 @@ def scatter_density(x,y,bins=20,threshold=None,ncontours=None,contf=False,cb=Fal
 
 
 def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
-                    logx=False,logy=False,doplot=True,**kwargs):
+                    logx=False,logy=False,doplot=True,perr=False,**kwargs):
     """
     Plots a 1d sequence of data points as a cumulative count less than (or 
     greater than) a given value - i.e. the integrated histogram. 
@@ -934,6 +934,9 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         If True, the plotting function is called. Otherwise no plot is made, but
         the x and y values are still generated and returned (allowing for more
         customized plots).
+    :param perr: 
+        If True, shaded error regions are added assuming poisson errors.  Can be
+        a dict giving kwargs for :func:`matplotlib.pyplot.fill_between`.
     
     kwargs are passed into :func:`matplotlib.pyplot.plot`
     
@@ -941,6 +944,7 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     
     """
     from matplotlib import pyplot as plt
+    from operator import isMappingType
     
     #both ls and linestyle can be used to set the style, so we don't 
     #differentiate unless both are missing
@@ -973,7 +977,9 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
         y = np.append(y,y[-1]+1)# if Nlt else 0)
         
     if frac:
-        y = y*float(frac)/y[-1]
+        frac = float(frac) #True->1.0
+        finalN = y[-1]
+        y = y*frac/finalN
             
     if logx and logy:
         pltfunc = plt.loglog
@@ -986,13 +992,35 @@ def cumulative_plot(data,Nlt=True,frac=False,xlabel='x',edges=(None,None),
     
     if doplot:
         with mpl_context() as plt:
-            pltfunc(x,y,**kwargs)
+            
+            pltres = pltfunc(x,y,**kwargs)[0]
             plt.xlabel(xlabel)
             ltgt = '<' if Nlt else '>'
             if '$' in xlabel:
                 plt.ylabel('$N(%s%s)$'%(ltgt,xlabel.replace('$','')))
             else:
                 plt.ylabel('N(%s%s)'%(ltgt,xlabel))
+                
+            #plot error region first if needed
+            if perr:
+                from matplotlib import colors
+                
+                if perr is True:
+                    perr = {}                    
+                if frac:
+                    N1 = y*finalN/frac
+                    N2 = finalN
+                    ferr = (1./N1 + 1./N2)**0.5
+                else:
+                    ferr = y**-0.5
+                    
+                perr.setdefault('zorder',pltres.get_zorder()-.1)
+                rgba = list(colors.colorConverter.to_rgba(pltres.get_color()))
+                rgba[-1] *= .5
+                perr.setdefault('color',tuple(rgba))
+                
+                plt.fill_between(x,y*(1-ferr),y*(1+ferr),**perr)
+                
             
     return x,y
         
