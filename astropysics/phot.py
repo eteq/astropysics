@@ -3086,8 +3086,8 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     :type x: scalar or array-like
     :param intype: Can be:
     
-        * 'distance': treat `x` as a distance in pc
-        * 'redshift': `x` is treated as a redshift
+        * 'distance' or 'd': treat `x` as a distance in pc
+        * 'redshift' or 'z': `x` is treated as a redshift
         
     :param dx: error in the `x` or None for no error
     :type dx: 
@@ -3111,13 +3111,13 @@ def distance_modulus(x,intype='distance',dx=None,autocosmo=True):
     c=c/1e5 #km/s
     cosmo=False
     
-    if intype == 'distance':
+    if intype=='distance' or intype=='d':
         z=x/1e6*H0/c
         if dx is not None:
             dz = dx/1e6*H0/c
         else:
             dz = None
-    elif intype == 'redshift':
+    elif intype=='redshift' or intype=='z':
         z=x
         x=z*c/H0
         if dx is not None:
