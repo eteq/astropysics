@@ -65,6 +65,8 @@ if apy_build_sphinx is not None:
 apyspkgs = find_packages()
 from astropysics.config import _recpkgs,_guipkgs
 scripts = glob('scripts/*')
+recpkgs = [pkg.name for pkg in _recpkgs]
+guipkgs = [pkg.name for pkg in _guipkgs]
 
 setup(name='Astropysics',
       version=versionstr,
@@ -76,8 +78,8 @@ setup(name='Astropysics',
       requires=['numpy','scipy'],
       install_requires=['numpy'],
       provides=['astropysics'],
-      extras_require={'all':_recpkgs.keys()+_guipkgs.keys(),
-                      'allnogui':_recpkgs.keys()},  
+      extras_require={'all':recpkgs+guipkgs,
+                      'allnoui':recpkgs},  
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
       license = 'Apache License 2.0',
