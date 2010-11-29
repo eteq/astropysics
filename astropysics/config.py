@@ -35,6 +35,7 @@ Module API
 
 """
 from __future__ import division,with_statement
+from HTMLParser import HTMLParser as _HTMLParser
 
 class VersionError(Exception): pass
 class InstallError(Exception): pass 
@@ -43,14 +44,41 @@ class DownloadError(Exception): pass
 #packages avaiable for install and the associated objects
 class PackageInstaller(object):
     """
-    Represents a package to be downloaded and installed.
+    Represents a python package to be downloaded and installed.
     """
-    def __init__(self,name,importmod=None):
+    def __init__(self,name,importmod=None,version=None,buildargs='',instargs='',
+                      extrainfo=None,verbose=True):
         """
         :param name: The name of the package.
         :param importmod: 
             The module name to import to test if the pacakge is installed. If
             None, will be assumed to match `name`
+        :param str version: 
+            A version request for finding the package on PyPI, such as
+            '0.2','>0.1' (greater than 0.1), or '<0.3'. Can also be None to get
+            the most recent version. If the PyPI entry only has a download link,
+            this is ignored.
+        :param buildargs: 
+            Arguments to be given to the "python setup.py build [args]" stage.
+            Can be either a string or a sequence of strings.
+        :param instargs:
+            :param buildargs: 
+            Arguments to be given to the "python setup.py install [args]" stage.
+            Can be either a string or a sequence of strings.
+        :param str extrainfo:
+            A string with additional information about the pacakge (to be shown
+            if the user requests it in the install tool). Can be None to
+            indicate no extra info.
+        :param bool verbose:
+            If True, information will be printed to standard out about steps in
+            the install process.
+            
+        *Subclassing*
+        
+        If a package needs some additional install steps, the
+        :meth:`postInstall` and :meth:`preInstall` methods can be overridden
+        (default does nothing). If the package isn't in PyPI, the :meth:`getURL`
+        method should be overridden to return the necessary URL.
         
         """
         self.name = name
@@ -58,10 +86,16 @@ class PackageInstaller(object):
             self.importmod = name
         else:
             self.importmod = importmod
+        self.version = version
+        self.buildargs = buildargs
+        self.instargs = instargs
+        self.extrainfo = extrainfo
+        self.verbose = verbose
         
     def getUrl(self):
         """
-        Override this to get a URL from somewhere other than PyPI.
+        Returns the URL to download to get this package. Override this to get a
+        URL from somewhere other than PyPI.
         
         :returns: 
             (url,fn) where `url` is the URL to the source distribution, and `fn`
@@ -72,21 +106,18 @@ class PackageInstaller(object):
         return self._getUrlfromPyPI()
     
     def _getUrlfromPyPI(self):
-        import os,xmlrpclib
+        import os,xmlrpclib,urllib2
         from pkg_resources import parse_version
+        from urlparse import urlparse
+        from contextlib import closing
         
-        #TODO: version string in object
-        #parse out the version if it's in the package name     
-        reqvers = reqstr = None
-        for s in ('>=','<=','=','<','>'):
-            if s in pkgname:
-                pkgname = pkgname.split(s)
-                reqvers = pkgname[-1]
-                pkgname = pkgname[0]
-                reqstr = s
-                   
+        pkgname = self.name
+        reqvers = self.version
+        
         client = xmlrpclib.ServerProxy('http://pypi.python.org/pypi')
         vers = client.package_releases(pkgname,True)
+        
+        
         
         #now identify the correct version
         if reqvers is None:
@@ -130,7 +161,28 @@ class PackageInstaller(object):
                 fn = durl['filename']
                 break
         else:
-            raise DownloadError('Could not find a source distribution for %s %s'%(pkgname,ver))
+            rd = client.release_data(pkgname,ver)
+            if 'download_url' in rd:
+                finder = _DownloadURLFinder()
+                with closing(urllib2.urlopen(rd['download_url'])) as uf:
+                    finder.feed(uf.read())
+                finder.close()
+                
+                #find *first* plausible download link and assume that's it.
+                for url in finder.urls:
+                    if any([ext in url for ext in ('.tar.gz','.tgz','.zip')]):
+                        break
+                else:
+                    raise DownloadError('download URL %s is not a source distribution'%url)
+                
+                #find the element in the path with the correct extension.  Assume
+                #that's the correct download name.
+                for pathpiece in urlparse(url).path.split('/'):
+                    if any([pathpiece.endswith(ext) for ext in ('.tar.gz','.tgz','.zip')]):
+                        fn = pathpiece
+                        break
+            else:
+                raise DownloadError('Could not find a source distribution for %s %s'%(pkgname,ver))
         
         return url,fn
     
@@ -148,7 +200,7 @@ class PackageInstaller(object):
         
     def download(self,dldir=None,overwrite=False):
         """
-        Attempt to install the package with the provided name.  
+        Attempt to download this package  
         
         :param str dldir: 
             The directory to download to.  If None, the standard configuration
@@ -175,9 +227,11 @@ class PackageInstaller(object):
         
         dlfn = os.path.join(dldir,fn)
         if not overwrite and os.path.exists(dlfn):
-            print dlfn,'already exists - not overwriting.'
+            if self.verbose:
+                print dlfn,'already exists - not overwriting.'
         else:
-            print 'Downloading',url,'to',dlfn
+            if self.verbose:
+                print 'Downloading',url,'to',dlfn
             urllib.urlretrieve(url,dlfn)
         
         return dlfn
@@ -196,65 +250,165 @@ class PackageInstaller(object):
             If True, downloaded package archives will be overwritten instead of
             being re-used.
         
-        :raises InstallError: If the install fails
+        :raises InstallError: 
+            If the install fails (:meth:`postInstall` will be called immediately
+            before).
         """
-        import tarfile,subprocess,os,sys,shutil
+        import tarfile,zipfile,subprocess,os,sys,shutil
         from contextlib import closing
                 
         fn = self.download(dldir,overwrite)
-        dldir,tgzfn = os.path.split(fn)[0]
+        dldir,cfn = os.path.split(fn)
         
         try:
-            print 'Untarring',tgzfn,'to',dldir
-            with closing(tarfile.open(tgzfn)) as f:
+            if cfn.endswith('.tar.gz') or cfn.endswith('.tgz'):
+                if self.verbose:
+                    print 'Untarring',cfn,'to',dldir
+                cfntype = tarfile
+                cfnbase = cfn.replace('.tgz','').replace('.tar.gz','')
+            elif cfn.endswith('.zip'):
+                if self.verbose:
+                    print 'Unzipping',cfn,'to',dldir
+                cfntype = zipfile
+                cfnbase = cfn.replace('.zip','')
+            else:
+                raise InstallError('Downloaded file %s is not a zip or tar source archive'%cfn)
+                
+            with closing(cfntype.open(fn)) as f:
                 m0 = f.getmembers()[0]
                 if not m0.isdir():
-                    idir = os.path.join(dldir,tgzfn.replace('.tgz','').replace('.tar.gz'))
+                    idir = os.path.join(dldir,cfnbase)
                     os.mkdir(idir)
                     f.extractall(idir)
                 else:
                     idir = os.path.join(dldir,m0.name)
                     f.extractall(dldir)
                     
-            print 'Building in',idir
-            pb = subprocess.Popen(sys.executable+' setup.py build',shell=True,cwd=idir)
+            self.preInstall(idir)
+                    
+            if self.verbose:
+                print 'Building in',idir
+            if not isinstance(self.buildargs,basestring):
+                buildargs = ' '.join(self.buildargs)
+            else:
+                buildargs = ' ' + self.buildargs
+            pb = subprocess.Popen(sys.executable+' setup.py build'+buildargs,shell=True,cwd=idir)
             bretcode = pb.wait()
             if bretcode != 0:
                 raise BuildError('build of %s failed'%pkgname)
             
-            print 'Installing in',idir
-            pi = subprocess.Popen(sys.executable+' setup.py install',shell=True,cwd=idir)
+            if self.verbose:
+                print 'Installing in',idir
+            if not isinstance(self.instargs,basestring):
+                instargs = ' '.join(self.instargs)
+            else:
+                instargs = ' ' + self.instargs
+            pi = subprocess.Popen(sys.executable+' setup.py install'+instargs,shell=True,cwd=idir)
             iretcode = pi.wait()
+            
             if iretcode == 0:
-                print '\nInstall successful, deleting install directory.',idir,'\n'
+                self.postInstall(idir,True)
+                if self.verbose:
+                    print '\nInstall successful, deleting install directory.',idir,'\n'
                 shutil.rmtree(idir)
             else:
+                self.postInstall(idir,False)
                 raise InstallError('install of %s failed'%pkgname)
+            
         except IOError,e:
-            if 'CRC check failed' in e.args[0]:
-                print 'Problem with downloaded package file',fn,'- re-downloading.'
-                install_package(pkgname,dldir,True)
+            if 'CRC check failed' in e.args[1]:
+                if self.verbose:
+                    print 'Problem with downloaded package file',fn,'- re-downloading.'
+                self.install(dldir,True)
             else:
                 raise
             
-class _MatplotlibInstaller(PackageInstaller):
-    def __init__(self):
-        PackageInstaller.__init__(self,'matplotlib')
+    def preInstall(self,idir):
+        """
+        Subclasses can override this method to do something before building and
+        installing occurs.
         
-class _PyfitsInstaller(PackageInstaller):
-    def __init__(self):
-        PackageInstaller.__init__(self,'pyfits')
+        :meth str idir: The path to the directory in which the package is built.
+        
+        """
+        pass
     
+    def postInstall(self,idir,success):
+        """
+        Subclasses can override this method to do something after building and
+        installing occurs. Only called if install succeeds.
+        
+        :meth str idir: The path to the directory in which the package is built.
+        :meth bool success: 
+            If True, the install was sucessful. Otherwise, it failed.
+        
+        """
+        pass
+    
+class _DownloadURLFinder(_HTMLParser):
+    """
+    Used in _getUrlfromPyPI to find source download URLs.
+    """
+    def __init__(self):
+        _HTMLParser.__init__(self)
+        self.urls = []
+    
+    def handle_starttag(self,tag, attrs):
+        if tag.lower()=='a':
+            for name,val in attrs:
+                if name.lower()=='href':
+                    self.urls.append(val)
+        
+class _PyfitsInstaller(PackageInstaller,_HTMLParser):
+    def __init__(self):
+        extrainfo = 'Requires a C-compiler to install.'
+        PackageInstaller.__init__(self,'pyfits',extrainfo=extrainfo)
+        _HTMLParser.__init__(self)
+        self.intr = False
+        self.lastlink = None
+        self.dlurl = None
+        
+    def getUrl(self):
+        import urllib2,urlparse,os
+        dlurl = 'http://www.stsci.edu/resources/software_hardware/pyfits/Download'
+        uf = urllib2.urlopen(dlurl)
+        try:
+            self.feed(uf.read())
+        finally:
+            uf.close()
+            
+        url = self.dlurl
+        fn= os.path.split(urlparse.urlparse(url).path)[-1]
+            
+        return url,fn
+    
+    #HTMLParser methods
+    def handle_starttag(self,tag,attrs):
+        if tag.lower()=='tr':
+            self.intr = True
+        elif tag.lower()=='a':
+            for n,v in attrs:
+                if n.lower()=='href':
+                    self.lastlink = v
+    def handle_endtag(self,tag):
+        if tag=='tr':
+            self.intr = False
+    def handle_data(self,data):
+        if self.intr and 'Current stable release' in data:
+            self.dlurl = self.lastlink
+        
+  
+#<-------------------Recommended Packages-------------------------------------->
 
 _recpkgs = [PackageInstaller('ipython','IPython'),
-            _MatplotlibInstaller(),
+            PackageInstaller('matplotlib',extrainfo='Requires a C-compiler to install.'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
             PackageInstaller('pygraphviz')]
 _guipkgs = [PackageInstaller('traits','enthought.traits'),
-            PackageInstaller('traitsUI','enthought.traits.ui.api'),
+            PackageInstaller('traitsUI','enthought.traits.ui.api',extrainfo='Requires WxWidgets or Qt to be installed'),
             PackageInstaller('chaco','enthought.chaco'),
-            PackageInstaller('mayavi','enthought.mayavi')]
+            PackageInstaller('mayavi','enthought.mayavi',extrainfo='Requires VTK to be installed.')]
             
             
 def run_install_tool():
@@ -274,19 +428,26 @@ def run_install_tool():
     
     quit = False
     while not quit:
-        recs = _check_if_installed(_recpkgs)
-        guis = _check_if_installed(_guipkgs)
-        pkgs = recs.keys()
-        insts = recs.values()
-        pkgs.extend(guis.keys())
-        insts.extend(guis.values())
+        pkgs = []
+        insts = []
         
         print 'Recommended packages:'
-        for n,i in recs.iteritems():
-            print '%i-%s: %s'%(pkgs.index(n)+1,n,'Installed' if i else 'NOT installed')
+        i = 1
+        for pkg in _recpkgs:
+            pkgs.append(pkg)
+            n = pkg.name
+            infostr = '' if pkg.extrainfo is None else ' (i)'
+            insts.append(pkg.isInstalled())
+            print '%i-%s%s: %s'%(i,n,infostr,'Installed' if insts[-1] else 'NOT installed')
+            i += 1
         print '\nGUI packages:'
-        for n,i in guis.iteritems():
-            print '%i-%s: %s'%(pkgs.index(n)+1,n,'Installed' if i else 'NOT installed')
+        for pkg in _guipkgs:
+            pkgs.append(pkg)
+            n = pkg.name
+            infostr = '' if pkg.extrainfo is None else ' (i)'
+            insts.append(pkg.isInstalled())
+            print '%i-%s%s: %s'%(i,n,infostr,'Installed' if insts[-1] else 'NOT installed')
+            i += 1
             
         if all(insts):
             print '\nAll packages Installed - nothing left to do.\n'
@@ -294,32 +455,48 @@ def run_install_tool():
         else:
             inpt = None
             while inpt is None:
-                inpt = raw_input("\nSelect individual package to install (#),  'a' to install everything not yet installed, or 'q' to quit:")
-                if inpt.strip()=='q':
+                inpt = raw_input("\nSelect individual package to install (#),  'a' to install everything not yet installed, 'i#' for information about a package, or 'q' to quit installer:")
+                linpt = inpt.strip().lower()
+                if linpt=='q':
                     print ''
                     quit = True
-                elif inpt.strip()=='a':
-                    for n,i in recs.iteritems():
-                        if not i:
+                elif linpt=='a':
+                    for pkg in pkgs:
+                        if not pkg.isInstalled():
                             try:
-                                install_package(n)
+                                pkg.install()
                             except Exception,e:
-                                print 'Installation of',n,'Failed:',e,'Skipping...'
+                                print 'Installation of',pkg.name,'Failed:',e,'Skipping...'
                     print '\n'
+                elif linpt.startswith('i'):
+                    try:
+                        i = int(linpt[1:])-1
+                    except ValueError:
+                        print 'Invalid package number.\n'
+                        continue
+                    
+                    pkg = pkgs[i]
+                    if pkg.extrainfo is None:
+                        print '\nNo extra information for package',pkg.name,'\n'
+                    else:
+                        print '\nExtra info for package',pkg.name+':\n',pkg.extrainfo,'\n'
+                        raw_input('(Press enter to continue)')
                 else:
                     try:
-                        inpt = int(inpt)-1
+                        i = int(linpt)-1
                     except ValueError:
-                        print 'Invalid entry.'
-                        inpt=None
+                        print 'Invalid package number.\n'
+                        continue
+                    
                     try:
-                        install_package(pkgs[inpt])
+                        pkgs[i].install()
                     except Exception,e:
-                        print 'Installation of',pkgs[inpt],'Failed:',e,'\n\n'
+                        print 'Installation of',pkgs[i].name,'Failed:',e.__class__.__name__,e,'\n\n'
+                        
     
 def run_ipython_setup():
     """
-    Starts the console-based ipython setup tool.
+    Runs the console-based ipython setup tool.
     """
     try:
         import IPython
@@ -328,6 +505,9 @@ def run_ipython_setup():
         return
     
     raise NotImplementedError
+    
+        
+    
 
 def get_config_dir(create=True):
     """
@@ -403,4 +583,3 @@ def get_data_dir(create=True):
     if create and not os.path.isdir(datadir):
         os.mkdir(datadir)
     return datadir
-

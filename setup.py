@@ -9,6 +9,22 @@ from setuptools import setup,find_packages
 from distutils.command.build_py import build_py as du_build_py
 
 from astropysics.version import version as versionstr
+from astropysics.config import _recpkgs,_guipkgs
+
+    
+descrip = """
+`astropysics` contains a variety of utilities and algorithms for reducing, analyzing, and visualizing astronomical data.
+      
+See http://packages.python.org/Astropysics/ for detailed documentation.
+"""
+
+apyspkgs = find_packages()
+scripts = glob('scripts/*')
+
+#recommended/gui packages are stored in config module - used in extras
+recpkgs = [pkg.name for pkg in _recpkgs]
+guipkgs = [pkg.name for pkg in _guipkgs]
+
 
 #custom build_py overwrites version.py with a version overwriting the revno-generating version.py
 class apy_build_py(du_build_py):
@@ -33,6 +49,7 @@ class apy_build_py(du_build_py):
         t = (timestamp,version,major,minor,bugfix,dev)
         return _frozen_version_py_template%t
         
+        
 #custom sphinx builder just makes the directory to build if it hasn't already been made
 try:
     from sphinx.setup_command import BuildDoc
@@ -51,21 +68,11 @@ try:
 except ImportError: #sphinx not present
     apy_build_sphinx = None
     
-descrip = """
-`astropysics` contains a variety of utilities and algorithms for reducing, analyzing, and visualizing astronomical data.
-      
-See http://packages.python.org/Astropysics/ for detailed documentation.
-"""
 
 cmdclassd = {'build_py' : apy_build_py}
 if apy_build_sphinx is not None:
     cmdclassd['build_sphinx'] = apy_build_sphinx
- 
-
-apyspkgs = find_packages()
-from astropysics.config import _recpkgs,_guipkgs
-scripts = glob('scripts/*')
-
+    
 setup(name='Astropysics',
       version=versionstr,
       description='Astrophysics libraries for Python',
@@ -76,8 +83,8 @@ setup(name='Astropysics',
       requires=['numpy','scipy'],
       install_requires=['numpy'],
       provides=['astropysics'],
-      extras_require={'all':_recpkgs.keys()+_guipkgs.keys(),
-                      'allnogui':_recpkgs.keys()},  
+      extras_require={'all':recpkgs+guipkgs,
+                      'nogui':recpkgs},  
       author='Erik Tollerud',
       author_email='etolleru@uci.edu',
       license = 'Apache License 2.0',
