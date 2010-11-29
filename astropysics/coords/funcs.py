@@ -977,8 +977,12 @@ def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
     
     kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
     
-    :returns: a scalar value for the physical size (in pc if redshift is used) 
+    :returns: 
+        A scalar value for the physical size (in pc if redshift is used,
+        otherwise in `zord` units)
     """
+    from ..constants import asecperrad
+    
     if usez:
         d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
     else:
@@ -1023,6 +1027,8 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
         `objout` is True.
         
     """
+    from ..constants import asecperrad
+    
     if usez:
         d = cosmo_z_to_dist(zord,disttype=2,**kwargs)*1e6 #pc
     else:
@@ -1030,7 +1036,7 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
             raise TypeError('if not using redshift, kwargs should not be provided')
         d = zord
         
-    r=physize
+    r = physize
     res = asecperrad*np.arcsin(r*(d*d+r*r)**-0.5)
     
     if objout:
