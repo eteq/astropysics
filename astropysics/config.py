@@ -359,14 +359,44 @@ class _DownloadURLFinder(_HTMLParser):
                 if name.lower()=='href':
                     self.urls.append(val)
         
-class _PyfitsInstaller(PackageInstaller):
+class _PyfitsInstaller(PackageInstaller,_HTMLParser):
     def __init__(self):
         extrainfo = 'Requires a C-compiler to install.'
         PackageInstaller.__init__(self,'pyfits',extrainfo=extrainfo)
+        _HTMLParser.__init__(self)
+        self.intr = False
+        self.lastlink = None
+        self.dlurl = None
         
     def getUrl(self):
-        raise NotImplementedError
-  
+        import urllib2,urlparse,os
+        dlurl = 'http://www.stsci.edu/resources/software_hardware/pyfits/Download'
+        uf = urllib2.urlopen(dlurl)
+        try:
+            self.feed(uf.read())
+        finally:
+            uf.close()
+            
+        url = self.dlurl
+        fn= os.path.split(urlparse.urlparse(url).path)[-1]
+            
+        return url,fn
+    
+    #HTMLParser methods
+    def handle_starttag(self,tag,attrs):
+        if tag.lower()=='tr':
+            self.intr = True
+        elif tag.lower()=='a':
+            for n,v in attrs:
+                if n.lower()=='href':
+                    self.lastlink = v
+    def handle_endtag(self,tag):
+        if tag=='tr':
+            self.intr = False
+    def handle_data(self,data):
+        if self.intr and 'Current stable release' in data:
+            self.dlurl = self.lastlink
+        
   
 #<-------------------Recommended Packages-------------------------------------->
 
@@ -461,7 +491,6 @@ def run_install_tool():
                     try:
                         pkgs[i].install()
                     except Exception,e:
-                        raise e
                         print 'Installation of',pkgs[i].name,'Failed:',e.__class__.__name__,e,'\n\n'
                         
     
