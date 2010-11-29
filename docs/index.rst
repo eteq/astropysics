@@ -65,7 +65,7 @@ If you are installing from source code, instead, just do::
 
     python setup.py install
 
-If you plan on editing the astropysics source code or using the most up-to-date version (see the :doc:`develop`), a useful way to immediately see changes without having to re-install every time is to use the command::
+If you plan on using the most up-to-date version of astropysics or if you wish to alter the source code (see the :doc:`develop`), a useful way to immediately see changes without having to re-install every time is to use the command::
 
     python setup.py develop
 

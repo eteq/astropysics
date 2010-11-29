@@ -47,7 +47,7 @@ class PackageInstaller(object):
     Represents a python package to be downloaded and installed.
     """
     def __init__(self,name,importmod=None,version=None,buildargs='',instargs='',
-                      verbose=True):
+                      extrainfo=None,verbose=True):
         """
         :param name: The name of the package.
         :param importmod: 
@@ -65,6 +65,10 @@ class PackageInstaller(object):
             :param buildargs: 
             Arguments to be given to the "python setup.py install [args]" stage.
             Can be either a string or a sequence of strings.
+        :param str extrainfo:
+            A string with additional information about the pacakge (to be shown
+            if the user requests it in the install tool). Can be None to
+            indicate no extra info.
         :param bool verbose:
             If True, information will be printed to standard out about steps in
             the install process.
@@ -85,6 +89,7 @@ class PackageInstaller(object):
         self.version = version
         self.buildargs = buildargs
         self.instargs = instargs
+        self.extrainfo = extrainfo
         self.verbose = verbose
         
     def getUrl(self):
@@ -356,21 +361,24 @@ class _DownloadURLFinder(_HTMLParser):
         
 class _PyfitsInstaller(PackageInstaller):
     def __init__(self):
-        PackageInstaller.__init__(self,'pyfits')
+        extrainfo = 'Requires a C-compiler to install.'
+        PackageInstaller.__init__(self,'pyfits',extrainfo=extrainfo)
         
     def getUrl(self):
         raise NotImplementedError
-    
+  
+  
+#<-------------------Recommended Packages-------------------------------------->
 
 _recpkgs = [PackageInstaller('ipython','IPython'),
-            PackageInstaller('matplotlib'),
+            PackageInstaller('matplotlib',extrainfo='Requires a C-compiler to install.'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
             PackageInstaller('pygraphviz')]
 _guipkgs = [PackageInstaller('traits','enthought.traits'),
-            PackageInstaller('traitsUI','enthought.traits.ui.api'),
+            PackageInstaller('traitsUI','enthought.traits.ui.api',extrainfo='Requires WxWidgets or Qt to be installed'),
             PackageInstaller('chaco','enthought.chaco'),
-            PackageInstaller('mayavi','enthought.mayavi')]
+            PackageInstaller('mayavi','enthought.mayavi',extrainfo='Requires VTK to be installed.')]
             
             
 def run_install_tool():
@@ -398,15 +406,17 @@ def run_install_tool():
         for pkg in _recpkgs:
             pkgs.append(pkg)
             n = pkg.name
+            infostr = '' if pkg.extrainfo is None else ' (i)'
             insts.append(pkg.isInstalled())
-            print '%i-%s: %s'%(i,n,'Installed' if insts[-1] else 'NOT installed')
+            print '%i-%s%s: %s'%(i,n,infostr,'Installed' if insts[-1] else 'NOT installed')
             i += 1
         print '\nGUI packages:'
         for pkg in _guipkgs:
             pkgs.append(pkg)
             n = pkg.name
+            infostr = '' if pkg.extrainfo is None else ' (i)'
             insts.append(pkg.isInstalled())
-            print '%i-%s: %s'%(i,n,'Installed' if insts[-1] else 'NOT installed')
+            print '%i-%s%s: %s'%(i,n,infostr,'Installed' if insts[-1] else 'NOT installed')
             i += 1
             
         if all(insts):
@@ -415,11 +425,12 @@ def run_install_tool():
         else:
             inpt = None
             while inpt is None:
-                inpt = raw_input("\nSelect individual package to install (#),  'a' to install everything not yet installed, or 'q' to quit:")
-                if inpt.strip()=='q':
+                inpt = raw_input("\nSelect individual package to install (#),  'a' to install everything not yet installed, 'i#' for information about a package, or 'q' to quit installer:")
+                linpt = inpt.strip().lower()
+                if linpt=='q':
                     print ''
                     quit = True
-                elif inpt.strip()=='a':
+                elif linpt=='a':
                     for pkg in pkgs:
                         if not pkg.isInstalled():
                             try:
@@ -427,22 +438,36 @@ def run_install_tool():
                             except Exception,e:
                                 print 'Installation of',pkg.name,'Failed:',e,'Skipping...'
                     print '\n'
+                elif linpt.startswith('i'):
+                    try:
+                        i = int(linpt[1:])-1
+                    except ValueError:
+                        print 'Invalid package number.\n'
+                        continue
+                    
+                    pkg = pkgs[i]
+                    if pkg.extrainfo is None:
+                        print '\nNo extra information for package',pkg.name,'\n'
+                    else:
+                        print '\nExtra info for package',pkg.name+':\n',pkg.extrainfo,'\n'
+                        raw_input('(Press enter to continue)')
                 else:
                     try:
-                        inpt = int(inpt)-1
+                        i = int(linpt)-1
                     except ValueError:
-                        print 'Invalid entry.'
-                        inpt = None
-                    pkgs[inpt].install()
+                        print 'Invalid package number.\n'
+                        continue
+                    
                     try:
-                        pkgs[inpt].install()
+                        pkgs[i].install()
                     except Exception,e:
-                        print 'Installation of',pkgs[inpt].name,'Failed:',e,'\n\n'
+                        raise e
+                        print 'Installation of',pkgs[i].name,'Failed:',e.__class__.__name__,e,'\n\n'
                         
     
 def run_ipython_setup():
     """
-    Starts the console-based ipython setup tool.
+    Runs the console-based ipython setup tool.
     """
     try:
         import IPython
@@ -451,6 +476,9 @@ def run_ipython_setup():
         return
     
     raise NotImplementedError
+    
+        
+    
 
 def get_config_dir(create=True):
     """
