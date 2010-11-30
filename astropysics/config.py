@@ -518,10 +518,18 @@ def run_ipython_setup():
         print 'IPython not installed - install it before running ipython setup.'
         return
     
-    raise NotImplementedError
+    from IPython.utils import path as ipypath
+    ipdir = ipypath.get_ipython_dir()
+    majver,minver = IPython.__version__.split('.')[:2]
+    majver,minver = int(majver),int(minver)
     
+    if majver==0 and minver==10:
+        raise NotImplementedError('IPy v0.10 not yet implemented')
+    elif (majver==0 and minver>=11) or majover>0:
+        raise NotImplementedError('IPy v0.11 not yet implemented')
+    else:
+        raise ValueError('Ipython version < 0.10 not supported')
         
-    
 
 def get_config_dir(create=True):
     """
