@@ -42,7 +42,7 @@ class InstallError(Exception): pass
 class DownloadError(Exception): pass 
 
 #packages avaiable for install and the associated objects
-class PackageInstaller(object):
+class PackageInstaller(_HTMLParser):
     """
     Represents a python package to be downloaded and installed.
     """
@@ -81,6 +81,10 @@ class PackageInstaller(object):
         method should be overridden to return the necessary URL.
         
         """
+        _HTMLParser.__init__(self)
+        self.urls = []
+        self.installed = None
+        
         self.name = name
         if importmod is None:
             self.importmod = name
@@ -91,6 +95,7 @@ class PackageInstaller(object):
         self.instargs = instargs
         self.extrainfo = extrainfo
         self.verbose = verbose
+        
         
     def getUrl(self):
         """
@@ -163,17 +168,19 @@ class PackageInstaller(object):
         else:
             rd = client.release_data(pkgname,ver)
             if 'download_url' in rd:
-                finder = _DownloadURLFinder()
-                with closing(urllib2.urlopen(rd['download_url'])) as uf:
-                    finder.feed(uf.read())
-                finder.close()
-                
-                #find *first* plausible download link and assume that's it.
-                for url in finder.urls:
-                    if any([ext in url for ext in ('.tar.gz','.tgz','.zip')]):
-                        break
+                if any([ext in rd['download_url'] for ext in ('.tar.gz','.tgz','.zip')]):
+                    url = rd['download_url']
                 else:
-                    raise DownloadError('download URL %s is not a source distribution'%url)
+                    with closing(urllib2.urlopen(rd['download_url'])) as uf:
+                        self.feed(uf.read())
+                    self.close()
+                    
+                    #find *first* plausible download link and assume that's it.
+                    for url in self.urls:
+                        if any([ext in url for ext in ('.tar.gz','.tgz','.zip')]):
+                            break
+                    else:
+                        raise DownloadError('download URL %s is not a source distribution'%url)
                 
                 #find the element in the path with the correct extension.  Assume
                 #that's the correct download name.
@@ -192,11 +199,14 @@ class PackageInstaller(object):
         
         :returns: True if the module is installed, otherwise False.
         """
-        try:
-            __import__(self.importmod)
-            return True
-        except ImportError:
-            return False
+        if self.installed is None:
+            try:
+                __import__(self.importmod)
+                return True
+            except ImportError:
+                return False
+        else:
+            return self.installed
         
     def download(self,dldir=None,overwrite=False):
         """
@@ -232,11 +242,17 @@ class PackageInstaller(object):
         else:
             if self.verbose:
                 print 'Downloading',url,'to',dlfn
-            urllib.urlretrieve(url,dlfn)
+            self._nextperc = 0
+            urllib.urlretrieve(url,dlfn,self._dlrephook)
+            del self._nextperc
         
         return dlfn
         
-        
+    def _dlrephook(self,blocks,blocksize,fnsize):
+        perc = blocks*blocksize*100/fnsize
+        if self.verbose and int(perc)>self._nextperc:
+            print 'Downloaded','%.1f'%perc,'%'
+            self._nextperc = int(perc)+5
         
     def install(self,dldir=None,overwrite=False):
         
@@ -311,14 +327,17 @@ class PackageInstaller(object):
                 if self.verbose:
                     print '\nInstall successful, deleting install directory.',idir,'\n'
                 shutil.rmtree(idir)
+                self.installed = True
             else:
                 self.postInstall(idir,False)
+                self.installed = False
                 raise InstallError('install of %s failed'%pkgname)
             
         except IOError,e:
             if 'CRC check failed' in e.args[1]:
                 if self.verbose:
                     print 'Problem with downloaded package file',fn,'- re-downloading.'
+                self.installed = False
                 self.install(dldir,True)
             else:
                 raise
@@ -345,19 +364,11 @@ class PackageInstaller(object):
         """
         pass
     
-class _DownloadURLFinder(_HTMLParser):
-    """
-    Used in _getUrlfromPyPI to find source download URLs.
-    """
-    def __init__(self):
-        _HTMLParser.__init__(self)
-        self.urls = []
-    
     def handle_starttag(self,tag, attrs):
         if tag.lower()=='a':
             for name,val in attrs:
                 if name.lower()=='href':
-                    self.urls.append(val)
+                    self.urls.append(val)    
         
 class _PyfitsInstaller(PackageInstaller,_HTMLParser):
     def __init__(self):
@@ -405,10 +416,13 @@ _recpkgs = [PackageInstaller('ipython','IPython'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
             PackageInstaller('pygraphviz')]
-_guipkgs = [PackageInstaller('traits','enthought.traits'),
-            PackageInstaller('traitsUI','enthought.traits.ui.api',extrainfo='Requires WxWidgets or Qt to be installed'),
-            PackageInstaller('chaco','enthought.chaco'),
-            PackageInstaller('mayavi','enthought.mayavi',extrainfo='Requires VTK to be installed.')]
+            
+_guipkgs = [PackageInstaller('Traits','enthought.traits'),
+            PackageInstaller('TraitsGUI','enthought.traits.ui.api',extrainfo='Requires TraitsBackendWX or TraitsBackendQt'),
+            PackageInstaller('TraitsBackendWX','enthought.pyface.ui.wx',extrainfo='Requires wxWidgets w/ wxPython'),
+            PackageInstaller('TraitsBackendQt','enthought.pyface.ui.qt4',extrainfo='Requires Qt w/ PyQy'),
+            PackageInstaller('Chaco','enthought.chaco'),
+            PackageInstaller('Mayavi','enthought.mayavi',extrainfo='Requires VTK to be installed.')]
             
             
 def run_install_tool():
