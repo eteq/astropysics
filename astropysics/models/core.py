@@ -1493,7 +1493,7 @@ class FunctionModel1D(FunctionModel):
         
         >>> from astropysics.models.builtins import QuadraticModel
         >>> m = QuadraticModel()
-        >>> '%.2f'%m.inv(2)
+        >>> '%.2f'%m.inv(2) #should give sqrt(2)
         '1.41'
         >>> '%.2f'%m.inv(9,2,4)
         '3.00'
