@@ -544,7 +544,7 @@ def run_ipython_setup():
         try:
             import matplotlib
             mplbk = matplotlib.rcParams['backend']
-            bkstr = '(for default %s, leave blank)'%mplbk
+            bkstr = ' (for default %s, leave blank)'%mplbk
         except:
             mplbk = None
             bkstr = ''
@@ -567,7 +567,7 @@ def run_ipython_setup():
             try:
                 __import__(tkp)
                 guitk = tkg
-                tkstr = '(for default %s, leave blank)'%guitk
+                tkstr = ' (for default %s, leave blank)'%tkg
                 break
             except ImportError:
                 pass
@@ -577,7 +577,7 @@ def run_ipython_setup():
             
         res = None
         while res is None:
-            res = raw_input('Choose GUI Toolkit%s:'%bkstr)
+            res = raw_input('Choose GUI Toolkit%s:'%tkstr)
             if res.strip()=='':
                 if guitk is None:
                     res = None
