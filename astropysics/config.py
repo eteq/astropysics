@@ -512,23 +512,99 @@ def run_ipython_setup():
     """
     Runs the console-based ipython setup tool.
     """
+    from .io import get_package_data
+    from os import path
+    
     try:
         import IPython
     except ImportError:
         print 'IPython not installed - install it before running ipython setup.'
         return
     
-    from IPython.utils import path as ipypath
-    ipdir = ipypath.get_ipython_dir()
+    try:
+        #this technique only works for ipython>=0.11
+        from IPython.utils.path import get_ipython_dir
+        ipdir = get_ipython_dir()
+    except ImportError:
+        #ipython<0.11
+        from IPython.genutils import get_ipython_dir
+        ipdir = get_ipython_dir()
+        
     majver,minver = IPython.__version__.split('.')[:2]
     majver,minver = int(majver),int(minver)
     
     if majver==0 and minver==10:
-        raise NotImplementedError('IPy v0.10 not yet implemented')
+        ipcfgfn = 'ipy_profile_astpys.py'
+        cfgstr = get_package_data(ipcfgfn)
     elif (majver==0 and minver>=11) or majover>0:
-        raise NotImplementedError('IPy v0.11 not yet implemented')
+        ipcfgfn = 'ipython_config_astpys.py'
+        cfgstr = get_package_data(ipcfgfn)
+        
+        #Identify the current matplotlib backend and prompt for it if necessary
+        try:
+            import matplotlib
+            mplbk = matplotlib.rcParams['backend']
+            bkstr = '(default %s)'%mplbk
+        except:
+            mplbk = None
+            bkstr = ''
+            
+        res = None
+        while res is not None:
+            res = raw_input('Choose matplotlib backend%s:'%bkstr)
+            if res.strip()=='':
+                if mplbk is None:
+                    res = None
+            else:
+                mplbk = res
+        cfgstr = cfgstr.replace('{MPLBACK}',mplbk)
+        
+        #Choose the GUI toolkit to start in ipython
+        #try gui toolkits in order of preference
+        tkpkgnms = ('wx','PyQt4','gtk','Tkinter','tkinter')
+        tkguinms = ('wx','qt','gtk','tk','tk')
+        for tkp,tkg in zip(tkpkgnms,tkguinms):
+            try:
+                __import__(tkp)
+                guitk = tkg
+                tkstr = '(default %s)'%guitk
+                break
+            except ImportError:
+                pass
+        else:
+            guitk = None
+            tkstr = ''
+            
+        res = None
+        while res is not None:
+            res = raw_input('Choose GUI Toolkit%s:'%bkstr)
+            if res.strip()=='':
+                if guitk is None:
+                    res = None
+            else:
+                guitk = res
+        cfgstr = cfgstr.replace('{GUITK}',guitk)
     else:
-        raise ValueError('Ipython version < 0.10 not supported')
+        raise ValueError('Ipython versionsion earlier than 0.10 not supported')
+    
+    outfn = path.join(ipdir,ipcfgfn)
+    
+    if path.exists(outfn):
+        res = None
+        while res is None:
+            res = raw_input('File %s exists, overwrite?([y]/n):'%outfn)
+            if res.strip()=='' or res.strip().lower()=='y':
+                pass
+            elif res.strip().lower()=='n':
+                outfn = None
+            else:
+                res = None
+        
+        
+    if outfn is not None:
+        with open(outfn,'w'):
+            outfn.write(cfgstr)
+        
         
 
 def get_config_dir(create=True):

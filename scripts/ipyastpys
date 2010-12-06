@@ -1,0 +1,19 @@
+#!/usr/bin/env python
+__requires__ = 'ipython'
+import sys,IPython
+from pkg_resources import load_entry_point
+
+if __name__ == '__main__':
+    #insert necessary ipython arguments if they aren't already there
+    
+    #add pylab if version < 0.11
+    majver,minver = IPython.__version__.split('.')[:2]
+    majver,minver = int(majver),int(minver)
+    if majver>0 or minver>=11:
+        if '--pylab' not in sys.argv:
+            sys.argv.append('--pylab')
+        
+    sys.argv.append('-p')
+    sys.argv.append('astpys')
+    
+    sys.exit(load_entry_point('ipython', 'console_scripts', 'ipython')())
