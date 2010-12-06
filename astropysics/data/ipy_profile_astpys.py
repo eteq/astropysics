@@ -12,6 +12,7 @@ ip.ex("from __future__ import division")
 ip.ex("import numpy")
 ip.ex("import numpy as np")
 ip.ex("from numpy import *")
+ip.ex("from numpy.random import rand,randn,randint")
 
 ip.ex("import scipy")
 ip.ex("from scipy import stats,optimize,ndimage,integrate,interpolate,special")

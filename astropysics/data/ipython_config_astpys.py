@@ -9,6 +9,7 @@ lines = """
 import numpy
 import numpy as np
 from numpy import *
+from numpy.random import rand,randn,randint
 
 import scipy
 from scipy import stats,optimize,ndimage,integrate,interpolate,special
