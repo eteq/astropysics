@@ -477,6 +477,9 @@ def run_install_tool(sudo='auto'):
     else:
         sudo = bool(sudo)
     
+    if sudo:
+        print "Running install commands prefixed by 'sudo'"
+    
     quit = False
     while not quit:
         pkgs = []
