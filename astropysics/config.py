@@ -254,7 +254,7 @@ class PackageInstaller(_HTMLParser):
             print 'Downloaded','%.1f'%perc,'%'
             self._nextperc = int(perc)+5
         
-    def install(self,dldir=None,overwrite=False):
+    def install(self,dldir=None,overwrite=False,instprefix=''):
         
         """
         Download the package, if necessary, and install it.
@@ -265,6 +265,9 @@ class PackageInstaller(_HTMLParser):
         :param bool overwrite: 
             If True, downloaded package archives will be overwritten instead of
             being re-used.
+        :param str instprefix: 
+            A command line prefix (before "python") to be used in the install
+            step. Most often this is 'sudo' on certain oses.
         
         :raises InstallError: 
             If the install fails (:meth:`postInstall` will be called immediately
@@ -275,6 +278,11 @@ class PackageInstaller(_HTMLParser):
                 
         fn = self.download(dldir,overwrite)
         dldir,cfn = os.path.split(fn)
+        
+        if instprefix:
+            instprefix = instprefix.strip()+' '
+        else:
+            instprefix = ''
         
         try:
             if cfn.endswith('.tar.gz') or cfn.endswith('.tgz'):
@@ -319,7 +327,7 @@ class PackageInstaller(_HTMLParser):
                 instargs = ' '.join(self.instargs)
             else:
                 instargs = ' ' + self.instargs
-            pi = subprocess.Popen(sys.executable+' setup.py install'+instargs,shell=True,cwd=idir)
+            pi = subprocess.Popen(instprefix+sys.executable+' setup.py install'+instargs,shell=True,cwd=idir)
             iretcode = pi.wait()
             
             if iretcode == 0:
@@ -425,9 +433,21 @@ _guipkgs = [PackageInstaller('Traits','enthought.traits'),
             PackageInstaller('Mayavi','enthought.mayavi',extrainfo='Requires VTK to be installed.')]
             
             
-def run_install_tool():
+def run_install_tool(sudo='auto'):
     """
     Starts the console-based interactive installation tool.
+    
+    :param sudo: 
+        Determines whether or not the install step is prefixed by 'sudo'. If
+        True, sudo will be prefixed, if False, no prefix will be used. If
+        'auto', the platform will be examined to try to determine if sudo is
+        necessary. If 'toggleauto', the opposite of whatever 'auto' gives will
+        be used.
+        
+    .. note::
+        The 'auto' option for `sudo` is nowhere close to perfect - it's pretty
+        much just a list of common platforms that require it... if you're on an
+        uncommon platform, you will probably have to set it manually.
     """
     #TODO: remork guts for PackageInstaller class
     
@@ -439,6 +459,23 @@ def run_install_tool():
         import scipy
     except ImportError:
         print 'Scipy not installed - get it (http://www.scipy.org/) before continuing.'
+    
+    if isinstance(sudo,basestring) and 'auto' in sudo:
+        import platform
+        
+        sudobool = False
+        
+        syslow = platform.system().lower()
+        if 'linux' in syslow:
+            sudodists = ('ubuntu',)
+            if platform.linux_distribution()[0].lower() in sudodists:
+                sudobool = True
+        elif 'mac' in syslow:
+            sudobool = True
+            
+        sudo = (not sudobool) if 'toggle' in sudo else sudobool
+    else:
+        sudo = bool(sudo)
     
     quit = False
     while not quit:
@@ -478,7 +515,7 @@ def run_install_tool():
                     for pkg in pkgs:
                         if not pkg.isInstalled():
                             try:
-                                pkg.install()
+                                pkg.install(instprefix='sudo' if sudo else '')
                             except Exception,e:
                                 print 'Installation of',pkg.name,'Failed:',e,'Skipping...'
                     print '\n'

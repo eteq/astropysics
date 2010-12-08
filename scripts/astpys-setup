@@ -23,11 +23,14 @@ parser.add_option("-p", "--no-package-install", dest="install",
 parser.add_option("-i", "--no-ipython", dest="ipython", 
                   help="Skip the ipython setup tool.",
                   action="store_false",default=True)
+parser.add_option("-s", "--sudo", dest="sudo", 
+                  help="Runs the install step prefixed by 'sudo' (or turns sudo *off* if this platform normally expects to use sudo).",
+                  action="store_true",default=False)
 
 ops, args = parser.parse_args()
 
 if ops.install:
-    config.run_install_tool()
+    config.run_install_tool(sudo='toggleauto' if ops.sudo else 'auto')
     
 if ops.ipython:
     config.run_ipython_setup()
