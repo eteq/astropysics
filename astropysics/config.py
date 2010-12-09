@@ -339,7 +339,7 @@ class PackageInstaller(_HTMLParser):
             else:
                 self.postInstall(idir,False)
                 self.installed = False
-                raise InstallError('install of %s failed'%pkgname)
+                raise InstallError('Install of %s failed. Perhaps you need -s/--sudo command line option?'%pkgname)
             
         except IOError,e:
             if 'CRC check failed' in e.args[1]:
@@ -478,7 +478,7 @@ def run_install_tool(sudo='auto'):
         sudo = bool(sudo)
     
     if sudo:
-        print "Running install commands prefixed by 'sudo'"
+        print "Install commands will be prefixed by 'sudo'.  Use -s/--sudo option if this is not desired."
     
     quit = False
     while not quit:
@@ -561,6 +561,7 @@ def run_ipython_setup():
         print 'IPython not installed - install it before running ipython setup.'
         return
     
+    print 'Running IPython setup for astropysics'
     try:
         #this technique only works for ipython>=0.11
         from IPython.utils.path import get_ipython_dir
