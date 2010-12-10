@@ -5,7 +5,7 @@ Astropysics includes a variety of graphical applications for various data analys
 Their full power is acheived when used interactively or as part of scripts, but some 
 operate as stand-alone command-line tools when the situation warrants.
 
-Note that these applications make heavy use of `Enthought Traits <http://code.enthought.com/projects/traits/>`_ and the associated `Enthought Tools Suite <http://code.enthought.com/projects/ets/>`_ 
+Note that these applications make heavy use of `Enthought Traits <http://code.enthought.com/projects/traits/>`_ and the associated `Enthought Tools Suite <http://code.enthought.com/projects/index.php>`_ 
  if they are not installed, most of these will not function.
 
 .. toctree::

@@ -13,11 +13,9 @@
 #   limitations under the License.
 
 """
-This module holds the (mostly abstract) classes for the data modeling framework
-used in astropysics, seperated from the implementations of specific models found
-in the :mod:`builtins` module.
-
-
+This module holds the base level classes for the data fitting/modeling framework
+used in astropysics. This is seperated from the implementations of specific
+models, which can be found in the :mod:`builtins` module.
 
 .. |attrdata| replace:: :attr:`data <astropysics.models.core.ParametricModel.data>`
 
@@ -252,8 +250,9 @@ class AutoParamsMeta(ABCMeta):
     is taken to be the number of arguments that particular instance should have,
     and the :attr:`paramnames` class attribute can be used to specify the prefix
     for the name of the parameters (and can be an iterator, in which case one of
-    each name will be made for each var arg, in sequence order). default values
+    each name will be made for each var arg, in sequence order). Default values
     can be given by adding class variables of the form :attr:`_param0_default`
+    where `param0` is replaced by the appropriate parameter name.
     """
     def __init__(cls,name,bases,dct):
         #called on import of astro.models
@@ -1454,8 +1453,11 @@ class FunctionModel1D(FunctionModel):
     
     def __call__(self,x):
         """
-        call the function on the input x,which will be flattened.  If not 1D,
-        the output will be reshaped to the input
+        Compute the output of the function at the input value(s) `x`.
+        
+        :param x: The input values as an ndarray or a scalar input value.
+            
+        :returns: The output of the function - shape will match `x`
         """
         arr = np.array(x,copy=False,dtype=float)
         res = self._filterfunc(arr.ravel(),*self.parvals)
@@ -1490,7 +1492,7 @@ class FunctionModel1D(FunctionModel):
         **Examples**
         
         This finds the x value of the (very simple) function :math:`y(x) = 4x+2`
-        at the point y=3::
+        at the point y=3
         
         >>> from astropysics.models import LinearModel
         >>> m = LinearModel(m=4,b=2)
@@ -1499,7 +1501,7 @@ class FunctionModel1D(FunctionModel):
         
         These examples use Newton's, Brent's, and Ridder's method, to find the
         inverse of :math`y(x) = x^2` for 2,9,and 16, respectively (i.e. they
-        should give sqrt(2),3, and 4)::
+        should give sqrt(2),3, and 4)
         
         >>> from astropysics.models import QuadraticModel
         >>> m = QuadraticModel()

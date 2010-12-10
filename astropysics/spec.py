@@ -26,6 +26,18 @@ valid in other bands.
 
 .. todo:: examples/tutorials
 
+.. seealso:: 
+
+    The :mod:`~astropysics.obstools` module 
+        Includes tools for spectra such as extinction/redenning corrections.
+         
+    The :mod:`~astropysics.phot` module
+        Allows photometric bands to be cross-calibrated to spectra (and vice
+        versa)
+    
+    The :mod:`~astropysics.io` module
+        Implements details of loading and saving various spectrum formats.
+
 
 Classes and Inheritance Structure
 ---------------------------------

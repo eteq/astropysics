@@ -62,7 +62,6 @@ class PackageInstaller(_HTMLParser):
             Arguments to be given to the "python setup.py build [args]" stage.
             Can be either a string or a sequence of strings.
         :param instargs:
-            :param buildargs: 
             Arguments to be given to the "python setup.py install [args]" stage.
             Can be either a string or a sequence of strings.
         :param str extrainfo:
@@ -259,7 +258,7 @@ class PackageInstaller(_HTMLParser):
         """
         Download the package, if necessary, and install it.
         
-        param str dldir: 
+        :param str dldir: 
             The directory to download to.  If None, the standard configuration
             directory will be used.
         :param bool overwrite: 
@@ -272,6 +271,7 @@ class PackageInstaller(_HTMLParser):
         :raises InstallError: 
             If the install fails (:meth:`postInstall` will be called immediately
             before).
+            
         """
         import tarfile,zipfile,subprocess,os,sys,shutil
         from contextlib import closing

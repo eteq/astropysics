@@ -126,10 +126,9 @@ def greenwich_sidereal_time(jd,apparent=True):
     :returns: GMST or GAST in hours or an array of times (if `jd` is an array) 
         
     .. seealso:: 
-        :func:`equation_of_the_equinoxes`
-        USNO Circular 179 and http://aa.usno.navy.mil/faq/docs/GAST.php
-        SOFA functions iauGmst00 and iauGst00b 
-    
+        :func:`equation_of_the_equinoxes`, USNO Circular 179,  
+        http://www.usno.navy.mil/USNO/astronomical-applications/astronomical-information-center/approx-sider-time, 
+        and SOFA functions iauGmst00 and iauGst00b 
     
     """
     from ..constants import asecperrad
