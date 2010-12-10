@@ -1489,16 +1489,32 @@ class FunctionModel1D(FunctionModel):
         
         **Examples**
         
-        These examples use Newton's, Brent's, and Ridder's method, respectively.
+        This finds the x value of the (very simple) function :math:`y(x) = 4x+2`
+        at the point y=3::
         
-        >>> from astropysics.models.builtins import QuadraticModel
+        >>> from astropysics.models import LinearModel
+        >>> m = LinearModel(m=4,b=2)
+        >>> '%.2f'%m.inv(3)
+        '0.25'
+        
+        These examples use Newton's, Brent's, and Ridder's method, to find the
+        inverse of :math`y(x) = x^2` for 2,9,and 16, respectively (i.e. they
+        should give sqrt(2),3, and 4)::
+        
+        >>> from astropysics.models import QuadraticModel
         >>> m = QuadraticModel()
-        >>> '%.2f'%m.inv(2) #should give sqrt(2)
+        >>> '%.2f'%m.inv(2,1)
         '1.41'
         >>> '%.2f'%m.inv(9,2,4)
         '3.00'
         >>> '%.2f'%m.inv(16,3,5,method='ridder')
         '4.00'
+        
+        All these methods require a guide for the range of x values to search.
+        The first requires a guess, although the default guess of 0 will be
+        assumed if the second argument is not present. (for this example,
+        sqrt(2) and -sqrt(2) are both valid answers, so the default guess of 0
+        is ambiguous).
         
         """    
         import scipy.optimize
