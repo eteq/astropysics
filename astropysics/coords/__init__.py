@@ -69,7 +69,9 @@ accessed seperately to make organization clearer. However, they are all also
 imported into the base module. Thus, as an example,
 ``astropysics.coords.coordsys.ICRSCoordinates`` and
 ``astropysics.coords.ICRSCoordinates`` are different names for the same class
-(:class:`~astropysics.coords.coordsys.ICRSCoordinates`).
+(:class:`~astropysics.coords.coordsys.ICRSCoordinates`). The
+``astropysics.coords.ICRSCoordinates`` usage is preferred as this allows the
+internal organization to be changed if it is deemed necessary.
 
 There are three submodules currently included. The
 :mod:`~astropysics.coords.coordsys` module implements classes representing

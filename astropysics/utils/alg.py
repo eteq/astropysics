@@ -1,4 +1,4 @@
-#Copyright 2009 Erik Tollerud
+#Copyright 2010 Erik Tollerud
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -13,26 +13,22 @@
 #   limitations under the License.
 
 """
+The :mod:`alg` module contains basic algorithms and data processing tasks
+utility used in more than one place in `astropysics`. 
 
-======================================
-utils -- utility classes and functions
-======================================
+.. seealso: :mod:`astropysics.stats`
 
-The :mod:`utils` module contains classes and funtions of general utility used in
-multiple places throughout `astropysics`. Some of these are
-astropyhysics-specific algorithms while others are more python tricks.
-
-.. todo:: examples/tutorials
+.. todo:: examples?
 
 
 Classes and Inheritance Structure
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.utils
+.. inheritance-diagram:: astropysics.utils.alg
    :parts: 1
 
 Module API
-----------
+^^^^^^^^^^
 
 """
 

@@ -1,4 +1,4 @@
-#Copyright 2010 Erik Tollerud
+#Copyright 2009 Erik Tollerud
 #
 #   Licensed under the Apache License, Version 2.0 (the "License");
 #   you may not use this file except in compliance with the License.
@@ -13,10 +13,15 @@
 #   limitations under the License.
 
 """
-The :mod:`gen` module contains classes and functions of general utility used in
-various places throughout `astropysics`. Mostly these are python utilities and
-hacks - general data-processing or similar operations are in the
-:mod:`~astropysics.utils.alg` module.
+
+The :mod:`stats` module contains classes and functions for statistics and
+statistical analysis. These tools in this module are mostly inspecific to
+astrophysics - the applications are all in the relevant other modules.
+
+.. seealso:: 
+    :mod:`scipy.stats` - :mod:`astropysics,utils.stats` is intended only to
+    provide utilites and interfaces that are not present in :mod:`scipy.stats` -
+    when possible, :mod:`scipy.stats` should be used.
 
 .. todo:: examples?
 
@@ -24,11 +29,10 @@ hacks - general data-processing or similar operations are in the
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.utils.gen
+.. inheritance-diagram:: astropysics.utils.stats
    :parts: 1
 
 Module API
-^^^^^^^^^^
 
 """
 
@@ -36,6 +40,7 @@ Module API
 
 from __future__ import division,with_statement
 import numpy as np
+from scipy import stats as spystats
 import re as _re
 
 try:

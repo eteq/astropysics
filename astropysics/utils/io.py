@@ -13,32 +13,27 @@
 #   limitations under the License.
 
 """
-
-=========================================
-io -- data input/output classes and tools
-=========================================
-
-The ``io`` module contains classes and functions for loading and saving data in
-various relevant formats used in astronomy, as well as convinience functions
+The :mod:`io` module contains classes and functions for loading and saving data
+in various relevant formats used in astronomy, as well as convinience functions
 retrieval for built-in data.
 
 .. todo:: examples
 
 
 Classes and Inheritance Structure
----------------------------------
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.io
+.. inheritance-diagram:: astropysics.utils.io
    :parts: 1
 
 Module API
-----------
+^^^^^^^^^^
 
 """
 
 from __future__ import division,with_statement
-from .utils import add_docs_and_sig as _add_docs_and_sig
-from .utils import add_docs as _add_docs
+from gen import add_docs_and_sig as _add_docs_and_sig
+from gen import add_docs as _add_docs
 import numpy as np
 
 try:
@@ -46,6 +41,7 @@ try:
 except ImportError:
     from warnings import warn
     warn('pyfits not found - all FITS-related IO will not work')
+    pyfits = None
     
     
 #<-----------------------Data retrieval and caching---------------------------->
