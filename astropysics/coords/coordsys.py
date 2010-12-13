@@ -68,7 +68,7 @@ from __future__ import division,with_statement
 
 from ..constants import pi
 from ..utils import rotation_matrix,add_docs
-from ..io import get_package_data
+from ..utils.io import get_package_data
 import numpy as np
 _twopi = 2*pi
 _pio2 = pi/2
