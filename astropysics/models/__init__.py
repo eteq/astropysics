@@ -40,8 +40,6 @@ gui will be available.
 Examples
 --------
 
-..todo :: add Examples
-
 Accessing Models
 ^^^^^^^^^^^^^^^^
 
@@ -119,6 +117,16 @@ models. The second, :mod:`~astropysics.models.builtins` contains a default set
 of models. There is also a :mod:`~astropysics.models.pca` module for performing
 n-dimensional Principal Component Analysis and plotting the results.
 
+.. note::
+
+    Everything in the :mod:`~astropysics.models.core`,
+    :mod:`~astropysics.models.builtins`, and :mod:`~astropysics.models.pca`
+    modules are present in the :mod:`~astropysics.models` module, and hence can
+    be accessed from there. For example,
+    :class:`astropysics.models.core.FunctionModel` and
+    :class:`astropysics.models.FunctionModel` are different names for the same
+    class. The second form is recommended for consistency and brevity.
+    
 models.core
 -----------
 

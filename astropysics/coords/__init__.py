@@ -18,6 +18,10 @@
 coords -- coordinate classes and coordinate conversions
 =======================================================
 
+
+Overview
+--------
+
 The :mod:`coords` module contains classes and functions specifying locations of
 objects on the sky as well as coordinate converstions and distance computations,
 including cosmological distance and redshift calculations.
@@ -56,37 +60,34 @@ particularly strange cosmology is in use.
     routine's functionality is replicated exactly as the SOFA implementation
     (barring the possibility of typos), but adapted to the python language.
    
+   
+.. todo:: Tutorials that unify the sub-modules?
 
-.. todo:: Tutorials
 
 
-
-Overview
---------
-
-The :mod:`~astropysics.coords` module is composed of submodules that can be
-accessed seperately to make organization clearer. However, they are all also
-imported into the base module. Thus, as an example,
-``astropysics.coords.coordsys.ICRSCoordinates`` and
-``astropysics.coords.ICRSCoordinates`` are different names for the same class
-(:class:`~astropysics.coords.coordsys.ICRSCoordinates`). The
-``astropysics.coords.ICRSCoordinates`` usage is preferred as this allows the
-internal organization to be changed if it is deemed necessary.
-
-There are three submodules currently included. The
-:mod:`~astropysics.coords.coordsys` module implements classes representing
-useful coordinate systems in astronomy and a framework to add additional
-coordinate systems as desired. It also implements standard transformations
-between the various celestial and terrestrial coordinates (although
-transformation to local horizontal coordinates is done with methods of
+    
+The :mod:`~astropysics.coords` module is composed of three submodules to make
+organization clearer. The :mod:`~astropysics.coords.coordsys` module implements
+classes representing useful coordinate systems in astronomy and a framework to
+add additional coordinate systems as desired. It also implements standard
+transformations between the various celestial and terrestrial coordinates
+(although transformation to local horizontal coordinates is done with methods of
 :class:`astropysics.obstools.Site`). :mod:`~astropysics.coords.ephems`
 implements ephemerides for solar system objects and proper motions. Finally,
 :mod:`~astropysics.coords.funcs` contains a range of utility functions including
 cartesian<->spherical and other canonical transforms, as well as cosmological
-distance calculations.
+distance calculations. The documentation for each of the sub-modules is
+described below.
 
-The API for each of these individual submodules is documented below, although
-they can all be accessed directly from :mod:`~astropysics.coords`.
+.. note::
+
+    The :mod:`~astropysics.coords` module is composed of submodules that can be
+    accessed seperately. However, they are all also included in the base module.
+    Thus, as an example, ``astropysics.coords.coordsys.ICRSCoordinates`` and
+    ``astropysics.coords.ICRSCoordinates`` are different names for the same
+    class (:class:`~astropysics.coords.coordsys.ICRSCoordinates`). The
+    ``astropysics.coords.ICRSCoordinates`` usage is preferred as this allows the
+    internal organization to be changed if it is deemed necessary.
 
 coords.coordsys -- coordinate systems and transforms
 ----------------------------------------------------
