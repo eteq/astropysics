@@ -84,4 +84,4 @@ from alg import *
 from io import *
 from stats import *
 
-del ABCMeta,abstractmethod,abstractproperty,np,pyfits #clean up namespace
+del np,pyfits #clean up namespace

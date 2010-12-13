@@ -15,7 +15,7 @@
 """
 The :mod:`io` module contains classes and functions for loading and saving data
 in various relevant formats used in astronomy, as well as convinience functions
-retrieval for built-in data.
+for retrieval of built-in data.
 
 .. todo:: examples
 
@@ -32,8 +32,8 @@ Module API
 """
 
 from __future__ import division,with_statement
-from gen import add_docs_and_sig as _add_docs_and_sig
-from gen import add_docs as _add_docs
+from .gen import add_docs_and_sig as _add_docs_and_sig
+from .gen import add_docs as _add_docs
 import numpy as np
 
 try:
@@ -42,6 +42,101 @@ except ImportError:
     from warnings import warn
     warn('pyfits not found - all FITS-related IO will not work')
     pyfits = None
+    
+    
+def funpickle(fileorname,number=0,usecPickle=True):
+    """
+    Unpickle a file specified by  and return the pickled contents.
+    
+    :param fileorname: The file from which to unpickle objects
+    :type fileorname: a file name string or a :class:`file` object
+    :param number: 
+        The number of objects to unpickle - if <1, returns a single object.
+    :type number: int
+    :param usecPickle: 
+        If True, the :mod:`cPickle` module is to be used in place of
+        :mod:`pickle` (cPickle is faster).
+    :type usecPickle: bool 
+    
+    :returns: A list of length given by `number` or a single object if number<1
+    
+    """
+    if usecPickle:
+        import cPickle as pickle
+    else:
+        import pickle
+        
+    if isinstance(fileorname,basestring):
+        f = open(fileorname,'r')
+        close = True
+    else:
+        f = fileorname
+        close = False
+        
+    try:
+        if number > 0:
+            res = []
+            for i in range(number):
+                res.append(pickle.load(f))
+        elif number < 0:
+            res = []
+            eof = False
+            while not eof:
+                try:
+                    res.append(pickle.load(f))
+                except EOFError:
+                    eof = True
+        else: #number==0
+            res = pickle.load(f)
+    finally:
+        if close:
+            f.close()
+            
+    return res
+
+def fpickle(object,fileorname,usecPickle=True,protocol=None,append=False):
+    """
+    Pickle an object to a specified file.
+    
+    :param object: the python object to pickle
+    :param fileorname: The file from which to unpickle objects
+    :type fileorname: a file name string or a :class:`file` object
+    :param usecPickle: 
+        If True, the :mod:`cPickle` module is to be used in place of
+        :mod:`pickle` (cPickle is faster).
+    :type usecPickle: bool 
+    :param protocol: 
+        Pickle protocol to use - see the :mod:`pickle` module for details on
+        these options. If None, the most recent protocol will be used.
+    :type protocol: int or None
+    :param append:
+        If True, the object is appended to the end of the file, otherwise the
+        file will be overwritten (if a file object is given instead of a 
+        file name, this has no effect).
+    :type append: bool
+    
+    """
+    
+    if usecPickle:
+        import cPickle as pickle
+    else:
+        import pickle
+        
+    if protocol is None:
+        protocol = pickle.HIGHEST_PROTOCOL
+    
+    if isinstance(fileorname,basestring):
+        f = open(fileorname,'a' if append else 'w')
+        close = True
+    else:
+        f = fileorname
+        close = False 
+        
+    try:
+        pickle.dump(object,f,protocol=protocol)
+    finally:
+        if close:
+            f.close()
     
     
 #<-----------------------Data retrieval and caching---------------------------->
@@ -62,8 +157,8 @@ def get_package_data(dataname):
         optional data files that are downloaded as needed.
     
     """
-    from . import __name__ as rootname
-    from . import __file__ as rootfile
+    from .. import __name__ as rootname
+    from .. import __file__ as rootfile
     from pkgutil import get_loader
     from os.path import dirname
     path = dirname(rootfile)+'/data/'+dataname
@@ -100,7 +195,7 @@ def get_data(dataurl,asfile=False,store=True,localfn=None):
         for larger or optional data files that are downloaded as needed.
     """
     import os,urlparse,urllib2,shelve,contextlib
-    from .config import get_data_dir
+    from ..config import get_data_dir
     
     if store:
         datadir = get_data_dir()
@@ -1063,7 +1158,7 @@ def load_wcs_spectrum(fn,fluxext=None,errext=None,hdrext=None,errtype='err'):
     """
     
     import pyfits
-    from .spec import Spectrum
+    from ..spec import Spectrum
     
     f=pyfits.open(fn)
     try:
@@ -1132,7 +1227,7 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
     returns Spectrum object with ivar, [bdata,rdata]
     """
     import pyfits
-    from .spec import Spectrum
+    from ..spec import Spectrum
     if 'spec1d' not in fn or 'fits' not in fn:
         raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
     
@@ -1231,7 +1326,7 @@ def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
     return dict(zip(fns,specs))
     
 def _load__old_spylot_spectrum(s,bandi):
-    from .spec import Spectrum
+    from ..spec import Spectrum
     x=s.getCurrentXAxis()
     f=s.getCurrentData(bandi=bandi)
     if s.isContinuumSubtracted():
