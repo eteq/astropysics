@@ -552,7 +552,7 @@ def run_ipython_setup():
     """
     Runs the console-based ipython setup tool.
     """
-    from .io import get_package_data
+    from .utils.io import get_package_data
     from os import path
     
     try:
@@ -711,7 +711,7 @@ def get_config_dir(create=True):
 def get_data_dir(create=True):
     """
     Returns the directory name for data that astropysics downloads. See
-    :func`astropysics.io.get_data` to work with data in this directory.
+    :func`astropysics.utils.io.get_data` to work with data in this directory.
     
     :param bool create: 
         If True, the directory will be created if it doesn't exist.

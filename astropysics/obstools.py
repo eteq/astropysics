@@ -1785,7 +1785,7 @@ class Site(object):
         
 
 def __loadobsdb(sitereg):
-    from .io import get_package_data
+    from .utils.io import get_package_data
     obsdb = get_package_data('obsdb.dat')
     from .coords import AngularCoordinate
     

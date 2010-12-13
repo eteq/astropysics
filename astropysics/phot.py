@@ -852,7 +852,7 @@ def set_zeropoint_system(system,bands='all'):
         
     elif 'vega' in system.lower():
         from cPickle import loads
-        from .io import get_package_data
+        from .utils.io import get_package_data
         
         try:
             offset = float(system.lower().replace('vega',''))
@@ -2605,6 +2605,9 @@ class SExtractor(object):
         
     def __init__(self,sexfile=None,parfile=None):
         
+        if not SExtractor._sexbinpresent:
+            raise RuntimeError('SExtractor binary not found, phot.SExtractor cannot function.')
+        
         opts = dict(SExtractor._defaultopts)
         pars = dict([(k,False) for k in  SExtractor._parinfo])
                     
@@ -2751,15 +2754,12 @@ class SExtractor(object):
             raise ValueError('unrecognized mode argument '+str(mode))
 try:
     SExtractor._getSexDefaults()
+    SExtractor._sexbinpresent = True
 except OSError:
-    from warnings import warn
-    warn('SExtractor not found on system - phot.SExtractor class will not function')
+    SExtractor._sexbinpresent = False
     
-class SExtractorError(Exception):
-    def __init__(self,*args):
-        super(SExtractorError,self).__init__(*args)
-            
-        
+class SExtractorError(Exception): pass
+
 #<------------------------conversion functions--------------------------------->
     
 def UBVRI_to_ugriz(U,B,V,R,I,ugrizprimed=False):
@@ -3505,7 +3505,7 @@ def teff_to_color(teff,colorbands='g-r'):
 #TODO: check UBVRI/ugriz S function - energy or quantal?
 
 def __load_UBVRI():
-    from .io import get_package_data
+    from .utils.io import get_package_data
     bandlines = get_package_data('UBVRIbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#Source:','').strip()
@@ -3531,7 +3531,7 @@ def __load_UBVRI():
     return d
 
 def __load_JHK():
-    from .io import get_package_data
+    from .utils.io import get_package_data
     bandlines = get_package_data('JHKbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
@@ -3556,7 +3556,7 @@ def __load_JHK():
     return d
 
 def __load_ugriz():
-    from .io import get_package_data
+    from .utils.io import get_package_data
     bandlines = get_package_data('ugrizbands.dat').split('\n')
     
     bandlines.pop(0)
@@ -3591,7 +3591,7 @@ def __load_ugriz():
     return d,dp
 
 def __load_washington():
-    from .io import get_package_data
+    from .utils.io import get_package_data
     bandlines = get_package_data('washingtonbands.dat').split('\n')
     
     src = bandlines.pop(0).replace('#2MASS J,H, and K bands:','').strip()
@@ -3616,7 +3616,7 @@ def __load_washington():
     return d
 
 def __load_human_eye():
-    from .io import get_package_data
+    from .utils.io import get_package_data
     bandlines = get_package_data('eyeresponse.dat').split('\n')
     
     src = bandlines.pop(0).replace('#from','').strip()

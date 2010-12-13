@@ -35,7 +35,7 @@ valid in other bands.
         Allows photometric bands to be cross-calibrated to spectra (and vice
         versa)
     
-    The :mod:`~astropysics.io` module
+    The :mod:`~astropysics.utils.io` module
         Implements details of loading and saving various spectrum formats.
 
 
@@ -69,7 +69,7 @@ except ImportError: #support for earlier versions
     ABCMeta = type
 
 #Spectrum related io module functions
-from .io import load_deimos_spectrum,load_all_deimos_spectra,load_wcs_spectrum
+from .utils.io import load_deimos_spectrum,load_all_deimos_spectra,load_wcs_spectrum
 
 class HasSpecUnits(object):
     """
@@ -1732,7 +1732,7 @@ def load_line_list(lst,unit='wavelength',tol=None,ondup='warn',sort=True):
     returns a list of KnownFeature objects 
     """
     from warnings import warn
-    from .io import get_package_data
+    from .utils.io import get_package_data
     
     if isinstance(lst,basestring):
         name = lst

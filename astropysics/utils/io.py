@@ -801,17 +801,18 @@ def load_tipsy_format(fn):
     return dout
 
 #<------------------------VOTable related-------------------------------------->
-try:
-    import vo.table
-except ImportError:
-    from warnings import warn
-    warn('vo.table not found - VOTable processing limited to VOTableReader class')
+#add this back in if anything actually uses vo.table in the future
+#try:
+#    import vo.table
+#except ImportError:
+#    from warnings import warn
+#    warn('vo.table not found - VOTable processing limited to VOTableReader class')
 
 class VOTableReader(object):
     """
-    This class represents a VOTable.  Currently, it is read-only, and will 
-    probably not be enhanced due to the existence of Michael Droettboom's vo
-    package
+    This class represents a VOTable. Currently, it is read-only, and will
+    probably not be enhanced due to the existence of Michael Droettboom's
+    vo.table package (http://trac6.assembla.com/astrolib).
     """
     
     dtypemap = {"boolean":'b',
