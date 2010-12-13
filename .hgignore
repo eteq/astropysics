@@ -6,3 +6,4 @@ Astropysics.egg-info
 *.pyc
 *.egg
 *.tar.gz
+?noseids
