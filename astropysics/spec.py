@@ -813,8 +813,9 @@ class Spectrum(HasSpecUnits):
     _rgbsensitivity = (1,1,1) #this is adjusted to a 5800 K blackbody after the Spectrum class is created
     def rgbEyeColor(self):
         """
-        this uses the 'eye' group in phot.bands to convert a spectrum to
-        an (r,g,b) tuple
+        This uses the 'eye' group in phot.bands to convert a spectrum to an
+        (r,g,b) tuple such that (1,1,1) corresponds to a T=5800 blackbody
+        spectrum (approximating the sun).
         """
         from .phot import bands
         spec = self
@@ -822,7 +823,7 @@ class Spectrum(HasSpecUnits):
         eyed = bands['eye']
         if len(eyed) != 3:
             raise ValueError('eye bands are not length 3')
-        eyefluxes = np.array([b.computeFlux(spec) for b in sorted(eyed.values())])
+        eyefluxes = np.array([b.computeFlux(spec,overlapcheck=False) for b in sorted(eyed.values())])
         eyefluxes = eyefluxes[::-1] #b,g,r -> r,g,b
         
         #now normalize by eye sensitivities -- default is computed by assuming
