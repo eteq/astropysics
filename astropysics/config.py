@@ -22,12 +22,22 @@ The :mod:`config` module contains functions to manage and access the persistent
 astropysics configuration. It also includes utilities to install recommended
 packages and set up the ipython environment.
 
-.. add this back in if any class structure is added
-    Classes and Inheritance Structure
-    ---------------------------------
+Configuration files can be found in the directory returned by
+:func:`get_config_dir`, typically a subdirectory '.astropysics' of the user's
+home directory. The format for the files is that of the `
+configobj<http://www.voidspace.org.uk/python/configobj.html>`_ package, although 
+for most files this is as simple as::
+    
+    name1=value
+    #maybe a comment
+    name2 = anothervalue
+    
 
-    .. inheritance-diagram:: astropysics.config
-       :parts: 1
+Classes and Inheritance Structure
+---------------------------------
+
+.. inheritance-diagram:: astropysics.config
+   :parts: 1
 
 Module API
 ----------
@@ -707,6 +717,24 @@ def get_config_dir(create=True):
         #try to create it
         os.mkdir(configdir)
     return configdir
+
+def get_config(name):
+    """
+    Returns a dictionary-like object that has the configuration information for 
+    the specified configuration file.  To save the configuration data if it is
+    modified, call :meth:`write` on the object.
+    
+    :returns: A :class:`ConfigObj` object with the configuration information.
+    
+    """
+    import os
+    from .external import configobj
+    
+    if os.sep in name:
+        raise ValueError('Configuration files cannot be in subdirectories and hence '+os.sep+' cannot be in their names')
+    
+    fn = os.path.join(get_config_dir(),name)
+    return configobj.ConfigObj(fn)
 
 def get_data_dir(create=True):
     """
