@@ -724,7 +724,15 @@ def get_config(name):
     the specified configuration file.  To save the configuration data if it is
     modified, call :meth:`write` on the object.
     
+    :param str name: 
+        The name of the configuration file (without any path).  The file will be
+        searched for in/written to the config directory.
+    
     :returns: A :class:`ConfigObj` object with the configuration information.
+    
+    :except ValueError: If the `name` is invalid.
+    :except astropysics.external.configobj.ConfigObjError: 
+        If the file exists and it is an invalid format.
     
     """
     import os
@@ -734,7 +742,11 @@ def get_config(name):
         raise ValueError('Configuration files cannot be in subdirectories and hence '+os.sep+' cannot be in their names')
     
     fn = os.path.join(get_config_dir(),name)
-    return configobj.ConfigObj(fn)
+    try:
+        return configobj.ConfigObj(fn)
+    except configobj.ConfigObjError,e:
+        if len(e.args)>0 and 'Parsing failed' in e.args[0]:
+            raise configobj.ConfigObjError(fn+' is not a config file')
 
 def get_data_dir(create=True):
     """
