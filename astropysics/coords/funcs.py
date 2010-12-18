@@ -959,7 +959,7 @@ def cosmo_z_to_H(z,zerr=None):
         lower=c.H(z-zerr)
         return H,upper-H,lower-H
 
-def angular_to_physical_size(angsize,zord,usez=True,**kwargs):
+def angular_to_physical_size(angsize,zord,usez=False,**kwargs):
     """
     Converts an observed angular size (in arcsec or as an AngularSeperation 
     object) to a physical size.

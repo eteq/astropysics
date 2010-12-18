@@ -635,6 +635,8 @@ class AngularSeperation(AngularCoordinate):
         
         :returns: a float value for the seperation (in pc if redshift is used) 
         """
+        from .funcs import angular_to_physical_size
+        
         return angular_to_physical_size(self.arcsec,zord,usez=usez,**kwargs)
     
     def seperation3d(self,zord1,zord2,usez=False,**kwargs):
