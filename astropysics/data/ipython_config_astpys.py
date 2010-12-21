@@ -17,7 +17,7 @@ from scipy import stats,optimize,ndimage,integrate,interpolate,special
 import pyfits
 try:
     import astropysics
-    from astropysics import phot,spec,coords,models,constants,objcat,obstools,io,plotting
+    from astropysics import phot,spec,coords,models,constants,objcat,obstools,plotting,utils
 except ImportError:
     print "Unable to start astropysics profile, is astropysics installed?"
 

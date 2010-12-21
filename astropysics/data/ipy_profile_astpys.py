@@ -21,7 +21,7 @@ ip.ex("import pyfits")
 try:
     ip.ex("import astropysics")
     #import typical modules
-    ip.ex("from astropysics import phot,spec,coords,models,constants,objcat,obstools,io")
+    ip.ex("from astropysics import phot,spec,coords,models,constants,objcat,obstools,plotting,utils")
     try:
         ip.ex("from astropysics import gui")
     except ImportError:
