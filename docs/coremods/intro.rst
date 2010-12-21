@@ -16,7 +16,6 @@ The modules forming the core of astropysics' functionality are documented below.
    spec
    phot
    obstools
-   io
    plotting
    pipeline
    publication
