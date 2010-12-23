@@ -365,7 +365,7 @@ class PackageInstaller(_HTMLParser):
         Subclasses can override this method to do something before building and
         installing occurs.
         
-        :meth str idir: The path to the directory in which the package is built.
+        :param str idir: The path to the directory in which the package is built.
         
         """
         pass
@@ -375,8 +375,8 @@ class PackageInstaller(_HTMLParser):
         Subclasses can override this method to do something after building and
         installing occurs. Only called if install succeeds.
         
-        :meth str idir: The path to the directory in which the package is built.
-        :meth bool success: 
+        :param str idir: The path to the directory in which the package is built.
+        :param bool success: 
             If True, the install was sucessful. Otherwise, it failed.
         
         """
