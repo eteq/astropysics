@@ -718,6 +718,21 @@ def get_config_dir(create=True):
         os.mkdir(configdir)
     return configdir
 
+def get_data_dir(create=True):
+    """
+    Returns the directory name for data that astropysics downloads. See
+    :func`astropysics.utils.io.get_data` to work with data in this directory.
+    
+    :param bool create: 
+        If True, the directory will be created if it doesn't exist.
+    :returns: The absolute path to the data directory as a string.
+    """
+    import os
+    datadir = os.path.join(get_config_dir(create),'data')
+    if create and not os.path.isdir(datadir):
+        os.mkdir(datadir)
+    return datadir
+
 def get_config(name):
     """
     Returns a dictionary-like object that has the configuration information for 
@@ -747,18 +762,86 @@ def get_config(name):
     except configobj.ConfigObjError,e:
         if len(e.args)>0 and 'Parsing failed' in e.args[0]:
             raise configobj.ConfigObjError(fn+' is not a config file')
-
-def get_data_dir(create=True):
+        
+def get_projects():
     """
-    Returns the directory name for data that astropysics downloads. See
-    :func`astropysics.utils.io.get_data` to work with data in this directory.
+    Returns all registered projects and their assoiciated directories and script
+    files.
     
-    :param bool create: 
-        If True, the directory will be created if it doesn't exist.
-    :returns: The absolute path to the data directory as a string.
+    :returns: 
+        A dictionary where the keys are the project names and the values are
+        2-tuples (projectdir,projectscriptfilename)
+    """
+    pc = get_config('projects')
+    return dict(pc)
+    
+def add_project(name,dir=None,scriptfile=None):
+    """
+    Add a new project to the project registry.
+    
+    :param str name: The name of the project.
+    :param str dir: 
+        The name of the directory associated with the project or None to use
+        `name`, relative to the current directory.  If the directory dos not 
+        exist, it will be created.
+    :param str scriptfile: 
+        The name of the file with the main runnable python code for the project,
+        relative to the `dir` directory, or None to use the name.  If the script
+        does not exist, it will be created with an analysis template file (see
+        :download:`project_template.py
+        </../astropysics/data/project_template.py>`).
+        
+    
+    :returns: A 2-tuple (projectdir,projectscriptfilename)
+    
+    :except IOError: If something is wrong with the file or directory.
+    
     """
     import os
-    datadir = os.path.join(get_config_dir(create),'data')
-    if create and not os.path.isdir(datadir):
-        os.mkdir(datadir)
-    return datadir
+    from .utils.io import get_package_data
+    
+    pc = get_config('projects')
+    if dir is None:
+        pdir = os.path.join('.',name)
+    else:
+        pdir = dir
+    pdir = os.path.abspath(pdir)
+    if not os.path.isdir(pdir):
+        os.mkdir(pdir)
+        
+    #now check/setup the script file
+    if scriptfile is None:
+        if os.sep in name:
+            pfile = os.path.join(pdir,name.replace(os.sep,'_'))
+        else:
+            pfile = os.path.join(pdir,name)
+        if not pfile.endswith('.py'):
+            pfile += '.py'
+    else:
+        pfile = os.path.join(pdir,scriptfile)
+    pfile = os.path.abspath(pfile)
+        
+        
+    if not os.path.exists(pfile):
+        #copy over project template
+        templstr = get_package_data('project_template.py')
+        with open(pfile,'w') as f:
+            f.write(templstr)
+    elif os.path.isdir(pfile):
+        raise IOError('Profile file %s is a directory'%pfile)
+    
+    val = (pdir,pfile)
+    pc[name] = val
+    pc.write()
+    
+    return val
+    
+def del_project(name):
+    """
+    Unregisters the project with the specified name.
+    """
+    pc = get_config('projects')
+    del pc[name]
+    pc.write()
+    
+    

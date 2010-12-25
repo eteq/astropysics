@@ -1,24 +1,74 @@
 #!/usr/bin/env python
 
-import sys,IPython
+import os,sys,IPython
 from optparse import OptionParser
-
+from astropysics import config
 
 op = OptionParser()
-op.usage = '%prog [options] [-a/--ipy-args --ipyop1 --ipyop2 -i ...]'
-op.add_option('-a','--ipy-args',help='All following arguments are treated as arguments for ipython')
-
-#first strip out the -a/--ipy-args bit and save the args if needed
-if '-a' in sys.argv or '--ipy-args' in sys.argv:
-    if '-a' in sys.argv:
-        ind = sys.argv.index('-a')
-    else:
-        ind = sys.argv.index('--ipy-args')
-        
-    ipyargs = sys.argv[(ind+1):]
-    ipyargs.insert(0,sys.argv[0])
-    del sys.argv[ind:]
+op.usage = '%prog [options] [projdir projfile] [-a/--ipy-args --ipyop1 --ipyop2 -i ...]'
+op.add_option('-a','--ipy-args',dest='iargs',help='IPython command line arguments - enclose the intended arguments in " marks.')
+op.add_option('-p','--project',help='Run a project in this session.  Project script will be run with any arguments passed to ipyastpys.')
+op.add_option('-c','--create-project',dest='create',help='Create a project with the specified name. Cannot be used with -p or -d.  Directory and scripts file (relative to directory) may be provided as arguments.')
+op.add_option('-d','--delete-project',dest='delete',help='Delete the project with the specified name. Cannot be used with -p or -c.')
+op.add_option('-l','--list-projects',dest='list',help='List all projects - all other options are ignored',action='store_true')
+op.add_option('-s','--script-args',dest='sargs',help='Arguments to be used in the profile script.  Ignored if -p/--profile is not given.')
     
+
+#parse ipyastpys args
+ops,args = op.parse_args()
+
+if ops.list:
+    print 'Registered projects:'
+    for n,t in config.get_projects().iteritems():
+        print n,':',tuple(t)
+    sys.exit(0)
+
+pdir = pfn = None
+if ops.project:    
+    if ops.create or ops.delete:
+        print "Can't both run and create a project."
+        sys.exit(1)
+    elif ops.delete:
+        print "Can't both run and delete a project."
+        sys.exit(1)
+
+    pname = ops.project
+    
+    projs = config.get_projects()
+    if ops.project not in projs:
+        print 'Project,',ops.project,'not found'
+        sys.exit(2)
+        
+    pdir,pfn = projs[ops.project]
+    
+elif ops.create:
+    pname = ops.create
+    if ops.delete:
+        print "Can't both create and delete a project."
+        sys.exit(1)
+        
+    addps = [pname]
+    addps.extend(args)
+    pdir,pfn = config.add_project(*addps)
+    print 'Created project',pname,'at',pdir,'with script',pfn
+    sys.exit(0)
+elif ops.delete:
+    pname = ops.delete
+    try:
+        config.del_project(pname)
+        print 'Deleted project',pname
+        sys.exit(0)
+    except KeyError:
+        print 'Project',pname,'not found'
+        sys.exit(2)
+        
+        
+        
+
+#figure out ipython expected command line
+if ops.iargs:
+    ipyargs = ops.iargs.split()
+    ipyargs.insert(0,sys.argv[0])
     #insert necessary ipython arguments if they aren't already there
     if '-p' not in ipyargs and '--profile' not in ipyargs:
         ipyargs.append('-p')
@@ -26,15 +76,29 @@ if '-a' in sys.argv or '--ipy-args' in sys.argv:
         
 else:
     ipyargs = [sys.argv[0],'-p','astpys']
-    
-
-#parse ipyastpys args
-ops,args = op.parse_args()
-
 #replace sys.argv with args appropriate for ipython
 sys.argv[:] = ipyargs
 
-#get version info
+if pdir is not None:
+    os.chdir(pdir)
+    
+if pfn is not None:
+    if '-c' in sys.argv:
+        print 'Cannot run a profile script if "-c" is in the ipython arguments.'
+        sys.exit(3)
+    
+    runstr = ['run',pfn]
+    if ops.sargs:
+        runstr.extend(ops.sargs.split())
+    runstr = ' '.join(runstr)
+    print 'Executing "'+runstr+'" on startup.'
+    
+    sys.argv.append('-c')
+    sys.argv.append(runstr)
+    if '-i' not in sys.argv:
+        sys.argv.append('-i')
+    
+#get version info to figure out how to launch ipy
 majver,minver = IPython.__version__.split('.')[:2]
 majver,minver = int(majver),int(minver)
 
@@ -50,6 +114,6 @@ else:
     #Launch via the .start mechanism
     import IPython.Shell
     IPython.Shell.start().mainloop()
-    
+
     
     
