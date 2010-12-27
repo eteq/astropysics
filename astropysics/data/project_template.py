@@ -15,6 +15,10 @@ import <filename>
 reload(<filename>)
 <filename>.make_plots('plotname',locals(),...)
 
+Additionally, this script can be called at the command line to show or save
+figures.  This is especially useful in conjunction with the mainfig argument 
+of plotfunc to save all figures intended for use in a paper.
+
 """
 
 from __future__ import division,with_statement
@@ -53,7 +57,7 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
         tuple or None for the default bounding box.
     :param bool mainfig:
         If True, this is a "main" figure - e.g. one that will actually appear in
-        a paper (used for the command-line call)
+        a paper (used for the command-line call).
     """
     def deco(f):
         fname = f.func_name
@@ -91,6 +95,8 @@ def plot_names():
     """
     return _plotreg.keys(),_mainfigs
 
+#To save by default in a different directory, change the "save='.'" line at the
+#start of this function to "save='/path/to/dir'"
 def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True):
     """
     Generate plots and maybe save them.
@@ -251,7 +257,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
 if __name__ == '__main__':
     from optparse import OptionParser
     
-    #ADD ON-RUN OPERATIONS HERE
+    #ADD ON-RUN OPERATIONS HERE - i.e. load data files, name variables, etc.
     
     op = OptionParser()
     op.usage = '%prog [options] [plot1 plot2 ...]'
