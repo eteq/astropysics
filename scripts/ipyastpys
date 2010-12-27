@@ -1,11 +1,19 @@
 #!/usr/bin/env python
 
-import os,sys,IPython
+try:
+    import IPython
+except ImportError:
+    print 'IPython not installed - ipyastpys requires IPython'
+    sys.exit(3)
+import os,sys
+from IPython.utils.path import get_ipython_dir
 from optparse import OptionParser
 from astropysics import config
+        
+ipdir = get_ipython_dir()
 
 op = OptionParser()
-op.usage = '%prog [options] [projdir projfile] [-a/--ipy-args --ipyop1 --ipyop2 -i ...]'
+op.usage = '%prog [options] [projdir projfile]'
 op.add_option('-a','--ipy-args',dest='iargs',help='IPython command line arguments - enclose the intended arguments in " marks.')
 op.add_option('-p','--project',help='Run a project in this session.  Project script will be run with any arguments passed to ipyastpys.')
 op.add_option('-c','--create-project',dest='create',help='Create a project with the specified name. Cannot be used with -p or -d.  Directory and scripts file (relative to directory) may be provided as arguments.')
@@ -97,16 +105,27 @@ if pfn is not None:
     sys.argv.append(runstr)
     if '-i' not in sys.argv:
         sys.argv.append('-i')
+        
     
 #get version info to figure out how to launch ipy
 majver,minver = IPython.__version__.split('.')[:2]
 majver,minver = int(majver),int(minver)
 
 if majver>0 or minver>=11:
+    #check to make sure profile file is present
+    if not os.path.exists(os.path.join(ipdir,'ipython_config_astpys.py')):
+        print 'Astropysics IPython profile missing - run astpys-setup'
+        sys.exit(2)
+        
     #Use entry point mechanism
     from pkg_resources import load_entry_point
     sys.exit(load_entry_point('ipython', 'console_scripts', 'ipython')())
 else:
+    #check to make sure profile file is present
+    if not os.path.exists(os.path.join(ipdir,'ipy_profile_astpys.py')):
+        print 'Astropysics IPython profile missing - run astpys-setup'
+        sys.exit(2)
+    
     #add pylab if version < 0.11,
     if '--pylab' not in sys.argv:
         sys.argv.append('--pylab')
