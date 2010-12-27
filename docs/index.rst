@@ -18,127 +18,56 @@ them interact in the most straightforward ways possible.
 (And to that end, if you are running one of those other projects, I'd love to 
 help integrate our projects into a common framework!)
 
-Documentation
-=============
+.. _contents:
 
-Astropysics is divided into two major subcomponents - the core modules that perform the calculation and contain a variety of useful classes for everyone's use, and the gui module that contains a number of useful applications.
+Contents
+========
+
+Astropysics is divided into two major subcomponents - the core modules that
+contain functions and classes to the calculations and organize data, and the gui
+module that contains a number of useful small-scale astronomy applications.
 
 .. toctree::
    :maxdepth: 2
    
+   install
+   getstarted
    coremods/intro
    gui/intro
    develop
 
 
-Installation
-============
+Quick Install
+=============
 
-Requirements
-------------
-Before you do anything with astropysics, you'll need:
+See :doc:`install` for full install instructions, including prerequisite
+packages.
 
-    * `Python <http://www.python.org/>`_ 2.5 or higher (2.6 highly recommended), although 3.x is not yet supported.
-    * `numpy <http://numpy.scipy.org>`_ 
-    * `scipy <http://www.scipy.org/>`_
-    
-Follow the instructions on those sites, or, far easier, install them as packages from your operating system (e.g. apt-get or the synaptic GUI on Ubuntu, `Macports <http://www.macports.org/>`_ on OS X, etc.).  
-
-
-Install
--------
-
-Once you have the requirements satisfied, you have a few options for installing astropysics.  
-
-.. note::
-    On most unix-like systems, you will need to either execute these commands as the root user, or preface them with ``sudo``.
-
-If you have `pip <http://pypi.python.org/pypi/pip>`_ (the new, better easy installer) or `easy_install/setuptools <http://pypi.python.org/pypi/setuptools>`_ (you should probably install pip...), just run either::
+To install a current release of astropysics, the simplest approach is::
 
     pip install astropysics
 
-or::
+(on unix-like systems or OS X, add "sudo " before this command)
 
-    easy_install astropysics
+If you want the must up-to-date (possible unstable) version, do::
 
-If you are installing from source code, instead, just do::
-
-    python setup.py install
-
-If you plan on using the most up-to-date version of astropysics or if you wish to alter the source code (see the :doc:`develop`), a useful way to immediately see changes without having to re-install every time is to use the command::
-
+    hg clone https://astropysics.googlecode.com/hg/ astropysics-dev
+    cd astropysics-dev
     python setup.py develop
 
+(note that `mercurial <http://mercurial.selenic.com/>`_ must be installed, and
+on some systems the last command may need to have "sudo " at the beginning) 
 
-Recommended packages
---------------------
+You can also alter the source code if you use this approach (see :doc:`develop`
+for guidelines of working contributing source code).
 
-A number of other packages are necessary for added functionality in astropysics (and all are recommended). 
-Some of these may be available and installable using your system's package management system, but the install commands below can be used if these are not present or are out-of-date.
+In either case, afterwords you can run::
 
-    * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
-        *highly recommended*, as it is necessary for all plotting (aside from the GUI applications). Install with::
-        
-            pip install matplotlib
-            
-    * `Ipython <http://ipython.scipy.org/>`_
-        *highly recommended*, as it is a far better interactive shell than the python default and has many wonderful features. Install with::
-        
-            pip install ipython
-            
-        and if you have matplotlib, run as::
-            
-            ipython -pylab
-        
-    * `NetworkX <http://networkx.lanl.gov/>`_
-        *highly recommended*, as it is used for a variety of internal purposes as well as any place where a network/graph is plotted. Install with::
-        
-            pip install networkx
-        
-        It might also be useful to have a closely related package for generating `graphviz <http://www.graphviz.org/>`_ graphs from networkx. Install with::
+    astpys-setup
     
-            pip install pygraphviz
-    
-    * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
-        Necessary for reading FITS files::
-        
-            pip install pyfits
-        
-            
-    * `Traits <http://code.enthought.com/projects/traits/>`_, `TraitsGUI <http://code.enthought.com/projects/traits_gui/>`_, `Chaco <http://code.enthought.com/projects/chaco/>`_, and `Mayavi <http://code.enthought.com/projects/mayavi/>`_.  Alternatively, `ETS <http://code.enthought.com/projects/index.php>`_ is all bundled in one.
-        Necessary for the interfaces in the :mod:`gui` modules::
-        
-            pip install ETS
-            
-        or::
-        
-            pip install traits
-            pip install traitsGUI
-            pip install chaco
-            pip install mayavi
-    
-    * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
-        Necessary to write VOTable files, and makes reading them much better, as well. Download from `<http://trac6.assembla.com/astrolib>`_ at the bottom of the page.
-        
-        
-    Note that you can install all of these at once if you install astropysics using the following command::
-    
-        easy_install "astropysics[all]"
-        
-    or if there are problems installing the ETS tools, use::
-    
-        easy_install "astropysics[allnogui]"
-    
-Astropysics also includes pythonic wrappers around some astronomy-related tools that need to be installed seperately if their functionality is desired:
+to install optional packages and setup the environment.
 
-    * `SExtractor <http://www.astromatic.net/software/sextractor>`_
-    * `Kcorrect <http://howdy.physics.nyu.edu/index.php/Kcorrect>`_
-    
-Developer Guidelines
-====================
-
-If you are interested in contributing code (either new functionality or bugfixes), see the :doc:`develop`.
-    
+       
 Bug Reports
 ===========
 
