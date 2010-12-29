@@ -30,6 +30,10 @@ Some of the calculations involved make use of the currently selected cosmology
 (see :mod:`astropysics.constants`) and hence may not function as expected if a
 particularly strange cosmology is in use.
 
+.. note::
+    Timekeeping/conversion functions are kept in :mod:`astropysics.obstools`,
+    although some are crucial to coordinate systems.
+
 .. seealso::
 
     `Kapteyn libraries <http://www.astro.rug.nl/software/kapteyn/index.html>`_
@@ -46,10 +50,6 @@ particularly strange cosmology is in use.
     `USNO Circular 179 <http://aa.usno.navy.mil/publications/docs/Circular_179.pdf>`_ 
         An excellent description of the IAU 2000 resolutions and related
         background for defining ICRS, CIO, and related standards.
-   
-.. note::
-    Timekeeping/conversion functions are kept in :mod:`astropysics.obstools`,
-    although some are crucial to coordinate systems.
     
 .. note::
     Some functionality in this module makes use of derived versions of the `SOFA
