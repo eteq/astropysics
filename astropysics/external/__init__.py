@@ -19,3 +19,10 @@ to simplify installation.  Currently, this includes:
     * ConfigObj v4.7.2  (http://www.voidspace.org.uk/python/configobj.html)
 
 """
+
+def setup_module(module):
+    """
+    Used by doctests
+    """
+    from nose.plugins.skip import SkipTest
+    raise SkipTest('Skipping tests for external modules/packages')
