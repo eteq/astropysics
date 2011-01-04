@@ -28,6 +28,29 @@ def _cartesian_transform(coord):
     y = cb*sl
     z = sb
     return x,y,z
+
+def _computematrix(intype,outtype,epoch):
+    #(x,y,z)=(1,0,0)
+    incx = intype(epoch=epoch)
+    incx.lat.d = 0
+    incx.long.d = 0
+    outcx = incx.convert(outtype)
+    
+    #(x,y,z)=(0,1,0)
+    incy = intype(epoch=epoch)
+    incy.lat.d = 0
+    incy.long.d = 90
+    outcy = incy.convert(outtype)
+    
+    #(x,y,z)=(0,0,1)
+    incz = intype(epoch=epoch)
+    incz.lat.d = 90
+    incz.long.d = 0
+    outcz = incz.convert(outtype)
+    
+    Mt = (_cartesian_transform(outcx),_cartesian_transform(outcy),_cartesian_transform(outcz))
+    return np.matrix(Mt).T
+    
 #END HELPERS
 
 tests = []
@@ -48,9 +71,11 @@ def trans_matricies(epoch,jd):
     print 'B',B #disagrees in 6thish decimal?
     print 'P',P #disagrees in 4thish decimal?
     print 'N',N #good
-
-    print 'BPN\n',icrs.getConversionMatrix(coords.EquatorialCoordinatesEquinox)
-    print 'C\n',icrs.getConversionMatrix(coords.EquatorialCoordinatesCIRS)
+    
+    BPN = _computematrix(coords.ICRSCoordinates,coords.EquatorialCoordinatesEquinox,epoch)
+    print 'BPN\n',BPN
+    C = _computematrix(coords.ICRSCoordinates,coords.EquatorialCoordinatesCIRS,epoch)
+    print 'C\n',C
     
 @tests.append
 def trans_coords(epoch,jd):
