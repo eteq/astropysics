@@ -1956,7 +1956,7 @@ def _nutation_matrix(epoch):
     Matrix converts from mean coordinate to true coordinate as
     r_true = M * r_mean
     """
-    #TODO: implement higher precsion 2006/2000A model if requested/needed
+    #TODO: implement higher precision 2006/2000A model if requested/needed
     epsa,dpsi,deps = _nutation_components2000B(epoch) #all in radians
     
     return rotation_matrix(-(epsa + deps),'x',False) *\

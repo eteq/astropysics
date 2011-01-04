@@ -81,129 +81,6 @@ except ImportError: #support for earlier versions
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
         
-        
-#<----------Lunisolar/SS fundamental arguments for coords via SOFA------------->
-#TODO: eventually replace with objects that return the proper thing?
-
-_mean_anomaly_of_moon_poly = np.poly1d([-0.00024470,
-                                        0.051635,
-                                        31.8792,
-                                        1717915923.2178,
-                                        485868.249036])
-def _mean_anomaly_of_moon(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean anomaly of the moon  in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
-
-_mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
-                                       0.000136,
-                                       -0.5532,
-                                       129596581.0481,
-                                       1287104.793048])
-def _mean_anomaly_of_sun(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean anomaly of the sun  in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
-   
-_mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
-                                              -0.001037,
-                                              -12.7512,
-                                              1739527262.8478,
-                                              335779.526232])
-def _mean_long_of_moon_minus_ascnode(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean logitude of the Moon minus the ascending node in radians
-    
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
-
-_mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
-                                                    0.006593,
-                                                    -6.3706,
-                                                    1602961601.2090,
-                                                    1072260.703692])
-def _mean_elongation_of_moon_from_sun(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean elongation of the Moon from the Sun in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
-
-_mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
-                                          0.007702,
-                                          7.4722,
-                                          -6962890.5431,
-                                          450160.398036])
-def _mean_long_asc_node_moon(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of the Moon's ascending node in radians 
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
-   
-def _long_venus(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of Venus in radians
-    """
-    return np.fmod(3.176146697 + 1021.3285546211*T,_twopi)
-   
-def _long_earth(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of Earth in radians
-    """
-    return np.fmod(1.753470314 + 628.3075849991*T,_twopi)
-
-def _long_prec(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: General accumulated precession in longitude in radians
-    """
-    return (0.024381750 + 0.00000538691*T)*T
-
 class EphemerisAccuracyWarning(Warning):
     """
     Class for warnings due to Ephemeris accuracy issues
@@ -969,3 +846,126 @@ def _earth_coords(jd):
     finally:
         sun.jd = oldsunjd
     
+    
+    
+#<------Lunisolar/Solarsys fundamental arguments, mostly for coordsys mod------>
+#from 2003 IERS Conventions via adaptations of SOFA 
+
+_mean_anomaly_of_moon_poly = np.poly1d([-0.00024470,
+                                        0.051635,
+                                        31.8792,
+                                        1717915923.2178,
+                                        485868.249036])
+def _mean_anomaly_of_moon(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean anomaly of the moon  in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
+
+_mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
+                                       0.000136,
+                                       -0.5532,
+                                       129596581.0481,
+                                       1287104.793048])
+def _mean_anomaly_of_sun(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean anomaly of the sun  in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
+   
+_mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
+                                              -0.001037,
+                                              -12.7512,
+                                              1739527262.8478,
+                                              335779.526232])
+def _mean_long_of_moon_minus_ascnode(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean logitude of the Moon minus the ascending node in radians
+    
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
+
+_mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
+                                                    0.006593,
+                                                    -6.3706,
+                                                    1602961601.2090,
+                                                    1072260.703692])
+def _mean_elongation_of_moon_from_sun(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean elongation of the Moon from the Sun in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
+
+_mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
+                                          0.007702,
+                                          7.4722,
+                                          -6962890.5431,
+                                          450160.398036])
+def _mean_long_asc_node_moon(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of the Moon's ascending node in radians 
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
+   
+def _long_venus(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of Venus in radians
+    """
+    return np.fmod(3.176146697 + 1021.3285546211*T,_twopi)
+   
+def _long_earth(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of Earth in radians
+    """
+    return np.fmod(1.753470314 + 628.3075849991*T,_twopi)
+
+def _long_prec(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: General accumulated precession in longitude in radians
+    """
+    return (0.024381750 + 0.00000538691*T)*T
