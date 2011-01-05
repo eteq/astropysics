@@ -29,6 +29,9 @@ import numpy as np
 from matplotlib.pyplot import *
 import matplotlib.pyplot as plt
 
+#modify this list to change the default file formats for saving figures
+defaultsavetype = ['eps','pdf'] 
+
 #<--------------------Plot support functions----------------------------------->
 _plotreg = {}
 _mainfigs = []
@@ -97,7 +100,8 @@ def plot_names():
 
 #To save by default in a different directory, change the "save='.'" line at the
 #start of this function to "save='/path/to/dir'"
-def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True):
+def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
+               showfigs=True,savetypes=defaultsavetypes):
     """
     Generate plots and maybe save them.
     
@@ -117,6 +121,12 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
     :parm bool showfigs:
         If True, the figures will be shown (in whatever GUI is the correct one
         for the type).
+    :param list savetype: 
+        A list of strings specifying the extensions of the file formats for
+        saving figures that don't explicitly specify a file format. Change the
+        `defaultsavetypes` variable at the top of the script to change the
+        default (initially, ['eps','pdf'])
+    
     """
     import os,shutil,inspect,subprocess   
     
@@ -195,7 +205,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
                     savefunc = plt.savefig
                     saveexts = ftype[3:].strip()
                     if saveexts=='':
-                        saveexts = ['eps','pdf']
+                        saveexts = savetypes
                     else:
                         saveexts = saveexts.split(',')
                 elif ftype.startswith('mayavi'):
