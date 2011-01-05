@@ -30,7 +30,7 @@ from matplotlib.pyplot import *
 import matplotlib.pyplot as plt
 
 #modify this list to change the default file formats for saving figures
-defaultsavetype = ['eps','pdf'] 
+defaultsavetypes = ['eps','pdf'] 
 
 #<--------------------Plot support functions----------------------------------->
 _plotreg = {}
@@ -205,7 +205,10 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
                     savefunc = plt.savefig
                     saveexts = ftype[3:].strip()
                     if saveexts=='':
-                        saveexts = savetypes
+                        if isinstance(savetypes,basestring):
+                            saveexts = [savetypes]
+                        else:
+                            saveexts = savetypes
                     else:
                         saveexts = saveexts.split(',')
                 elif ftype.startswith('mayavi'):
@@ -223,9 +226,9 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
                 else:
                     raise ValueError('unrecognized figtype')
                 
+                epsfns = []
                 for saveext in saveexts:
                     fn = '%s%s.%s'%(save,fname,saveext)
-                    epsfns = None
                     
                     if not overwrite and exists(fn):
                         print fn,'exists, skipping (use -o at command line to overwrite)'
@@ -233,15 +236,18 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
                         print 'saving',fn
                         savefunc(fn)
                         if saveext == epsconv:
-                            epsfns = (fn,'%s%s.%s'%(save,fname,'eps'))
+                            epsfns.append((fn,'%s%s.%s'%(save,fname,'eps')))
+                        elif saveexts == 'eps':
+                            epsfns.append((False,fn))
                 
-                if epsfns is not None:
+                for epsfnt in epsfns:
                     from os import system
-                    fn,epsfn = epsfns
-                    print 'converting',fn,'to',epsfn
-                    retcode = subprocess.call('convert %s %s'%(fn,epsfn),shell=True)
-                    if retcode is not 0:
-                        raise ValueError('convert failed to convert %s to %s'%(fn,epsfn))
+                    fn,epsfn = epsfnt
+                    if fn:
+                        print 'converting',fn,'to',epsfn
+                        retcode = subprocess.call('convert %s %s'%(fn,epsfn),shell=True)
+                        if retcode is not 0:
+                            raise ValueError('convert failed to convert %s to %s'%(fn,epsfn))
                     
                     if tweakbbox is not None:
                         print 'updating eps bounding box on',epsfn,'to',tweakbbox
