@@ -2211,6 +2211,12 @@ def get_SFD_dust(long,lat,dustmap='ebv',interpolate=True):
     
     if `interpolate` is an integer, it can be used to specify the order of the
     interpolating polynomial
+    
+    .. todo::
+        Check mask for SMC/LMC/M31, E(B-V)=0.075 mag for the LMC, 0.037 mag for
+        the SMC, and 0.062 for M31. Also auto-download dust maps. Also add
+        tests. Also allow for other bands.
+    
     """
     from numpy import sin,cos,round,isscalar,array,ndarray,ones_like
     from pyfits import open
