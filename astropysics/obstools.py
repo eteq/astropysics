@@ -685,60 +685,6 @@ __dat_m = 12*__dat_changes[0] + __dat_changes[1]
 
 #<-------------------Site and Observing/Instrumentation-related---------------->
 
-def geographic_to_geocentric_latitude(geoglat):
-    """
-    Converts a geographic/geodetic latitude to a geocentric latitude.
-    
-    :param geoglat:
-        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
-        create one) or an angle in degrees for the geographic latitude.
-        
-    :returns: 
-        An :class:`astropysics.coords.AngularCoordinate` object with the
-        geocentric latitude.
-    """
-    from astropysics.constants import Rea,Reb
-    from astropysics.coords import AngularCoordinate
-    from operator import isSequenceType
-    
-    if not isinstance(geoglat,AngularCoordinate):
-        if isSequenceType(geoglat):
-            rads = AngularCoordinate(*geoglat).radians
-        else:
-            rads = AngularCoordinate(geoglat).radians
-    else:
-        rads = geoglat.radians
-    
-    boasq = (Reb/Rea)**2
-    return AngularCoordinate(np.arctan(boasq*np.tan(rads)),radians=True)
-
-def geocentric_to_geographic_latitude(geoclat):
-    """
-    Converts a geocentric latitude to a geographic/geodetic latitude.
-    
-    :param geoclat:
-        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
-        create one) or an angle in degrees for the geocentric latitude.
-        
-    :returns: 
-        An :class:`astropysics.coords.AngularCoordinate` object with the
-        geographic latitude.
-    """
-    from astropysics.constants import Rea,Reb
-    from astropysics.coords import AngularCoordinate
-    from operator import isSequenceType
-    
-    if not isinstance(geoclat,AngularCoordinate):
-        if isSequenceType(geoclat):
-            rads = AngularCoordinate(*geoclat).radians
-        else:
-            rads = AngularCoordinate(geoclat).radians
-    else:
-        rads = geoclat.radians
-        
-    boasq = (Reb/Rea)**2
-    return AngularCoordinate(np.arctan((1/boasq)*np.tan(rads)),radians=True)
-
 
 class Site(object):
     """
