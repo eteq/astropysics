@@ -67,8 +67,8 @@ Module API
 from __future__ import division,with_statement
 
 from ..constants import pi
-from ..utils import rotation_matrix,add_docs
-from ..utils.io import get_package_data
+from ..utils import add_docs
+
 import numpy as np
 _twopi = 2*pi
 _pio2 = pi/2
@@ -1800,6 +1800,8 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     
     
     def __makeFrameBias():
+        from ..utils import rotation_matrix
+        
         #sing USNO circular 179 for frame bias -- all in milliarcsec
         da0 = -14.6
         xi0 = -16.6170
@@ -1822,6 +1824,8 @@ def _precession_matrix_J2000_Capitaine(epoch):
         Circular 179.  This should match the IAU 2006 standard from SOFA 
         (although this has not yet been tested)
         """
+        from ..utils import rotation_matrix
+        
         T = (epoch-2000.0)/100.0
         #from USNO circular
         pzeta = (-0.0000003173,-0.000005971,0.01801828,0.2988499,2306.083227,2.650545)
@@ -1842,6 +1846,8 @@ def _load_nutation_data(datafn,seriestype):
     
     Seriestype can be 'lunisolar' or 'planetary'
     """
+    from ..utils.io import get_package_data
+    
     if seriestype == 'lunisolar':
         dtypes = [('nl',int),
                   ('nlp',int),
@@ -1956,6 +1962,8 @@ def _nutation_matrix(epoch):
     Matrix converts from mean coordinate to true coordinate as
     r_true = M * r_mean
     """
+    from ..utils import rotation_matrix
+    
     #TODO: implement higher precision 2006/2000A model if requested/needed
     epsa,dpsi,deps = _nutation_components2000B(epoch) #all in radians
     
@@ -1970,6 +1978,7 @@ def _load_CIO_locator_data(datafn):
     
     returns polycoeffs,termsarr (starting with 0th)
     """
+    from ..utils.io import get_package_data
     
     lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
     coeffs = []
@@ -2209,6 +2218,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
         else:
             from ..obstools import epoch_to_jd
             from .funcs import equation_of_the_origins
+            from ..utils import rotation_matrix
             
             jd = epoch_to_jd(eqsys.epoch)
             eqo = equation_of_the_origins(jd)*15.  #hours>degrees
@@ -2279,6 +2289,8 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     
     @staticmethod
     def _WMatrix(epoch):
+        from ..utils import rotation_matrix
+        
         sp = ITRSCoordinates._TIOLocator(epoch)
         if ITRSCoordinates.polarmotion is None:
             xp = 0
@@ -2326,6 +2338,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     def _fromEqC(eqc):
         from .funcs import earth_rotation_angle
         from ..obstools import epoch_to_jd
+        from ..utils import rotation_matrix
         
         epoch = eqc.epoch
         if epoch is not None:
@@ -2341,6 +2354,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
     def _fromEqE(eqe):
         from .funcs import greenwich_sidereal_time
+        from ..utils import rotation_matrix
         
         epoch = eqe.epoch
         if epoch is not None:
@@ -2376,6 +2390,8 @@ class FK5Coordinates(EquatorialCoordinatesEquinox):
         """
         Computes the precession matrix from one Julian epoch to another
         """
+        from ..utils import rotation_matrix
+        
         T = (epoch1 - 2000)/100
         dt = (epoch2 - epoch1)/100
         
@@ -2425,6 +2441,8 @@ class FK5Coordinates(EquatorialCoordinatesEquinox):
         """
         B-matrix from USNO circular 179 
         """
+        from ..utils import rotation_matrix
+        
         eta0 = -19.9/3600000
         xi0 = 9.1/3600000
         da0 = -22.9/3600000
@@ -2470,6 +2488,8 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
         computes the precession matrix from one Besselian epoch to another using
         Newcomb's method.
         """
+        from ..utils import rotation_matrix
+        
         #tropical years
         t1 = (epoch1-1850.0)/1000.0    
         t2 = (epoch2-1850.0)/1000.0
@@ -2564,11 +2584,15 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toEq(eclsc):
         from .funcs import obliquity
+        from ..utils import rotation_matrix
+        
         return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
         
     @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
     def _fromEq(eqc):
         from .funcs import obliquity
+        from ..utils import rotation_matrix
+        
         return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
     
     def transformToEpoch(self,newepoch):
@@ -2613,11 +2637,15 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
     def _toEq(eclsc):
         from .funcs import obliquity
+        from ..utils import rotation_matrix
+        
         return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
         
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
     def _fromEq(eqc):
         from .funcs import obliquity
+        from ..utils import rotation_matrix
+        
         return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
         
     def transformToEpoch(self,newepoch):
@@ -2739,6 +2767,8 @@ class GalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
+        from ..utils import rotation_matrix
+        
         mat = rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
               rotation_matrix(90 - GalacticCoordinates._ngp_J2000.dec.d,'y') *\
               rotation_matrix(GalacticCoordinates._ngp_J2000.ra.d,'z') *\
@@ -2752,6 +2782,8 @@ class GalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(FK4Coordinates,'self',transtype='smatrix')
     def _fromFK4(fk4coords):
+        from ..utils import rotation_matrix
+        
         mat = rotation_matrix(180 - GalacticCoordinates._long0_B1950.d,'z') *\
               rotation_matrix(90 - GalacticCoordinates._ngp_B1950.dec.d,'y') *\
               rotation_matrix(GalacticCoordinates._ngp_B1950.ra.d,'z') *\
@@ -2777,6 +2809,8 @@ class SupergalacticCoordinates(LatLongCoordinates):
     
     @CoordinateSystem.registerTransform(GalacticCoordinates,'self',transtype='smatrix')
     def _fromGal(galcoords):
+        from ..utils import rotation_matrix
+        
         z1r = rotation_matrix(SupergalacticCoordinates._nsgp_gal.l.d,'z')
         yr = rotation_matrix(90 - SupergalacticCoordinates._nsgp_gal.b.d,'y')
         z2r = rotation_matrix(180 - SupergalacticCoordinates._sg0_gal.l.d +\
