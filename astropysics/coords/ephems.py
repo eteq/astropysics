@@ -845,6 +845,30 @@ def _earth_coords(jd):
         return -xs,-ys,-zs
     finally:
         sun.jd = oldsunjd
+        
+def _load_earth_series(datafn):
+    from ..utils.io import get_package_data
+    #TODO:optimize
+    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    
+    lst = None
+    lsts = {}
+    for l in lines:
+        ls = l.strip()
+        if not ls.startswith('#') and ls!='':
+            if ls.endswith(':'):
+                #new variable
+                lsts[ls[:-1]] = lst = []
+            else:
+                for s in ls.split(','):
+                    lst.append(float(s))
+    
+    for k,v in lsts.items():
+        lsts[k] = np.array(v)
+    
+    return lsts
+    
+_Earth_series = _load_earth_series('earth_series.tab')
     
     
     
