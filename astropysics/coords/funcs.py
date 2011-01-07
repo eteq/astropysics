@@ -615,8 +615,11 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     else:
         raise ValueError('unrecognized mode')
     
-def match_nearest_coords(c1,c2,n=None):
+def match_nearest_coords(c1,c2=None,n=None):
     """
+    Match a set of coordinates to their nearest neighbor(s) in another set of
+    coordinates.
+    
     :param c1: 
         A D x N array with coordinate values (either as floats or
         :class:`AngularPosition` objects) or a sequence of
@@ -625,11 +628,15 @@ def match_nearest_coords(c1,c2,n=None):
         A D x N array with coordinate values (either as floats or
         :class:`AngularPosition` objects) or a sequence of
         :class:`LatLongCoordinates` objects for the second set of coordinates.
+        Alternatively, if this is None, `c2` will be set to `c1`, finding the 
+        nearest neighbor of a point in `c1` to another point in `c1`.
     :param int n: 
         Specifies the nth nearest neighbor to be returned (1 means the closest
         match). If None, it will default to 2 if `c1` and `c2` are the same
         object (just equality is not enough - they must actually be the same
-        in-memory array), or 1 otherwise.
+        in-memory array), or 1 otherwise. This is because if `c1` and `c2` are
+        the same, a coordinate matches to *itself* instead of the nearest other
+        coordinate.
     
     :returns: 
         (seps,ind2) where both are arrays matching the shape of `c1`. `ind2` is
@@ -643,6 +650,8 @@ def match_nearest_coords(c1,c2,n=None):
         warn('C-based scipy kd-tree not available - match_nearest_coords will be much slower!')
         from scipy.spatial import KDTree
         
+    if c2 is None:
+        c2 = c1
     if n is None:    
         n = 2 if c1 is c2 else 1
         
@@ -1044,7 +1053,59 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
         return res
     
 
+def geographic_to_geocentric_latitude(geoglat):
+    """
+    Converts a geographic/geodetic latitude to a geocentric latitude.
+    
+    :param geoglat:
+        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
+        create one) or an angle in degrees for the geographic latitude.
+        
+    :returns: 
+        An :class:`astropysics.coords.AngularCoordinate` object with the
+        geocentric latitude.
+    """
+    from astropysics.constants import Rea,Reb
+    from astropysics.coords import AngularCoordinate
+    from operator import isSequenceType
+    
+    if not isinstance(geoglat,AngularCoordinate):
+        if isSequenceType(geoglat):
+            rads = AngularCoordinate(*geoglat).radians
+        else:
+            rads = AngularCoordinate(geoglat).radians
+    else:
+        rads = geoglat.radians
+    
+    boasq = (Reb/Rea)**2
+    return AngularCoordinate(np.arctan(boasq*np.tan(rads)),radians=True)
 
+def geocentric_to_geographic_latitude(geoclat):
+    """
+    Converts a geocentric latitude to a geographic/geodetic latitude.
+    
+    :param geoclat:
+        An :class:`astropysics.coords.AngularCoordinate` object (or arguments to
+        create one) or an angle in degrees for the geocentric latitude.
+        
+    :returns: 
+        An :class:`astropysics.coords.AngularCoordinate` object with the
+        geographic latitude.
+    """
+    from astropysics.constants import Rea,Reb
+    from astropysics.coords import AngularCoordinate
+    from operator import isSequenceType
+    
+    if not isinstance(geoclat,AngularCoordinate):
+        if isSequenceType(geoclat):
+            rads = AngularCoordinate(*geoclat).radians
+        else:
+            rads = AngularCoordinate(geoclat).radians
+    else:
+        rads = geoclat.radians
+        
+    boasq = (Reb/Rea)**2
+    return AngularCoordinate(np.arctan((1/boasq)*np.tan(rads)),radians=True)
 
     
 #<---------------------DEPRECATED transforms----------------------------------->

@@ -793,8 +793,10 @@ class Site(object):
     latitude = property(_getLatitude,_setLatitude,doc='Geographic/Geodetic Latitude of the site as an :class:`AngularCoordinate` object')
     
     def _getGeocentriclat(self):
+        from .coords import geographic_to_geocentric_latitude
         return geographic_to_geocentric_latitude(self._lat)
     def _setGeocentriclat(self,val):
+        from .coords import geocentric_to_geographic_latitude
         self._lat = geocentric_to_geographic_latitude(val)
     geocentriclat = property(_getGeocentriclat,_setGeocentriclat,doc=None)
     
