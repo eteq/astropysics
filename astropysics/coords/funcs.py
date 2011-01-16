@@ -84,7 +84,9 @@ def earth_rotation_angle(jd,degrees=True):
     :returns: ERA or an array of angles (if `jd` is an array) 
     
     """
-    d = jd - 2451545.0 #days since 2000
+    from ..obstools import jd2000
+    
+    d = jd - jd2000 #days since 2000
     res = (0.7790572732640 + 0.00273781191135448*d + (d%1.0))%1.0
     
     if degrees is None:
