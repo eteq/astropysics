@@ -846,30 +846,136 @@ def _earth_coords(jd):
     finally:
         sun.jd = oldsunjd
         
-def _load_earth_series(datafn):
+def _load_earth_series(datafn='earth_series.tab'):
     from ..utils.io import get_package_data
-    #TODO:optimize
-    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l.strip()=='']
+    from numpy import array,matrix
+    from math import sqrt
+    
+    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l=='']
     
     lst = None
     lsts = {}
     for l in lines:
-        ls = l.strip()
-        if not ls.startswith('#') and ls!='':
-            if ls.endswith(':'):
-                #new variable
-                lsts[ls[:-1]] = lst = []
+        if l.endswith(':'):
+            #new variable
+            lsts[l[:-1]] = lst = []
+        else:
+            ls = l.split(',')
+            if ls[-1]=='':
+                lst.extend(ls[:-1])
             else:
-                for s in ls.split(','):
-                    lst.append(float(s))
+                lst.extend(ls)
+                
+                
+    res = {}
     
+    #first add all matricies
     for k,v in lsts.items():
-        lsts[k] = np.array(v)
+        if k.endswith('mat'):
+            mat = matrix(v,dtype=float)
+            res[k] = mat.reshape(sqrt(mat.size),sqrt(mat.size))
     
-    return lsts
+    #now construct all the x,y,z combination series'
+    coeffnms = set([k[:-1] for k in lsts.keys() if not k.endswith('mat')])
+        
+    #bad any coeff sets where x,y, and z don't match so that the missing entries are 0
+    for cnm in coeffnms:
+        xs = lsts[cnm+'x']
+        ys = lsts[cnm+'y']
+        zs = lsts[cnm+'z']
+        mx = max(max(len(xs),len(ys)),len(zs))
+        
+        if len(xs)<mx:
+            for i in range(mx-len(xs)):
+                xs.append(0)
+        if len(ys)<mx:
+            for i in range(mx-len(ys)):
+                ys.append(0)
+        if len(zs)<mx:
+            for i in range(mx-len(zs)):
+                zs.append(0)
+                
+        res[cnm+'coeffs'] = array([xs,ys,zs],dtype=float)
     
-_Earth_series = _load_earth_series('earth_series.tab')
+    return res
     
+_earth_series_coeffs = _load_earth_series()
+
+def _compute_earth_series(t,coeffs0,coeffs1,coeffs2):
+    """
+    Computes Earth location/velocity components from series coefficients.
+    
+    t should be in jd from J2000
+    
+    Returns pos,vel
+    """
+    
+    #T^0 terms
+    acs = coeffs0[:,0::3]
+    bcs = coeffs0[:,1::3]
+    ccs = coeffs0[:,2::3]
+    ps = bcs + ccs*t
+    pos = np.sum(acs*np.cos(ps),axis=1)
+    vel = np.sum(-acs*ccs*np.sin(ps),axis=1)
+    
+    #T^1 terms
+    acs = coeffs1[:,0::3]
+    bcs = coeffs1[:,1::3]
+    ccs = coeffs1[:,2::3]
+    cts = ccs*t
+    ps = bcs + cts
+    cps = np.cos(ps)
+    pos += np.sum(acs*t*cps,axis=1)
+    vel += np.sum(acs*(cps - cts*np.sin(ps)),axis=1)
+    
+    #T^2 terms
+    acs = coeffs2[:,0::3]
+    bcs = coeffs2[:,1::3]
+    ccs = coeffs2[:,2::3]
+    cts = ccs*t
+    ps = bcs + cts
+    cps = np.cos(ps)
+    pos += np.sum(acs*cps*t*t,axis=1)
+    vel += np.sum(acs*t*(2.0*cps - cts*np.sin(ps)),axis=1)
+    
+    return pos,vel
+
+def _earth_loc(jd,barycentric=False,kms=True):
+    """
+    Testing function - need to adapt to OO framework
+    
+    returns x,y,z,vx,vy,vz
+    
+    x is AU, v is either AU/yr or km/s
+    """
+    from ..obstools import jd2000
+    from ..constants import aupercm,secperyr
+    from warnings import warn
+    
+    coeffsd = _earth_series_coeffs
+    
+    t = (jd-jd2000)/365.25 #Julian years since 2000.0 reference
+    
+    if t > 100 or t < -100:
+        warn('JD {0} is not in range 1900-2100 CE'.format(jd),EphemerisAccuracyWarning)
+        
+    pos,vel = _compute_earth_series(t,coeffsd['h0coeffs'],coeffsd['h1coeffs'],coeffsd['h2coeffs'])
+    
+    if barycentric:
+        poff,voff = _compute_earth_series(t,coeffsd['b0coeffs'],coeffsd['b1coeffs'],coeffsd['b2coeffs'])
+        pos += poff
+        vel += voff
+    
+    #this rotates the analytic model from the series to DE405/BCRS
+    #same as rotating by -23d26'21.4091" about x then 0.0475" about z        
+    pos = (coeffsd['ec2bcrsmat']*pos.reshape(3,1)).A.ravel()
+    vel = (coeffsd['ec2bcrsmat']*vel.reshape(3,1)).A.ravel()
+    
+    if kms:
+        #AU/yr*(   km/AU  *  yr/sec ) = km/sec
+        vel *= (1e5/aupercm/secperyr)
+        
+    return pos,vel
     
     
 #<------Lunisolar/Solarsys fundamental arguments, mostly for coordsys mod------>

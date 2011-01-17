@@ -86,6 +86,17 @@ def trans_coords(epoch,jd):
     print 'ICRS->',icrs.convert(coords.EquatorialCoordinatesEquinox)
     print 'ICRS->',icrs.convert(coords.ITRSCoordinates)
     
+@tests.append
+def earth_pv(epoch,jd):
+    p,v = coords.ephems._earth_loc(jd,barycentric=False,kms=False)
+    pb,vb = coords.ephems._earth_loc(jd,barycentric=True,kms=False)
+    
+    print 'Heliocentric pos:',p
+    print 'Heliocentric vel:',v/365.25
+    print 'SS Barycentric pos:',pb
+    print 'SS Barycentric vel:',vb/365.25
+    
+    
 def compile_c():
     if not os.path.exists('sofatests'):
         res = os.system('./sofatests.build')

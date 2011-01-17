@@ -85,6 +85,23 @@ void earth_rotation(double ep, double jd) {
     printf("GMST:%g\n",iauGmst00(jd,0,jd,0));
 }
 
+void earth_pv(double ep, double jd) {
+    int res;
+    double pvh[2][3],pvb[2][3];
+    
+    res = iauEpv00(jd,0,pvh,pvb);
+    
+    if (res!=0) {
+        printf("JD not in range 1900-2100 CE as expected by SOFA function!");
+    }
+    
+    printf("Heliocentric pos: %g,%g,%g\n",pvh[0][0],pvh[0][1],pvh[0][2]);
+    printf("Heliocentric vel: %g,%g,%g\n",pvh[1][0],pvh[1][1],pvh[1][2]);
+    
+    printf("SS Barycentric pos: %g,%g,%g\n",pvb[0][0],pvb[0][1],pvb[0][2]);
+    printf("SS Barycentric vel: %g,%g,%g\n",pvb[1][0],pvb[1][1],pvb[1][2]);
+}
+
 int main(int argc, const char* argv[] ){
     if (argc != 4){
         printf("Need command line arguments: testname epoch jd\n");
@@ -105,6 +122,9 @@ int main(int argc, const char* argv[] ){
         if (doall|(strcmp(testname,"earth_rotation")==0)) {
             earth_rotation(epoch,jd);
         }    
+        if (doall|(strcmp(testname,"earth_pv")==0)) {
+            earth_pv(epoch,jd);
+        } 
     }
     
 }
