@@ -946,7 +946,7 @@ def _earth_loc(jd,barycentric=False,kms=True):
     
     returns x,y,z,vx,vy,vz
     
-    x is AU, v is either AU/yr or km/s
+    x is AU, v is either AU/yr or km/s (controlled by `kms`)
     """
     from ..obstools import jd2000
     from ..constants import aupercm,secperyr
@@ -973,7 +973,7 @@ def _earth_loc(jd,barycentric=False,kms=True):
     
     if kms:
         #AU/yr*(   km/AU  *  yr/sec ) = km/sec
-        vel *= (1e5/aupercm/secperyr)
+        vel *= (1e-5/aupercm/secperyr)
         
     return pos,vel
     
