@@ -15,9 +15,9 @@ ipdir = get_ipython_dir()
 op = OptionParser()
 op.usage = '%prog [options] [projdir projfile]'
 op.add_option('-a','--ipy-args',dest='iargs',help='IPython command line arguments - enclose the intended arguments in " marks.')
-op.add_option('-p','--project',help='Run a project in this session.  Project script will be run with any arguments passed to ipyastpys.')
-op.add_option('-c','--create-project',dest='create',help='Create a project with the specified name. Cannot be used with -p or -d.  Directory and scripts file (relative to directory) may be provided as arguments. Directory and script are created if they do not exist.')
-op.add_option('-d','--delete-project',dest='delete',help='Delete the project with the specified name. Cannot be used with -p or -c. This does not delete the directory for the project.')
+op.add_option('-p','--project',dest='project',metavar='PROJECT',help='Run a project in this session.  Project script will be run with any arguments passed to ipyastpys.')
+op.add_option('-c','--create-project',dest='create',metavar='PROJECT',help='Create a project with the specified name. Cannot be used with -p or -d.  Directory and scripts file (relative to directory) may be provided as arguments. Directory and script are created if they do not exist.')
+op.add_option('-d','--delete-project',dest='delete',metavar='PROJECT',help='Delete the project with the specified name. Cannot be used with -p or -c. This does not delete the directory for the project.')
 op.add_option('-l','--list-projects',dest='list',help='List all projects - all other options are ignored',action='store_true')
 op.add_option('-s','--script-args',dest='sargs',help='Arguments to be used in the profile script.  Ignored if -p/--profile is not given.')
     
