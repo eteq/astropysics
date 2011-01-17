@@ -19,7 +19,7 @@ try:
     import astropysics
     from astropysics import phot,spec,coords,models,constants,objcat,obstools,plotting,utils
 except ImportError:
-    print "Unable to start astropysics profile, is astropysics installed?"
+    print "Unable to start astropysics profile, try re-running astpys-setup (or re-installing astropysics)"
 
 """
 
