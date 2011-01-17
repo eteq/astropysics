@@ -2355,6 +2355,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     def _fromEqE(eqe):
         from .funcs import greenwich_sidereal_time
         from ..utils import rotation_matrix
+        from ..obstools import epoch_to_jd
         
         epoch = eqe.epoch
         if epoch is not None:
