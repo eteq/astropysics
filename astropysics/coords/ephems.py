@@ -832,19 +832,6 @@ solsysobjs['neptune'] = KeplerianOrbit('Neptune',
                         jd0=KeplerianOrbit.jd2000 - 0.5)
 solsysobjs['neptune']._validrange = solsysobjs['sun']._validrange
 
-def _earth_coords(jd):
-    """
-    Coordinates of the earth in heliocentric cartesian coordinates.  Can also
-    be thought of as the negative of the sun coordinates in geocentric.
-    """
-    try:
-        sun = solsysobjs['sun']
-        oldsunjd = sun.jd
-        sun.jd = self.jd
-        xs,ys,zs = sun.cartesianCoordinates(True)
-        return -xs,-ys,-zs
-    finally:
-        sun.jd = oldsunjd
         
 def _load_earth_series(datafn='earth_series.tab'):
     from ..utils.io import get_package_data
