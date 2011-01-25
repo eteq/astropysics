@@ -387,7 +387,7 @@ def cylindrical_to_cartesian(s,t,z,degrees=False):
     
 def offset_proj_sep(rx,ty,pz,offset,spherical=False):
     """
-    computes the projected seperation for a list of points in galacto-centric
+    computes the projected separation for a list of points in galacto-centric
     coordinates as seen from a point offset (an [[x,y,z]] 2-sequence)
     
     spherical determines if the inputs are spherical coords or cartesian.  If it
@@ -411,7 +411,7 @@ def offset_proj_sep(rx,ty,pz,offset,spherical=False):
 
 def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     """
-    Compute the full 3D seperation between two objects at distances `d1` and
+    Compute the full 3D separation between two objects at distances `d1` and
     `d2` and angular positions `pos1` and `pos2`
     (:class:`~astropysics.coords.coordsys.LatLongCoordinates` objects, or an
     argument that will be used to generate a
@@ -443,7 +443,7 @@ def sky_sep_to_3d_sep(pos1,pos2,d1,d2):
     if not isinstance(pos2,LatLongCoordinates):
         pos2 = EquatorialCoordinatesEquinox(pos2)
         
-    return (pos1-pos2).seperation3d(d1,d2)
+    return (pos1-pos2).separation3d(d1,d2)
 
 def radec_str_to_decimal(*args):
     """
@@ -505,7 +505,7 @@ def match_coords(a1,b1,a2,b2,eps=1,mode='mask'):
     :param b2: the second coordinate for the second set of coordinates
     :type b2: array-like
     :param eps: 
-        The maximum seperation allowed for coordinate pairs to be considered
+        The maximum separation allowed for coordinate pairs to be considered
         matched.
     :type eps: float
     :param mode:
@@ -687,22 +687,22 @@ def match_nearest_coords(c1,c2=None,n=None):
         
         
     
-def seperation_matrix(v,w=None,tri=False):
+def separation_matrix(v,w=None,tri=False):
     """
-    Computes a matrix of the seperation between each of the components of the
+    Computes a matrix of the separation between each of the components of the
     first dimension of an array. That is, A[i,j] = v[i]-w[j]. 
     
     :param v: The first array with first dimension n
     :param w: 
         The second array with first dimension m, and all following dimensions
-        matched to `v`. If None, `v` will be treated as `w` (e.g. the seperation
+        matched to `v`. If None, `v` will be treated as `w` (e.g. the separation
         matrix of `v` with itself will be returned).
     :param bool tri: 
         If True, the lower triangular part of the matrix is set to 0 (this is
         really only useful if w is None) 
         
     :returns: 
-        Seperation matrix with dimension nXmX(whatever the remaining dimensions
+        Separation matrix with dimension nXmX(whatever the remaining dimensions
         are)
         
     """
@@ -972,11 +972,11 @@ def cosmo_z_to_H(z,zerr=None):
 
 def angular_to_physical_size(angsize,zord,usez=False,**kwargs):
     """
-    Converts an observed angular size (in arcsec or as an AngularSeperation 
+    Converts an observed angular size (in arcsec or as an AngularSeparation 
     object) to a physical size.
     
     :param angsize: Angular size in arcsecond.
-    :type angsize: float or an :class:`AngularSeperation` object
+    :type angsize: float or an :class:`AngularSeparation` object
     :param zord: Redshift or distance
     :type zord: scalar number
     :param usez:
@@ -1009,7 +1009,7 @@ def angular_to_physical_size(angsize,zord,usez=False,**kwargs):
 def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     """
     Converts a physical size (in pc) to an observed angular size (in arcsec or 
-    as an AngularSeperation object if objout is True)
+    as an AngularSeparation object if objout is True)
     
     if usez is True, zord is interpreted as a redshift, and cosmo_z_to_dist 
     is used to determine the distance, with kwargs passed into cosmo_z_to_dist 
@@ -1026,14 +1026,14 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
         pc. Otherwise, `zord` will be interpreted as a distance.
     :type usez: boolean
     :param objout: 
-        If True, return value is an :class:`AngularSeperation` object,
+        If True, return value is an :class:`AngularSeparation` object,
         otherwise, angular size in arcsec.
     :type: bool
     
     kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
     
     :returns: 
-        The angular size in acsec, or an :class:`AngularSeperation` object if
+        The angular size in acsec, or an :class:`AngularSeparation` object if
         `objout` is True.
         
     """
@@ -1050,7 +1050,7 @@ def physical_to_angular_size(physize,zord,usez=True,objout=False,**kwargs):
     res = asecperrad*np.arcsin(r*(d*d+r*r)**-0.5)
     
     if objout:
-        return AngularSeperation(res/3600)
+        return AngularSeparation(res/3600)
     else:
         return res
     

@@ -95,7 +95,7 @@ class AngularCoordinate(object):
     
     Arithmetic operators can be applied to the coordinate, and will be applied 
     directly to the numerical value in radians.  For + and -, two angular 
-    coordinates may be used, although for -, an AngularSeperation object will
+    coordinates may be used, although for -, an AngularSeparation object will
     be returned.
     
     """
@@ -422,8 +422,8 @@ class AngularCoordinate(object):
     def __sub__(self,other):
         if type(other) == AngularCoordinate:
             from math import degrees
-            res = AngularSeperation()
-            return AngularSeperation(degrees(other._decval),degrees(self._decval))
+            res = AngularSeparation()
+            return AngularSeparation(degrees(other._decval),degrees(self._decval))
         else:
             res = AngularCoordinate()
             res._decval = self._decval - other
@@ -557,9 +557,9 @@ class AngularCoordinate(object):
             
         return ''.join(tojoin)
 
-class AngularSeperation(AngularCoordinate):
+class AngularSeparation(AngularCoordinate):
     """
-    This class represents a seperation between two angular coordinates on the
+    This class represents a separation between two angular coordinates on the
     unit sphere.
     
     A constructor is available, but the most natural way to generate this object
@@ -571,12 +571,12 @@ class AngularSeperation(AngularCoordinate):
         """
         Input arguments can be either:
         
-        * AngularSeperation(:class:`AngularSeperation` object) 
+        * AngularSeparation(:class:`AngularSeparation` object) 
             Generates a copy of the provided object.
-        * AngularSeperation(sep) 
-            Generates a seperation of the provided distance with no starting point.
-        * AngularSeperation(start,end) 
-            Computes the seperation from the start and end objects, which must
+        * AngularSeparation(sep) 
+            Generates a separation of the provided distance with no starting point.
+        * AngularSeparation(start,end) 
+            Computes the separation from the start and end objects, which must
             be :class:`AngularCoordinate` objects.
           
         """
@@ -594,9 +594,9 @@ class AngularSeperation(AngularCoordinate):
             a1 = a1._decval if hasattr(a1,'_decval') else a1
             sep = a1 - a0
         else:
-            raise ValueError('improper number of inputs to AngularSeperation')
+            raise ValueError('improper number of inputs to AngularSeparation')
         
-        super(AngularSeperation,self).__init__(sep)
+        super(AngularSeparation,self).__init__(sep)
         
     def __add__(self,other):
         if isinstance(other,AngularCoordinate) and not self.__class__ == other.__class__:
@@ -604,7 +604,7 @@ class AngularSeperation(AngularCoordinate):
             res._decval = self._decval+other._decval
             return res
         else:
-            return super(AngularSeperation,self).__add__(other)
+            return super(AngularSeparation,self).__add__(other)
         
     def _getArcsec(self):
         return self.degrees*3600
@@ -619,9 +619,9 @@ class AngularSeperation(AngularCoordinate):
     arcmin = property(_getArcmin,_setArcmin,doc=None)
     
         
-    def projectedSeperation(self,zord,usez=False,**kwargs):
+    def projectedSeparation(self,zord,usez=False,**kwargs):
         """
-        Computes the physical projected seperation assuming a given distance.
+        Computes the physical projected separation assuming a given distance.
         
         kwargs are passed into :func:`cosmo_z_to_dist` if `usez` is True.
         
@@ -633,16 +633,16 @@ class AngularSeperation(AngularCoordinate):
             pc. Otherwise, `zord` will be interpreted as a distance.
         :type usez: boolean
         
-        :returns: a float value for the seperation (in pc if redshift is used) 
+        :returns: a float value for the separation (in pc if redshift is used) 
         """
         from .funcs import angular_to_physical_size
         
         return angular_to_physical_size(self.arcsec,zord,usez=usez,**kwargs)
     
-    def seperation3d(self,zord1,zord2,usez=False,**kwargs):
+    def separation3d(self,zord1,zord2,usez=False,**kwargs):
         """
-        computes the 3d seperation assuming the two points at the ends of this
-        :class:`AngularSeperation` are at the distances `zord1` and `zord2`.  
+        computes the 3d separation assuming the two points at the ends of this
+        :class:`AngularSeparation` are at the distances `zord1` and `zord2`.  
         
         :param zord1: Redshift or distance for start point
         :type zord1: scalar number
@@ -654,7 +654,7 @@ class AngularSeperation(AngularCoordinate):
             pc. Otherwise, `zord` will be interpreted as a distance.
         :type usez: boolean
         
-        :returns: a float value for the seperation (in pc if redshift is used) 
+        :returns: a float value for the separation (in pc if redshift is used) 
         """
         from math import sin,cos,sqrt
         
@@ -1325,13 +1325,13 @@ class LatLongCoordinates(CoordinateSystem):
     def _setLaterr(self,val):
         if val is None:
             self._laterr = None
-        elif isinstance(val,AngularSeperation):
+        elif isinstance(val,AngularSeparation):
             self._laterr = val
         else:
-            self._laterr = AngularSeperation(val)
+            self._laterr = AngularSeparation(val)
     laterr = property(_getLaterr,_setLaterr,doc="""
-    Latitude error for this object as a :class:`AngularSeperation` object. May
-    be set using any valid input form for :class:`AngularSeperation`.
+    Latitude error for this object as a :class:`AngularSeparation` object. May
+    be set using any valid input form for :class:`AngularSeparation`.
     """)
     
     def _getLongerr(self):
@@ -1339,13 +1339,13 @@ class LatLongCoordinates(CoordinateSystem):
     def _setLongerr(self,val):
         if val is None:
             self._longerr = None
-        elif isinstance(val,AngularSeperation):
+        elif isinstance(val,AngularSeparation):
             self._longerr = val
         else:
-            self._longerr = AngularSeperation(val)
+            self._longerr = AngularSeparation(val)
     longerr = property(_getLongerr,_setLongerr,doc="""
-    Longitude error for this object as a :class:`AngularSeperation` object. May
-    be set using any valid input form for :class:`AngularSeperation`.
+    Longitude error for this object as a :class:`AngularSeparation` object. May
+    be set using any valid input form for :class:`AngularSeparation`.
     """)
     
     def __str__(self):
@@ -1400,14 +1400,14 @@ class LatLongCoordinates(CoordinateSystem):
             #10% faster due to the other overhead
             #sep = acos(sin(b1)*sin(b2)+cos(b1)*cos(b2)*cos(dl))
             
-            return AngularSeperation(degrees(sep))
+            return AngularSeparation(degrees(sep))
             
 #            #small angle version
 #            from math import cos,degrees,sqrt
 #            clat = cos((self._lat.radians+other._lat.radians)/2)
 #            dcorrlong = (self._long.radians - other._long.radians)*clat
 #            dlat = self._lat.radians-other._lat.radians
-#            sep = AngularSeperation(degrees(sqrt(dlat*dlat+dcorrlong*dcorrlong)))
+#            sep = AngularSeparation(degrees(sqrt(dlat*dlat+dcorrlong*dcorrlong)))
 #            return sep
         else:
             raise ValueError("unsupported operand type(s) for -: '%s' and '%s'"%(self.__class__,other.__class__))
