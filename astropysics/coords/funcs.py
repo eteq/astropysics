@@ -705,6 +705,13 @@ def separation_matrix(v,w=None,tri=False):
         Separation matrix with dimension nXmX(whatever the remaining dimensions
         are)
         
+    .. seealso::
+    
+        :mod:`scipy.spatial.distance`, in particular the
+        :func:`scipy.spatial.distance.pdist` function. It is much more efficient
+        and flexible at computing distances if individual components and sign
+        information is unnecessary.
+        
     """
     if w is None:
         w = v
