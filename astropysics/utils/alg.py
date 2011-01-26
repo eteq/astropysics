@@ -219,7 +219,7 @@ def centroid(val,axes=None,offset=None):
 
 
 
-def sigma_clip(data,sig=3,iters=1,bkgmeth='median',cenfunc=np.var,maout=False):
+def sigma_clip(data,sig=3,iters=1,cenfunc='median',varfunc=np.var,maout=False):
     """
     This performs the sigma clipping algorithm - i.e. the data will be iterated
     over, each time rejecting points that are more than a specified number of
@@ -286,22 +286,25 @@ def estimate_background(arr,method='median'):
     
     if method is None:
         res = 0
+    elif isinstance(method,basestring):
+        if method == 'median':
+            res = np.median(arr)
+        elif method == 'mean':
+            res = np.mean(arr)
+        elif method == '32':
+            res = (3*np.median(arr) - 2*np.mean(arr))
+        elif method == '2515':
+            res = (2.5*np.median(arr) - 1.5*np.mean(arr))
+        elif method == '21':
+            res = (2*np.median(arr) - np.mean(arr))
+        else:
+            raise ValueError('unrecognized estimate_background method string')
     elif np.isscalar(method) or (hasattr(method,'shape') and method.shape is tuple()):
         res = method
     elif callable(method):
         res = method(arr)
-    elif method == 'median':
-        res = np.median(arr)
-    elif method == 'mean':
-        res = np.mean(arr)
-    elif method == '32':
-        res = (3*np.median(arr) - 2*np.mean(arr))
-    elif method == '2515':
-        res = (2.5*np.median(arr) - 1.5*np.mean(arr))
-    elif method == '21':
-        res = (2*np.median(arr) - np.mean(arr))
     else:
-        raise ValueError('unrecognized offset type')
+        raise ValueError('unrecognized estimate_background method type')
     
     return res
 
