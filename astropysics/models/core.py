@@ -901,6 +901,28 @@ class FunctionModel(ParametricModel):
         
         return chi2,chi2/dof,chisqprob(chi2,dof)
     
+    def getCov(self):
+        """
+        Computes the covariance matrix for the last :func:`fitData` call.  
+        
+        :returns: 
+            The covariance matrix with variables in the same order as
+            :attr:`params`. Diagonal entries give the variance in each
+            parameter.
+        
+        .. warning:: 
+            This is not guaranteed to work for custom fit-types, but will always
+            work with the default (leastsq) fit.
+            
+        """
+        try:
+            cov = self.lastfit[1]
+        except:
+            raise ValueError('No fit has been performed or the fitting type does not support covariance matricies.')
+        rchi2 = self.chi2Data()[1]
+        
+        return cov*rchi2
+    
     def resampleFit(self,x=None,y=None,xerr=None,yerr=None,bootstrap=False,
                           modely=False,n=250,prefit=True, medianpars=False,
                           plothist=False,**kwargs):
