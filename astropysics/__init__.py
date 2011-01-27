@@ -34,3 +34,13 @@ and visualizing astronomical data.
 #If True, the add_docs and similar functions will only replace with empty 
 #strings - this is used by sphinx to 
 _ignore_add_docs = False
+
+#Large-scale TODO list:
+
+#Add Obsplots 
+#ccd tweaks/todos 
+#instrument registry along with site
+#objcat testing w/ M31 catalog
+#ZODB/Web objcat integration
+#pipeline gui and mid-saving
+#Phot reworking/clean up docs
