@@ -2331,7 +2331,7 @@ class BurkertModel(FunctionModel1DAuto):
     Burkert (1996) profile defined as:
     
     .. math::
-        \\frac{\rho_0 r_0^3}{(r+r_0)(r^2+r_0^2)}
+        \\frac{\\rho_0 r_0^3}{(r+r_0)(r^2+r_0^2)}
         
     where :attr:`rho0` is the central density.
     
