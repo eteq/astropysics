@@ -2266,6 +2266,8 @@ class DeVaucouleursModel(SersicModel):
     Sersic model with n=4.
     """
     
+    xaxisname = 'r'
+    
     def f(self,r,Ae=1,re=1):
         return SersicModel.f(self,r,Ae,re,4)
     
@@ -2285,6 +2287,10 @@ class JaffeModel(FunctionModel1DAuto):
         different overall normalization. 
     
     """
+    
+    xaxisname = 'r'
+    yaxisname = 'rho'
+    
     def f(self,r,A=1,rj=1):
         return (A/4/pi)*rj*r**-2*(r+rj)**-2
     
@@ -2309,8 +2315,33 @@ class HernquistModel(FunctionModel1DAuto):
         different overall normalization.
     
     """
+    
+    xaxisname = 'r'
+    yaxisname = 'rho'
+    
     def f(self,r,A=1,r0=1):
         return (A/2/pi)*(r0/r)*(r+r0)**-3
+    
+    @property
+    def rangehint(self):
+        return 0,self.r0*3
+    
+class BurkertModel(FunctionModel1DAuto):
+    """
+    Burkert (1996) profile defined as:
+    
+    .. math::
+        \\frac{\rho_0 r_0^3}{(r+r_0)(r^2+r_0^2)}
+        
+    where :attr:`rho0` is the central density.
+    
+    """
+    
+    xaxisname = 'r'
+    yaxisname = 'rho'
+    
+    def f(self,r,rho0=1,r0=1):
+        return rho0*r0**3/((r+r0)*(r**2+r0**2))
     
     @property
     def rangehint(self):
