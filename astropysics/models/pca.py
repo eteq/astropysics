@@ -13,8 +13,8 @@
 #   limitations under the License.
 
 """
-This module implements a single class :class:`Pca` to perform Principal
-Component Analysis.
+This module implements a single class :class:`Pca` to perform n-dimensional
+Principal Component Analysis.
 """
 
 import numpy as np
