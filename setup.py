@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-#Copyright (c) 2008 Erik Tollerud (etolleru@uci.edu) 
+#Copyright (c) 2008 Erik Tollerud (erik.tollerud@gmail.com) 
 from __future__ import division,with_statement
 
 from glob import glob
@@ -86,9 +86,9 @@ setup(name='Astropysics',
       extras_require={'all':recpkgs+guipkgs,
                       'nogui':recpkgs},  
       author='Erik Tollerud',
-      author_email='etolleru@uci.edu',
+      author_email='erik.tolleru@gmail.com',
       license = 'Apache License 2.0',
-      url='http://www.physics.uci.edu/~etolleru/software.html#astropysics',
+      url='http://packages.python.org/Astropysics/',
       long_description=descrip,
       cmdclass = cmdclassd
      )
