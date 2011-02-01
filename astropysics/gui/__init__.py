@@ -24,17 +24,17 @@ GUI tools (each in their own modules):
 
 * spectarget: a tool for making slitmasks from fiducial CMDs and photometric
   catalogs.  Currently only has direct support for Keck/DEIMOS
-* fitgui: tools for interactively fitting ``astropysics.models`` models 
-  to data.
 * spylot: spectrum plotter
 
 Convinence functions for launching the apps and the primary application classes
-are also aliased in this module for ease of use.
+are also aliased in this module for ease of use. This also includes the
+:func:`pymodelfit.fit_data` function, used for launching the FitGUI interactive
+curve-fitter.
  
 """
 try:
     from spectarget import spec_target,SpecTarget
-    from fitgui import fit_data,FitGui
+    from pymodelfit import fit_data
     from spylot import spylot_specs,Spylot
 except ImportError,e:
     if 'traits' in e.message:

@@ -6,7 +6,11 @@ Their full power is acheived when used interactively or as part of scripts, but 
 operate as stand-alone command-line tools when the situation warrants.
 
 Note that these applications make heavy use of `Enthought Traits <http://code.enthought.com/projects/traits/>`_ and the associated `Enthought Tools Suite <http://code.enthought.com/projects/index.php>`_ 
- if they are not installed, most of these will not function.
+ if they are not installed, most of these will not function. 
+ 
+Another important related GUI used in astropysics is the Fit GUI from 
+:mod:`pymodelfit`.  This GUI is used wherever interactive curve-fitting is
+needed (and was, in fact, originally made for astropysics).
 
 .. toctree::
    :maxdepth: 2
@@ -18,8 +22,7 @@ Note that these applications make heavy use of `Enthought Traits <http://code.en
    
 the :mod:`gui` module also imports the convinience functions and primary application classes for these GUIs.  These include:
 
-* :class:`FitGui <astropysics.gui.fitgui.FitGui>`
-* :func:`fit_data <astropysics.gui.fitgui.fit_data>`
+* :func:`fit_data <astropysics.gui.fitgui.fit_data>` (a wrapper for :mod:`pymodelfit`)
 * :class:`Spylot <astropysics.gui.spylot.Spylot>`
 * :func:`spylot_specs <astropysics.gui.spylot.spylot_specs>`
 * :class:`SpecTarget <astropysics.gui.spectarget.SpecTarget>`
