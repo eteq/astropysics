@@ -362,7 +362,7 @@ spylotkeybindings = KeyBindings(
 
 class Spylot(HasTraits):
     """
-    This class represents the fitgui application state.
+    This class represents the spylot application state.
     """
     
     defaultlines = 'galaxy' #can be 'galaxy' or 'stellar' or None

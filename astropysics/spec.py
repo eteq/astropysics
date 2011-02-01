@@ -881,7 +881,7 @@ class Spectrum(HasSpecUnits):
             model.fitData(self.x,self.flux,weights=(self.ivar if weighted else None))
         
         if interactive:
-            from .gui.fitgui import FitGui
+            from pymodelfit.gui import FitGui
             
             if interactive == 'reuse' and hasattr(self,'_contfg'):
                 fg = self._contfg
@@ -1583,8 +1583,8 @@ class SpectralFeature(HasSpecUnits):
                 model = get_model_instance(fit)
                 
             if interactive:
-                from .gui import fitgui
-                fg = fitgui.FitGui(x,y-cont,weights=1/err,model=model)
+                from pymodelfit.gui import FitGui
+                fg = FitGui(x,y-cont,weights=1/err,model=model)
                 fg.configure_traits(kind='modal')
             else:
                 model.fitData(x,y-cont,weights=1/err)
