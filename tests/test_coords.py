@@ -13,8 +13,8 @@ def test_gal():
     Thanks to David Nicholls for the data set.
     
     """
-    from astropysics.coords import SupergalacticCoordinates,GalacticCoordinates\
-                                   ,FK5Coordinates
+    from astropysics.coords.coordsys import SupergalacticCoordinates,\
+                                        GalacticCoordinates,FK5Coordinates
                                    
     
     #data set computed with IDL glactc.pro and cross-checks with catalogs
@@ -56,3 +56,60 @@ def test_gal():
         assert (fk2sgals[i]-sgals[i]).arcsec < 2,'FK5->SGal not within 2 arcsec'
         
     return fk5s,fk2gals,gals,gal2sgals,sgals,fk2sgals
+
+def test_icrs_rect():
+    """
+    Tests conversion ICRSCoordinates <-> RectangularICRSCoordinates
+    """
+    from astropysics.coords.coordsys import RectangularICRSCoordinates,\
+                                            ICRSCoordinates
+     
+    from numpy.random import randn
+    from nose.tools import assert_almost_equal
+    
+    ntests = 5
+    coords = randn(ntests,3)
+    
+    for x,y,z in coords:
+        unit = 'au' if x<0 else 'pc'
+        r = RectangularICRSCoordinates(x,y,z,unit=unit)
+        c = r.convert(ICRSCoordinates)
+        r2 = c.convert(RectangularICRSCoordinates)
+        r2.unit = unit
+        
+        #unit conversion only good to ~5 places
+        assert_almost_equal(x,r2.x,5)
+        assert_almost_equal(y,r2.y,5)
+        assert_almost_equal(z,r2.z,5)
+        
+def test_ecliptic_rect():
+    """
+    Tests conversion ecliptic <-> RectangularGeocentricEclipticCoordinates
+    """
+    from astropysics.coords.coordsys import EclipticCoordinatesCIRS,\
+                                            EclipticCoordinatesEquinox,\
+                                    RectangularGeocentricEclipticCoordinates
+                                            
+     
+    from numpy.random import randn
+    from nose.tools import assert_almost_equal
+    
+    ntests = 5
+    coords = randn(ntests,3)
+    
+    for x,y,z in coords:
+        r = RectangularGeocentricEclipticCoordinates(x,y,z)
+        c1 = r.convert(EclipticCoordinatesCIRS)
+        c2 = r.convert(EclipticCoordinatesEquinox)
+        r1 = c1.convert(RectangularGeocentricEclipticCoordinates)
+        r2 = c2.convert(RectangularGeocentricEclipticCoordinates)
+        
+        places = 7
+        assert_almost_equal(x,r1.x,places)
+        assert_almost_equal(y,r1.y,places)
+        assert_almost_equal(z,r1.z,places)
+        
+        assert_almost_equal(x,r2.x,places)
+        assert_almost_equal(y,r2.y,places)
+        assert_almost_equal(z,r2.z,places)
+        

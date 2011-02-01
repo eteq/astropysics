@@ -59,6 +59,7 @@ The following unit conversion factors are also provided:
 * `cmperau`
 * `aupercm`
 * `asecperrad`
+* `auperpc` (same as `asecperrad`)
 
 The package also includes classes representing various cosmologies that are used
 to derive relevant cosmological parameters. The current default is the
@@ -140,7 +141,7 @@ pcperly = 1.0/lyperpc
 cmperau = 1.49597887e13
 aupercm = 1.0/cmperau
 asecperrad = 206264.8062470963551564734
-
+auperpc = asecperrad #definitionally true
 
 #TODO:remove this once these are no longer in use in favor of spec.HasSpectrumUnits?
 def flambda_to_fnu_l(flambda,lamb):

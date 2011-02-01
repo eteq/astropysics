@@ -596,7 +596,7 @@ class AngularSeparation(AngularCoordinate):
         else:
             raise ValueError('improper number of inputs to AngularSeparation')
         
-        super(AngularSeparation,self).__init__(sep)
+        AngularCoordinate.__init__(self,sep)
         
     def __add__(self,other):
         if isinstance(other,AngularCoordinate) and not self.__class__ == other.__class__:
@@ -604,7 +604,7 @@ class AngularSeparation(AngularCoordinate):
             res._decval = self._decval+other._decval
             return res
         else:
-            return super(AngularSeparation,self).__add__(other)
+            return AngularCoordinate.__add__(self,other)
         
     def _getArcsec(self):
         return self.degrees*3600
@@ -1020,14 +1020,14 @@ class CoordinateSystem(object):
         :except: raises :exc:`NotImplementedError` if conversion is not present
         """
         
-        convpath = CoordinateSystem.getTransformPath(self.__class__,tosys)[1:-1]
+        convpath = CoordinateSystem.getTransformPath(self.__class__,tosys)
         
         if callable(convpath):
             return convpath(self)
         else:
             currobj = self
             currsys = self.__class__
-            for intersys in convpath:
+            for intersys in convpath[1:-1]:
                 currobj = CoordinateSystem._converters[currsys][intersys](currobj)
             return CoordinateSystem._converters[currsys][tosys](currobj)
 
@@ -1254,7 +1254,7 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             try:
                 self._dpc = (float(val[0]),float(val[1]))
-            except TypeError:
+            except (TypeError,IndexError):
                 self._dpc = (float(val),0)
     distancepc = property(_getDistancepc,_setDistancepc,doc="""
     Parallax distance to object in parsecs, or None to assume infinity. Set as
@@ -1263,14 +1263,15 @@ class LatLongCoordinates(CoordinateSystem):
     """)
     
     def _getDistanceau(self):
-        from .constants import aupercm,cmperpc
+        from ..constants import aupercm,cmperpc
         auperpc = cmperpc * aupercm
-        if self._dpcs is None:
+        if self._dpc is None:
             return None
         elif callable(self._dpc):
-            return self._dpc() * auperpc
+            res = self._dpc()
         else:
-            return self._dpc * auperpc
+            res = self._dpc
+        return (res[0]*auperpc,res[1]*auperpc)
     def _setDistanceau(self,val):
         from ..constants import cmperau,pcpercm
         pcperau = cmperau * pcpercm
@@ -1278,11 +1279,11 @@ class LatLongCoordinates(CoordinateSystem):
         if val is None:
             self._dpc = None
         elif callable(val):
-            self._dpc = lambda: val()*pcperau
+            self._dpc = lambda: tuple((v*pcperau for v in val()))
         else:
             try:
                 self._dpc = (float(val[0])*pcperau,float(val[1])*pcperau)
-            except TypeError:
+            except (TypeError,IndexError):
                 self._dpc = (float(val)*pcperau,0)
     distanceau = property(_getDistanceau,_setDistanceau,doc="""
     Parallax distance to object in AU, or None to assume infinity. Set as either
@@ -1704,7 +1705,8 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch,distancepc)
         
         Note that the default epoch is 2000 if not otherwise specified.  To 
-        disable epoch tranformations, set the epoch to None.
+        disable epoch tranformations, set the epoch to None.  If scalar values
+        are provided, they are assummed to be degrees.
         
         """
         posargs = {}
@@ -1712,7 +1714,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
             pass
         if len(args) == 1:
             if isinstance(args[0],EquatorialCoordinatesBase):
-                super(EquatorialCoordinates,self).__init__(args[0])
+                EpochalLatLongCoordinates.__init__(self,args[0])
                 self.epoch = args[0].epoch
                 return
             elif isinstance(args[0],basestring):
@@ -1756,7 +1758,13 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         if 'epoch' in kwargs:
             self.epoch = kwargs['epoch']
         if 'distancepc' in kwargs:
+            if 'distanceau' in kwargs:
+                raise TypeError("can't specify distance in both pc and au")
             self.distancepc = kwargs['distancepc']
+        elif 'distanceau' in kwargs:
+            self.distanceau = kwargs['distanceau']
+        else:
+            self._dpc = None
     
     @add_docs(EpochalLatLongCoordinates.convert)
     def convert(self,tosys,optimize=True):
@@ -1778,8 +1786,9 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
         Strictly speaking this class is actually the Barycentric Celestial
         Reference System (BCRS), as any space/proper motions are computed before
         this object (e.g. in :class:`~astropysics.ephems.EphemerisObject`). But
-        BCRS's orientation is tied to ICRS, so it is called ICRS here, as the 
-        true reference system is ICRS.
+        BCRS's orientation is tied to ICRF, a realization of ICRS.  And given 
+        that most other tools use the ICRS term in this context, it seems
+        clearer this way.
         
     .. warning:: 
         Abberation and annual parallax are not yet included in transformations!
@@ -1816,6 +1825,112 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     """
     #make it a static method just for clarity even though it isn't really visible
     __makeFrameBias = staticmethod(__makeFrameBias)
+    
+    
+class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
+    """
+    Rectangular coordinates oriented so that the positive z-axis points to the
+    north celestial pole and the positive x-axis to the origin of the BCRS/ICRS
+    (aligned via the ICRF).
+    
+    Distances can be specified via the :attr:`unit` attribute.  When converting
+    *to* :class:`RectangularICRSCoordinates`, distances default to AU if less
+    than 1000 AU, otherwise, pc.  If a distance is not present, the default
+    distance is 1 (unspecified unit).
+    
+    """
+    __slots__ = tuple()
+    julianepoch = True
+    
+    def __init__(self,x,y,z,epoch=None,unit='pc'):
+        RectangularCoordinates.__init__(self,x,y,z)
+        self._epoch = epoch
+        self._unit = None
+        self.unit = unit
+        
+    def __getstate__(self):
+        d = RectangularCoordinates.__getstate__(self)
+        d.update(EpochalCoordinates.__getstate__(self))
+        return d
+    
+    def __setstate__(self,d):
+        RectangularCoordinates.__setstate__(self,d)
+        EpochalCoordinates.__setstate__(self,d)
+        
+    def __str__(self):
+        if self.epoch is None:
+            epochstr = ''
+        else:
+            epochstr = ' ('+self.epochstr+')'
+        return RectangularCoordinates.__str__(self) + epochstr
+        
+    def transformToEpoch(self,newepoch):
+        EpochalCoordinates.transformToEpoch(newepoch)
+        
+    def _getUnit(self):
+        return self._unit
+    def _setUnit(self,val):
+        from ..constants import auperpc
+        
+        if val is None:
+            self._unit = None
+        elif self._unit is None and (val in ('au','pc')):
+            self._unit = val
+        elif val=='au':
+            if self._unit == 'pc':
+                self.x *= auperpc
+                self.y *= auperpc
+                self.z *= auperpc
+                self._unit = val
+        elif val == 'pc':
+            if self._unit == 'au':
+                self.x /= auperpc
+                self.y /= auperpc
+                self.z /= auperpc
+                self._unit = val
+        else:
+            raise ValueError("unit must be 'au' or 'pc' - got %s"%val)
+        
+    unit = property(_getUnit,_setUnit,doc="""The unit for these coordinates. 
+        Must be 'au', 'pc', or None - setting to anything else will raise a
+        :exc:`ValueError`. If not None, setting to a new unit will convert the
+        values from AU to pc or vice versa.
+        """)
+    
+    
+    @CoordinateSystem.registerTransform('self',ICRSCoordinates)
+    def _toICRS(ric):
+        from math import asin,atan2,degrees
+        
+        x,y,z = ric.x,ric.y,ric.z        
+        r = (x*x+y*y+z*z)**0.5
+        dec = degrees(asin(z/r))
+        ra = degrees(atan2(y,x))
+        
+        if ric.unit == 'pc':
+            return ICRSCoordinates(ra,dec,distancepc=r,epoch=ric.epoch)
+        else:
+            return ICRSCoordinates(ra,dec,distanceau=r,epoch=ric.epoch)
+    
+    @CoordinateSystem.registerTransform(ICRSCoordinates,'self')    
+    def _fromICRS(ic):
+        from math import sin,cos
+        
+        ra,dec = ic.ra.r,ic.dec.r
+        if ic.distanceau is None:
+            r = 1
+            unit = None
+        elif ic.distanceau>1000:
+            r = ic.distancepc[0]
+            unit = 'pc'
+        else:
+            r = ic.distanceau[0]
+            unit = 'au'
+        x = r*cos(ra)*cos(dec)
+        y = r*sin(ra)*cos(dec)
+        z = r*sin(dec)
+        
+        return RectangularICRSCoordinates(x,y,z,ic.epoch,unit)
                        
 def _precession_matrix_J2000_Capitaine(epoch):
         """
@@ -2627,7 +2742,7 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
     
     obliqyear = 1980
     
-    def __init__(self,lamb=0,beta=0,lemberr=None,betaerr=None,epoch=2000,
+    def __init__(self,lamb=0,beta=0,lamberr=None,betaerr=None,epoch=2000,
                       distanceau=None):
         """
         See the associated attribute docstrings for the meaning of the inputs.  
@@ -2664,7 +2779,7 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
     """
     Rectangular coordinates oriented so that the x-y plane lies in the plane of
     the ecliptic at the specified epoch. Distances are in AU. Origin is at the
-    barycenter of the Earth.
+    center of mass of the Earth.
     
     Note that the epoch should not be set directly - if precession is desired
     desired, convert to an Ecliptic coordinate system, do the precession, and
@@ -2726,13 +2841,13 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
         if ec.distanceau is None:
             r = 1
         else:
-            r = ec.distanceau
+            r = ec.distanceau[0]
             
         x = r*cos(l)*cos(b)
         y = r*sin(l)*cos(b)
         z = r*sin(b)
         
-        return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
+        return RectangularGeocentricEclipticCoordinates(x,y,z,ec.epoch)
     
     @CoordinateSystem.registerTransform(EclipticCoordinatesEquinox,'self')    
     def _fromEcQ(ec):
@@ -2742,13 +2857,13 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
         if ec.distanceau is None:
             r = 1
         else:
-            r = ec.distanceau
+            r = ec.distanceau[0]
             
         x = r*cos(l)*cos(b)
         y = r*sin(l)*cos(b)
         z = r*sin(b)
             
-        return RectangularEclipticCoordinates(x,y,z,True,ec.epoch)
+        return RectangularGeocentricEclipticCoordinates(x,y,z,ec.epoch)
     
 class GalacticCoordinates(LatLongCoordinates):
     __slots__ = tuple()
