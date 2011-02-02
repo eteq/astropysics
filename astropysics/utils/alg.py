@@ -431,5 +431,40 @@ def rotation_matrix_xy(x,y):
     return np.matrix([[1-b*xsq,-b*xy,-x],
                       [-b*xy,1-n*ysq,-y],
                       [x,y,1-b*(xsq+ysq)]])
+                      
+
+def intrinsic_to_observed_ellipticity(ei,i,degrees=True):
+    """
+    Converts intrinsic ellipticity to observed where :math:`e^2 = 1-(b/a)^2`
+    
+    :param ei: intrinsic ellipticity
+    :type ei: float or array-like
+    :param i: inclination angle
+    :type i: float or array-like
+    :param degrees: if True, the inclination is assumed to be in degrees
+    
+    :returns: observed ellipticity
+    """
+    if degrees:
+        i = np.radians(i)
+        
+    return 1 - ((1-ei)**2*np.sin(i)**2+np.cos(i)**2)**0.5
+    
+def observed_to_intrinsic_ellipticity(eo,i,degrees=True):
+    """
+    Converts observed ellipticity to intrinsic where :math:`e^2 = 1-(b/a)^2`
+    
+    :param eo: observed ellipticity
+    :type eo: float or array-like
+    :param i: inclination angle
+    :type i: float or array-like
+    :param degrees: if True, the inclination is assumed to be in degrees
+    
+    :returns: intrinsic ellipticity
+    """
+    if degrees:
+        i = np.radians(i)
+        
+    return 1 - ((1-eo)-np.cos(i)**2)**0.5/np.sin(i)
 
 del ABCMeta,abstractmethod,abstractproperty #clean up namespace
