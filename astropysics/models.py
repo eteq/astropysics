@@ -38,7 +38,7 @@ astropysics, often using the models in this module.
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. inheritance-diagram:: astropysics.models.builtins
+.. inheritance-diagram:: astropysics.models
    :parts: 1
    
 Module API
@@ -254,11 +254,11 @@ class BlackbodyModel(FunctionModel1DAuto,_HasSpecUnits):
     
     
 class BurkertModel(FunctionModel1DAuto):
-    """
+    r"""
     Burkert (1996) profile defined as:
     
     .. math::
-        \\frac{\rho_0 r_0^3}{(r+r_0)(r^2+r_0^2)}
+        \frac{\rho_0 r_0^3}{(r+r_0)(r^2+r_0^2)}
         
     where :attr:`rho0` is the central density.
     
