@@ -28,13 +28,13 @@ GUI tools (each in their own modules):
 
 Convinence functions for launching the apps and the primary application classes
 are also aliased in this module for ease of use. This also includes the
-:func:`pymodelfit.fit_data` function, used for launching the FitGUI interactive
-curve-fitter.
+:func:`pymodelfit.fitgui.fit_data` function, used for launching the FitGUI
+interactive curve-fitter.
  
 """
 try:
     from spectarget import spec_target,SpecTarget
-    from pymodelfit import fit_data
+    from pymodelfit.fitgui import fit_data
     from spylot import spylot_specs,Spylot
 except ImportError,e:
     if 'traits' in e.message:

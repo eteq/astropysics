@@ -45,6 +45,8 @@ Module API
 ^^^^^^^^^^
 
 """
+from __future__ import division,with_statement
+import numpy as np
 #from pymodelfit.core import *
 from pymodelfit.builtins import * #includes core
 from .spec import HasSpecUnits as _HasSpecUnits
@@ -1314,4 +1316,4 @@ for o in locals().values():
         if 'FunctionModel' not in o.__name__ and 'CompositeModel' not in o.__name__:
             register_model(o)
 
-del ABCMeta,abstractmethod,abstractproperty,np,pi,isclass,o #clean up namespace
+del ABCMeta,abstractmethod,abstractproperty,isclass,o #clean up namespace
