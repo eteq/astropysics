@@ -32,12 +32,14 @@ from astropysics.version import version as setup_version
 
 # -- General configuration -----------------------------------------------------
 
-# Add any Sphinx extension module names here, as strings. They can be extensions
-# coming with Sphinx (named 'sphinx.ext.*') or your custom ones.
+# Builtin sphinx extensions
 extensions = ['sphinx.ext.autodoc', 'sphinx.ext.intersphinx', 'sphinx.ext.todo', 
               'sphinx.ext.pngmath', 'sphinx.ext.inheritance_diagram',
               'sphinx.ext.coverage','sphinx.ext.ifconfig','sphinx.ext.doctest']
               #'matplotlib.sphinxext.plot_directive','matplotlib.sphinxext.ipython_console_highlighting']
+              
+#custom extensions
+extensions.extend(['astropysics.sphinxext.todomod'])
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -250,57 +252,3 @@ graphviz_output_format = 'png' #can be 'svg' or 'png'
 #are intended for in-shell use - Sphinx links are better
 import astropysics
 astropysics._ignore_add_docs = True
-
-#<-------------Custom extension functionality-------------->
-from sphinx.ext.todo import Todo,todo_node,nodes
-from sphinx.pycode import ModuleAnalyzer,PycodeError
-
-
-class TodoModule(Todo):
-    required_arguments = 1
-    has_content = True
-    
-    def run(self):        
-        try:
-            modfn = ModuleAnalyzer.for_module(self.arguments[0]).srcname
-        except PycodeError,e:
-            warnstr = "can't find module %s for todomodule: %s"%(self.arguments[0],e)
-            return [self.state.document.reporter.warning(warnstr,lineno=self.lineno)]
-        
-        todolines = []
-        with open(modfn) as f:
-            for l in f:
-                if l.startswith('#TODO'):
-                    todolines.append(l)
-                    
-        todoreses = []
-        for tl in todolines:
-            text = tl.replace('#TODO:','').replace('#TODO','').strip()
-            env = self.state.document.settings.env
-
-            targetid = "todo-%s" % env.index_num
-            env.index_num += 1
-            targetnode = nodes.target('', '', ids=[targetid])
-            
-            td_node = todo_node(text)
-            
-            title_text = _('Module Todo')
-            textnodes, messages = self.state.inline_text(title_text, self.lineno)
-            td_node += nodes.title(title_text, '', *textnodes)
-            td_node += messages
-            if 'class' in self.options:
-                classes = self.options['class']
-            else:
-                classes = ['admonition-' + nodes.make_id(title_text)]
-            td_node['classes'] += classes
-            
-            td_node.append(nodes.paragraph(text,text))
-            td_node.line = self.lineno
-            
-            todoreses.append(targetnode)
-            todoreses.append(td_node)
-        return todoreses
-
-
-def setup(app):
-    app.add_directive('todomodule', TodoModule) #add this directive to document TODO comments in the root of the module
