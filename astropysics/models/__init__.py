@@ -144,17 +144,9 @@ models.builtins
    :undoc-members:
    :show-inheritance:
 
-models.pca
-----------
-
-.. automodule:: astropysics.models.pca
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 """
 from core import *
 from builtins import *
-from pca import Pca
 
 del ABCMeta,abstractmethod,abstractproperty,np,pi #clean up namespace
