@@ -240,7 +240,8 @@ intersphinx_mapping = {'python':('http://docs.python.org/',None),
                        'scipy':('http://docs.scipy.org/doc/scipy/reference/',None),
                        'matplotlib':('http://matplotlib.sourceforge.net/',None),
                        'pymc':('http://pymc.googlecode.com/svn/doc/',None),
-                       'networkx':('http://networkx.lanl.gov/',None)}
+                       'networkx':('http://networkx.lanl.gov/',None),
+                       'pymodelfit':('http://packages.python.org/PyModelFit/',None)}
 
 autoclass_content = 'both'
 

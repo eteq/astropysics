@@ -20,10 +20,10 @@
 models -- astronomy-specific models for pymodelfit
 ==================================================
 
-This module makes use of the :mod:`pymodelfit` package to define a number of 
-models inteded for data-fitting that are astronomy-specific.  Note that 
-:mod:`pymodelfit` was originally written as part of astropysics, and hence it
-is tightly integrated (including the Fit GUI, where relevant) to other parts of
+This module makes use of the :mod:`pymodelfit` package to define a number of
+models inteded for data-fitting that are astronomy-specific. Note that
+:mod:`pymodelfit` was originally written as part of astropysics, and hence it is
+tightly integrated (including the Fit GUI, where relevant) to other parts of
 astropysics, often using the models in this module.
 
 .. note::
@@ -33,7 +33,7 @@ astropysics, often using the models in this module.
     astropysics is written for when pymodelfit was part of astropysics.  This 
     may change in the future, though, so it is recommended that user code always
     use ``from pymodelfit import ...`` instead of 
-    ``from astropysic.models import ...``.
+    ``from astropysics.models import ...``.
 
 Classes and Inheritance Structure
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
