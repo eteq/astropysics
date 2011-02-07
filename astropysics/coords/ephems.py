@@ -14,8 +14,9 @@
 
 
 """
-This module contains tools and utilities for computing ephemerides of solar
-system objects, as well as proper motion calculations for extrasolar objects.
+This module contains tools and utilities for computing ephemerides and physical
+locations of solar system objects, as well as proper motion calculations for
+extrasolar objects.
 
 .. warning::
     This module is currently being re-worked and has incomplete/possibly 
@@ -307,7 +308,7 @@ class KeplerianOrbit(SolarSystemObject):
     only accurate to ~ 1 arcmin within a millenium or so of J2000, but are
     computationally quite fast and simple.
     """
-    jd2000 = 2451545.0
+    from ..obstools import jd2000
     
     def __init__(self,name,e,a,i,N,w,M,jd0=None,jdnow=None):
         """
