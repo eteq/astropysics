@@ -2974,6 +2974,7 @@ custom coordinates and transforms::
     from astropysics.coords import CoordinateSystem
     graph = CoordinateSystem.getTransformGraph()
     dotgraph = to_agraph(relabel_nodes(graph,lambda n:n.__name__))
+    dotgraph.graph_attr.update(dict(size='12.0, 12.0',fontsize=12))
     dotgraph.write('mygraph.dot')
     draw_networkx(graph)
     
@@ -2985,6 +2986,7 @@ showing both builtin and custom-added coordinates and transforms.
 try:
     from networkx import to_agraph,relabel_nodes
     graph = to_agraph(relabel_nodes(CoordinateSystem.getTransformGraph(),lambda n:n.__name__))
+    graph.graph_attr.update(dict(size=r'12.0, 12.0',fontsize=12))
     transstr="""
 Built-in Transforms
 ^^^^^^^^^^^^^^^^^^^
