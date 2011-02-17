@@ -248,6 +248,7 @@ autoclass_content = 'both'
 todo_include_todos = 'dev' in release
 
 graphviz_output_format = 'png' #can be 'svg' or 'png'
+inheritance_graph_attrs = dict(size='"12.0, 12.0"',fontsize=12)
 
 #This makes the add_doc family of functions in astropysics do nothing, as those
 #are intended for in-shell use - Sphinx links are better
