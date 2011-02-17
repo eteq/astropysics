@@ -60,10 +60,7 @@ Module API
 from __future__ import division,with_statement
 
 from ..constants import pi
-from ..utils import DataObjectRegistry
 import numpy as np
-
-from .coordsys import ICRSCoordinates
 
 _twopi = 2*pi
 
@@ -86,6 +83,8 @@ class EphemerisAccuracyWarning(Warning):
     """
     Class for warnings due to Ephemeris accuracy issues
     """
+
+#<--------------------Define general classes----------------------------------->
     
 class EphemerisObject(object):
     """
@@ -93,7 +92,13 @@ class EphemerisObject(object):
     time. 
     
     **Subclassing**
-    FILL IN
+    
+    * Subclasses should implement the :meth:`_getCoordObj` abstract method.
+      This should return a :class:`astropysics.coords.coordsys.CoordinateSystem`
+      object of the coordinates for the current value of :attr:`jd`.
+      
+    * Subclasses may implement a :meth:`_jdhook` method to perform an action
+      whenever the jd is changed.  It must take the new JD as its only argument. 
     
     """
     
@@ -103,6 +108,15 @@ class EphemerisObject(object):
     'The name of the object.'
     
     def __init__(self,name,validjdrange=None):
+        """
+        :params name: The name of the object.
+        :params validjdrange:  
+            Sets the jd range over which this method is valid as (minjd,maxjd).
+            Trying to get something outside will result in an
+            :`exc`:EphemerisAccuracyWarning warning. `minjd` or `maxjd` can be
+            None to indicate no bound.
+            
+        """
         from ..obstools import jd2000
         
         self._jd = jd2000
@@ -130,11 +144,14 @@ class EphemerisObject(object):
             elif jd > self._validrange[1]:
                 warn('JD {0} is above the valid range for this EphemerisObject'.format(jd),EphemerisAccuracyWarning)
         self._jd = jd
+        if hasattr(self,'_jdhook'):
+            self._jdhook(jd)
         
     jd = property(_getJd,_setJd,doc="""
     Julian Date at which to calculate the orbital elements. Can be set either as
     a scalar JD, 'now', :class:`datetime.datetime` object or a compatible tuple.
     """)
+    
     
     @property
     def validjdrange(self):
@@ -177,366 +194,921 @@ class EphemerisObject(object):
                     else:
                         vs.append(val)
                 self._validrange = tuple(vs)
-    
-    
-            
-class SolarSystemObject(EphemerisObject):
-    """
-    A :class:`EphemerisObject` that can be interpreted as an object in the Solar
-    System.  
-    
-    :meth:`cartesianCoordinates` must be overridden in subclasses.
-    """
-    
-    def _obliquity(self,jd):
+                
+    def __call__(self,jds=None,coordsys=None):
         """
-        obliquity of the Earth/angle of the ecliptic in degrees
+        Computes the coordinates of this object at the specified time(s).
         
-        the input `jd` is the actual Julian Day, *not* the offset `d` used for
-        the orbital elements
+        :param jds: 
+            A sequence of julian dates at which to compute the coordinates, a
+            scalar JD, or None to use the :attr:`jd` attribute's current value.
+        :param coordsys: 
+            A :class:`astropysics.coords.coordsys.CooordinateSystem` class that
+            specifies the type of the output coordinates, or None to use the
+            default coordinate type.
+
+        :returns: 
+            A list of objects with the coordinates in the same order as `jds`,
+            or a single object if `jds` is None or a scalar. Outputs are
+            :class:`astropysics.coords.coordsys.CooordinateSystem` subclasses,
+            and their type is either `coordsys` or the default type if
+            `coordsys` is None.
+        
+        
         """
-        #TODO: eventually pull this from Ecliptic coordinate transform
-        return 23.4393 - 3.563E-7 * (jd - KeplerianOrbit.jd2000)
+        single = False #return an object instead of a sequence of objects
+        if jds is None:
+            single = True
+            res = (self._getCoordObj(),)
+        else:
+            if isinstance(jds,np.ndarray):
+                if jds.shape == ():
+                    single = True
+                jds = jds.ravel()
+            elif np.isscalar(jds):
+                single = True
+            
+            jd0 = self.jd
+            try:
+                res = []
+                for jd in jds:
+                    self.jd = jd
+                    res.append(self._getCoordObj())
+            finally:
+                self.jd = jd0
+                
+        
+        if coordsys is not None:
+            res = [c.convert(coordsys) for c in res]
+        
+        if single:
+            return res[0]
+        else:
+            return res
+                
     
     @abstractmethod
-    def cartesianCoordinates(self,geocentric=False):
+    def _getCoordObj(self):
         """
-        Returns the ecliptic rectangular coordinates of this object
-        at the current date/time as an (x,y,z) tuple (in AU).
+        Computes and returns the coordinate location of the object at the time
+        given by the current value of the :attr:`jd` attribute of this object.
         
-        If `geocentric` is True, return geocentric coordinates.  Otherwise, 
-        heliocentric.
+        :returns: 
+            With the current coordinates for the object. The exact output
+            coordinate system is not specified, other than that it must be a
+            subclass of :class:`astropysics.coords.coordsys.CooordinateSystem`.
+            
         """
         raise NotImplementedError
     
-    def equatorialCoordinates(self):
-        """
-        Returns the equatorial coordinates of this object at the current
-        date/time as a :class:`EquatorialCoordinates` object for the epoch at which
-        they are derived.
-        """
-        from math import radians,degrees,cos,sin,atan2,sqrt
-        from ..obstools import jd_to_epoch
-        
-        
-        if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
-            return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
-        
-        jd = self.jd
-        
-        eclr = radians(self._obliquity(jd))
-        
-        #heliocentric coordinates
-        xh,yh,zh = self.cartesianCoordinates()
-        
-        #get Earth position - from the Sun ephemeris
-        xs,ys,zs = _earth_coords(jd)
-        
-        #switch to geocentric coordinates
-        xg = xh - xs
-        yg = yh - ys
-        zg = zh - zs
-        
-        #finally correct for obliquity to get equatorial coordinates
-        cecl = cos(eclr)
-        secl = sin(eclr)
-        x = xg
-        y = cecl*yg - secl*zg
-        z = secl*yg + cecl*zg
-        
-        ra = degrees(atan2(y,x))
-        dec = degrees(atan2(z,sqrt(x*x+y*y)))
-        
-        #cache for faster retrieval if JD is not changed
-        self._eqcache = (self._jd,ra,dec)
-        return EquatorialCoordinates(ra,dec,epoch=jd_to_epoch(self._jd))
-    
-    def phase(self,perc=False):
-        """
-        Compute the phase of this object - 0 is "new", 1 is "full".
-        
-        if `perc` is True, returns percent illumination.
-        """
-        from math import sqrt
-        
-        xh,yh,zh = self.cartesianCoordinates()
-        
-        xs,ys,zs = _earth_coords(jd)
-        
-        xg = xh - xs
-        yg = yh - ys
-        zg = zh - zs
-        
-        r = sqrt(xh*xh+yh*yh+zh*zh)
-        R = sqrt(xg*xg+yg*yg+zg*zg)
-        s = sqrt(xs*xs+ys*ys+zs*zs)
-        
-        phase = (1+(r*r + R*R - s*s)/(2*r*R))/2
-        
-        if perc:
-            return 100*phase
-        else:
-            return phase
-    
-class KeplerianOrbit(SolarSystemObject):
+class KeplerianObject(EphemerisObject):
     """
-    An object with orbital elements (probably a solar system body) that can be
-    used to construct ephemerides.
+    An object with Keplerian orbital elements.
     
-    The orbital elements are accessible as properties, computed for a Julian
-    Date given by the :attr:`jd` attribute. They can also be set to a function
-    of the form `element(d)`, where `d` is the offset from `jd0`. Alternatively,
-    subclasses may directly override the orbital elements with their own custom
-    properties that should return orbital elements at time `d`. The primary
-    orbital elements are:
+    The following orbital elements are available for the current value of
+    :attr:`jd` as read-only properties:
     
-    * :attr:`e`
-        ellipticity 
-    * :attr:`a`
-        semimajor axis (AU)
+    * :attr:`a` 
+    * :attr:`e` 
     * :attr:`i` 
-        is the orbital inclination (degrees)
-    * :attr:`N` 
-        is the longitude of the ascending node (degrees)
-    * :attr:`w` 
-        is the argument of the perihelion (degrees)
+    * :attr:`Lan`
+    * :attr:`L`
+    * :attr:`Lp`
     * :attr:`M`
-        is the mean anamoly (degrees)
-    
-    Note that the default algorithms used here (based on heavily modified
-    versions of `these methods <http://stjarnhimlen.se/comp/ppcomp.html>`_) are
-    only accurate to ~ 1 arcmin within a millenium or so of J2000, but are
-    computationally quite fast and simple.
+    * :attr:`ap`
+        
     """
-    from ..obstools import jd2000
+    from ..obstools import jd2000 as _jd2k
     
-    def __init__(self,name,e,a,i,N,w,M,jd0=None,jdnow=None):
+    def __init__(self,**kwargs):
         """
-        Generates an object with orbital elements given a generator 
+        Keywords should be the names of orbital elements. Orbital elements can
+        be a callable f(T) that returns the orbital element, where T is the
+        Julian century from J2000. Otherwise, it must be a sequence giving
+        polynomial coefficients in T, specified in increasing power (i.e.
+        constant term first).
         
-        Arguments for these orbital elements can be either fixed values or
-        functions of the form f(jd-jd0) that return the orbital element as a
-        function of Julian Day from the epoch
+        The orbital elements :attr:`a`,:attr:`e`, :attr:`i`, and :attr:`Lan`
+        must be specified, as must either :attr:`L` and :attr:`Lp` or :attr:`ap`
+        and :attr:`M`
         
-        `name` is a string describing the object `jd0` is the epoch for these
-        orbital elements (e.g. where their input functions are 0). To use raw
-        JD, set this to 0. If None, it defaults to J2000
+        an additional keyword that can be supplied:
         
-        `jdnow` can be used to set the initial JD.  If None, it will be the same
-        as `jd0`
+        :params outcoords: 
+            The coordinate class that should be used as the output. It should be
+            either a :class:`astropysics.coords.coordsys.CartesianCoordinates`
+            or a :class:`astropysics.coords.coordsys.LatLongCoordinates`
+            subclass. For either, the origin will be taken as the center of the
+            Keplerian orbit. If not specified, it will default to
+            :class:`astropysics.coords.coordsys.ICRSCoordinates`.
+            
+        Any other keywords will be passed into the constructor for
+        :class:`EphemerisObject`.
+            
+        :except TypeError: If necessary orbital elements are missing.
+            
         """
-        if jd0 is None:
-            jd0 = EphemerisObject.jd2000 - 0.5
-        EphemerisObject.__init__(self,name,jd0)
+        from .coordsys import ICRSCoordinates
         
-        self.e = e
-        self.a = a
-        self.i = i
-        self.N = N
-        self.w = w
-        self.M = M
-        self.name = name
+        self.outcoords = kwargs.pop('outcoords',ICRSCoordinates)
+        oens = ('a','e','i','Lan','L','Lp','ap','M','bcfs')
+        a,e,i,Lan,L,Lp,ap,M = [kwargs.pop(n,None) for n in oens]
+        EphemerisObject.__init__(self,**kwargs)
         
-        self.jd0 = jd0
-        self._jd = jd0
-        if jdnow is None:
-            self._jd = jd0
-        else:
-            self.jd = jdnow
+        if a is None:
+            raise TypeError('Need to provide orbital element `a`')
+        if e is None:
+            raise TypeError('Need to provide orbital element `e`')
+        if i is None:
+            raise TypeError('Need to provide orbital element `i`')
+        if Lan is None:
+            raise TypeError('Need to provide orbital element `Lan`')
         
-    
-    def _getD(self):
-        return self._jd - self._jd0
-    def _setD(self,val):
-        self._jd = val + self._jd0
-    d = property(_getD,_setD,doc='The current Julian Date offset by :attr:`jd0`')
-    
-    def _getJd0(self):
-        return self._jd0
-    def _setJd0(self,val):
+        self._a = _makeElement(a)
+        self._e = _makeElement(e)
+        self._i = _makeElement(i)
+        self._Lan = _makeElement(Lan)
+        
+        if L is None and Lp is None:
+            if ap is not None or M is not None:
+                raise TypeError('Cannot specify both `L`/`Lp` and `ap`/`M`')
+            self._L = _makeElement(L)
+            self._Lp = _makeElement(Lp)
+            
+        elif ap is None and M is None:
+            if L is not None or Lp is not None:
+                raise TypeError('Cannot specify both `L`/`Lp` and `ap`/`M`')
+            self._ap = _makeElement(ap)
+            self._M = _makeElement(M)
+            
+        #special 'hidden' bcfs element for JPL ephemerides that applies outside 1800-2050
+        if bcfs is not None:
+            self._bcfs = bcfs
+            
+    def _jdhook(self,jd):
+        self._t = (jd - _jd2k)/365.25
+   
+    def _makeElement(self,val):
         from operator import isSequenceType
-        from ..obstools import calendar_to_jd
-        from datetime import datetime
         
-        if hasattr(val,'year') or isSequenceType(val):
-            self._jd0 = calendar_to_jd(val)
-        else:
-            self._jd0 = val
-    jd0 = property(_getJd0,_setJd0,doc="""
-    The starting Epoch for this object - when :attr:`jd` equals this value,
-    :attr:`d` is 0. Can be set as a decimal number, :class:`datetime.datetime`
-    object, or a gregorian date tuple.
-    """)
-    
-    #primary orbital elements
-    def _getE(self):
-        return self._e(self.d)
-    def _setE(self,val):
         if callable(val):
-            self._e = val
+            return val
+        elif isSequenceType(val):
+            if len(val)==2:
+                a,b = val
+                return lambda T:a+b*T
+            else:
+                coeffs = tuple(reversed(val))
+                return lambda T:np.polyval(coeffs,T)
         else:
-            self._e = lambda d:val
-    e = property(_getE,_setE,doc='orbital eccentricity')
-    
-    def _getA(self):
-        return self._a(self.d)
-    def _setA(self,val):
-        if callable(val):
-            self._a = val
-        else:
-            self._a = lambda d:val
-    a = property(_getA,_setA,doc='semi-major axis (au)')
-    
-    def _getI(self):
-        return self._i(self.d)
-    def _setI(self,val):
-        if callable(val):
-            self._i = val
-        else:
-            self._i = lambda d:val
-    i = property(_getI,_setI,doc='inclination (degrees)')
-    
-    def _getN(self):
-        return self._N(self.d)
-    def _setN(self,val):
-        if callable(val):
-            self._N = val
-        else:
-            self._N = lambda d:val
-    N = property(_getN,_setN,doc='Longitude of the ascending node (degrees)')
-    
-    def _getW(self):
-        return self._w(self.d)
-    def _setW(self,val):
-        if callable(val):
-            self._w = val
-        else:
-            self._w = lambda d:val
-    w = property(_getW,_setW,doc='Argument of the perihelion (degrees)')
-    
-    def _getM0(self):
-        return self._M0(self.d)
-    def _setM0(self,val):
-        if callable(val):
-            self._M0 = val
-        else:
-            self._e = lambda d:val
-    M0 = property(_getM0,_setM0,doc='Mean anamoly (degrees)')
-    
-    #secondary/read-only orbital elements
+            raise TypeError('invalid value for orbit element %s'%val)
     
     @property
-    def lw(self):
+    def a(self):
         """
-        longitude of the perihelion (degrees): :math:`N + w`
+        The semi-major axis.
         """
-        return self.N + self.w
+        return self._a(self._t)
+        
+    @property
+    def e(self):
+        """
+        The eccentricity.
+        """
+        return self._e(self._t)
     
+    @property
+    def i(self):
+        """
+        The orbital inclination.
+        """
+        return self._i(self._t)
+        
+    @property
+    def Lan(self):
+        """
+        The longitude of the ascending node.
+        """
+        return self._Lan(self._t)
+        
     @property
     def L(self):
         """
-        mean longitude: (degrees):math:`M + lw`
+        The mean longitude.
         """
-        return self.M + self.N + self.w
-    
+        if hasattr(self,'_L'):
+            return self._L(self._t)
+        else:
+            return self.M + self.Lp
+        
+    @property
+    def Lp(self):
+        """
+        The longitude of the pericenter.
+        """
+        if hasattr(self,'_Lp'):
+            return self._Lp(self._t)
+        else:
+            return self.ap + self.Lan
+        
+    @property
+    def M(self):
+        """
+        The mean anomaly.
+        """
+        if hasattr(self,'_M'):
+            return self._M(self._t)
+        elif hasattr(self,'_bcfs'):
+            b,c,f,s,jd1,jd2 = self._bcfs
+            if self._jd  < jd1 or self._jd > jd2:
+                from math import sin,cos
+                T = self._t
+                return self.L - self.Lp  + b*T*T + c*cos(f*T) + s*sin(f*T)
+            else:
+                return self.L - self.Lp
+        else:
+            return self.L - self.Lp
+        
+    @property
+    def ap(self):
+        """
+        The argument of the pericenter.
+        """
+        if hasattr(self,'_ap'):
+            return self._ap(self._t)
+        else:
+            return self.Lp - self.Lan
+        
     @property
     def dperi(self):
         """
-        distance at perihelion (AU): :math:`a(1-e)`
+        Distance from focus at pericenter: :math:`a(1-e)`
         """
         return self.a*(1 - self.e)
     
     @property
     def dapo(self):
         """
-        distance at apohelion (AU): :math:`a(1+e)`
+        Distance from focus at apocenter: :math:`a(1-e)`
         """
         return self.a*(1 + self.e)
     
     @property
     def P(self):
         """
-        orbital period (years): :math:`a^{3/2}`
+        Orbital period (if gravitational parameter GM=1).
         """
         return self.a**1.5
+        
+_ss_ephems = {}
+def set_solar_system_ephem_method(meth=None):
+    """
+    Sets the type of ephemerides to use.  Must be 'keplerian' for now.
+    """
+    global _ss_ephems
     
-    @property
-    def T(self):
-        """
-        time of perihelion (in *offset* JD i.e. `d`)
-        """
-        return - self.M/(self.P*360.0)
+    if meth is None:
+        meth = 'keplerian'
+    if meth=='keplerian':
+        _ss_ephems = _keplerian_ephems()
+    else:
+        raise ValueError('Solar System ephemeride method %s not available'%s)
     
-    @property
-    def Eapprox(self):
-        """
-        *approximate* Eccentric anamoly - faster than proper numerical solution
-        of the E-M relation, but lower precision
-        """
-        from math import radians,sin,cos,degrees
-        Mr = radians(self.M)
-        e = self.e
-        return degrees(Mr + e*sin(Mr)*(1.0 + e*cos(Mr)))
-            
-    @property
-    def vapprox(self):
-        """
-        *approximate* Eccentric anamoly - faster than proper numerical solution
-        of the E-M relation, but lower precision
-        """
-        from math import radians,sin,cos,atan2,sqrt,degrees
+def _keplerian_ephems():
+    """
+    Generates dictionary with Keplerian ephemerides for the solar system from
+    JPL Solar System Dynamics group Approximate positions
+    (http://ssd.jpl.nasa.gov/?planet_pos).
+    """
+    raise NotImplementedError
+
+#<--------------Earth location and velocity, based on SOFA epv00--------------->
+# SIMPLIFIED SOLUTION from the planetary theory VSOP2000
+# X. Moisson, P. Bretagnon, 2001, 
+# Celes. Mechanics & Dyn. Astron., 80, 3/4, 205-213
+
+
         
-        Mr = radians(self.M)
-        e = self.e
-        
-        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
-        xv = cos(E) - e
-        yv = sqrt(1.0 - e*e) * sin(E)
-        
-        return degrees(atan2(yv,xv))
+def _load_earth_series(datafn='earth_series.tab'):
+    """
+    Load series terms from VSOP2000 simplified solution
+    """
+    from ..utils.io import get_package_data
+    from numpy import array,matrix
+    from math import sqrt
     
-    def cartesianCoordinates(self,geocentric=False):
-        """
-        Returns the heliocentric ecliptic rectangular coordinates of this object
-        at the current date/time as an (x,y,z) tuple (in AU)
-        """
-        from math import radians,degrees,cos,sin,atan2,sqrt
-        
-        #now get the necessary elements
-        Mr = radians(self.M)
-        wr = radians(self.w)
-        ir = radians(self.i)
-        Nr = radians(self.N)
-        e = self.e
-        a = self.a
-        
-        #compute coordinates
-        #approximate eccentric anamoly
-        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
-        
-        xv = a*(cos(E) - e)
-        yv = a*(sqrt(1.0 - e*e) * sin(E))
-        
-        v = atan2(yv,xv)
-        r = sqrt(xv*xv + yv*yv)
-        
-        sN = sin(Nr)
-        cN = cos(Nr)
-        si = sin(ir)
-        ci = cos(ir)
-        svw = sin(v + wr)
-        cvw = cos(v + wr)
-        
-        #convert to heliocentric ecliptic coords
-        xh = r*(cN*cvw - sN*svw*ci)
-        yh = r*(sN*cvw + cN*svw*ci)
-        zh = r*(svw*si)
-        
-        if geocentric:
-            xg,yg,zg = _earth_coords(self._jd)
-            return xh+xg,yh+yg,zh+zg
+    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l=='']
+    
+    lst = None
+    lsts = {}
+    for l in lines:
+        if l.endswith(':'):
+            #new variable
+            lsts[l[:-1]] = lst = []
         else:
-            return xh,yh,zh
+            ls = l.split(',')
+            if ls[-1]=='':
+                lst.extend(ls[:-1])
+            else:
+                lst.extend(ls)
+                
+                
+    res = {}
+    
+    #first add all matricies
+    for k,v in lsts.items():
+        if k.endswith('mat'):
+            mat = matrix(v,dtype=float)
+            res[k] = mat.reshape(sqrt(mat.size),sqrt(mat.size))
+    
+    #now construct all the x,y,z combination series'
+    coeffnms = set([k[:-1] for k in lsts.keys() if not k.endswith('mat')])
+        
+    #bad any coeff sets where x,y, and z don't match so that the missing entries are 0
+    for cnm in coeffnms:
+        xs = lsts[cnm+'x']
+        ys = lsts[cnm+'y']
+        zs = lsts[cnm+'z']
+        mx = max(max(len(xs),len(ys)),len(zs))
+        
+        if len(xs)<mx:
+            for i in range(mx-len(xs)):
+                xs.append(0)
+        if len(ys)<mx:
+            for i in range(mx-len(ys)):
+                ys.append(0)
+        if len(zs)<mx:
+            for i in range(mx-len(zs)):
+                zs.append(0)
+                
+        res[cnm+'coeffs'] = array([xs,ys,zs],dtype=float)
+    
+    return res
+    
+_earth_series_coeffs = _load_earth_series()
+
+def _compute_earth_series(t,coeffs0,coeffs1,coeffs2):
+    """
+    Internal function to computes Earth location/velocity components from series
+    coefficients.
+    
+    :param t:  T = JD - JD_J2000
+    :param coeffs0: constant term
+    :param coeffs1: T^1 term
+    :param coeffs2: T^2 term
+    
+    :returns: pos,vel
+    """
+    
+    #T^0 terms
+    acs = coeffs0[:,0::3]
+    bcs = coeffs0[:,1::3]
+    ccs = coeffs0[:,2::3]
+    ps = bcs + ccs*t
+    pos = np.sum(acs*np.cos(ps),axis=1)
+    vel = np.sum(-acs*ccs*np.sin(ps),axis=1)
+    
+    #T^1 terms
+    acs = coeffs1[:,0::3]
+    bcs = coeffs1[:,1::3]
+    ccs = coeffs1[:,2::3]
+    cts = ccs*t
+    ps = bcs + cts
+    cps = np.cos(ps)
+    pos += np.sum(acs*t*cps,axis=1)
+    vel += np.sum(acs*(cps - cts*np.sin(ps)),axis=1)
+    
+    #T^2 terms
+    acs = coeffs2[:,0::3]
+    bcs = coeffs2[:,1::3]
+    ccs = coeffs2[:,2::3]
+    cts = ccs*t
+    ps = bcs + cts
+    cps = np.cos(ps)
+    pos += np.sum(acs*cps*t*t,axis=1)
+    vel += np.sum(acs*t*(2.0*cps - cts*np.sin(ps)),axis=1)
+    
+    return pos,vel
+
+def _earth_loc(jd,barycentric=False,kms=True):
+    """
+    Testing function - need to adapt to OO framework
+    
+    returns (x,y,z),(vx,vy,vz) in BCRS
+    
+    x is AU, v is either AU/yr or km/s (controlled by `kms`)
+    """
+    from ..obstools import jd2000
+    from ..constants import aupercm,secperyr
+    from warnings import warn
+    
+    coeffsd = _earth_series_coeffs
+    
+    t = (jd-jd2000)/365.25 #Julian years since 2000.0 reference
+    
+    if t > 100 or t < -100:
+        warn('JD {0} is not in range 1900-2100 CE'.format(jd),EphemerisAccuracyWarning)
+        
+    pos,vel = _compute_earth_series(t,coeffsd['h0coeffs'],coeffsd['h1coeffs'],coeffsd['h2coeffs'])
+    
+    if barycentric:
+        poff,voff = _compute_earth_series(t,coeffsd['b0coeffs'],coeffsd['b1coeffs'],coeffsd['b2coeffs'])
+        pos += poff
+        vel += voff
+    
+    #this rotates the analytic model from the series to DE405/BCRS
+    #same as rotating by -23d26'21.4091" about x then 0.0475" about z        
+    pos = (coeffsd['ec2bcrsmat']*pos.reshape(3,1)).A.ravel()
+    vel = (coeffsd['ec2bcrsmat']*vel.reshape(3,1)).A.ravel()
+    
+    if kms:
+        #AU/yr*(   km/AU  *  yr/sec ) = km/sec
+        vel *= (1e-5/aupercm/secperyr)
+        
+    return pos,vel
+    
+    
+#<----Lunisolar/Solar system fundamental arguments, mostly used in coordsys---->
+#from 2003 IERS Conventions via adaptations of SOFA 
+
+_mean_anomaly_of_moon_poly = np.poly1d([-0.00024470,
+                                        0.051635,
+                                        31.8792,
+                                        1717915923.2178,
+                                        485868.249036])
+def _mean_anomaly_of_moon(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean anomaly of the moon  in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
+
+_mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
+                                       0.000136,
+                                       -0.5532,
+                                       129596581.0481,
+                                       1287104.793048])
+def _mean_anomaly_of_sun(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean anomaly of the sun  in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
+   
+_mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
+                                              -0.001037,
+                                              -12.7512,
+                                              1739527262.8478,
+                                              335779.526232])
+def _mean_long_of_moon_minus_ascnode(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean logitude of the Moon minus the ascending node in radians
+    
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
+
+_mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
+                                                    0.006593,
+                                                    -6.3706,
+                                                    1602961601.2090,
+                                                    1072260.703692])
+def _mean_elongation_of_moon_from_sun(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean elongation of the Moon from the Sun in radians
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
+
+_mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
+                                          0.007702,
+                                          7.4722,
+                                          -6962890.5431,
+                                          450160.398036])
+def _mean_long_asc_node_moon(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of the Moon's ascending node in radians 
+    """
+    from ..constants import asecperrad
+    return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
+   
+def _long_venus(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of Venus in radians
+    """
+    return np.fmod(3.176146697 + 1021.3285546211*T,_twopi)
+   
+def _long_earth(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: Mean longitude of Earth in radians
+    """
+    return np.fmod(1.753470314 + 628.3075849991*T,_twopi)
+
+def _long_prec(T):
+    """
+    From SOFA (2010) - IERS 2003 conventions
+    
+    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
+    :type T: float or array-like
+    
+    :returns: General accumulated precession in longitude in radians
+    """
+    return (0.024381750 + 0.00000538691*T)*T
+
+
+
+
+#Outdated from old version of epehem - when rework is done, delete this
+#class SolarSystemObject(EphemerisObject):
+#    """
+#    A :class:`EphemerisObject` that can be interpreted as any object in the Solar
+#    System.  
+#    """
+    
+#    def _obliquity(self,jd):
+#        """
+#        obliquity of the Earth/angle of the ecliptic in degrees
+        
+#        the input `jd` is the actual Julian Day, *not* the offset `d` used for
+#        the orbital elements
+#        """
+#        #TODO: eventually pull this from Ecliptic coordinate transform
+#        return 23.4393 - 3.563E-7 * (jd - KeplerianOrbit.jd2000)
+    
+#    @abstractmethod
+#    def cartesianCoordinates(self,geocentric=False):
+#        """
+#        Returns the ecliptic rectangular coordinates of this object
+#        at the current date/time as an (x,y,z) tuple (in AU).
+        
+#        If `geocentric` is True, return geocentric coordinates.  Otherwise, 
+#        heliocentric.
+#        """
+#        raise NotImplementedError
+    
+#    def equatorialCoordinates(self):
+#        """
+#        Returns the equatorial coordinates of this object at the current
+#        date/time as a :class:`EquatorialCoordinates` object for the epoch at which
+#        they are derived.
+#        """
+#        from math import radians,degrees,cos,sin,atan2,sqrt
+#        from ..obstools import jd_to_epoch
+        
+        
+#        if hasattr(self,'_eqcache') and self._eqcache[0] == self._jd:
+#            return EquatorialCoordinates(*self._eqcache[1:],**dict(epoch=jd_to_epoch(self._jd)))
+        
+#        jd = self.jd
+        
+#        eclr = radians(self._obliquity(jd))
+        
+#        #heliocentric coordinates
+#        xh,yh,zh = self.cartesianCoordinates()
+        
+#        #get Earth position - from the Sun ephemeris
+#        xs,ys,zs = _earth_coords(jd)
+        
+#        #switch to geocentric coordinates
+#        xg = xh - xs
+#        yg = yh - ys
+#        zg = zh - zs
+        
+#        #finally correct for obliquity to get equatorial coordinates
+#        cecl = cos(eclr)
+#        secl = sin(eclr)
+#        x = xg
+#        y = cecl*yg - secl*zg
+#        z = secl*yg + cecl*zg
+        
+#        ra = degrees(atan2(y,x))
+#        dec = degrees(atan2(z,sqrt(x*x+y*y)))
+        
+#        #cache for faster retrieval if JD is not changed
+#        self._eqcache = (self._jd,ra,dec)
+#        return EquatorialCoordinates(ra,dec,epoch=jd_to_epoch(self._jd))
+    
+#    def phase(self,perc=False):
+#        """
+#        Compute the phase of this object - 0 is "new", 1 is "full".
+        
+#        if `perc` is True, returns percent illumination.
+#        """
+#        from math import sqrt
+        
+#        xh,yh,zh = self.cartesianCoordinates()
+        
+#        xs,ys,zs = _earth_coords(jd)
+        
+#        xg = xh - xs
+#        yg = yh - ys
+#        zg = zh - zs
+        
+#        r = sqrt(xh*xh+yh*yh+zh*zh)
+#        R = sqrt(xg*xg+yg*yg+zg*zg)
+#        s = sqrt(xs*xs+ys*ys+zs*zs)
+        
+#        phase = (1+(r*r + R*R - s*s)/(2*r*R))/2
+        
+#        if perc:
+#            return 100*phase
+#        else:
+#            return phase
+    
+#class KeplerianOrbit(SolarSystemObject):
+#    """
+#    An object with orbital elements (probably a solar system body) that can be
+#    used to construct ephemerides.
+    
+#    The orbital elements are accessible as properties, computed for a Julian
+#    Date given by the :attr:`jd` attribute. They can also be set to a function
+#    of the form `element(d)`, where `d` is the offset from `jd0`. Alternatively,
+#    subclasses may directly override the orbital elements with their own custom
+#    properties that should return orbital elements at time `d`. The primary
+#    orbital elements are:
+    
+#    * :attr:`e`
+#        ellipticity 
+#    * :attr:`a`
+#        semimajor axis (AU)
+#    * :attr:`i` 
+#        is the orbital inclination (degrees)
+#    * :attr:`N` 
+#        is the longitude of the ascending node (degrees)
+#    * :attr:`w` 
+#        is the argument of the perihelion (degrees)
+#    * :attr:`M`
+#        is the mean anamoly (degrees)
+    
+#    Note that the default algorithms used here (based on heavily modified
+#    versions of `these methods <http://stjarnhimlen.se/comp/ppcomp.html>`_) are
+#    only accurate to ~ 1 arcmin within a millenium or so of J2000, but are
+#    computationally quite fast and simple.
+#    """
+#    from ..obstools import jd2000
+    
+#    def __init__(self,name,e,a,i,N,w,M,jd0=None,jdnow=None):
+#        """
+#        Generates an object with orbital elements given a generator 
+        
+#        Arguments for these orbital elements can be either fixed values or
+#        functions of the form f(jd-jd0) that return the orbital element as a
+#        function of Julian Day from the epoch
+        
+#        `name` is a string describing the object `jd0` is the epoch for these
+#        orbital elements (e.g. where their input functions are 0). To use raw
+#        JD, set this to 0. If None, it defaults to J2000
+        
+#        `jdnow` can be used to set the initial JD.  If None, it will be the same
+#        as `jd0`
+#        """
+#        if jd0 is None:
+#            jd0 = EphemerisObject.jd2000 - 0.5
+#        EphemerisObject.__init__(self,name,jd0)
+        
+#        self.e = e
+#        self.a = a
+#        self.i = i
+#        self.N = N
+#        self.w = w
+#        self.M = M
+#        self.name = name
+        
+#        self.jd0 = jd0
+#        self._jd = jd0
+#        if jdnow is None:
+#            self._jd = jd0
+#        else:
+#            self.jd = jdnow
+        
+    
+#    def _getD(self):
+#        return self._jd - self._jd0
+#    def _setD(self,val):
+#        self._jd = val + self._jd0
+#    d = property(_getD,_setD,doc='The current Julian Date offset by :attr:`jd0`')
+    
+#    def _getJd0(self):
+#        return self._jd0
+#    def _setJd0(self,val):
+#        from operator import isSequenceType
+#        from ..obstools import calendar_to_jd
+#        from datetime import datetime
+        
+#        if hasattr(val,'year') or isSequenceType(val):
+#            self._jd0 = calendar_to_jd(val)
+#        else:
+#            self._jd0 = val
+#    jd0 = property(_getJd0,_setJd0,doc="""
+#    The starting Epoch for this object - when :attr:`jd` equals this value,
+#    :attr:`d` is 0. Can be set as a decimal number, :class:`datetime.datetime`
+#    object, or a gregorian date tuple.
+#    """)
+    
+#    #primary orbital elements
+#    def _getE(self):
+#        return self._e(self.d)
+#    def _setE(self,val):
+#        if callable(val):
+#            self._e = val
+#        else:
+#            self._e = lambda d:val
+#    e = property(_getE,_setE,doc='orbital eccentricity')
+    
+#    def _getA(self):
+#        return self._a(self.d)
+#    def _setA(self,val):
+#        if callable(val):
+#            self._a = val
+#        else:
+#            self._a = lambda d:val
+#    a = property(_getA,_setA,doc='semi-major axis (au)')
+    
+#    def _getI(self):
+#        return self._i(self.d)
+#    def _setI(self,val):
+#        if callable(val):
+#            self._i = val
+#        else:
+#            self._i = lambda d:val
+#    i = property(_getI,_setI,doc='inclination (degrees)')
+    
+#    def _getN(self):
+#        return self._N(self.d)
+#    def _setN(self,val):
+#        if callable(val):
+#            self._N = val
+#        else:
+#            self._N = lambda d:val
+#    N = property(_getN,_setN,doc='Longitude of the ascending node (degrees)')
+    
+#    def _getW(self):
+#        return self._w(self.d)
+#    def _setW(self,val):
+#        if callable(val):
+#            self._w = val
+#        else:
+#            self._w = lambda d:val
+#    w = property(_getW,_setW,doc='Argument of the perihelion (degrees)')
+    
+#    def _getM0(self):
+#        return self._M0(self.d)
+#    def _setM0(self,val):
+#        if callable(val):
+#            self._M0 = val
+#        else:
+#            self._e = lambda d:val
+#    M0 = property(_getM0,_setM0,doc='Mean anamoly (degrees)')
+    
+#    #secondary/read-only orbital elements
+    
+#    @property
+#    def lw(self):
+#        """
+#        longitude of the perihelion (degrees): :math:`N + w`
+#        """
+#        return self.N + self.w
+    
+#    @property
+#    def L(self):
+#        """
+#        mean longitude: (degrees):math:`M + lw`
+#        """
+#        return self.M + self.N + self.w
+    
+#    @property
+#    def dperi(self):
+#        """
+#        distance at perihelion (AU): :math:`a(1-e)`
+#        """
+#        return self.a*(1 - self.e)
+    
+#    @property
+#    def dapo(self):
+#        """
+#        distance at apohelion (AU): :math:`a(1+e)`
+#        """
+#        return self.a*(1 + self.e)
+    
+#    @property
+#    def P(self):
+#        """
+#        orbital period (years): :math:`a^{3/2}`
+#        """
+#        return self.a**1.5
+    
+#    @property
+#    def T(self):
+#        """
+#        time of perihelion (in *offset* JD i.e. `d`)
+#        """
+#        return - self.M/(self.P*360.0)
+    
+#    @property
+#    def Eapprox(self):
+#        """
+#        *approximate* Eccentric anamoly - faster than proper numerical solution
+#        of the E-M relation, but lower precision
+#        """
+#        from math import radians,sin,cos,degrees
+#        Mr = radians(self.M)
+#        e = self.e
+#        return degrees(Mr + e*sin(Mr)*(1.0 + e*cos(Mr)))
+            
+#    @property
+#    def vapprox(self):
+#        """
+#        *approximate* Eccentric anamoly - faster than proper numerical solution
+#        of the E-M relation, but lower precision
+#        """
+#        from math import radians,sin,cos,atan2,sqrt,degrees
+        
+#        Mr = radians(self.M)
+#        e = self.e
+        
+#        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
+#        xv = cos(E) - e
+#        yv = sqrt(1.0 - e*e) * sin(E)
+        
+#        return degrees(atan2(yv,xv))
+    
+#    def cartesianCoordinates(self,geocentric=False):
+#        """
+#        Returns the heliocentric ecliptic rectangular coordinates of this object
+#        at the current date/time as an (x,y,z) tuple (in AU)
+#        """
+#        from math import radians,degrees,cos,sin,atan2,sqrt
+        
+#        #now get the necessary elements
+#        Mr = radians(self.M)
+#        wr = radians(self.w)
+#        ir = radians(self.i)
+#        Nr = radians(self.N)
+#        e = self.e
+#        a = self.a
+        
+#        #compute coordinates
+#        #approximate eccentric anamoly
+#        E = Mr + e*sin(Mr)*(1.0 + e*cos(Mr))
+        
+#        xv = a*(cos(E) - e)
+#        yv = a*(sqrt(1.0 - e*e) * sin(E))
+        
+#        v = atan2(yv,xv)
+#        r = sqrt(xv*xv + yv*yv)
+        
+#        sN = sin(Nr)
+#        cN = cos(Nr)
+#        si = sin(ir)
+#        ci = cos(ir)
+#        svw = sin(v + wr)
+#        cvw = cos(v + wr)
+        
+#        #convert to heliocentric ecliptic coords
+#        xh = r*(cN*cvw - sN*svw*ci)
+#        yh = r*(sN*cvw + cN*svw*ci)
+#        zh = r*(svw*si)
+        
+#        if geocentric:
+#            xg,yg,zg = _earth_coords(self._jd)
+#            return xh+xg,yh+yg,zh+zg
+#        else:
+#            return xh,yh,zh
     
     
 #class Sun(KeplerianOrbit):
@@ -806,263 +1378,3 @@ class KeplerianOrbit(SolarSystemObject):
 #                        M=lambda d: 260.2471 + 0.005995147 * d,
 #                        jd0=KeplerianOrbit.jd2000 - 0.5)
 #solsysobjs['neptune']._validrange = solsysobjs['sun']._validrange
-
-        
-def _load_earth_series(datafn='earth_series.tab'):
-    from ..utils.io import get_package_data
-    from numpy import array,matrix
-    from math import sqrt
-    
-    lines = [l for l in get_package_data(datafn).split('\n') if not l.startswith('#') if not l=='']
-    
-    lst = None
-    lsts = {}
-    for l in lines:
-        if l.endswith(':'):
-            #new variable
-            lsts[l[:-1]] = lst = []
-        else:
-            ls = l.split(',')
-            if ls[-1]=='':
-                lst.extend(ls[:-1])
-            else:
-                lst.extend(ls)
-                
-                
-    res = {}
-    
-    #first add all matricies
-    for k,v in lsts.items():
-        if k.endswith('mat'):
-            mat = matrix(v,dtype=float)
-            res[k] = mat.reshape(sqrt(mat.size),sqrt(mat.size))
-    
-    #now construct all the x,y,z combination series'
-    coeffnms = set([k[:-1] for k in lsts.keys() if not k.endswith('mat')])
-        
-    #bad any coeff sets where x,y, and z don't match so that the missing entries are 0
-    for cnm in coeffnms:
-        xs = lsts[cnm+'x']
-        ys = lsts[cnm+'y']
-        zs = lsts[cnm+'z']
-        mx = max(max(len(xs),len(ys)),len(zs))
-        
-        if len(xs)<mx:
-            for i in range(mx-len(xs)):
-                xs.append(0)
-        if len(ys)<mx:
-            for i in range(mx-len(ys)):
-                ys.append(0)
-        if len(zs)<mx:
-            for i in range(mx-len(zs)):
-                zs.append(0)
-                
-        res[cnm+'coeffs'] = array([xs,ys,zs],dtype=float)
-    
-    return res
-    
-_earth_series_coeffs = _load_earth_series()
-
-def _compute_earth_series(t,coeffs0,coeffs1,coeffs2):
-    """
-    Computes Earth location/velocity components from series coefficients.
-    
-    t should be in jd from J2000
-    
-    Returns pos,vel
-    """
-    
-    #T^0 terms
-    acs = coeffs0[:,0::3]
-    bcs = coeffs0[:,1::3]
-    ccs = coeffs0[:,2::3]
-    ps = bcs + ccs*t
-    pos = np.sum(acs*np.cos(ps),axis=1)
-    vel = np.sum(-acs*ccs*np.sin(ps),axis=1)
-    
-    #T^1 terms
-    acs = coeffs1[:,0::3]
-    bcs = coeffs1[:,1::3]
-    ccs = coeffs1[:,2::3]
-    cts = ccs*t
-    ps = bcs + cts
-    cps = np.cos(ps)
-    pos += np.sum(acs*t*cps,axis=1)
-    vel += np.sum(acs*(cps - cts*np.sin(ps)),axis=1)
-    
-    #T^2 terms
-    acs = coeffs2[:,0::3]
-    bcs = coeffs2[:,1::3]
-    ccs = coeffs2[:,2::3]
-    cts = ccs*t
-    ps = bcs + cts
-    cps = np.cos(ps)
-    pos += np.sum(acs*cps*t*t,axis=1)
-    vel += np.sum(acs*t*(2.0*cps - cts*np.sin(ps)),axis=1)
-    
-    return pos,vel
-
-def _earth_loc(jd,barycentric=False,kms=True):
-    """
-    Testing function - need to adapt to OO framework
-    
-    returns (x,y,z),(vx,vy,vz) in BCRS
-    
-    x is AU, v is either AU/yr or km/s (controlled by `kms`)
-    """
-    from ..obstools import jd2000
-    from ..constants import aupercm,secperyr
-    from warnings import warn
-    
-    coeffsd = _earth_series_coeffs
-    
-    t = (jd-jd2000)/365.25 #Julian years since 2000.0 reference
-    
-    if t > 100 or t < -100:
-        warn('JD {0} is not in range 1900-2100 CE'.format(jd),EphemerisAccuracyWarning)
-        
-    pos,vel = _compute_earth_series(t,coeffsd['h0coeffs'],coeffsd['h1coeffs'],coeffsd['h2coeffs'])
-    
-    if barycentric:
-        poff,voff = _compute_earth_series(t,coeffsd['b0coeffs'],coeffsd['b1coeffs'],coeffsd['b2coeffs'])
-        pos += poff
-        vel += voff
-    
-    #this rotates the analytic model from the series to DE405/BCRS
-    #same as rotating by -23d26'21.4091" about x then 0.0475" about z        
-    pos = (coeffsd['ec2bcrsmat']*pos.reshape(3,1)).A.ravel()
-    vel = (coeffsd['ec2bcrsmat']*vel.reshape(3,1)).A.ravel()
-    
-    if kms:
-        #AU/yr*(   km/AU  *  yr/sec ) = km/sec
-        vel *= (1e-5/aupercm/secperyr)
-        
-    return pos,vel
-    
-    
-#<------Lunisolar/Solarsys fundamental arguments, mostly for coordsys mod------>
-#from 2003 IERS Conventions via adaptations of SOFA 
-
-_mean_anomaly_of_moon_poly = np.poly1d([-0.00024470,
-                                        0.051635,
-                                        31.8792,
-                                        1717915923.2178,
-                                        485868.249036])
-def _mean_anomaly_of_moon(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean anomaly of the moon  in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_anomaly_of_moon_poly(T)/asecperrad,_twopi)
-
-_mean_anomaly_of_sun_poly = np.poly1d([-0.00001149,
-                                       0.000136,
-                                       -0.5532,
-                                       129596581.0481,
-                                       1287104.793048])
-def _mean_anomaly_of_sun(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean anomaly of the sun  in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_anomaly_of_sun_poly(T)/asecperrad,_twopi)
-   
-_mean_long_of_moon_minus_ascnode_poly = np.poly1d([0.00000417,
-                                              -0.001037,
-                                              -12.7512,
-                                              1739527262.8478,
-                                              335779.526232])
-def _mean_long_of_moon_minus_ascnode(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean logitude of the Moon minus the ascending node in radians
-    
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_long_of_moon_minus_ascnode_poly(T)/asecperrad,_twopi)
-
-_mean_elongation_of_moon_from_sun_poly = np.poly1d([-0.00003169,
-                                                    0.006593,
-                                                    -6.3706,
-                                                    1602961601.2090,
-                                                    1072260.703692])
-def _mean_elongation_of_moon_from_sun(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean elongation of the Moon from the Sun in radians
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_elongation_of_moon_from_sun_poly(T)/asecperrad,_twopi)
-
-_mean_long_ascnode_moon_poly = np.poly1d([-0.00005939,
-                                          0.007702,
-                                          7.4722,
-                                          -6962890.5431,
-                                          450160.398036])
-def _mean_long_asc_node_moon(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of the Moon's ascending node in radians 
-    """
-    from ..constants import asecperrad
-    return np.fmod(_mean_long_ascnode_moon_poly(T)/asecperrad,_twopi)
-   
-def _long_venus(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of Venus in radians
-    """
-    return np.fmod(3.176146697 + 1021.3285546211*T,_twopi)
-   
-def _long_earth(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: Mean longitude of Earth in radians
-    """
-    return np.fmod(1.753470314 + 628.3075849991*T,_twopi)
-
-def _long_prec(T):
-    """
-    From SOFA (2010) - IERS 2003 conventions
-    
-    :param T: Julian centuries from 2000.0 in TDB (~TT for this function)
-    :type T: float or array-like
-    
-    :returns: General accumulated precession in longitude in radians
-    """
-    return (0.024381750 + 0.00000538691*T)*T
-
-
-#clean up namespace
-del ICRSCoordinates,DataObjectRegistry
-
