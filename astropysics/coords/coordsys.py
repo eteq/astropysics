@@ -1830,8 +1830,9 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
 class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     """
     Rectangular coordinates oriented so that the positive z-axis points to the
-    north celestial pole and the positive x-axis to the origin of the BCRS/ICRS
-    (aligned via the ICRF).
+    north celestial pole and the positive x-axis to the origin of the ICRS.
+    Additionally, because the ICRS is based on BCRS, the origin is the solar
+    system barycenter.
     
     Distances can be specified via the :attr:`unit` attribute.  When converting
     *to* :class:`RectangularICRSCoordinates`, distances default to AU if less
