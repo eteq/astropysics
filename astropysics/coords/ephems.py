@@ -120,6 +120,7 @@ class EphemerisObject(object):
         from ..obstools import jd2000
         
         self._jd = jd2000
+        self._jdhook(jd2000)
         
         self.name = name
         self._setValidjdrange(validjdrange)
@@ -139,9 +140,9 @@ class EphemerisObject(object):
             jd = val
         if self._validrange is not None:
             from warnings import warn
-            if jd < self._validrange[0]:
+            if self._validrange[0] is not None and jd < self._validrange[0]:
                 warn('JD {0} is below the valid range for this EphemerisObject'.format(jd),EphemerisAccuracyWarning)
-            elif jd > self._validrange[1]:
+            elif self._validrange[1] is not None and jd > self._validrange[1]:
                 warn('JD {0} is above the valid range for this EphemerisObject'.format(jd),EphemerisAccuracyWarning)
         self._jd = jd
         if hasattr(self,'_jdhook'):
@@ -159,7 +160,7 @@ class EphemerisObject(object):
         The range of jds over which these ephemerides are valid. Returns a 
         2-tuple (minjd,maxjd), either of which can be None to indicate no bound.
         """
-        return self._validjdrange
+        return self._validrange
     
     def _setValidjdrange(self,val):
         """
@@ -189,10 +190,10 @@ class EphemerisObject(object):
                         vs.append(None)
                     elif v == 'now':
                         vs.append(calendar_to_jd(datetime.utcnow(),tz=None))
-                    elif hasattr(val,'year') or isSequenceType(val):
-                        vs.append(calendar_to_jd(val))
+                    elif hasattr(v,'year') or isSequenceType(v):
+                        vs.append(calendar_to_jd(v))
                     else:
-                        vs.append(val)
+                        vs.append(v)
                 self._validrange = tuple(vs)
                 
     def __call__(self,jds=None,coordsys=None):
@@ -227,6 +228,7 @@ class EphemerisObject(object):
                 jds = jds.ravel()
             elif np.isscalar(jds):
                 single = True
+                jds = (jds,)
             
             jd0 = self.jd
             try:
@@ -278,7 +280,25 @@ class KeplerianObject(EphemerisObject):
     * :attr:`ap`
         
     """
-    from ..obstools import jd2000 as _jd2k
+    
+    Etol = None #default set in constructor
+    r""" Desired accuracy for iterative calculation of eccentric anamoly (or
+    true anomaly) from mean anomaly. If None, default tolerance is used
+    (1.5e-8), or if 0, an analytic approximation will be used (:math:`E \approx
+    M + e (1 + e \cos M ) \sin M`). This approximation can be 10x faster to
+    compute but fails for e close to 1.
+    """
+    
+    outcoords = None #default set in constructor
+    """ The coordinate class that should be used as the output.. It should be A
+    :class:`astropysics.coords.coordsys.CartesianCoordinates` subclass. The
+    origin will be taken as the center of the Keplerian orbit.
+    """
+    
+    obliquity = None #default set in constructor
+    """ Obliquity in degrees. Will be used to rotate the output coordinate
+    system z-axis about the +x-axis.  Defaults to J2000 obliquity.
+    """
     
     def __init__(self,**kwargs):
         """
@@ -292,15 +312,18 @@ class KeplerianObject(EphemerisObject):
         must be specified, as must either :attr:`L` and :attr:`Lp` or :attr:`ap`
         and :attr:`M`
         
-        an additional keyword that can be supplied:
+        Three additional keywords can be supplied:
         
         :params outcoords: 
-            The coordinate class that should be used as the output. It should be
-            either a :class:`astropysics.coords.coordsys.CartesianCoordinates`
-            or a :class:`astropysics.coords.coordsys.LatLongCoordinates`
-            subclass. For either, the origin will be taken as the center of the
-            Keplerian orbit. If not specified, it will default to
+            The coordinate class that should be used as the output (see
+            :attr:`outcoords` for details). If not specified, it will default to
             :class:`astropysics.coords.coordsys.ICRSCoordinates`.
+        :params obliquity: 
+            Obliquity to reorient the output coordinates to match the expected
+            `outcoords` (see :attr:`obliquity`). Defaults to J2000 obliquity.
+        :params Etol:
+            Tolerance for eccentric anomaly (see :attr:`Etol`). Defaults to
+            None.
             
         Any other keywords will be passed into the constructor for
         :class:`EphemerisObject`.
@@ -308,11 +331,14 @@ class KeplerianObject(EphemerisObject):
         :except TypeError: If necessary orbital elements are missing.
             
         """
-        from .coordsys import ICRSCoordinates
+        from .coordsys import RectangularICRSCoordinates
         
-        self.outcoords = kwargs.pop('outcoords',ICRSCoordinates)
-        oens = ('a','e','i','Lan','L','Lp','ap','M','bcfs')
-        a,e,i,Lan,L,Lp,ap,M = [kwargs.pop(n,None) for n in oens]
+        self.outcoords = kwargs.pop('outcoords',RectangularICRSCoordinates)
+        self.Etol = kwargs.pop('Etol',23.43928)
+        self.obliquity = kwargs.pop('obliquity',23.43928)
+        
+        kwnms = ('a','e','i','Lan','L','Lp','ap','M')
+        a,e,i,Lan,L,Lp,ap,M = [kwargs.pop(n,None) for n in kwnms]
         EphemerisObject.__init__(self,**kwargs)
         
         if a is None:
@@ -324,29 +350,27 @@ class KeplerianObject(EphemerisObject):
         if Lan is None:
             raise TypeError('Need to provide orbital element `Lan`')
         
-        self._a = _makeElement(a)
-        self._e = _makeElement(e)
-        self._i = _makeElement(i)
-        self._Lan = _makeElement(Lan)
+        self._a = self._makeElement(a)
+        self._e = self._makeElement(e)
+        self._i = self._makeElement(i)
+        self._Lan = self._makeElement(Lan)
         
-        if L is None and Lp is None:
+        if L is not None and Lp is not None:
             if ap is not None or M is not None:
                 raise TypeError('Cannot specify both `L`/`Lp` and `ap`/`M`')
-            self._L = _makeElement(L)
-            self._Lp = _makeElement(Lp)
+            self._L = self._makeElement(L)
+            self._Lp = self._makeElement(Lp)
             
-        elif ap is None and M is None:
+        elif ap is not None and M is not None:
             if L is not None or Lp is not None:
                 raise TypeError('Cannot specify both `L`/`Lp` and `ap`/`M`')
-            self._ap = _makeElement(ap)
-            self._M = _makeElement(M)
-            
-        #special 'hidden' bcfs element for JPL ephemerides that applies outside 1800-2050
-        if bcfs is not None:
-            self._bcfs = bcfs
+            self._ap = self._makeElement(ap)
+            self._M = self._makeElement(M)
+        
             
     def _jdhook(self,jd):
-        self._t = (jd - _jd2k)/365.25
+        from ..obstools import jd2000
+        self._t = (jd - jd2000)/36525.
    
     def _makeElement(self,val):
         from operator import isSequenceType
@@ -373,28 +397,28 @@ class KeplerianObject(EphemerisObject):
     @property
     def e(self):
         """
-        The eccentricity.
+        The eccentricity in radians.
         """
         return self._e(self._t)
     
     @property
     def i(self):
         """
-        The orbital inclination.
+        The orbital inclination in degrees.
         """
         return self._i(self._t)
         
     @property
     def Lan(self):
         """
-        The longitude of the ascending node.
+        The longitude of the ascending node in degrees.
         """
         return self._Lan(self._t)
         
     @property
     def L(self):
         """
-        The mean longitude.
+        The mean longitude in degrees.
         """
         if hasattr(self,'_L'):
             return self._L(self._t)
@@ -404,7 +428,7 @@ class KeplerianObject(EphemerisObject):
     @property
     def Lp(self):
         """
-        The longitude of the pericenter.
+        The longitude of the pericenter in degrees.
         """
         if hasattr(self,'_Lp'):
             return self._Lp(self._t)
@@ -414,30 +438,89 @@ class KeplerianObject(EphemerisObject):
     @property
     def M(self):
         """
-        The mean anomaly.
+        The mean anomaly in degrees.
         """
         if hasattr(self,'_M'):
             return self._M(self._t)
-        elif hasattr(self,'_bcfs'):
-            b,c,f,s,jd1,jd2 = self._bcfs
-            if self._jd  < jd1 or self._jd > jd2:
-                from math import sin,cos
-                T = self._t
-                return self.L - self.Lp  + b*T*T + c*cos(f*T) + s*sin(f*T)
-            else:
-                return self.L - self.Lp
+        elif hasattr(self,'_bcfs'): #special hidden correction used for 3000BCE-3000CE 
+            from math import sin,cos
+            
+            b,c,f,s = self._bcfs
+            T = self._t
+            
+            return self.L - self.Lp  + b*T*T + c*cos(f*T) + s*sin(f*T)
+        
         else:
             return self.L - self.Lp
         
     @property
     def ap(self):
         """
-        The argument of the pericenter.
+        The argument of the pericenter in degrees.
         """
         if hasattr(self,'_ap'):
             return self._ap(self._t)
         else:
             return self.Lp - self.Lan
+    
+    @staticmethod
+    def _keplerEq(E,M,e):
+        r"""
+        Kepler's equation :math:`-M + E - e \sin(E)` - used for finding E from M
+        """
+        from math import sin
+        
+        return E-M-e*sin(E)
+        
+    @property
+    def E(self):
+        """
+        Eccentric anamoly in degrees - calculated from mean anamoly with
+        accuracy given by :attr:`Etol`.
+        """
+        from math import radians,sin,cos,degrees
+        from scipy.optimize import fsolve
+        
+        M = radians(self.M)
+        e = self.e #radians
+        
+        if self.Etol==0:
+            Er =M + e*sin(M)*(1.0 + e*cos(M))
+        elif self.Etol is None:
+            Er = fsolve(KeplerianObject._keplerEq,0,args=(M,e))[0]
+        else:
+            Er = fsolve(KeplerianObject._keplerEq,0,args=(M,e),xtol=self.Etol)[0]
+        
+        return degrees(Er)
+    
+    @property
+    def nu(self):
+        r"""
+        True anamoly in degrees (:math:`\nu`) - calculated from eccentric anamoly with
+        accuracy given by :attr:`Etol`.
+        """
+        from math import radians,sin,cos,atan2,sqrt,degrees
+        
+        E = radians(self.E)
+        e = self.e
+        
+        xv = cos(E) - e
+        yv = sqrt(1.0 - e*e) * sin(E)
+        
+        return degrees(atan2(yv,xv))
+    
+    @property
+    def r(self):
+        """
+        Distance from focus of attraction to object.
+        """
+        from math import radians,cos
+        
+        a = self.a
+        e = self.e
+        nu = radians(self.nu)
+        
+        return a*(1-e*e)/(1+e*cos(nu))
         
     @property
     def dperi(self):
@@ -459,7 +542,116 @@ class KeplerianObject(EphemerisObject):
         Orbital period (if gravitational parameter GM=1).
         """
         return self.a**1.5
+    
+    def _getCoordObj(self):
+        from ..obstools import jd_to_epoch
+        from math import sin,cos,sqrt,radians
         
+        #orbital plane coordinates
+        a = self.a
+        E = radians(self.E)
+        e = self.e
+        xp = a*(cos(E)-e)
+        yp = a*sqrt(1-e*e)*sin(E)
+        
+        w = radians(self.ap)
+        o = radians(self.Lan)
+        i = radians(self.i)
+        cw,sw = cos(w),sin(w)
+        co,so = cos(o),sin(o)
+        ci,si = cos(i),sin(i)
+        
+        xecl = (cw*co-sw*so*ci)*xp + (-sw*co - cw*so*ci)*yp
+        yecl = (cw*so+sw*co*ci)*xp + (-sw*so + cw*co*ci)*yp
+        zecl = (sw*si)*xp + (cw*si)*yp
+        
+        
+        if self.obliquity is None or self.obliquity==0:
+            res = self.outcoords(xecl,yecl,zecl)  
+        else:
+            ob = radians(self.obliquity)
+            seps = sin(ob)
+            ceps = cos(ob)
+            x = xecl
+            y = ceps*yecl - seps*zecl
+            z = seps*yecl + ceps*zecl
+            
+            res = self.outcoords(x,y,z)
+        
+        #adjust units to AU if the coordinate system has units
+        if hasattr(res,'unit'):
+            res.unit = None #convention is that None implies not to do conversions
+            res.unit = 'au'
+            
+        return res
+    
+def get_solar_system_ephems(objname,jds=None,coordsys=None):
+    """
+    Retrieves an :class:`EphemerisObject` object or computes the coordinates for
+    a solar system object.  
+    
+    :param str objname: 
+        The (case-sensitive) name of the object (see
+        :func:`list_solar_system_objects` for valid names)
+    :param jds:  
+        The jds at which to compute the coordinates or None to return
+        :class:`EphemerisObject` instances.
+    :param coordsys: 
+        Specifies the coordinate system class of the returned ephemerides. See
+        :meth:`EphemerisObject.__call__` for the details. Ignored if `jds` is
+        None.
+    
+    :returns: 
+        A subclass of :class:`EphemerisObject` if `jds` is None, or the
+        appropriate coordinate object (or objects) as detailed in
+        :meth:`EphemerisObject.__call__` if `jds` is not None.
+    
+    """
+    from inspect import isclass
+    from copy import copy
+    
+    #entrys in _ss_ephems may be classes or objects, so do the appropriate action.
+    eobj = _ss_ephems[objname]
+    if jds is None:
+        if isclass(eobj):
+            return eobj()
+        else:
+            return copy(eobj)
+    else:
+        if isclass(eobj):
+            return eobj()(jds,coordsys)
+        else:
+            return eobj(jds,coordsys)
+    
+def list_solar_system_objects():
+    """
+    Returns a list of objects that can be returned by
+    :func:`get_solar_system_object`.
+    """
+    return _ss_ephems.keys()
+
+
+def _keplerian_ephems():
+    """
+    Generates dictionary with Keplerian ephemerides for the solar system from
+    JPL Solar System Dynamics group Approximate positions
+    (http://ssd.jpl.nasa.gov/?planet_pos).
+    """
+    d = {}
+    s="""
+    1.52371034      0.09339410      1.84969142       -4.55343205    -23.94362959     49.55953891
+          0.00001847      0.00007882     -0.00813131    19140.30268499      0.44441088     -0.29257343          """
+    from StringIO import StringIO
+    oes = np.loadtxt(StringIO(s)).T
+    
+    kw={}
+    for i,n in enumerate(('a','e','i','L','Lp','Lan')):
+        kw[n] = oes[i]
+    kw['name'] = 'Mars'
+    kw['validjdrange'] = (625698.0,2816788.0)
+    d[kw['name']] = KeplerianObject(**kw)
+    return d
+
 _ss_ephems = {}
 def set_solar_system_ephem_method(meth=None):
     """
@@ -473,14 +665,8 @@ def set_solar_system_ephem_method(meth=None):
         _ss_ephems = _keplerian_ephems()
     else:
         raise ValueError('Solar System ephemeride method %s not available'%s)
-    
-def _keplerian_ephems():
-    """
-    Generates dictionary with Keplerian ephemerides for the solar system from
-    JPL Solar System Dynamics group Approximate positions
-    (http://ssd.jpl.nasa.gov/?planet_pos).
-    """
-    raise NotImplementedError
+#Set to default
+set_solar_system_ephem_method()
 
 #<--------------Earth location and velocity, based on SOFA epv00--------------->
 # SIMPLIFIED SOLUTION from the planetary theory VSOP2000
