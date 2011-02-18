@@ -442,10 +442,10 @@ class KeplerianObject(EphemerisObject):
         """
         if hasattr(self,'_M'):
             return self._M(self._t)
-        elif hasattr(self,'_bcfs'): #special hidden correction used for 3000BCE-3000CE 
+        elif hasattr(self,'_bcsf'): #special hidden correction used for 3000BCE-3000CE 
             from math import sin,cos
             
-            b,c,f,s = self._bcfs
+            b,c,s,f = self._bcsf
             T = self._t
             
             return self.L - self.Lp  + b*T*T + c*cos(f*T) + s*sin(f*T)
@@ -630,28 +630,6 @@ def list_solar_system_objects():
     """
     return _ss_ephems.keys()
 
-
-def _keplerian_ephems():
-    """
-    Generates dictionary with Keplerian ephemerides for the solar system from
-    JPL Solar System Dynamics group Approximate positions
-    (http://ssd.jpl.nasa.gov/?planet_pos).
-    """
-    d = {}
-    s="""
-    1.52371034      0.09339410      1.84969142       -4.55343205    -23.94362959     49.55953891
-          0.00001847      0.00007882     -0.00813131    19140.30268499      0.44441088     -0.29257343          """
-    from StringIO import StringIO
-    oes = np.loadtxt(StringIO(s)).T
-    
-    kw={}
-    for i,n in enumerate(('a','e','i','L','Lp','Lan')):
-        kw[n] = oes[i]
-    kw['name'] = 'Mars'
-    kw['validjdrange'] = (625698.0,2816788.0)
-    d[kw['name']] = KeplerianObject(**kw)
-    return d
-
 _ss_ephems = {}
 def set_solar_system_ephem_method(meth=None):
     """
@@ -665,8 +643,70 @@ def set_solar_system_ephem_method(meth=None):
         _ss_ephems = _keplerian_ephems()
     else:
         raise ValueError('Solar System ephemeride method %s not available'%s)
-#Set to default
-set_solar_system_ephem_method()
+ 
+def _load_ss_elems(datafn):
+    from ..utils.io import get_package_data
+    
+    s = get_package_data(datafn)
+    data = []
+    names = []
+        
+    for l in s.split('\n'):
+        ls = l.strip()
+        
+        if not (ls=='' or ls.startswith('#')):
+            lss = ls.split()
+            if len(lss)>6:
+                names.append(' '.join(lss[:-6]))
+                data.append(lss[-6:])
+            elif len(lss)<=5:
+                names.append(lss[0])
+                dat = lss[1:]
+                while len(dat)<4:
+                    dat.append(0)
+                data.append(dat)
+            else:
+                data.append(lss[-6:])
+    arrs = np.split(np.array(data,dtype=float),len(names))
+    return dict(zip(names,arrs))
+    
+            
+    return namearrs
+            
+_shortelems = _load_ss_elems('ss_elems_1.dat') #array elements are 2 x 6
+_longelems  = _load_ss_elems('ss_elems_2.dat') #array elements are 2 x 6
+_longelemsb = _load_ss_elems('ss_elems_2b.dat') #array elements are 1 x 4
+
+def _keplerian_ephems():
+    """
+    Generates dictionary with Keplerian ephemerides for the solar system from
+    JPL Solar System Dynamics group Approximate positions
+    (http://ssd.jpl.nasa.gov/?planet_pos).
+    """
+    from ..obstools import calendar_to_jd
+    d = {}
+    
+    jd1800 = calendar_to_jd((1800,1,1))
+    jd2050 = calendar_to_jd((2050,1,1))
+    jd3000ce = calendar_to_jd((3000,1,1))
+    jd3000bce = calendar_to_jd((-2999,1,1))
+    
+    for n,oes in _shortelems.iteritems():
+        kw = {'name':n,'validjdrange':(jd1800,jd2050)}
+        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
+            kw[oen] = oe
+        d[n] = KeplerianObject(**kw)
+        
+    for n,oes in _longelems.iteritems():
+        n = n+'-long'
+        kw = {'name':n,'validjdrange':(jd3000bce,jd3000ce)}
+        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
+            kw[oen] = oe
+        d[n] = obj = KeplerianObject(**kw)
+        if n in _longelemsb:
+            obj._bcsf = _longelemsb[n][0]
+
+    return d
 
 #<--------------Earth location and velocity, based on SOFA epv00--------------->
 # SIMPLIFIED SOLUTION from the planetary theory VSOP2000
@@ -937,6 +977,8 @@ def _long_prec(T):
     return (0.024381750 + 0.00000538691*T)*T
 
 
+#Set to solar system ephemerides to default
+set_solar_system_ephem_method()
 
 
 #Outdated from old version of epehem - when rework is done, delete this
