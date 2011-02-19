@@ -1029,6 +1029,7 @@ class CoordinateSystem(object):
             currsys = self.__class__
             for intersys in convpath[1:-1]:
                 currobj = CoordinateSystem._converters[currsys][intersys](currobj)
+                currsys = intersys
             return CoordinateSystem._converters[currsys][tosys](currobj)
 
 class EpochalCoordinates(CoordinateSystem):
@@ -2710,7 +2711,7 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
         from .funcs import obliquity
         from ..utils import rotation_matrix
         
-        return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
+        return rotation_matrix(obliquity(eqc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
     
     def transformToEpoch(self,newepoch):
         if self.epoch is not None and newepoch is not None:
@@ -2763,7 +2764,7 @@ class EclipticCoordinatesEquinox(EpochalLatLongCoordinates):
         from .funcs import obliquity
         from ..utils import rotation_matrix
         
-        return rotation_matrix(obliquity(eclsc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
+        return rotation_matrix(obliquity(eqc.jdepoch,EclipticCoordinatesEquinox.obliqyear),'x')
         
     def transformToEpoch(self,newepoch):
         if self.epoch is not None and newepoch is not None:
