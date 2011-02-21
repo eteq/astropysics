@@ -103,9 +103,10 @@ def compile_c():
         if res != 0:
             raise ValueError('Could not build C sofatests.  Is SOFA installed, and are the paths in sofatests.build correct?')
         
-def run_test(testname,testfunc,args):
+def run_test(testname,testfunc,epoch,jd):
     print '\n\n\nRunning PYTHON test',testname
-    testfunc(*args)
+    testfunc(epoch,jd)
+    
 
     cmd = './sofatests %s %.16g %.16g'%(testname,epoch,jd)
     print '\nRunning C test',testname,'as','"'+cmd+'"'  
@@ -113,6 +114,35 @@ def run_test(testname,testfunc,args):
 
 
 tests = [(tfunc.func_name,tfunc) for tfunc in tests]
+
+def main(compile=False,epoch=None,teststorun=None):
+    if not os.path.exists('sofatests') or compile:
+        print 'Compiling:','./sofatests.build'
+        res = os.system('./sofatests.build')
+        if res != 0:
+            raise ValueError('Could not build C sofatests.  Is SOFA installed, and are the paths in sofatests.build correct?')
+    
+    if epoch is None:
+        epoch = obstools.jd_to_epoch(None)
+        jd = obstools.epoch_to_jd(epoch)
+        print 'No Epoch given - current:',epoch,'JD:',jd
+    else:
+        epoch = float(ops.epoch)
+        jd = obstools.epoch_to_jd(ops.epoch)
+    
+    if teststorun is None:
+        print 'No Tests specified - running all.'
+        for tn,tf in tests:
+            run_test(tn,tf,epoch,jd)
+        print 'Done running tests!'
+    else:
+        testd = dict(tests)
+        for arg in args:
+            try:
+                run_test(arg,testd[arg],epoch,jd)
+            except KeyError:
+                print "Couldn't find python test %s, skipping"%arg
+
 if __name__ == '__main__':
     from optparse import OptionParser
     
@@ -122,30 +152,6 @@ if __name__ == '__main__':
     op.usage = '%prog [options] [testname1 testname2 ...]'
     ops,args = op.parse_args()
     
-    if not os.path.exists('sofatests') or ops.compile:
-        print 'Compiling:','./sofatests.build'
-        res = os.system('./sofatests.build')
-        if res != 0:
-            raise ValueError('Could not build C sofatests.  Is SOFA installed, and are the paths in sofatests.build correct?')
-    
-    if ops.epoch is None:
-        epoch = obstools.jd_to_epoch(None)
-        jd = obstools.epoch_to_jd(epoch)
-        print 'No Epoch given - current:',epoch,'JD:',jd
-    else:
-        epoch = float(ops.epoch)
-        jd = obstools.epoch_to_jd(ops.epoch)
-    
     if len(args)==0:
-        print 'No Tests specified - running all.'
-        for tn,tf in tests:
-            run_test(tn,tf,(epoch,jd))
-        print 'Done running tests!'
-    else:
-        testd = dict(tests)
-        for arg in args:
-            try:
-                run_test(arg,testd[arg],(epoch,jd))
-            except KeyError:
-                print "Couldn't find python test %s, skipping"%arg
-
+        args = None
+    main(ops.compile,ops.epoch,args)
