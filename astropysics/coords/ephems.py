@@ -278,6 +278,14 @@ class KeplerianObject(EphemerisObject):
     * :attr:`Lp`
     * :attr:`M`
     * :attr:`ap`
+    * :attr:`nu`
+    
+    Additional read only properties derived from the orbital elements include:
+    
+    * :attr:`P`
+    * :attr:`d`
+    * :attr:`dapo`
+    * :attr:`dperi`
         
     """
     
@@ -478,26 +486,27 @@ class KeplerianObject(EphemerisObject):
         Eccentric anamoly in degrees - calculated from mean anamoly with
         accuracy given by :attr:`Etol`.
         """
-        from math import radians,sin,cos,degrees
+        from math import radians,sin,cos,degrees,pi
         from scipy.optimize import fsolve
         
-        M = radians(self.M)
+        M = radians((self.M + 180)%360 - 180)
         e = self.e #radians
+        E0 = M + e*sin(M)*(1.0 + e*cos(M))
         
         if self.Etol==0:
-            Er =M + e*sin(M)*(1.0 + e*cos(M))
+            Er = E0
         elif self.Etol is None:
-            Er = fsolve(KeplerianObject._keplerEq,0,args=(M,e))[0]
+            Er = fsolve(KeplerianObject._keplerEq,E0,args=(M,e))[0]
         else:
-            Er = fsolve(KeplerianObject._keplerEq,0,args=(M,e),xtol=self.Etol)[0]
+            Er = fsolve(KeplerianObject._keplerEq,E0,args=(M,e),xtol=self.Etol)[0]
         
-        return degrees(Er)
+        return degrees(Er)%360
     
     @property
     def nu(self):
         r"""
-        True anamoly in degrees (:math:`\nu`) - calculated from eccentric anamoly with
-        accuracy given by :attr:`Etol`.
+        True anamoly in degrees (:math:`-180 < \nu < 180`) - calculated from
+        eccentric anamoly with accuracy given by :attr:`Etol`.
         """
         from math import radians,sin,cos,atan2,sqrt,degrees
         
@@ -510,9 +519,9 @@ class KeplerianObject(EphemerisObject):
         return degrees(atan2(yv,xv))
     
     @property
-    def r(self):
+    def d(self):
         """
-        Distance from focus of attraction to object.
+        Current distance from focus of attraction to object.
         """
         from math import radians,cos
         
@@ -525,14 +534,14 @@ class KeplerianObject(EphemerisObject):
     @property
     def dperi(self):
         """
-        Distance from focus at pericenter: :math:`a(1-e)`
+        Distance from focus of attraction at pericenter.
         """
         return self.a*(1 - self.e)
     
     @property
     def dapo(self):
         """
-        Distance from focus at apocenter: :math:`a(1-e)`
+        Distance from focus of attraction at apocenter.
         """
         return self.a*(1 + self.e)
     
