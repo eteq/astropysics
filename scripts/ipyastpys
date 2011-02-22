@@ -26,9 +26,10 @@ op.add_option('-s','--script-args',dest='sargs',help='Arguments to be used in th
 ops,args = op.parse_args()
 
 if ops.list:
-    print 'Registered projects:'
     for n,t in config.get_projects().iteritems():
-        print n,':',tuple(t)
+        print n
+        print '\tDirectory:',t[0]
+        print '\tScript:',t[1]
     sys.exit(0)
 
 pdir = pfn = None
