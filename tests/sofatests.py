@@ -88,8 +88,8 @@ def trans_coords(epoch,jd):
     
 @tests.append
 def earth_pv(epoch,jd):
-    p,v = coords.ephems._earth_loc(jd,barycentric=False,kms=False)
-    pb,vb = coords.ephems._earth_loc(jd,barycentric=True,kms=False)
+    p,v = coords.ephems.earth_pos_vel(jd,barycentric=False,kms=False)
+    pb,vb = coords.ephems.earth_pos_vel(jd,barycentric=True,kms=False)
     
     print 'Heliocentric pos:',p
     print 'Heliocentric vel:',v/365.25
