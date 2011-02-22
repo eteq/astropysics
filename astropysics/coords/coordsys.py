@@ -1964,12 +1964,12 @@ class GCRSCoordinates(EquatorialCoordinatesBase):
         
     @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
     def _toICRS(gc):
-        #TODO: implement parallax/abberation
+        #TODO: replace with rectangular trans or implement parallax/abberation
         return np.eye(3).view(np.matrix)
     
     @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')    
     def _fromICRS(ic):
-        #TODO: implement parallax/abberation
+        #TODO: replace with rectangular trans or implement parallax/abberation
         return np.eye(3).view(np.matrix)
     
 class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
@@ -2044,41 +2044,67 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         """)
     
     
-    @CoordinateSystem.registerTransform('self',ICRSCoordinates)
-    def _toICRS(ric):
+    @CoordinateSystem.registerTransform('self',GCRSCoordinates)
+    def _toGCRS(rgc):
         from math import asin,atan2,degrees
         
-        x,y,z = ric.x,ric.y,ric.z        
+        x,y,z = rgc.x,rgc.y,rgc.z        
         r = (x*x+y*y+z*z)**0.5
         dec = degrees(asin(z/r))
         ra = degrees(atan2(y,x))
         
-        if ric.unit == 'pc':
-            return ICRSCoordinates(ra,dec,distancepc=r,epoch=ric.epoch)
+        if rgc.unit == 'pc':
+            return GCRSCoordinates(ra,dec,distancepc=r,epoch=rgc.epoch)
         else:
-            return ICRSCoordinates(ra,dec,distanceau=r,epoch=ric.epoch)
+            return GCRSCoordinates(ra,dec,distanceau=r,epoch=rgc.epoch)
     
-    @CoordinateSystem.registerTransform(ICRSCoordinates,'self')    
-    def _fromICRS(ic):
+    @CoordinateSystem.registerTransform(GCRSCoordinates,'self')    
+    def _fromGCRS(gc):
         from math import sin,cos
         
-        ra,dec = ic.ra.r,ic.dec.r
+        ra,dec = gc.ra.r,gc.dec.r
         if ic.distanceau is None:
             r = 1
             unit = None
-        elif ic.distanceau>1000:
-            r = ic.distancepc[0]
+        elif gc.distanceau>1000:
+            r = gc.distancepc[0]
             unit = 'pc'
         else:
-            r = ic.distanceau[0]
+            r = gc.distanceau[0]
             unit = 'au'
         x = r*cos(ra)*cos(dec)
         y = r*sin(ra)*cos(dec)
         z = r*sin(dec)
         
-        return RectangularICRSCoordinates(x,y,z,ic.epoch,unit)
-
-                       
+        return RectangularGCRSCoordinates(x,y,z,ic.epoch,unit)
+    
+#    @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
+#    def _toRectICRS(rgc):
+#        #TODO:implement abberation, check this
+#        from .ephems import earth_pos_vel
+#        from ..obstools import epoch_to_jd
+        
+#        xe,ye,ze = earth_pos_vel(epoch_to_jd(rgc.epoch),True)[0]
+#        xp = rgc.x + xe
+#        yp = rgc.y + ye
+#        zp = rgc.z + ze
+        
+#        return RectangularICRSCoordinates(xp,yp,zp,rgc.epoch,rgc.unit)
+    
+#    @CoordinateSystem.registerTransform(RectangularICRSCoordinates,'self')    
+#    def _fromRectICRS(ric):
+#        #TODO:implement abberation, check this for higher precision
+#        from .ephems import earth_pos_vel
+#        from ..obstools import epoch_to_jd
+        
+#        xe,ye,ze = earth_pos_vel(epoch_to_jd(ric.epoch),True)[0]
+#        xp = ric.x - xe
+#        yp = ric.y - ye
+#        zp = ric.z - ze
+        
+#        return RectangularGCRSCoordinates(xp,yp,zp,ric.epoch,ric.unit)
+    
+    
 def _precession_matrix_J2000_Capitaine(epoch):
         """
         Computes the precession matrix from J2000 to the given Julian Epoch.
@@ -2622,7 +2648,12 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         epoch = eqe.epoch
         if epoch is not None:
             jd = epoch_to_jd(eqe.epoch)
-            gst = greenwich_sidereal_time(jd,True)*15. #hours -> degrees
+            try:
+                gst = greenwich_sidereal_time(jd,True)*15. #hours -> degrees
+            except Exception,e:
+                from warnings import warn
+                warn('temporarily bypassing problem with greenwich_sidereal_time:%s'%e)
+                gst = greenwich_sidereal_time(jd,'simple')*15. #hours -> degrees
             W = ITRSCoordinates._WMatrix(eqe.epoch)
             
             return W*rotation_matrix(gst)
