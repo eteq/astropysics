@@ -1782,18 +1782,18 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     (ICRS). Strictly speaking this is not an Equatorial system, as it is an
     inertial frame that only aligns with Earth's equator at J2000, but it is
     nearly an equatorial system at J2000.
-    
+        
     .. note::
-        Strictly speaking this class is actually the Barycentric Celestial
-        Reference System (BCRS), as any space/proper motions are computed before
-        this object (e.g. in :class:`~astropysics.ephems.EphemerisObject`). But
-        BCRS's orientation is tied to ICRF, a realization of ICRS.  And given 
-        that most other tools use the ICRS term in this context, it seems
-        clearer this way.
+        Technically, this is actually the Barycentric Celestial Referense System
+        (BCRS), distringuished from ICRS by having acounted for space motion. In
+        astropysics, instead, space motion is already accounted for by using
+        :class:`astropysics.coords.ephems.EphemerisObject` objects, which yield
+        coordinates (often :class:`ICRSCoordinates`) at the epoch of
+        observation.
         
     .. warning:: 
-        Abberation and annual parallax are not yet included in transformations!
-        Also, all general relativistic effects are currently ignored.
+        Abberation and annual parallax are not yet implemented in
+        transformations to/from ICRS, where relevant.
         
     """
     
@@ -1805,10 +1805,8 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
         """
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
-    
-    #conversion methods and attributes are below
-    
-    
+    #Conversions to/from ICRS are in the other coordinate systems
+
     def __makeFrameBias():
         from ..utils import rotation_matrix
         
@@ -1827,18 +1825,17 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
     #make it a static method just for clarity even though it isn't really visible
     __makeFrameBias = staticmethod(__makeFrameBias)
     
-    
 class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     """
-    Rectangular coordinates oriented so that the positive z-axis points to the
-    north celestial pole and the positive x-axis to the origin of the ICRS.
-    Additionally, because the ICRS is based on BCRS, the origin is the solar
-    system barycenter.
+    Rectangular coordinates aligned to the ICRS with origin at the solar system
+    barycenter. The positive z-axis points to the north celestial pole and the
+    positive x-axis  is along with the (0,0) point of the equatorial ICRS. 
     
-    Distances can be specified via the :attr:`unit` attribute.  When converting
-    *to* :class:`RectangularICRSCoordinates`, distances default to AU if less
-    than 1000 AU, otherwise, pc.  If a distance is not present, the default
-    distance is 1 (unspecified unit).
+    .. note::
+        Units for the coordinates are specified via the :attr:`unit` attribute.
+        When converting *from* :class:`ICRSCoordinates`, distances default to AU
+        if less than 1000 AU, otherwise, pc. If a distance is not present, the
+        default distance is 1 (unspecified unit).
     
     """
     __slots__ = tuple()
@@ -1933,6 +1930,154 @@ class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         z = r*sin(dec)
         
         return RectangularICRSCoordinates(x,y,z,ic.epoch,unit)
+    
+    
+class GCRSCoordinates(EquatorialCoordinatesBase):
+    """
+    Geocentric Celestial Reference System equatorial coordinates. The
+    orientation of this coordinates is fixed to the ICRS orientation, but with
+    origin at the earth geocenter.
+        
+    .. warning:: 
+        Abberation and annual parallax are not yet included.
+        
+    """
+    
+    __slots__ = tuple()
+    
+    def transformToEpoch(self,newepoch):
+        """
+        Transforms from the current epoch to a new epoch by converting to ICRS
+        and back again in the new epoch.  
+        """
+        c1 = self.convert(ICRSCoordinates)
+        c1.epoch = newepoch
+        c2 = c1.convert(GCRSCoordinates)
+        
+        self._lat = c2._lat
+        self._long = c2._long
+        self._laterr = c2._laterr
+        self._longerr = c2._longerr
+        self._dpc = c2._dpc
+            
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
+        
+    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
+    def _toICRS(gc):
+        #TODO: implement parallax/abberation
+        return np.eye(3).view(np.matrix)
+    
+    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')    
+    def _fromICRS(ic):
+        #TODO: implement parallax/abberation
+        return np.eye(3).view(np.matrix)
+    
+class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
+    """
+    Rectangular coordinates aligned to the GCRS (identical orientation to the
+    ICRS) with origin at the Earth geocenter. The positive z-axis points to the
+    north celestial pole and the positive x-axis points down the (0,0) point of
+    the equatorial GCRS (and thus, also ICRS).
+    
+    .. note::
+        Units for the coordinates are specified via the :attr:`unit` attribute.
+        When converting *from* :class:`GCRSCoordinates`, distances default to AU
+        if less than 1000 AU, otherwise, pc. If a distance is not present, the
+        default distance is 1 (unspecified unit).
+    """
+    __slots__ = tuple()
+    julianepoch = True
+    
+    def __init__(self,x,y,z,epoch=None,unit='pc'):
+        RectangularCoordinates.__init__(self,x,y,z)
+        self._epoch = epoch
+        self._unit = None
+        self.unit = unit
+        
+    def __getstate__(self):
+        d = RectangularCoordinates.__getstate__(self)
+        d.update(EpochalCoordinates.__getstate__(self))
+        return d
+    
+    def __setstate__(self,d):
+        RectangularCoordinates.__setstate__(self,d)
+        EpochalCoordinates.__setstate__(self,d)
+        
+    def __str__(self):
+        if self.epoch is None:
+            epochstr = ''
+        else:
+            epochstr = ' ('+self.epochstr+')'
+        return RectangularCoordinates.__str__(self) + epochstr
+        
+    def transformToEpoch(self,newepoch):
+        EpochalCoordinates.transformToEpoch(newepoch)
+        
+    def _getUnit(self):
+        return self._unit
+    def _setUnit(self,val):
+        from ..constants import auperpc
+        
+        if val is None:
+            self._unit = None
+        elif self._unit is None and (val in ('au','pc')):
+            self._unit = val
+        elif val=='au':
+            if self._unit == 'pc':
+                self.x *= auperpc
+                self.y *= auperpc
+                self.z *= auperpc
+                self._unit = val
+        elif val == 'pc':
+            if self._unit == 'au':
+                self.x /= auperpc
+                self.y /= auperpc
+                self.z /= auperpc
+                self._unit = val
+        else:
+            raise ValueError("unit must be 'au' or 'pc' - got %s"%val)
+        
+    unit = property(_getUnit,_setUnit,doc="""The unit for these coordinates. 
+        Must be 'au', 'pc', or None - setting to anything else will raise a
+        :exc:`ValueError`. If not None, setting to a new unit will convert the
+        values from AU to pc or vice versa.
+        """)
+    
+    
+    @CoordinateSystem.registerTransform('self',ICRSCoordinates)
+    def _toICRS(ric):
+        from math import asin,atan2,degrees
+        
+        x,y,z = ric.x,ric.y,ric.z        
+        r = (x*x+y*y+z*z)**0.5
+        dec = degrees(asin(z/r))
+        ra = degrees(atan2(y,x))
+        
+        if ric.unit == 'pc':
+            return ICRSCoordinates(ra,dec,distancepc=r,epoch=ric.epoch)
+        else:
+            return ICRSCoordinates(ra,dec,distanceau=r,epoch=ric.epoch)
+    
+    @CoordinateSystem.registerTransform(ICRSCoordinates,'self')    
+    def _fromICRS(ic):
+        from math import sin,cos
+        
+        ra,dec = ic.ra.r,ic.dec.r
+        if ic.distanceau is None:
+            r = 1
+            unit = None
+        elif ic.distanceau>1000:
+            r = ic.distancepc[0]
+            unit = 'pc'
+        else:
+            r = ic.distanceau[0]
+            unit = 'au'
+        x = r*cos(ra)*cos(dec)
+        y = r*sin(ra)*cos(dec)
+        z = r*sin(dec)
+        
+        return RectangularICRSCoordinates(x,y,z,ic.epoch,unit)
+
                        
 def _precession_matrix_J2000_Capitaine(epoch):
         """
@@ -2266,12 +2411,12 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
         
         return np.polyval(newpolys[::-1],T)/asecperrad - x*y/2.0
     
-    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')
-    def _fromICRS(icrsc):
-        return EquatorialCoordinatesCIRS._CMatrix(icrsc.epoch)
-    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
-    def _toICRS(cirssys):
-        return EquatorialCoordinatesCIRS._CMatrix(icrsc.epoch).T
+    @CoordinateSystem.registerTransform(GCRSCoordinates,'self',transtype='smatrix')
+    def _fromGCRS(gcrsc):
+        return EquatorialCoordinatesCIRS._CMatrix(gcrsc.epoch)
+    @CoordinateSystem.registerTransform('self',GCRSCoordinates,transtype='smatrix')
+    def _toGCRS(cirssys):
+        return EquatorialCoordinatesCIRS._CMatrix(cirssys.epoch).T
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -2315,23 +2460,23 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
             self.matrixRotate(A*B)
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
-    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')
-    def _fromICRS(icrsc):
+    @CoordinateSystem.registerTransform(GCRSCoordinates,'self',transtype='smatrix')
+    def _fromGCRS(gcrsc):
         B = ICRSCoordinates.frameBiasJ2000
-        if icrsc.epoch is None:
+        if gcrsc.epoch is None:
             return B
         else:
-            P = _precession_matrix_J2000_Capitaine(icrsc.epoch)
-            N = _nutation_matrix(icrsc.epoch)
+            P = _precession_matrix_J2000_Capitaine(gcrsc.epoch)
+            N = _nutation_matrix(gcrsc.epoch)
             return N*P*B 
-    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
-    def _toICRS(eqsys):
-        return EquatorialCoordinatesEquinox._fromICRS(eqsys).T
+    @CoordinateSystem.registerTransform('self',GCRSCoordinates,transtype='smatrix')
+    def _toGCRS(eqsys):
+        return EquatorialCoordinatesEquinox._fromGCRS(eqsys).T
           
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toCIRS(eqsys):
         if eqsys.epoch is None:
-            return np.mat(np.eye(3))
+            return np.eye(3).view(np.matrix)
         else:
             from ..obstools import epoch_to_jd
             from .funcs import equation_of_the_origins
@@ -2466,7 +2611,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
             
             return W*rotation_matrix(era)
         else:
-            return np.mat(np.eye(3))
+            return np.eye(3).view(np.matrix)
     
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self',transtype='smatrix')
     def _fromEqE(eqe):
@@ -2482,7 +2627,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
             
             return W*rotation_matrix(gst)
         else:
-            return np.mat(np.eye(3))   
+            return np.eye(3).view(np.matrix)  
     
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
     def _toEqC(itrsc):

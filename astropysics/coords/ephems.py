@@ -98,7 +98,7 @@ class EphemerisObject(object):
       object of the coordinates for the current value of :attr:`jd`.
       
     * Subclasses may implement a :meth:`_jdhook` method to perform an action
-      whenever the jd is changed.  It must take the new JD as its only argument. 
+      whenever the jd is changed.  It must have a signature f(oldjd,newjd). 
     
     """
     
@@ -120,7 +120,7 @@ class EphemerisObject(object):
         from ..obstools import jd2000
         
         self._jd = jd2000
-        self._jdhook(jd2000)
+        self._jdhook(jd2000,jd2000)
         
         self.name = name
         self._setValidjdrange(validjdrange)
@@ -144,14 +144,21 @@ class EphemerisObject(object):
                 warn('JD {0} is below the valid range for this EphemerisObject'.format(jd),EphemerisAccuracyWarning)
             elif self._validrange[1] is not None and jd > self._validrange[1]:
                 warn('JD {0} is above the valid range for this EphemerisObject'.format(jd),EphemerisAccuracyWarning)
-        self._jd = jd
-        if hasattr(self,'_jdhook'):
-            self._jdhook(jd)
         
+        self._jdhook(self._jd,jd)
+        self._jd = jd        
     jd = property(_getJd,_setJd,doc="""
     Julian Date at which to calculate the orbital elements. Can be set either as
     a scalar JD, 'now', :class:`datetime.datetime` object or a compatible tuple.
     """)
+       
+    def _jdhook(self,oldjd,newjd):
+        """
+        Override in subclasses to perform an action when the jd is changed
+        (although before self._jd is updated).
+        """
+        pass
+
     
     
     @property
@@ -297,23 +304,12 @@ class KeplerianObject(EphemerisObject):
     compute but fails for e close to 1.
     """
     
-    outcoords = None #default set in constructor
-    """ The coordinate class that should be used as the output.. It should be A
-    :class:`astropysics.coords.coordsys.CartesianCoordinates` subclass. The
-    origin will be taken as the center of the Keplerian orbit.
-    """
-    
-    obliquity = None #default set in constructor
-    """ Obliquity in degrees. Will be used to rotate the output coordinate
-    system z-axis about the +x-axis.  Defaults to J2000 obliquity.
-    """
-    
     def __init__(self,**kwargs):
         """
         Keywords should be the names of orbital elements. Orbital elements can
         be a callable f(T) that returns the orbital element, where T is the
         Julian century from J2000. Otherwise, it must be a sequence giving
-        polynomial coefficients in T, specified in increasing power (i.e.
+        polynomial coefficients of T, specified in increasing power (i.e.
         constant term first).
         
         The orbital elements :attr:`a`,:attr:`e`, :attr:`i`, and :attr:`Lan`
@@ -323,12 +319,17 @@ class KeplerianObject(EphemerisObject):
         Three additional keywords can be supplied:
         
         :params outcoords: 
-            The coordinate class that should be used as the output (see
-            :attr:`outcoords` for details). If not specified, it will default to
-            :class:`astropysics.coords.coordsys.ICRSCoordinates`.
-        :params obliquity: 
-            Obliquity to reorient the output coordinates to match the expected
-            `outcoords` (see :attr:`obliquity`). Defaults to J2000 obliquity.
+            The coordinate class that should be used as the output. Should be a
+            :class:`astropysics.coords.coordsys.CartesianCoordinates` subclass,
+            and the origin will be taken as the center of the Keplerian orbit.
+            Defaults to
+            :class:`astropysics.coords.coordsys.RectangularCoordinates`.
+        :params outtransfunc:
+            A function that maps the coordinates from the standard coordinate
+            system (where the x-y plane is the plane of reference) to a system
+            matching the type specified by `outcoords`. The function should have
+            the signature f(x,y,z,jd) and return (xp,yp,zp). It can also be None
+            to perform no trasnformation. Defaults to None.
         :params Etol:
             Tolerance for eccentric anomaly (see :attr:`Etol`). Defaults to
             None.
@@ -339,11 +340,13 @@ class KeplerianObject(EphemerisObject):
         :except TypeError: If necessary orbital elements are missing.
             
         """
-        from .coordsys import RectangularICRSCoordinates
+        from .coordsys import RectangularCoordinates
         
-        self.outcoords = kwargs.pop('outcoords',RectangularICRSCoordinates)
+        
+        self.outcoords = kwargs.pop('outcoords',RectangularCoordinates)
+        self.outtransfunc = kwargs.pop('outtransfunc',None)
         self.Etol = kwargs.pop('Etol',23.43928)
-        self.obliquity = kwargs.pop('obliquity',23.43928)
+        
         
         kwnms = ('a','e','i','Lan','L','Lp','ap','M')
         a,e,i,Lan,L,Lp,ap,M = [kwargs.pop(n,None) for n in kwnms]
@@ -376,9 +379,9 @@ class KeplerianObject(EphemerisObject):
             self._M = self._makeElement(M)
         
             
-    def _jdhook(self,jd):
+    def _jdhook(self,oldjd,newjd):
         from ..obstools import jd2000
-        self._t = (jd - jd2000)/36525.
+        self._t = (newjd - jd2000)/36525.
    
     def _makeElement(self,val):
         from operator import isSequenceType
@@ -570,22 +573,13 @@ class KeplerianObject(EphemerisObject):
         co,so = cos(o),sin(o)
         ci,si = cos(i),sin(i)
         
-        xecl = (cw*co-sw*so*ci)*xp + (-sw*co - cw*so*ci)*yp
-        yecl = (cw*so+sw*co*ci)*xp + (-sw*so + cw*co*ci)*yp
-        zecl = (sw*si)*xp + (cw*si)*yp
+        x = (cw*co-sw*so*ci)*xp + (-sw*co - cw*so*ci)*yp
+        y = (cw*so+sw*co*ci)*xp + (-sw*so + cw*co*ci)*yp
+        z = (sw*si)*xp + (cw*si)*yp
         
-        
-        if self.obliquity is None or self.obliquity==0:
-            res = self.outcoords(xecl,yecl,zecl)  
-        else:
-            ob = radians(self.obliquity)
-            seps = sin(ob)
-            ceps = cos(ob)
-            x = xecl
-            y = ceps*yecl - seps*zecl
-            z = seps*yecl + ceps*zecl
-            
-            res = self.outcoords(x,y,z)
+        if self.outtransfunc:
+            x,y,z = self.outtransfunc(x,y,z,self._jd)
+        res = self.outcoords(x,y,z)              
         
         #adjust units to AU if the coordinate system has units
         if hasattr(res,'unit'):
@@ -651,71 +645,75 @@ def set_solar_system_ephem_method(meth=None):
     if meth=='keplerian':
         _ss_ephems = _keplerian_ephems()
     else:
-        raise ValueError('Solar System ephemeride method %s not available'%s)
- 
-def _load_ss_elems(datafn):
-    from ..utils.io import get_package_data
-    
-    s = get_package_data(datafn)
-    data = []
-    names = []
-        
-    for l in s.split('\n'):
-        ls = l.strip()
-        
-        if not (ls=='' or ls.startswith('#')):
-            lss = ls.split()
-            if len(lss)>6:
-                names.append(' '.join(lss[:-6]))
-                data.append(lss[-6:])
-            elif len(lss)<=5:
-                names.append(lss[0])
-                dat = lss[1:]
-                while len(dat)<4:
-                    dat.append(0)
-                data.append(dat)
-            else:
-                data.append(lss[-6:])
-    arrs = np.split(np.array(data,dtype=float),len(names))
-    return dict(zip(names,arrs))
-    
-            
-    return namearrs
-            
-_shortelems = _load_ss_elems('ss_elems_1.dat') #array elements are 2 x 6
-_longelems  = _load_ss_elems('ss_elems_2.dat') #array elements are 2 x 6
-_longelemsb = _load_ss_elems('ss_elems_2b.dat') #array elements are 1 x 4
+        raise ValueError('Solar System ephemerides method %s not available'%s)
 
-def _keplerian_ephems():
+    #Add in Simon 94 Moon and SOFA earth pv if needed
+    if 'Moon' not in _ss_ephems:
+        _ss_ephems['Moon'] = _moon_simon94()
+    if 'Earth' not in _ss_ephems:
+        _ss_ephems['Earth'] = Earth
+        
+
+#<--------------Moon location from Simon 94------------------------------------>
+
+def _ecl_to_icrs(x,y,z,jd):
     """
-    Generates dictionary with Keplerian ephemerides for the solar system from
-    JPL Solar System Dynamics group Approximate positions
-    (http://ssd.jpl.nasa.gov/?planet_pos).
+    tilt from ecliptic to ICRS orientation
     """
+    #from math import sin,cos,radians
+    #obliquity = radians(23.43928)
+    #seps = sin(obliquity)
+    #ceps = cos(obliquity)
+    seps = 0.39777697800876388
+    ceps = 0.91748213920828747
+    
+    yp = ceps*y - seps*z
+    zp = seps*y + ceps*z
+    
+    return x,yp,zp
+
+def _moon_simon94():
+    """
+    returns a KeplerianObject for the moon using the osculating elements of
+    Simon et al. 94 for the "1992 values". 
+    """
+    from math import degrees
+    from .coordsys import RectangularGCRSCoordinates
     from ..obstools import calendar_to_jd
-    d = {}
+    from ..constants import aupercm,asecperrad
+    auperkm = aupercm*1e5
+    degperasec = degrees(1./asecperrad)
     
-    jd1800 = calendar_to_jd((1800,1,1))
-    jd2050 = calendar_to_jd((2050,1,1))
-    jd3000ce = calendar_to_jd((3000,1,1))
-    jd3000bce = calendar_to_jd((-2999,1,1))
+    jd4000b = calendar_to_jd((-3999,1,1))
+    jd8000 = calendar_to_jd((8000,1,1))
+    kw = {'name':'Moon','validjdrange':(jd4000b,jd8000),
+              'outcoords':RectangularGCRSCoordinates, #origin already geocentric
+              'outtransfunc':_ecl_to_icrs}
     
-    for n,oes in _shortelems.iteritems():
-        kw = {'name':n,'validjdrange':(jd1800,jd2050)}
-        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
-            kw[oen] = oe
-        d[n] = KeplerianObject(**kw)
-        
-    for n,oes in _longelems.iteritems():
-        n = n+'-long'
-        kw = {'name':n,'validjdrange':(jd3000bce,jd3000ce)}
-        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
-            kw[oen] = oe
-        d[n] = obj = KeplerianObject(**kw)
-        if n in _longelemsb:
-            obj._bcsf = _longelemsb[n][0]
-
-    return d
+    kw['a'] = (383397.7725*auperkm,.0040*auperkm) #Simon values are in km
+    kw['e'] = (.055545526,-1.6e-8)
+    kw['i'] = (5.15668983,
+         -.00008*degperasec,
+          .02966*degperasec,
+         -.000042*degperasec,
+         -.00000013*degperasec)
+    kw['Lp'] = (83.35324312,
+           14643420.2669*degperasec,
+          -38.2702*degperasec,
+          -.045047*degperasec,
+           .00021301*degperasec) 
+    kw['Lan'] = (125.04455501,
+           -6967919.3631*degperasec,
+            6.3602*degperasec,
+            .007625*degperasec,
+            .00003586*degperasec)
+    kw['L'] = (218.31664563,
+          1732559343.48470*degperasec,
+         -6.3910*degperasec,
+          .006588*degperasec,
+         -.00003169*degperasec)
+    
+    return KeplerianObject(**kw)
 
 #<--------------Earth location and velocity, based on SOFA epv00--------------->
 # SIMPLIFIED SOLUTION from the planetary theory VSOP2000
@@ -825,13 +823,59 @@ def _compute_earth_series(t,coeffs0,coeffs1,coeffs2):
     
     return pos,vel
 
-def _earth_loc(jd,barycentric=False,kms=True):
+class Earth(EphemerisObject):
     """
-    Testing function - need to adapt to OO framework
+    Earth position (and velocity) relative to solar system barycenter. Adapted
+    from SOFA fits generated from DE405 solar system model. Outputs
+    :class:`astropysics.coords.coordsys.RectangularICRSCoordinates` objects.
+    """
     
-    returns (x,y,z),(vx,vy,vz) in BCRS
     
-    x is AU, v is either AU/yr or km/s (controlled by `kms`)
+    def __init__(self):
+        from ..obstools import calendar_to_jd
+        
+        jd1900 = calendar_to_jd((1900,1,1))
+        jd2100 = calendar_to_jd((2100,1,1))
+        EphemerisObject.__init__(self,'Earth',(jd1900,jd2100))
+        
+    def _getCoordObj(self):
+        from .coordsys import RectangularICRSCoordinates
+        from ..obstools import jd_to_epoch
+        
+        x,y,z = earth_pos_vel(self.jd,True)[0]
+        return RectangularICRSCoordinates(x=x,y=y,z=z,epoch=jd_to_epoch(self.jd))
+    
+    def getVelocity(self,jd=None,kms=True):
+        """
+        Computes and returns the velociy of the Earth relative to the solar
+        system barycenter.
+        
+        :params jd: 
+            The julian date at which to compute the velocity, or None to use the
+            :attr:`jd` attribute.
+        :params bool kms: 
+            If True, velocities are returned in km/s, otherwise AU/yr.
+            
+        :returns: vx,vy,vz in km/s if `kms` is True, otherwise AU/yr.
+            
+        """
+        return earth_pos_vel(self.jd if jd is None else jd,True,kms)[1]
+
+def earth_pos_vel(jd,barycentric=False,kms=True):
+    """
+    Computes the earth's position and velocity at a given julian date. Adapted
+    from SOFA function epv00.c from fits to DE405, valid from ~ 1900-2100.  
+    
+    :param jd: The julian date for the positions and velocities.
+    :param bool barycentric: 
+        If True, the output positions and velocities are relative to the solar
+        system barycenter. Otherwise, positions and velocities are heliocentric.
+    :param bool kms: If True, velocity outputs are in km/s, otherwise AU/yr.
+    
+    :returns: 
+        2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are positions in AU, and
+        vx,vy, and vz are velocities in km/s (if `kms` is True) or AU/yr.
+    
     """
     from ..obstools import jd2000
     from ..constants import aupercm,secperyr
@@ -861,6 +905,89 @@ def _earth_loc(jd,barycentric=False,kms=True):
         vel *= (1e-5/aupercm/secperyr)
         
     return pos,vel
+    
+#<---------------Approximate Keplerian major planet ephemerides---------------->
+def _load_jpl_orb_elems(datafn):
+    from ..utils.io import get_package_data
+    
+    s = get_package_data(datafn)
+    data = []
+    names = []
+        
+    for l in s.split('\n'):
+        ls = l.strip()
+        
+        if not (ls=='' or ls.startswith('#')):
+            lss = ls.split()
+            if len(lss)>6:
+                names.append(' '.join(lss[:-6]))
+                data.append(lss[-6:])
+            elif len(lss)<=5:
+                names.append(lss[0])
+                dat = lss[1:]
+                while len(dat)<4:
+                    dat.append(0)
+                data.append(dat)
+            else:
+                data.append(lss[-6:])
+    arrs = np.split(np.array(data,dtype=float),len(names))
+    return dict(zip(names,arrs))
+    
+            
+    return namearrs
+            
+_shortelems = _load_jpl_orb_elems('ss_elems_1.dat') #array elements are 2 x 6
+_longelems  = _load_jpl_orb_elems('ss_elems_2.dat') #array elements are 2 x 6
+_longelemsb = _load_jpl_orb_elems('ss_elems_2b.dat') #array elements are 1 x 4
+
+def _ecl_to_gcrs(x,y,z,jd):
+    from math import sin,cos,radians
+    
+    #tilt to ICRS orientation
+    xp,yp,zp = _ecl_icrs(x,y,z,jd)
+    
+    #Now offset to earth coordinates
+    (xe,ye,ze),(vxe,vye,vze) = earth_pos_vel(jd,barycentric=True)
+    
+    return xp-xe,yp-ye,zp-ze
+
+def _keplerian_ephems():
+    """
+    Generates dictionary with Keplerian ephemerides for the solar system from
+    JPL Solar System Dynamics group Approximate positions
+    (http://ssd.jpl.nasa.gov/?planet_pos).
+    """
+    from ..obstools import calendar_to_jd
+    from .coordsys import RectangularGCRSCoordinates
+    
+    d = {}
+    
+    jd1800 = calendar_to_jd((1800,1,1))
+    jd2050 = calendar_to_jd((2050,1,1))
+    jd3000ce = calendar_to_jd((3000,1,1))
+    jd3000bce = calendar_to_jd((-2999,1,1))
+    
+    for n,oes in _shortelems.iteritems():
+        kw = {'name':n,'validjdrange':(jd1800,jd2050),
+              'outcoords':RectangularGCRSCoordinates,
+              'outtransfunc':_ecl_to_gcrs}
+        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
+            kw[oen] = oe
+        d[n] = KeplerianObject(**kw)
+        
+    for n,oes in _longelems.iteritems():
+        n = n+'-long'
+        kw = {'name':n,'validjdrange':(jd3000bce,jd3000ce),
+              'outcoords':RectangularGCRSCoordinates,
+              'outtransfunc':_ecl_to_gcrs}
+        for oen,oe in zip(('a','e','i','L','Lp','Lan'),oes.T):
+            kw[oen] = oe
+        d[n] = obj = KeplerianObject(**kw)
+        if n in _longelemsb:
+            obj._bcsf = _longelemsb[n][0]
+    
+    return d
+
     
     
 #<----Lunisolar/Solar system fundamental arguments, mostly used in coordsys---->

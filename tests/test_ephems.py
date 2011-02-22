@@ -5478,7 +5478,9 @@ def _apx_compare(jplstr,objname,plotdiff=False):
     
     
     m = ephems.get_solar_system_ephems(objname)
-    m.obliquity = 0 #->ecliptic plane
+    #ecliptic instead of GCRS
+    m.outcoords = RectangularCoordinate 
+    m.outtransfunc = None 
 
     x,y,z = pos.T
     r = (x**2+y**2+z**2)**0.5
