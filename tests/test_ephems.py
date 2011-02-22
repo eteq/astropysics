@@ -5470,6 +5470,7 @@ def _apx_compare(jplstr,objname,plotdiff=False):
     :param plotdiff: whether or not to show the comparison plot
     
     """
+    from astropysics.coords import RectangularCoordinates
 
     sl = jplstr.split('\n')[1:-1]
     jds = np.array([l.split()[0] for l in sl[::4]],dtype=float)
@@ -5479,7 +5480,7 @@ def _apx_compare(jplstr,objname,plotdiff=False):
     
     m = ephems.get_solar_system_ephems(objname)
     #ecliptic instead of GCRS
-    m.outcoords = RectangularCoordinate 
+    m.outcoords = RectangularCoordinates 
     m.outtransfunc = None 
 
     x,y,z = pos.T
