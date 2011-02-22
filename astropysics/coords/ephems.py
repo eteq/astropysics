@@ -555,6 +555,7 @@ class KeplerianObject(EphemerisObject):
         """
         return self.a**1.5
     
+    
     def _getCoordObj(self):
         from ..obstools import jd_to_epoch
         from math import sin,cos,sqrt,radians
@@ -587,6 +588,63 @@ class KeplerianObject(EphemerisObject):
             res.unit = 'au'
             
         return res
+    
+    def getPhase(self,viewobj='Earth',illumobj='Sun'):
+        """
+        Computes the phase of this object. The phase is computed as viwed from
+        `viewobj` if illuminated by `illumobj`
+        
+        :param viewobj: 
+            The object viewing this object. Either a string with the name of a
+            solar system object (from the list in
+            :func:`list_solar_system_objects`), or a :class:`EphemerisObject`
+            object. If None, it is taken to be the coordinate origin.
+        :param viewobj: 
+            The object illuminating this object. Either a string with the name
+            of a solar system object (from the list in
+            :func:`list_solar_system_objects`), or a :class:`EphemerisObject`
+            object. If None, it is taken to be the coordinate origin.
+        
+        :returns: 
+            The phase of the object as a float where 0 is new and 1 is full. 
+        """
+        from math import sqrt
+        
+        c = self()
+        coordcls = c.__class__
+        x,y,z = c.x,c.y,c.z
+        
+        if illumobj is None:
+            xi = yi = zi = 0
+        else:
+            if isinstance(illumobj,basestring):
+                cillum = get_solar_system_ephems(illumobj,self.jd)
+            else:
+                cillum = illumobj(self.jd)
+            if not isinstance(cillum,coordcls):
+                cillum = cillum.convert(coordcls)
+            xi,yi,zi = cillum.x,cillum.y,cillum.z
+            
+        if viewobj is None:
+            xv = yv = zv = 0
+        else:
+            if isinstance(viewobj,basestring):
+                cview = get_solar_system_ephems(viewobj,self.jd)
+            else:
+                cview = viewobj(self.jd)
+            if not isinstance(cview,coordcls):
+                cview = cview.convert(coordcls)
+            xv,yv,zv = cview.x,cview.y,cview.z
+        
+        xR,yR,zR = x-xv,y-yv,z-zv #view -> self vector
+        xs,ys,zs = xv-xi,yv-yi,zv-zi #illum -> view vector
+        xr,yr,zr = x-xi,y-yi,z-zi #illum -> self vector
+        
+        r = sqrt(xr*xr+yr*yr+zr*zr)
+        R = sqrt(xR*xR+yR*yR+zR*zR)
+        s = sqrt(xs*xs+ys*ys+zs*zs)
+        
+        return (1+(r*r + R*R - s*s)/(2*r*R))/2
     
 def get_solar_system_ephems(objname,jds=None,coordsys=None):
     """
@@ -649,7 +707,7 @@ def set_solar_system_ephem_method(meth=None):
 
     #Add in Simon 94 Moon and SOFA earth pv if needed
     if 'Moon' not in _ss_ephems:
-        _ss_ephems['Moon'] = _moon_simon94()
+        _ss_ephems['Moon'] = Moon
     if 'Earth' not in _ss_ephems:
         _ss_ephems['Earth'] = Earth
         
@@ -672,49 +730,81 @@ def _ecl_to_icrs(x,y,z,jd):
     
     return x,yp,zp
 
-def _moon_simon94():
+class Moon(KeplerianObject):
     """
-    returns a KeplerianObject for the moon using the osculating elements of
-    Simon et al. 94 for the "1992 values". 
+    A :class:`KeplerianObject` for Earth's moon based on the model of Simon et
+    al. 1994. The osculating elements for the "1992 values" are used to compute
+    the location. The output coordinates are
+    :class:`astropysics.coords.coordsys.RectangularGCRSCoordinates`.
     """
-    from math import degrees
-    from .coordsys import RectangularGCRSCoordinates
-    from ..obstools import calendar_to_jd
-    from ..constants import aupercm,asecperrad
-    auperkm = aupercm*1e5
-    degperasec = degrees(1./asecperrad)
-    
-    jd4000b = calendar_to_jd((-3999,1,1))
-    jd8000 = calendar_to_jd((8000,1,1))
-    kw = {'name':'Moon','validjdrange':(jd4000b,jd8000),
-              'outcoords':RectangularGCRSCoordinates, #origin already geocentric
-              'outtransfunc':_ecl_to_icrs}
-    
-    kw['a'] = (383397.7725*auperkm,.0040*auperkm) #Simon values are in km
-    kw['e'] = (.055545526,-1.6e-8)
-    kw['i'] = (5.15668983,
-         -.00008*degperasec,
-          .02966*degperasec,
-         -.000042*degperasec,
-         -.00000013*degperasec)
-    kw['Lp'] = (83.35324312,
-           14643420.2669*degperasec,
-          -38.2702*degperasec,
-          -.045047*degperasec,
-           .00021301*degperasec) 
-    kw['Lan'] = (125.04455501,
-           -6967919.3631*degperasec,
-            6.3602*degperasec,
-            .007625*degperasec,
-            .00003586*degperasec)
-    kw['L'] = (218.31664563,
-          1732559343.48470*degperasec,
-         -6.3910*degperasec,
-          .006588*degperasec,
-         -.00003169*degperasec)
-    
-    return KeplerianObject(**kw)
-
+    def __init__(self):
+        from math import degrees
+        from .coordsys import RectangularGCRSCoordinates
+        from ..obstools import calendar_to_jd
+        from ..constants import aupercm,asecperrad
+        auperkm = aupercm*1e5
+        degperasec = degrees(1./asecperrad)
+        
+        jd4000b = calendar_to_jd((-3999,1,1))
+        jd8000 = calendar_to_jd((8000,1,1))
+        kw = {'name':'Moon','validjdrange':(jd4000b,jd8000),
+                  'outcoords':RectangularGCRSCoordinates, #origin already geocentric
+                  'outtransfunc':_ecl_to_icrs}
+        
+        kw['a'] = (383397.7725*auperkm,.0040*auperkm) #Simon values are in km
+        kw['e'] = (.055545526,-1.6e-8)
+        kw['i'] = (5.15668983,
+             -.00008*degperasec,
+              .02966*degperasec,
+             -.000042*degperasec,
+             -.00000013*degperasec)
+        kw['Lp'] = (83.35324312,
+               14643420.2669*degperasec,
+              -38.2702*degperasec,
+              -.045047*degperasec,
+               .00021301*degperasec) 
+        kw['Lan'] = (125.04455501,
+               -6967919.3631*degperasec,
+                6.3602*degperasec,
+                .007625*degperasec,
+                .00003586*degperasec)
+        kw['L'] = (218.31664563,
+              1732559343.48470*degperasec,
+             -6.3910*degperasec,
+              .006588*degperasec,
+             -.00003169*degperasec)
+        
+        KeplerianObject.__init__(self,**kw)
+        
+    def getPhase(self,viewobj=None,illumobj=None):
+        """
+        Computes the phase of the Moon. This is computed as viewed from the
+        Earth and illuminated by the Sun if `viewobj` and `illumobj` are None -
+        otherwise, see :meth:`KeplerianObject.getPhase` for the meaning of the
+        parameters.
+        
+        :returns: A float where 1 is full and 0 is new.
+        
+        """
+        if viewobj is None and illumobj is None:
+            from math import sqrt
+            
+            c = self()
+            xg,yg,zg = c.x,c.y,c.z #relative to earth
+            xe,ye,ze = earth_pos_vel(self.jd,False)[0] #heliocentric
+            xm = xe + xg
+            ym = ye + yg
+            zm = ze + zg
+            
+            r = sqrt(xm*xm+ym*ym+zm*zm)
+            R = sqrt(xg*xg+yg*yg+zg*zg)
+            s = sqrt(xe*xe+ye*ye+ze*ze)
+            
+            return (1+(r*r + R*R - s*s)/(2*r*R))/2
+        else:
+            return KeplerianObject.getPhase(self,viewobj,illumobj)
+        
+        
 #<--------------Earth location and velocity, based on SOFA epv00--------------->
 # SIMPLIFIED SOLUTION from the planetary theory VSOP2000
 # X. Moisson, P. Bretagnon, 2001, 
