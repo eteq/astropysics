@@ -18,10 +18,6 @@ This module contains tools and utilities for computing ephemerides and physical
 locations of solar system objects, as well as proper motion calculations for
 extrasolar objects.
 
-.. warning::
-    This module is currently being re-worked and has incomplete/possibly 
-    incorrect functionality
-
 .. seealso::
         
     `Pyephem <http://rhodesmill.org/pyephem/>`_
@@ -50,7 +46,7 @@ Module API
 
 """
 
-#TODO: JPL Ephemeris and default ephemeris setting functions
+#TODO: JPL Ephemeris option
 
 #useful references:
 #*http://www.astro.rug.nl/software/kapteyn/index.html
@@ -587,6 +583,10 @@ class KeplerianObject(EphemerisObject):
             res.unit = None #convention is that None implies not to do conversions
             res.unit = 'au'
             
+        #add epoch info if coordinates have an epoch
+        if hasattr(res,'epoch'):
+            res.epoch = jd_to_epoch(self.jd)
+            
         return res
     
     def getPhase(self,viewobj='Earth',illumobj='Sun'):
@@ -1034,7 +1034,15 @@ def _ecl_to_gcrs(x,y,z,jd):
     from math import sin,cos,radians
     
     #tilt to ICRS orientation
-    xp,yp,zp = _ecl_icrs(x,y,z,jd)
+    #sine = sin(radians(23.43928))
+    sine = 0.39777697800876388
+    #cose = cos(radians(23.43928))
+    cose = 0.917482139208
+    
+    xp = x
+    yp = cose*y - sine*z
+    zp = sine*y + cose*z
+    #xp,yp,zp = _ecl_icrs(x,y,z,jd)
     
     #Now offset to earth coordinates
     (xe,ye,ze),(vxe,vye,vze) = earth_pos_vel(jd,barycentric=True)
