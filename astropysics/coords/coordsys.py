@@ -707,12 +707,21 @@ class CoordinateSystem(object):
     
     *Subclassing*
     
-    Subclasses of :class:`CoordinateSystem` must override :meth:`__init__` to
-    set initial values. Additionally, :class:`CoordinateSystem` objects are
-    intended to be quite small, so unless there is a reason to do otherwise,
-    subclasses should have a :attr:`__slots__` class attribute (see
-    http://docs.python.org/reference/datamodel.html for an explanation of
-    slots - it should be a sequence of all the valid attributes for the object).
+    * Subclasses of :class:`CoordinateSystem` must override :meth:`__init__` to
+      set initial values. 
+    
+    * :class:`CoordinateSystem` objects are intended to be quite small, so
+      unless there is a reason to do otherwise, subclasses should have a
+      :attr:`__slots__` class attribute (it should be a sequence of all the 
+      valid attribute names for the object - see
+      http://docs.python.org/reference/datamodel.html for an explanation of the
+      `__slots__` mechanism).
+      
+    * The :attr:`transweight` class variable can be set to determine the
+      weighting of this class when computing coordinate transformation pathways.
+      Note that *smaller* weights are preferred paths (e.g. a larger weight is
+      less likely to be visited).  See 
+      :meth:`CoordinateSystem.getTransformGraph` for more details.
     
     """
     from collections import defaultdict as _defaultdict
@@ -967,7 +976,7 @@ class CoordinateSystem(object):
                 import networkx as nx
                 
                 g = CoordinateSystem.getTransformGraph()
-                path = nx.shortest_path(g,fromsys,tosys)
+                path = nx.shortest_path(g,fromsys,tosys,weighted=True)
                 if not path:
                     raise NotImplementedError(failstr+'; no transform path could be found')
                 return path
@@ -992,7 +1001,14 @@ class CoordinateSystem(object):
         
         if CoordinateSystem._transgraph is None:
             CoordinateSystem._transgraph = g = nx.DiGraph()
-            g.add_edges_from(CoordinateSystem.listAllTransforms())
+            
+            transes = []
+            for a,b in CoordinateSystem.listAllTransforms():
+                avgweight = (getattr(a,'transweight',1) +
+                             getattr(b,'transweight',1))/2
+                transes.append((a,b,dict(weight=avgweight)))
+            g.add_edges_from(transes)
+            
             
         return CoordinateSystem._transgraph.copy()
     
@@ -1034,8 +1050,8 @@ class CoordinateSystem(object):
 
 class EpochalCoordinates(CoordinateSystem):
     """
-    A base class for :class:`CoordinateSystem` classes that have epochs
-    associated with them. 
+    A base class for :class:`CoordinateSystem` classes that have *changeable*
+    epochs associated with them. 
     
     *Subclassing*
     
@@ -1163,6 +1179,40 @@ class RectangularCoordinates(CoordinateSystem):
         
     def __str__(self):
         return '%s: x=%f,y=%f,z=%f'%(self.__class__.__name__,self.x,self.y,self.z)
+        
+    def __add__(self,other):
+        from copy import deepcopy
+        if hasattr(other,'x') and hasattr(other,'y') and hasattr(other,'z'):
+            new = deepcopy(self)
+            new.x = self.x+other.x
+            new.y = self.y+other.y
+            new.z = self.z+other.z
+            return new
+        raise TypeError('Object of type %s does not have x,y, and z for operand +'%other.__class__)
+        
+    def __sub__(self,other):
+        from copy import deepcopy
+        if hasattr(other,'x') and hasattr(other,'y') and hasattr(other,'z'):
+            new = deepcopy(self)
+            new.x = self.x-other.x
+            new.y = self.y-other.y
+            new.z = self.z-other.z
+            return new
+        raise TypeError('Object of type %s does not have x,y, and z for operand -'%other.__class__)
+        
+    def _getLength(self):
+        from math import sqrt
+        return sqrt(self.x**2+self.y**2+self.z**2)
+    def _setLength(self,val):
+        scaling = val/self._getLength()
+        self.x *= scaling
+        self.y *= scaling
+        self.z *= scaling        
+    length = property(_getLength,_setLength,doc="""
+    The Length of this coordinate's vector e.g. distance from the origin. If
+    set, the direction will be preserved but the vector will be scaled to the
+    provided value.""")
+    
     
 CartesianCoordinates = RectangularCoordinates
     
@@ -2063,7 +2113,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         from math import sin,cos
         
         ra,dec = gc.ra.r,gc.dec.r
-        if ic.distanceau is None:
+        if gc.distanceau is None:
             r = 1
             unit = None
         elif gc.distanceau>1000:
@@ -2076,7 +2126,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         y = r*sin(ra)*cos(dec)
         z = r*sin(dec)
         
-        return RectangularGCRSCoordinates(x,y,z,ic.epoch,unit)
+        return RectangularGCRSCoordinates(x,y,z,gc.epoch,unit)
     
 #    @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
 #    def _toRectICRS(rgc):
@@ -2302,7 +2352,7 @@ def _load_CIO_locator_data(datafn):
 _CIO_locator_data = _load_CIO_locator_data('iau00_cio_locator.tab')  
 
 
-class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
+class CIRSCoordinates(EquatorialCoordinatesBase):
     """
     Represents an object as equatorial coordinates in the Celestial Intermediate
     Reference System. This is the post-2000 IAU system for equatorial
@@ -2316,7 +2366,7 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     for precession nutation. Nutation currently uses the IAU 2000B model that
     should be good to ~1 mas. If abberration or annual parallax corrections are
     necessary, convert to :class:`ICRSCoordinates`, change the epoch, and then
-    convert back to :class:`EquatorialCoordinatesCIRS`.
+    convert back to :class:`CIRSCoordinates`.
     
     To convert from these coordinates to :class:`HorizontalCoordinates`
     appropriate for observed coordinates, site information is necessary. Hence,
@@ -2360,7 +2410,7 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
             x,y,z = (N*P*B).A[2]
             xsq,ysq = x**2,y**2
             bz = 1/(1+z)
-            s = EquatorialCoordinatesCIRS._CIOLocator(epoch)
+            s = CIRSCoordinates._CIOLocator(epoch)
                    
             #matrix components - see Circular 179 or IERS Conventions 2003
             a,b,c = 1-bz*xsq , -bz*x*y , -x
@@ -2439,10 +2489,10 @@ class EquatorialCoordinatesCIRS(EquatorialCoordinatesBase):
     
     @CoordinateSystem.registerTransform(GCRSCoordinates,'self',transtype='smatrix')
     def _fromGCRS(gcrsc):
-        return EquatorialCoordinatesCIRS._CMatrix(gcrsc.epoch)
+        return CIRSCoordinates._CMatrix(gcrsc.epoch)
     @CoordinateSystem.registerTransform('self',GCRSCoordinates,transtype='smatrix')
     def _toGCRS(cirssys):
-        return EquatorialCoordinatesCIRS._CMatrix(cirssys.epoch).T
+        return CIRSCoordinates._CMatrix(cirssys.epoch).T
             
 class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     """
@@ -2464,6 +2514,8 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     :mod:`astropysics.obstools` module, and attempting to directly convert will
     raise a :exc:`TypeError`.
     """
+    
+    transweight = 1.1 #Equinox-based transforms are to be avoided in favor of CIRS
     
     __slots__ = tuple()
     
@@ -2499,7 +2551,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
     def _toGCRS(eqsys):
         return EquatorialCoordinatesEquinox._fromGCRS(eqsys).T
           
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    @CoordinateSystem.registerTransform('self',CIRSCoordinates,transtype='smatrix')
     def _toCIRS(eqsys):
         if eqsys.epoch is None:
             return np.eye(3).view(np.matrix)
@@ -2512,7 +2564,7 @@ class EquatorialCoordinatesEquinox(EquatorialCoordinatesBase):
             eqo = equation_of_the_origins(jd)*15.  #hours>degrees
             return rotation_matrix(-eqo,'z',True)
     
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    @CoordinateSystem.registerTransform(CIRSCoordinates,'self',transtype='smatrix')
     def _fromCIRS(cirssys):
         return EquatorialCoordinatesEquinox._toCIRS(cirssys).T
             
@@ -2526,7 +2578,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
     
     Epoch transformations in this system only adjust for polar motion - to
     account for earth rotation, transform back to
-    :class:`EquatorialCoordinatesCIRS` or :class:`EquatorialCoordinatesEquinox`,
+    :class:`CIRSCoordinates` or :class:`EquatorialCoordinatesEquinox`,
     change the epoch, then transfrom back to :class:`ITRSCoordinates`.
     
     Because polar motion is not fully predictable, a number of methods are
@@ -2622,7 +2674,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
             res._dpc = self._dpc
         return res
     
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    @CoordinateSystem.registerTransform(CIRSCoordinates,'self',transtype='smatrix')
     def _fromEqC(eqc):
         from .funcs import earth_rotation_angle
         from ..obstools import epoch_to_jd
@@ -2660,17 +2712,17 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         else:
             return np.eye(3).view(np.matrix)  
     
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    @CoordinateSystem.registerTransform('self',CIRSCoordinates,transtype='smatrix')
     def _toEqC(itrsc):
         #really we want inverse, but rotations are unitary -> inv==transpose
         #we provide itrsc in the call because the epoch is needed
-        return ICRSCoordinates._fromEqC(itrsc).T 
+        return ITRSCoordinates._fromEqC(itrsc).T 
     
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox,transtype='smatrix')
     def _toEqE(itrsc):
         #really we want inverse, but rotations are unitary -> inv==transpose
         #we provide itrsc in the call because the epoch is needed
-        return ICRSCoordinates._fromEqE(itrsc).T 
+        return ITRSCoordinates._fromEqE(itrsc).T 
             
 class FK5Coordinates(EquatorialCoordinatesEquinox):
     """
@@ -2836,8 +2888,8 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
             B[2,1] += -5.6024448e-9*T
             B[2,2] += 1.02587734e-8*T
       
-            PB = _precessionMatrixB(fk4c.epoch,1950)
-            PJ = _precessionMatrixBJ(2000,jepoch)
+            PB = FK4Coordinates._precessionMatrixB(fk4c.epoch,1950)
+            PJ = FK5Coordinates._precessionMatrixJ(2000,jepoch)
             
             return PJ*B*PB
         else:
@@ -2846,7 +2898,7 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5c):
         #need inverse because Murray's matrix is *not* a true rotation matrix
-        return FK5Coordinates._toFK5(fk5c).I
+        return FK4Coordinates._toFK5(fk5c).I
         
 class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     """
@@ -2857,7 +2909,7 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     ill-defined, ecliptic coordinates is astropysics are simply defined as
     tied to a particular set of equatorial coordinates with a given obliquity
     model.  For :class:`EclipticCoordinatesCIRS`, the equatorial 
-    coordinates are :class:`EquatorialCoordinatesCIRS` with obliquity
+    coordinates are :class:`CIRSCoordinates` with obliquity
     given by the IAU 2006 obliquity model (see :func:`obliquity`)
     """
     
@@ -2875,14 +2927,14 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
         EpochalLatLongCoordinates.__init__(self,lamb,beta,lamberr,betaerr,epoch)
         self.distanceau = distanceau
         
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS,transtype='smatrix')
+    @CoordinateSystem.registerTransform('self',CIRSCoordinates,transtype='smatrix')
     def _toEq(eclsc):
         from .funcs import obliquity
         from ..utils import rotation_matrix
         
         return rotation_matrix(-obliquity(eclsc.jdepoch,EclipticCoordinatesCIRS.obliqyear),'x')
         
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self',transtype='smatrix')
+    @CoordinateSystem.registerTransform(CIRSCoordinates,'self',transtype='smatrix')
     def _fromEq(eqc):
         from .funcs import obliquity
         from ..utils import rotation_matrix
@@ -2891,7 +2943,7 @@ class EclipticCoordinatesCIRS(EpochalLatLongCoordinates):
     
     def transformToEpoch(self,newepoch):
         if self.epoch is not None and newepoch is not None:
-            eqc = self.convert(EquatorialCoordinatesCIRS)
+            eqc = self.convert(CIRSCoordinates)
             eqc.epoch = newepoch
             newval = eqc.convert(self.__class__)
             self._lat._decval = newval._lat._decval
@@ -3043,7 +3095,7 @@ class RectangularGeocentricEclipticCoordinates(RectangularCoordinates,EpochalCoo
             
         return RectangularGeocentricEclipticCoordinates(x,y,z,ec.epoch)
     
-class GalacticCoordinates(LatLongCoordinates):
+class GalacticCoordinates(EpochalLatLongCoordinates):
     __slots__ = tuple()
     _longlatnames_ = ('l','b')
     _longrange_ = (0,360)
@@ -3053,11 +3105,12 @@ class GalacticCoordinates(LatLongCoordinates):
     _ngp_B1950 = FK4Coordinates(192.25, 27.4,epoch=1950)
     _long0_B1950 = AngularCoordinate(123)
     
-    def __init__(self,l=0,b=0,lerr=None,berr=None,distancepc=None):
+    def transformToEpoch(self,newepoch):
         """
-        See the associated attribute docstrings for the meaning of the inputs.  
+        Galactic coordinates are nominally inertial, although the definition is
+        a bit unclear in that regard.
         """
-        LatLongCoordinates.__init__(self,l,b,lerr,berr,distancepc)
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
     @CoordinateSystem.registerTransform(FK5Coordinates,'self',transtype='smatrix')
     def _fromFK5(fk5coords):
@@ -3089,13 +3142,20 @@ class GalacticCoordinates(LatLongCoordinates):
     def _toFK4(galcoords):
         return GalacticCoordinates._fromFK4(galcoords).T
         
-class SupergalacticCoordinates(LatLongCoordinates):   
+class SupergalacticCoordinates(EpochalLatLongCoordinates):   
     __slots__ = tuple()
     _longlatnames_ = ('sgl','sgb')
     _longrange_ = (0,360)
     
     _nsgp_gal = GalacticCoordinates(47.37,6.32) #glactc is 47.47=WRONG
     _sg0_gal = GalacticCoordinates(137.37,0)
+    
+    def transformToEpoch(self,newepoch):
+        """
+        Supergalactic coordinates are nominally inertial, although the
+        definition is a bit unclear in that regard.
+        """
+        EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
     
     @CoordinateSystem.registerTransform('self',GalacticCoordinates,transtype='smatrix')
     def _toGal(sgalcoords):
@@ -3131,12 +3191,12 @@ class HorizontalCoordinates(LatLongCoordinates):
         LatLongCoordinates.__init__(self,az,alt,azerr,alterr,distancepc)
     
     @CoordinateSystem.registerTransform(EquatorialCoordinatesEquinox,'self')
-    @CoordinateSystem.registerTransform(EquatorialCoordinatesCIRS,'self')
+    @CoordinateSystem.registerTransform(CIRSCoordinates,'self')
     def _toHoriz(incoosys=None):
         raise TypeError('use astropysics.obstools.Site methods to transform celestial to terrestrial coordinates')
     
     @CoordinateSystem.registerTransform('self',EquatorialCoordinatesEquinox)
-    @CoordinateSystem.registerTransform('self',EquatorialCoordinatesCIRS)
+    @CoordinateSystem.registerTransform('self',CIRSCoordinates)
     def _fromHoriz(incoosys=None):
         raise TypeError('use astropysics.obstools.Site methods to transform terrestrial to celestial coordinates')
     
