@@ -75,14 +75,14 @@ void trans_coords(double ep, double jd) {
     
     iauRxp(rc2t,vec,transvec);
     iauC2s(transvec,&theta,&phi);
-    printf("ITRS coords: lat:%g long:%g\n",phi*180/PI,theta*180/PI);
+    printf("ITRS coords: lat:%.12g long:%.12g\n",phi*180/PI,theta*180/PI);
 
 }
 
 void earth_rotation(double ep, double jd) {
-    printf("ERA:%g\n",iauEra00(jd,0));
-    printf("GAST:%g\n",iauGst00b(jd,0));
-    printf("GMST:%g\n",iauGmst00(jd,0,jd,0));
+    printf("ERA:%.12g\n",iauEra00(jd,0));
+    printf("GAST:%.12g\n",iauGst00b(jd,0));
+    printf("GMST:%.12g\n",iauGmst00(jd,0,jd,0));
 }
 
 void earth_pv(double ep, double jd) {
@@ -126,5 +126,7 @@ int main(int argc, const char* argv[] ){
             earth_pv(epoch,jd);
         } 
     }
+    
+    return 0;
     
 }

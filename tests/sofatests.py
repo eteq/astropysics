@@ -57,10 +57,28 @@ tests = []
    
 @tests.append
 def earth_rotation(epoch,jd):
-    print 'ERA',coords.earth_rotation_angle(jd,False)
-    print 'GAST',coords.greenwich_sidereal_time(jd,'simple')*pi/12
-    print 'GMST',coords.greenwich_sidereal_time(jd,False)*pi/12
-
+    ERA = coords.earth_rotation_angle(jd,False)
+    print 'ERA',ERA
+    GAST = coords.greenwich_sidereal_time(jd,'simple')*pi/12
+    print 'GAST',GAST
+    GMST = coords.greenwich_sidereal_time(jd,False)*pi/12
+    print 'GMST', GMST
+    
+    def cmpfunc(cstdout,ERA,GAST,GMST):
+        from warnings import warn
+        
+        ls = [l.split(':')[-1].strip() for l in cstdout.split('\n') if l.strip()!='']
+        dERA = ERA-float(ls[0])
+        dGAST = GAST-float(ls[1])
+        dGMST = GMST-float(ls[2])
+        
+        for s in ('dERA','dGAST','dGMST'):
+            val = locals()[s]
+            if abs(val)>1e-8:
+                warn('%s too large:%g !!!'%(s,val))
+        
+    return cmpfunc,ERA,GAST,GMST
+    
 @tests.append
 def trans_matricies(epoch,jd):
     icrs = coords.ICRSCoordinates(0,0,epoch=epoch)
@@ -74,17 +92,66 @@ def trans_matricies(epoch,jd):
     
     BPN = _computematrix(coords.ICRSCoordinates,coords.EquatorialCoordinatesEquinox,epoch)
     print 'BPN\n',BPN
-    C = _computematrix(coords.ICRSCoordinates,coords.EquatorialCoordinatesCIRS,epoch)
+    C = _computematrix(coords.ICRSCoordinates,coords.CIRSCoordinates,epoch)
     print 'C\n',C
+    
+    def cmpfunc(cstdout,B,P,N,BPN,C):
+        from warnings import warn
+        
+        ls = [l for l in cstdout.split('\n') if l.strip()!='']
+        cB = np.matrix(eval(','.join(ls[1:4])))
+        cP = np.matrix(eval(','.join(ls[5:8])))
+        cN = np.matrix(eval(','.join(ls[9:12])))
+        cBPN = np.matrix(eval(','.join(ls[13:16])))
+        cC = np.matrix(eval(','.join(ls[17:20])))
+        
+        dB = np.abs(cB-B).max()
+        dP = np.abs(cP-P).max()
+        dN = np.abs(cN-N).max()
+        dBPN = np.abs(cBPN-BPN).max()
+        dC = np.abs(cC-C).max()
+        
+        for s in ('dB','dP','dN','dBPN','dC'):
+            val = locals()[s]
+            if val>5e-7:
+                warn('%s too large:%g !!!'%(s,val))
+    
+    return cmpfunc,B,P,N,BPN,C
     
 @tests.append
 def trans_coords(epoch,jd):
     icrs = coords.ICRSCoordinates('10d','20d',epoch=epoch)
     print icrs
     #print "cartesian",_cartesian_transform(icrs)
-    print 'ICRS->',icrs.convert(coords.EquatorialCoordinatesCIRS)
-    print 'ICRS->',icrs.convert(coords.EquatorialCoordinatesEquinox)
-    print 'ICRS->',icrs.convert(coords.ITRSCoordinates)
+    c = icrs.convert(coords.CIRSCoordinates)
+    e = icrs.convert(coords.EquatorialCoordinatesEquinox)
+    i = icrs.convert(coords.ITRSCoordinates)
+    print 'ICRS->',c
+    print 'ICRS->',e
+    print 'ICRS->',i
+    
+    def cmpfunc(cstdout,c,e,i):
+        from warnings import warn
+        
+        ldats = [l[(l.index(':')+2):].strip() for l in cstdout.split('\n') if l.strip()!='']
+        racs,deccs = (ldats[0].split()[0])[3:],(ldats[0].split()[1])[4:]
+        raes,deces = (ldats[1].split()[0])[3:],(ldats[1].split()[1])[4:]
+        ilat,ilong = (ldats[2].split()[0])[4:],(ldats[2].split()[1])[5:]
+        
+        drac = coords.AngularCoordinate(racs).d-c.ra.d
+        ddecc = coords.AngularCoordinate(deccs).d-c.dec.d
+        drae = coords.AngularCoordinate(raes).d-e.ra.d
+        ddece = coords.AngularCoordinate(deces).d-e.dec.d
+        dlat = float(ilat)-i.lat.d
+        dlong = float(ilong)-i.long.d
+        
+        for s in ('drac','ddecc','drae','ddece','dlat','dlong'):
+            val = locals()[s]
+            if abs(val)>5e-8:
+                warn('%s too large:%g !!!'%(s,val))
+        
+        
+    return cmpfunc,c,e,i
     
 @tests.append
 def earth_pv(epoch,jd):
@@ -96,6 +163,22 @@ def earth_pv(epoch,jd):
     print 'SS Barycentric pos:',pb
     print 'SS Barycentric vel:',vb/365.25
     
+    def cmpfunc(cstdout,p,v,pb,vb):
+        from warnings import warn
+        
+        ldats = [l.split(':')[-1].strip() for l in cstdout.split('\n') if l.strip()!='']
+        pc,vc,pbc,vbc = [np.array(l.split(','),dtype=float) for l in ldats]
+        
+        if np.abs(p-pc).max() > 1e-6:
+            warn('earth_pv C and python do not match: p-pc=%g !!!'%(p-pc))
+        if np.abs(v-vc).max() > 1e-6:
+            warn('earth_pv C and python do not match: v-vc=%g !!!'%(v-vc))
+        if np.abs(pb-pbc).max() > 1e-6:
+            warn('earth_pv C and python do not match: pb-pbc=%g !!!'%(pb-pbc))
+        if np.abs(vb-vbc).max() > 1e-6:
+            warn('earth_pv C and python do not match: vb-vbc=%g !!!'%(vb-vbc))
+             
+    return cmpfunc,p,v/365.25,pb,vb/365.25
     
 def compile_c():
     if not os.path.exists('sofatests'):
@@ -104,13 +187,40 @@ def compile_c():
             raise ValueError('Could not build C sofatests.  Is SOFA installed, and are the paths in sofatests.build correct?')
         
 def run_test(testname,testfunc,epoch,jd):
+    """
+    Run the python and C tests with the given name and python function - the
+    name will be used to infer the C test.
+    
+    if the python functions return anything other than None, it will be assumed
+    that the first return value is a function of the form f(cstdoput,*pyreturn).
+    """
+    import subprocess
+    
     print '\n\n\nRunning PYTHON test',testname
-    testfunc(epoch,jd)
+    pyres = testfunc(epoch,jd)
     
 
     cmd = './sofatests %s %.16g %.16g'%(testname,epoch,jd)
     print '\nRunning C test',testname,'as','"'+cmd+'"'  
-    os.system(cmd)
+    
+    if pyres is None:
+        os.system(cmd)
+    else:
+        cmpfunc = pyres[0]
+        
+        sp = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE)
+        cstdout,cstderr = sp.communicate()
+        if sp.returncode==0:
+            print 'C code complete - output:\n',cstdout
+        else:
+            print 'Problem with C - retcode',sp.returncode,'- output:\n',cstdout,'\nstd err:',cstderr
+        
+        cmps = []
+        cmps.append(cstdout)
+        cmps.extend(pyres[1:])
+        print 'Comparing python to C'
+        cmpfunc(*cmps)
+        print 'Comparison complete'
 
 
 tests = [(tfunc.func_name,tfunc) for tfunc in tests]
