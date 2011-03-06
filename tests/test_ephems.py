@@ -5508,3 +5508,89 @@ def _apx_compare(jplstr,objname,plotdiff=False):
         
     return (x,y,z),(xapx,yapx,zapx)
         
+def test_radec():
+    """
+    Test conversion from rectangular ephemerides to equatorial.
+    
+    Data are from JPL Horizons.  Only a few jds are tested, as opposed to the
+    other test functions that are more complete in jd ranges.
+    """
+    from astropysics.coords import GCRSCoordinates,AngularCoordinate
+    from collections import defaultdict
+    
+    dras = defaultdict(list)
+    ddecs = defaultdict(list)
+    
+    ven2000jds = [2451544,2451545,2451546]
+    ven2000dat="""
+    1999-Dec-31 12:00     15 54 38.77 -18 10 46.0  -4.08   1.20 1.13108098603332  11.2767695  39.0394 /L  59.3320
+    2000-Jan-01 12:00     15 59 36.28 -18 27 06.7  -4.07   1.20 1.13757924201495  11.2283324  38.8494 /L  58.9239
+    2000-Jan-02 12:00     16 04 35.00 -18 43 00.3  -4.07   1.20 1.14404941365377  11.1795083  38.6583 /L  58.5175
+    """
+    ven2000dat = [l.split() for l in ven2000dat.split('\n') if l.strip()!='']
+    for jd,ds in zip(ven2000jds,ven2000dat):
+        ec = ephems.get_solar_system_ephems('Venus',jd,GCRSCoordinates)
+        hc = GCRSCoordinates('%sh%sm%ss'%tuple(ds[2:5]),'%sd%sm%ss'%tuple(ds[5:8]))
+        
+        assert abs((ec.ra-hc.ra).arcsec)<1000,'RA diff too large for Venus:%g arcsec'%(ec.ra-hc.ra).arcsec
+        assert abs((ec.dec-hc.dec).arcsec)<200,'Dec diff too large for Venus:%g arcsec'%(ec.dec-hc.dec).arcsec
+        dras['Venus'].append((ec.ra-hc.ra).arcsec)
+        ddecs['Venus'].append((ec.dec-hc.dec).arcsec) 
+    
+    mars2011jds = [2455625.5,2455626.5,2455627.5]
+    mars2011dat="""
+    2011-Mar-05 00:00     22 39 07.32 -09 39 13.0   1.12   3.85 2.36296930822370  -0.8704738   6.2880 /L   4.5085
+    2011-Mar-06 00:00     22 42 05.09 -09 21 21.2   1.12   3.85 2.36246305320815  -0.8826355   6.4979 /L   4.6601
+    2011-Mar-07 00:00     22 45 02.52 -09 03 24.4   1.13   3.85 2.36194981445853  -0.8946490   6.7076 /L   4.8117
+    """
+    mars2011dat = [l.split() for l in mars2011dat.split('\n') if l.strip()!='']
+    for jd,ds in zip(mars2011jds,mars2011dat):
+        ec = ephems.get_solar_system_ephems('Mars',jd,GCRSCoordinates)
+        hc = GCRSCoordinates('%sh%sm%ss'%tuple(ds[2:5]),'%sd%sm%ss'%tuple(ds[5:8]))
+        
+        assert abs((ec.ra-hc.ra).arcsec)<150,'RA diff too large for Mars:%g arcsec'%(ec.ra-hc.ra).arcsec
+        assert abs((ec.dec-hc.dec).arcsec)<60,'Dec diff too large for Mars:%g arcsec'%(ec.dec-hc.dec).arcsec
+        dras['Mars'].append((ec.ra-hc.ra).arcsec)
+        ddecs['Mars'].append((ec.dec-hc.dec).arcsec) 
+
+    jup1950jds = [2433434,2433435,2433436]
+    jup1950dat="""
+    1950-Jun-01 12:00     22 36 46.48 -09 47 07.8  -2.40   5.36 4.85491578560559 -27.0499079  93.9923 /L  11.6093
+    1950-Jun-02 12:00     22 37 04.35 -09 45 39.5  -2.41   5.36 4.83930285665111 -27.0168429  94.8724 /L  11.5978
+    1950-Jun-03 12:00     22 37 21.57 -09 44 15.0  -2.42   5.33 4.82370990428714 -26.9784929  95.7552 /L  11.5834
+    """
+    jup1950dat = [l.split() for l in jup1950dat.split('\n') if l.strip()!='']
+    
+    for jd,ds in zip(jup1950jds,jup1950dat):
+        ec = ephems.get_solar_system_ephems('Jupiter',jd,GCRSCoordinates)
+        hc = GCRSCoordinates('%sh%sm%ss'%tuple(ds[2:5]),'%sd%sm%ss'%tuple(ds[5:8]))
+        
+        assert abs((ec.ra-hc.ra).arcsec)<120,'RA diff too large for Jupiter:%g arcsec'%(ec.ra-hc.ra).arcsec
+        assert abs((ec.dec-hc.dec).arcsec)<45,'Dec diff too large for Jupiter:%g arcsec'%(ec.dec-hc.dec).arcsec
+        dras['Jupiter'].append((ec.ra-hc.ra).arcsec)
+        ddecs['Jupiter'].append((ec.dec-hc.dec).arcsec) 
+        
+    for jd,ds in zip(jup1950jds,jup1950dat):
+        ec = ephems.get_solar_system_ephems('Jupiter-long',jd,GCRSCoordinates)
+        hc = GCRSCoordinates('%sh%sm%ss'%tuple(ds[2:5]),'%sd%sm%ss'%tuple(ds[5:8]))
+        
+        assert abs((ec.ra-hc.ra).arcsec)<550,'RA diff too large for long Jupiter:%g arcsec'%(ec.ra-hc.ra).arcsec
+        assert abs((ec.dec-hc.dec).arcsec)<200,'Dec diff too large for long Jupiter:%g arcsec'%(ec.dec-hc.dec).arcsec    
+        dras['Jupiter-long'].append((ec.ra-hc.ra).arcsec)
+        ddecs['Jupiter-long'].append((ec.dec-hc.dec).arcsec) 
+        
+#    Cannot do *real* long jupiter due to Earth_pv limit
+#    jupl1650jds = [2323711,2323712,2323713]
+#    jupl1650dat="""
+#    1650-Jan-01 12:00     17 05 16.06 -21 42 23.3  -3.91   1.06 1.40362160397088   8.6401171  28.9833 /L  41.2372
+#    1650-Jan-02 12:00     17 10 34.74 -21 51 29.1  -3.91   1.06 1.40859342747816   8.5782460  28.7599 /L  40.8761
+#    1650-Jan-03 12:00     17 15 54.15 -21 59 56.8  -3.90   1.06 1.41352959945461   8.5166632  28.5363 /L  40.5160
+#    """
+#    jupl1650dat = [l.split() for l in jupl1650dat.split('\n') if l.strip()!='']
+#    for jd,ds in zip(jupl1650jds,jupl1650dat):
+#        ec = ephems.get_solar_system_ephems('Jupiter-long',jd,GCRSCoordinates)
+#        hc = GCRSCoordinates('%sh%sm%ss'%tuple(ds[2:5]),'%sd%sm%ss'%tuple(ds[5:8]))
+#        assert (ec.ra-hc.ra).arcsec<140,'RA diff too large for Jupiter:%g arcsec'%(ec.ra-hc.ra).arcsec
+#        assert (ec.dec-hc.dec).arcsec<60,'Dec diff too large for Jupiter:%g arcsec'%(ec.ra-hc.ra).arcsec
+
+    return dict(dras),dict(ddecs)

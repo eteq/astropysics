@@ -420,10 +420,10 @@ class AngularCoordinate(object):
         return res
         
     def __sub__(self,other):
-        if type(other) == AngularCoordinate:
+        
+        if isinstance(other,AngularCoordinate):
             from math import degrees
-            res = AngularSeparation()
-            return AngularSeparation(degrees(other._decval),degrees(self._decval))
+            res = AngularSeparation(degrees(other._decval),degrees(self._decval))
         else:
             res = AngularCoordinate()
             res._decval = self._decval - other

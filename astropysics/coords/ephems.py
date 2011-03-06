@@ -976,7 +976,7 @@ def earth_pos_vel(jd,barycentric=False,kms=True):
     t = (jd-jd2000)/365.25 #Julian years since 2000.0 reference
     
     if t > 100 or t < -100:
-        warn('JD {0} is not in range 1900-2100 CE'.format(jd),EphemerisAccuracyWarning)
+        warn('JD {0} is not in range 1900-2100 CE for Earth position'.format(jd),EphemerisAccuracyWarning)
         
     pos,vel = _compute_earth_series(t,coeffsd['h0coeffs'],coeffsd['h1coeffs'],coeffsd['h2coeffs'])
     
