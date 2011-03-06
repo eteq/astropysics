@@ -60,7 +60,7 @@ def earth_rotation(epoch,jd):
     ERA = coords.earth_rotation_angle(jd,False)
     print 'ERA',ERA
     GAST = coords.greenwich_sidereal_time(jd,'simple')*pi/12
-    print 'GAST',GAST
+    print 'simple GAST (change to non-simple when ready)',GAST
     GMST = coords.greenwich_sidereal_time(jd,False)*pi/12
     print 'GMST', GMST
     
