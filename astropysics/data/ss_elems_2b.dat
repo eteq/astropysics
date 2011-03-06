@@ -1,0 +1,24 @@
+#=====================================================================
+#  These data are to be used as described in the related document
+#  titled "Keplerian Elements for Approximate Positions of the
+#  Major Planets" by E.M. Standish (JPL/Caltech) available from
+#  the JPL Solar System Dynamics web site (http://ssd.jpl.nasa.gov/).
+#=====================================================================
+
+
+
+#Table 2b.
+#
+#Additional terms which must be added to the computation of M
+#for Jupiter through Pluto, 3000 BC to 3000 AD, as described
+#in the related document.
+#
+#                b             c             s            f 
+#---------------------------------------------------------------
+Jupiter   -0.00012452    0.06064060   -0.35635438   38.35125000
+Saturn     0.00025899   -0.13434469    0.87320147   38.35125000
+Uranus     0.00058331   -0.97731848    0.17689245    7.67025000
+Neptune   -0.00041348    0.68346318   -0.10162547    7.67025000
+Pluto     -0.01262724
+#---------------------------------------------------------------
+
