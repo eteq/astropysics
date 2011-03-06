@@ -4,7 +4,7 @@ from __future__ import division,with_statement
 from nose.tools import assert_almost_equal
 
 def test_gal():
-    """Cross-check Galactic <-> Supergalactic <-> FK5 coordinate conversions.
+    """Cross-check Gal <-> Supergal <-> FK5 coordinate conversions.
     
     Implicitly also tests networkx conversion routing and matrix composition of
     transforms.
