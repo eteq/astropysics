@@ -91,7 +91,7 @@ except ImportError: #support for earlier versions
 
 class AngularCoordinate(object):
     """
-    The value of an angular coordinate on the unit sphere.
+    A class representing an angular value.
     
     Arithmetic operators can be applied to the coordinate, and will be applied 
     directly to the numerical value in radians.  For + and -, two angular 
