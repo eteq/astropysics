@@ -34,6 +34,8 @@ parser.add_option("-w", "--overwrite",action="store_true", dest="overwrite",
                   default=False,help="Overwrite the directory instead of making a new one.")
 parser.add_option("-c", "--compile",action="store_true", dest="compile", 
                   default=False,help="Attempt to compile using latex and possibly bibtex.")
+parser.add_option("-f", "--figure-exts", dest="figexts",metavar="FIGEXTS",default='eps,pdf',
+                  help="Specifies filename extensions to copy for figures.")
 
 ops, args = parser.parse_args()
 
@@ -45,6 +47,8 @@ texfn,fmt = args
 kwargs = dict(overwritedir=ops.overwrite,verbose=not ops.quiet)
 if ops.directory != '':
     kwargs['newdir'] = ops.directory
+if ops.figexts is not None:
+    kwargs['figexts'] = ops.figexts.split(',')
     
 publication.print_warnings = True
 

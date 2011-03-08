@@ -65,7 +65,7 @@ _envre = _re.compile(r'(\\begin{(.*?)}(.*?)\\end{\2})|(\${1,2}.*?\${1,2})',_re.D
 
 #This finds anthing like \command{...}{...}... w/ group 1  as the command name,
 # 2 the arguments
-_commandstr = r'\\(\w.*?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|(?=\W))'
+_commandstr = r'\\(\w.*?[*]?)((?:(?:(?:{.*?})|(?:\[.*?\]))+)|(?=\W))'
 _commandre = _re.compile(_commandstr)
 
 #this matches either '}' or ']' if it is followed by { or [ or the end of the string
@@ -468,7 +468,7 @@ class Document(Environment):
         for i,c in enumerate(self.children):
             if isinstance(c,Environment) and c.name=='abstract':
                 self.abstract = c
-            elif isinstance(c,Command) and c.name=='section':
+            elif isinstance(c,Command) and (c.name=='section' or c.name=='section*'):
                 self.sections[c.reqargs[0]] = i
 
 @Environment.registerEnvironment
@@ -552,7 +552,7 @@ class Command(TeXNode):
     def __init__(self,parent,content):
         """
         :param parent: The parent node
-        :param conent:  
+        :param content:  
             Either a string with the command text, or a (name,args) tuple where
             args is a sequence of strings or a string '{arg1}[oarg1]{arg2}...'
         """
@@ -978,7 +978,7 @@ def text_to_nodes(parent,txt):
                     txtnodel[i] = EnclosedDeclaration(parent,(padstr,cmdnode,encdeccontent))
                 
     for i in reversed(todel):
-        del txtnode[i]
+        del txtnodel[i]
         
     #remove origtxt from any nodes that have it
     for n in txtnodel:
@@ -1017,7 +1017,8 @@ def _warn(*args):
 
 _arxiv_abstract_max_lines = 20 
 _arxiv_abstract_char_per_line = 80 
-def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
+def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,
+                       figexts=('eps','pdf'),verbose=True):
     r"""
     Takes a LaTeX file and prepares it for posting to `arXiv
     <http://arxiv.org/>`_.  This includes the following actions:
@@ -1027,7 +1028,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         3. Checks that the abstract is within the ArXiv line limit and issues a 
            warning if it is not (will require abridging during submission).
         4. Makes the directory for the files.
-        5. Copies over all necessary .eps files.
+        5. Copies over all necessary .eps and/or .pdf files.
         6. Copies .bbl (or .bib if no .bbl) file if \bibliography is present.
         7. Creates the modified .tex file.
         8. Creates a .tar.gz file containing the files and places it in the 
@@ -1040,6 +1041,9 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         present. Otherwise, if `newdir` is present, the directory name will be
         ``newdir_#`` where # is the first number (starting from 2) that is not
         already present as a directory.
+    :param figexts:
+        A sequence of strings with the file name extensions that should be
+        copied over for each figure, if present.
     :param verbose: 
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
@@ -1115,7 +1119,8 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
     # look through all Figure environments and add the figure filenames in them
     for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
         filenames.extend(figenv.filenames)
-    exts = ('.eps','.pdf')
+        
+    exts = tuple([e if e.startswith('.') else ('.'+e) for e in figexts])
     for fn in filenames:
         copied = False
         for ext in exts:
@@ -1128,7 +1133,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         if not copied:
             _warn("File %s%s does not exist - skipping"%(fn,exts))
         
-    #copy over bbl file if \bibliography is present
+    #store \bibliography values in case bbl is not present
     bibs = f.visit(lambda n:n.reqargs[0] if isinstance(n,Command) and n.name=='bibliography' else None)
     
     #save .tex file
@@ -1139,22 +1144,23 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
         print 'Saving',texfn
     f.save(texfn)
     
-    if len(bibs)>1:
-        _warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
+    bblfn = os.path.split(texfn)[-1][:-4]+'.bbl'
+    if os.path.exists(bblfn):
+        if verbose:
+            print '.bbl file found - Copying',bblfn,'to',newdir+os.sep
+        shutil.copy(bblfn,newdir)
+    elif len(bibs)>1:
+        _warn(r'No %s file and multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography'%bblfn)
     elif len(bibs)==1:
-        bibfn,bblfn = bibs[0]+'.bib',bibs[0]+'.bbl'
-        if os.path.exists(bblfn):
-            if verbose:
-                print 'Copying',bblfn,'to',newdir+os.sep
-            shutil.copy(bblfn,newdir)
-        elif os.path.exists(bibfn):
+        bibfn = bibs[0]+'.bib'
+        if os.path.exists(bibfn):
             _warn(r'\bibliography present, but no %s file found - copying %s instead (not recommended by arXiv)'%(bblfn,bibfn))
             shutil.copy(bibfn,newdir)
         else:
-            _warn(r'\bibliography present, but no %s or %s files found - skipping bibliography'%(bibfn,bblfn))
+            _warn(r'\bibliography present, but no %s nor %s files found - skipping bibliography'%(bblfn,bibfn))
                 
     elif verbose:
-        print r'No \bibliography entry found - skipping bibliography'
+        print r'No %s file or \bibliography entry found - skipping bibliography'%bblfn
     
     #make .tar.gz file from directory and place in directory
     tfn = os.path.join(newdir,newdir+'.tar.gz')
@@ -1168,7 +1174,8 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,verbose=True):
 
 #remove \comment?
 _apj_abstract_max_words = 250 
-def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
+def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
+                     figexts=('eps','pdf'),verbose=True):
     r"""
     Takes a LaTeX file and prepares it for submission to `The Astrophysical
     Journal <http://iopscience.iop.org/0004-637X>`_. This involves the following
@@ -1196,6 +1203,9 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
         present. Otherwise, if `newdir` is present, the directory name will be
         ``newdir_#`` where # is the first number (starting from 2) that is not
         already present as a directory.
+    :param figexts:
+        A sequence of strings with the file name extensions that should be
+        copied over for each figure, if present.
     :param verbose: 
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
@@ -1306,7 +1316,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
             figenv.filenames = newfns = ['f'+fignumstr+chr(97+i) for i in range(len(oldfns))]
         filenamemap.update(dict(zip(oldfns,newfns)))
         
-    exts = ('.eps','.pdf')
+    exts = tuple([e if e.startswith('.') else ('.'+e) for e in figexts])
     for oldfn,newfn in filenamemap.iteritems():
         copied = False
         for ext in exts:
@@ -1326,7 +1336,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,verbose=True):
     if len(bibs)>1:
         _warn(r'Multiple \bibliography entries found, cannot infer bibliography file - skipping bibliography')
     elif len(bibs)==1:
-        bibfn,bblfn = bibs[0].reqargs[0]+'.bib',bibs[0].reqargs[0]+'.bbl'
+        bibfn,bblfn = bibs[0].reqargs[0]+'.bib',texfn[:-4]+'.bbl'
         newbibfn = os.path.join(newdir,'ms.bib')
         newbblfn = os.path.join(newdir,'ms.bbl')
         bblcp = bibcl = False
