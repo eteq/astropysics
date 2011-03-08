@@ -953,8 +953,13 @@ class Earth(EphemerisObject):
 
 def earth_pos_vel(jd,barycentric=False,kms=True):
     """
-    Computes the earth's position and velocity at a given julian date. Adapted
-    from SOFA function epv00.c from fits to DE405, valid from ~ 1900-2100.  
+    Computes the earth's position and velocity at a given julian date. 
+    
+    Output coordinates are aligned to GCRS/ICRS so that +z is along the
+    spherical GCRS pole and +x points down the spherical GCRS origin.
+    
+    Adapted from SOFA function epv00.c from fits to DE405, valid from ~
+    1900-2100. 
     
     :param jd: The julian date for the positions and velocities.
     :param bool barycentric: 
@@ -963,8 +968,10 @@ def earth_pos_vel(jd,barycentric=False,kms=True):
     :param bool kms: If True, velocity outputs are in km/s, otherwise AU/yr.
     
     :returns: 
-        2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are positions in AU, and
-        vx,vy, and vz are velocities in km/s (if `kms` is True) or AU/yr.
+        2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are GCRS-aligned
+        positions in AU, and vx,vy, and vz are velocities in km/s (if `kms` is
+        True) or AU/yr.
+        
     
     """
     from ..obstools import jd2000

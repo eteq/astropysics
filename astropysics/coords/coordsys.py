@@ -47,6 +47,10 @@ The resulting :class:`GalacticCoordinates` object's coordinates can then be
 accessed in any of the various ways supported by the :class:`AngularCoordinate`
 object.
 
+.. warning::
+    Errors are not currently propogated in all coordinate transforms - this
+    will be corrected eventually, but for now you should check to make sure 
+    errors propogate for any coordinate transform you want to perform.
 
 
 {transformdiagram}
@@ -699,7 +703,11 @@ class _TransformerMethodDeco(object):
         self.fromclasses = [fromclass]
         self.toclasses = [toclass]
         self.transtype = transtype
-                        
+
+
+#Default for optmizing convert functions - currently false because it's not smart enough
+_convertoptimizedefault = False
+
 class CoordinateSystem(object):
     """
     Base class of all coordinate systems. This class also holds the static
@@ -1576,17 +1584,22 @@ class LatLongCoordinates(CoordinateSystem):
         else:
             return latp,longp,dlatp,dlongp
     
-    def convert(self,tosys,optimize=True):
+    def convert(self,tosys,optimize=_convertoptimizedefault):
         """
         Converts the coordinate system from it's current system to a new
         :class:`CoordinateSystem` object possibly with optimizations for
         matrix-based transformation of :class:`LatLongCoordinates` objects.
         
-        .. note::
-            The transformation optimizations here are only correct if the
-            conversion matricies are independent of the coordinate values
-            themselves (e.g. are linear) - set optimize to False if this is not
-            the case.
+        .. warning::
+            The transformation optimizations used if `optimize` is True are only
+            correct if the conversion matricies are independent of the
+            coordinate values themselves (e.g. are linear and
+            epoch-independent). Examples that are good for optimization include
+            FK4->FK5->ICRS (all are epoch-independent).
+            
+            In the future, this system will be smarter about
+            knowing when it is safe to optimize, but for now, only use it if
+            you're sure it will work correctly.
         
         :param tosys: 
             The new coordinate system class. Should be a subclass of
@@ -1596,8 +1609,10 @@ class LatLongCoordinates(CoordinateSystem):
             possible. If False, the standard transformation is performed.
         :returns: A new object of a class determined by `tosys`
         
+        
         :except: raises NotImplementedError if converters are not present
         """
+        
         if optimize:
             cache = CoordinateSystem._transformcache['smatrix']
             
@@ -1708,7 +1723,7 @@ class EpochalLatLongCoordinates(LatLongCoordinates,EpochalCoordinates):
         EpochalCoordinates.__setstate__(self,d)
     
     @add_docs(LatLongCoordinates.convert)
-    def convert(self,tosys,optimize=True):
+    def convert(self,tosys,optimize=_convertoptimizedefault):
         ''
         res = LatLongCoordinates.convert(self,tosys,optimize)
         if issubclass(tosys,EpochalLatLongCoordinates):
@@ -1818,7 +1833,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
             self._dpc = None
     
     @add_docs(EpochalLatLongCoordinates.convert)
-    def convert(self,tosys,optimize=True):
+    def convert(self,tosys,optimize=_convertoptimizedefault):
         ''
         res = EpochalLatLongCoordinates.convert(self,tosys,optimize)
         if self._dpc is not None:
@@ -1842,8 +1857,8 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
         observation.
         
     .. warning:: 
-        Abberation and annual parallax are not yet implemented in
-        transformations to/from ICRS, where relevant.
+        Abberation of starlight is not yet implemented in transformations
+        to/from ICRS.
         
     """
     
@@ -1956,10 +1971,14 @@ class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         dec = degrees(asin(z/r))
         ra = degrees(atan2(y,x))
         
-        if ric.unit == 'pc':
+        if ric.unit is None:
+            return ICRSCoordinates(ra,dec,epoch=ric.epoch)
+        elif ric.unit == 'pc':
             return ICRSCoordinates(ra,dec,distancepc=r,epoch=ric.epoch)
-        else:
+        elif ric.unit == 'au':
             return ICRSCoordinates(ra,dec,distanceau=r,epoch=ric.epoch)
+        else:
+            raise NotImplementedError('Unrecognized unit %s in RectICRS->ICRS'%ric.unit)
     
     @CoordinateSystem.registerTransform(ICRSCoordinates,'self')    
     def _fromICRS(ic):
@@ -1989,7 +2008,7 @@ class GCRSCoordinates(EquatorialCoordinatesBase):
     origin at the earth geocenter.
         
     .. warning:: 
-        Abberation and annual parallax are not yet included.
+        Abberation of starlight not yet included in transforms.
         
     """
     
@@ -2012,15 +2031,14 @@ class GCRSCoordinates(EquatorialCoordinatesBase):
             
         EpochalLatLongCoordinates.transformToEpoch(self,newepoch)
         
-    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
-    def _toICRS(gc):
-        #TODO: replace with rectangular trans or implement parallax/abberation
-        return np.eye(3).view(np.matrix)
+#TODO:implement direct spherical transformations if needed/wanted for precision
+#    @CoordinateSystem.registerTransform('self',ICRSCoordinates,transtype='smatrix')
+#    def _toICRS(gc):
+#        return np.eye(3).view(np.matrix)
     
-    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')    
-    def _fromICRS(ic):
-        #TODO: replace with rectangular trans or implement parallax/abberation
-        return np.eye(3).view(np.matrix)
+#    @CoordinateSystem.registerTransform(ICRSCoordinates,'self',transtype='smatrix')    
+#    def _fromICRS(ic):
+#        return np.eye(3).view(np.matrix)
     
 class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     """
@@ -2103,10 +2121,14 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         dec = degrees(asin(z/r))
         ra = degrees(atan2(y,x))
         
-        if rgc.unit == 'pc':
+        if rgc.unit is None:
+            return GCRSCoordinates(ra,dec,epoch=rgc.epoch)
+        elif rgc.unit == 'pc':
             return GCRSCoordinates(ra,dec,distancepc=r,epoch=rgc.epoch)
-        else:
+        elif rgc.unit == 'au':
             return GCRSCoordinates(ra,dec,distanceau=r,epoch=rgc.epoch)
+        else:
+            raise NotImplementedError('Unrecognized unit %s in RectGCRS->GCRS'%rgc.unit)
     
     @CoordinateSystem.registerTransform(GCRSCoordinates,'self')    
     def _fromGCRS(gc):
@@ -2128,31 +2150,67 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         
         return RectangularGCRSCoordinates(x,y,z,gc.epoch,unit)
     
-#    @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
-#    def _toRectICRS(rgc):
-#        #TODO:implement abberation, check this
-#        from .ephems import earth_pos_vel
-#        from ..obstools import epoch_to_jd
+    @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
+    def _toRectICRS(rgc):
+        #TODO:implement abberation, check this
+        from .ephems import earth_pos_vel
+        from ..obstools import epoch_to_jd
+        from ..constants import auperpc
         
-#        xe,ye,ze = earth_pos_vel(epoch_to_jd(rgc.epoch),True)[0]
-#        xp = rgc.x + xe
-#        yp = rgc.y + ye
-#        zp = rgc.z + ze
+        x = rgc.x
+        y = rgc.y
+        z = rgc.z
+        unit = rgc.unit
+        epoch = rgc.epoch
         
-#        return RectangularICRSCoordinates(xp,yp,zp,rgc.epoch,rgc.unit)
+        if unit is None: #infitiely far, so no corrections
+            return RectangularICRSCoordinates(x,y,z,epoch,unit=None)
+        else:
+            xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
+            
+            if unit == 'au':
+                xp = ric.x - xe
+                yp = ric.y - ye
+                zp = ric.z - ze
+            elif unit == 'pc':
+                xp = ric.x - xe/auperpc
+                yp = ric.y - ye/auperpc
+                zp = ric.z - ze/auperpc
+            else:
+                raise NotImplementedError('Unit %s not supported by GCRS->ICRS'%unit)
+            
+            return RectangularICRSCoordinates(xp,yp,zp,epoch,unit=unit)
     
-#    @CoordinateSystem.registerTransform(RectangularICRSCoordinates,'self')    
-#    def _fromRectICRS(ric):
-#        #TODO:implement abberation, check this for higher precision
-#        from .ephems import earth_pos_vel
-#        from ..obstools import epoch_to_jd
+    @CoordinateSystem.registerTransform(RectangularICRSCoordinates,'self')    
+    def _fromRectICRS(ric):
+        #TODO:implement abberation, check
+        from .ephems import earth_pos_vel
+        from ..obstools import epoch_to_jd
+        from ..constants import auperpc
         
-#        xe,ye,ze = earth_pos_vel(epoch_to_jd(ric.epoch),True)[0]
-#        xp = ric.x - xe
-#        yp = ric.y - ye
-#        zp = ric.z - ze
+        x = ric.x
+        y = ric.y
+        z = ric.z
+        unit = ric.unit
+        epoch = ric.epoch
         
-#        return RectangularGCRSCoordinates(xp,yp,zp,ric.epoch,ric.unit)
+        if unit is None: #infitiely far, so no corrections
+            return RectangularGCRSCoordinates(x,y,z,epoch,unit=None)
+        else:
+            xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
+            
+            if unit == 'au':
+                xp = ric.x - xe
+                yp = ric.y - ye
+                zp = ric.z - ze
+            elif unit == 'pc':
+                xp = ric.x - xe/auperpc
+                yp = ric.y - ye/auperpc
+                zp = ric.z - ze/auperpc
+            else:
+                raise NotImplementedError('Unit %s not supported by ICRS->GCRS'%unit)
+            
+            return RectangularGCRSCoordinates(xp,yp,zp,epoch,unit=unit)
     
     
 def _precession_matrix_J2000_Capitaine(epoch):
@@ -2667,7 +2725,7 @@ class ITRSCoordinates(EpochalLatLongCoordinates):
         
     
     @add_docs(EpochalLatLongCoordinates.convert)
-    def convert(self,tosys,optimize=True):
+    def convert(self,tosys,optimize=_convertoptimizedefault):
         ''
         res = EpochalLatLongCoordinates.convert(self,tosys,optimize)
         if self._dpc is not None:
@@ -3116,10 +3174,12 @@ class GalacticCoordinates(EpochalLatLongCoordinates):
     def _fromFK5(fk5coords):
         from ..utils import rotation_matrix
         
+        epoch = 2000 if fk5coords.epoch is None else fk5coords.epoch
+        
         mat = rotation_matrix(180 - GalacticCoordinates._long0_J2000.d,'z') *\
               rotation_matrix(90 - GalacticCoordinates._ngp_J2000.dec.d,'y') *\
               rotation_matrix(GalacticCoordinates._ngp_J2000.ra.d,'z') *\
-              FK5Coordinates._precessionMatrixJ(fk5coords.epoch,2000)
+              FK5Coordinates._precessionMatrixJ(epoch,2000)
         mat.nocache = True #can't cache because of the need to get the epoch
         return mat
     
@@ -3131,10 +3191,12 @@ class GalacticCoordinates(EpochalLatLongCoordinates):
     def _fromFK4(fk4coords):
         from ..utils import rotation_matrix
         
+        epoch = 1950 if fk4coords.epoch is None else fk4coords.epoch
+        
         mat = rotation_matrix(180 - GalacticCoordinates._long0_B1950.d,'z') *\
               rotation_matrix(90 - GalacticCoordinates._ngp_B1950.dec.d,'y') *\
               rotation_matrix(GalacticCoordinates._ngp_B1950.ra.d,'z') *\
-              FK4Coordinates._precessionMatrixB(fk4coords.epoch,1950)
+              FK4Coordinates._precessionMatrixB(epoch,1950)
         mat.nocache = True #can't cache because of the need to get the epoch
         return mat
     

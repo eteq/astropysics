@@ -96,9 +96,9 @@ def test_main_eq_symm(rasdecs=None):
         idiff = (ics[i]-ics2[i]).arcsec
         f5diff = (f5s[i]-f5s2[i]).arcsec
         
-        assert gdiff< 3e-10,'GCRS<-...->GCRS too large:%g'%gdiff
+        assert gdiff< 4e-10,'GCRS<-...->GCRS too large:%g'%gdiff
         assert idiff< 3e-10,'ICRS<-...->ICRS too large:%g'%idiff
-        assert f5diff< 3e-10,'FK5<-...->FK5 too large:%g'%f5diff
+        assert f5diff< 2e-10,'FK5<-...->FK5 too large:%g'%f5diff
         
         gdiffs.append(gdiff)
         idiffs.append(idiff)
@@ -217,12 +217,13 @@ def test_icrs_rect():
     """
     from astropysics.coords.coordsys import RectangularICRSCoordinates,\
                                             ICRSCoordinates
-    import numpy as np
+    from numpy import  array,mgrid
+    from numpy.random import randn
     from nose.tools import assert_almost_equal
     
 #    ntests = 5
-#    coords = np.random.randn(ntests,3)
-    coords = np.mgrid[-1.5:1.5:5j,-1.5:1.5:5j,-1.5:1.5:5j].reshape((3,5*5*5)).T
+#    coords = randn(ntests,3)
+    coords = mgrid[-1.5:1.5:5j,-1.5:1.5:5j,-1.5:1.5:5j].reshape((3,5*5*5)).T
     
     
     xds,yds,zds = [],[],[]
@@ -233,18 +234,20 @@ def test_icrs_rect():
         r = RectangularICRSCoordinates(x,y,z,unit=unit)
         c = r.convert(ICRSCoordinates)
         r2 = c.convert(RectangularICRSCoordinates)
-        r2.unit = unit
+        c2 = r2.convert(ICRSCoordinates)
+        r3 = c2.convert(RectangularICRSCoordinates)
+        r3.unit = unit
         
         #unit conversion only good to ~5 places
-        assert_almost_equal(x,r2.x,5)
-        assert_almost_equal(y,r2.y,5)
-        assert_almost_equal(z,r2.z,5)
+        assert_almost_equal(x,r3.x,5)
+        assert_almost_equal(y,r3.y,5)
+        assert_almost_equal(z,r3.z,5)
         
-        xds.append(x-r2.x)
-        yds.append(y-r2.y)
-        zds.append(z-r2.z)
+        xds.append(x-r3.x)
+        yds.append(y-r3.y)
+        zds.append(z-r3.z)
         
-    return np.array(xds),np.array(yds),np.array(zds)
+    return array(xds),array(yds),array(zds)
         
 def test_gcrs_rect():
     """
@@ -253,29 +256,34 @@ def test_gcrs_rect():
     from astropysics.coords.coordsys import RectangularGCRSCoordinates,\
                                             GCRSCoordinates
     
-    from numpy import  array
+    from numpy import  array,mgrid
     from numpy.random import randn
     from nose.tools import assert_almost_equal
     
-    ntests = 5
-    coords = randn(ntests,3)
+#    ntests = 5
+#    coords = randn(ntests,3)
+    coords = mgrid[-1.5:1.5:5j,-1.5:1.5:5j,-1.5:1.5:5j].reshape((3,5*5*5)).T
     
     xds,yds,zds = [],[],[]
     for x,y,z in coords:
+        if x==0 and y==0 and z==0:
+            continue
         unit = 'au' if x<0 else 'pc'
         r = RectangularGCRSCoordinates(x,y,z,unit=unit)
         c = r.convert(GCRSCoordinates)
         r2 = c.convert(RectangularGCRSCoordinates)
-        r2.unit = unit
+        c2 = r2.convert(GCRSCoordinates)
+        r3 = c2.convert(RectangularGCRSCoordinates)
+        r3.unit = unit
         
         #unit conversion only good to ~5 places
-        assert_almost_equal(x,r2.x,5)
-        assert_almost_equal(y,r2.y,5)
-        assert_almost_equal(z,r2.z,5)
+        assert_almost_equal(x,r3.x,5)
+        assert_almost_equal(y,r3.y,5)
+        assert_almost_equal(z,r3.z,5)
         
-        xds.append(x-r2.x)
-        yds.append(y-r2.y)
-        zds.append(z-r2.z)
+        xds.append(x-r3.x)
+        yds.append(y-r3.y)
+        zds.append(z-r3.z)
         
     return array(xds),array(yds),array(zds)
         
@@ -309,4 +317,58 @@ def test_ecliptic_rect():
         assert_almost_equal(x,r2.x,places)
         assert_almost_equal(y,r2.y,places)
         assert_almost_equal(z,r2.z,places)
+        
+def test_parallax(plot=False):
+    from astropysics.coords.coordsys import ICRSCoordinates,GCRSCoordinates
+    from astropysics.constants import asecperrad
+    from numpy import linspace,array,radians,mean,max
+    
+    icoords = [(1,1),(270,66.56),(1,30),(180,-30),(85,-78)]
+    distpcs = [1,1,1,1,1]
+    epochs = linspace(2000,2001,50)
+    
+    ras = []
+    decs = []
+    
+    for (ra,dec),d in zip(icoords,distpcs):
+        rai = []
+        deci = []
+        for e in epochs:
+            i = ICRSCoordinates(ra,dec,distancepc=d,epoch=e)
+            g = i.convert(GCRSCoordinates)
+            
+            rai.append(g.ra.d)
+            deci.append(g.dec.d)
+        ras.append(rai)
+        decs.append(deci)
+    
+    ras = array(ras)
+    decs = array(decs)
+    
+    dras = []
+    ddecs = []
+    for ra,dec,ic in zip(ras,decs,icoords):
+        dras.append(radians(ra - mean(ra))*asecperrad)
+        ddecs.append(radians(dec - mean(dec))*asecperrad)
+        assert max(dras[-1]) < 1,'RA difference  1 pc away is greater that 1: %f'%max(dras[-1])
+        assert max(ddecs[-1]) < 1,'Dec difference 1 pc away is greater that 1: %f'%max(ddecs[-1])
+    
+    if plot:
+        from matplotlib import pyplot as plt
+        
+        if plot != 'notclf':
+            plt.clf()
+            
+        for dra,ddec,ic in zip(dras,ddecs,icoords):
+            plt.plot(dra,ddec,label='%.2f,%.2f'%ic)
+            
+        plt.xlabel('$\Delta$RA')
+        plt.ylabel('$\Delta$Dec')
+        plt.xlim(-3,3)
+        plt.ylim(-3,3)
+        plt.legend(loc=0)
+    
+    
+    
+    
         
