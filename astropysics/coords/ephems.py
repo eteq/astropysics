@@ -266,6 +266,93 @@ class EphemerisObject(object):
         """
         raise NotImplementedError
     
+class ProperMotionObject(EphemerisObject):
+    """
+    An object with linear proper motion relative to a specified epoch.
+    """
+    
+    def __init__(self,name,ra0,dec0,dra=0,ddec=0,epoch0=2000,distpc0=None,rv=0,
+                      coordclass=None):
+        """
+        :param str name: Name of the object.
+        :param float ra0: RA in degrees at the starting epoch.
+        :param float dec0: Dec in degrees at the starting epoch.
+        :param float dra: Proper motion in RA, arcsec/yr.
+        :param float ddec: Proper motion in Dec, arcsec/yr.
+        :param epoch0: Epoch for which `ra0`,`dec0`,and`distpc0` are valid.
+        :param distpc0: Distance in pc at the starting epoch.
+        :param float rv: Radial velocity in km/s
+        :param coordclass: 
+            The type of output coordinates. If None, defaults to
+            :class:`~astropysics.coords.coordsys.ICRSCoordinates`.
+        :type coordclass: 
+            :class:`astropysics.coords.coordsys.EpochalLatLongCoordinates`
+        """
+        from ..obstools import epoch_to_jd
+        from .coordsys import ICRSCoordinates
+        
+        self.ra0 = ra0
+        self.dec0 = dec0
+        self.dra = dra
+        self.ddec = ddec
+        self.epoch0 = epoch0
+        self._jd0 = epoch_to_jd(epoch0)
+        self.distpc0 = distpc0
+        self.rv = rv
+        
+        if coordclass is None:
+            self.coordclass = ICRSCoordinates
+        else:
+            self.coordclass = coordclass
+        
+        EphemerisObject.__init__(self,name)
+        self.jd = self._jd0
+        
+    @property
+    def ra(self):
+        """
+        RA at the current :attr:`jd` in degrees.
+        """
+        from math import degrees
+        from ..constants import asecperrad
+        
+        return self.ra0 + degrees(self._dyr*self.dra/asecperrad)
+    
+    @property
+    def dec(self):
+        """
+        Declination at the current :attr:`jd` in degrees.
+        """
+        from math import degrees
+        from ..constants import asecperrad
+        
+        return self.dec0 + degrees(self._dyr*self.ddec/asecperrad)
+    
+    @property
+    def distancepc(self):
+        """
+        Distance at the current :attr:`jd` in parsecs.
+        """
+        from ..constants import cmperpc,secperyr
+        
+        if self.distpc0 is None:
+            return None
+        else:
+            return self.distpc0 + self._dyr*self.rv*secperyr*1e5/cmperpc
+    
+    def _jdhook(self,oldjd,newjd):
+        self._dyr = (newjd - self._jd0)/365.25
+    
+    def _getCoordObj(self):
+        from ..obstools import jd_to_epoch
+        
+        if self.distancepc is None:
+            return self.coordclass(self.ra,self.dec,epoch=jd_to_epoch(self.jd))
+        else:
+            return self.coordclass(self.ra,self.dec,distancepc=self.distancepc,
+                                           epoch=jd_to_epoch(self.jd))
+            
+    
 class KeplerianObject(EphemerisObject):
     """
     An object with Keplerian orbital elements.
