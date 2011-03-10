@@ -715,6 +715,11 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Rvir: Virial Radius in kpc
+        :param float z: Redshift
+        
+        :returns: Virial mass in Msun
+            
         """
         #Mvir = 10^12 Msun/h [Omega_0 Delta(z)/97.2] [Rvir(1+z)/203.4 kpc/h]^3
         from .constants import get_cosmology
@@ -730,6 +735,11 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Mvir: Virial Mass in Msun
+        :param float z: Redshift
+        
+        :returns: Virial radius in kpc
         
         """
         #Rvir = 203.4 kpc/h [Omega_0 Delta(z)/97.2]^-1/3 [Mvir/10^12 h^-1 Msun]^1/3 (1+z)^-1 ~= 300 kpc [Mvir/10^12 h^-1 Msun]^1/3 (1+z)^-1
@@ -746,6 +756,11 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Mvir: Virial Mass in Msun
+        :param float z: Redshift
+        
+        :returns: Virial Velocity in km/s
         
         """
         #Vvir = 143.8 km/s [Omega_0 Delta(z)/97.2]^1/6 [Mvir/10^12 Msun/h]^1/3 (1+z)^1/2
@@ -763,6 +778,11 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Vvir: Virial velocity in km/s
+        :param float z: Redshift
+        
+        :returns: Virial mass in Msun
+            
         """
         from .constants import get_cosmology
         c = get_cosmology()
@@ -778,6 +798,10 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Vvir: Virial velocity in km/s
+        
+        :returns: Virial velocity in km/s
+            
         """
         return (Vvir/0.468)**(1/1.1)
     
@@ -790,6 +814,11 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Vmax: Maximum circular Velocity in km/s 
+        :param float z: Redshift
+        
+        :returns: Virial Velocity in km/s
+            
         """
         return (0.468)*Vmax**1.1
     
@@ -801,6 +830,11 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Mvir: Virial Mass in Msun
+        :param float z: Redshift
+        
+        :returns: Concentration parameter (rvir/rc)
             
         """
         cvir = 9.6*(Mvir*(c.h/.72)/1e13)**-.13*(1+z)**-1
@@ -815,6 +849,11 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Cvir: Concentration parameter rvir/rc
+        :param float z: Redshift
+        
+        :returns: Virial mass in Msun
+            
         """
         return 1e13/(c.h/.72)*((Cvir/9.6)*(1+z))**(-1.0/.13)
     
@@ -825,6 +864,11 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+        
+        :param float Mvir: Virial Mass in Msun
+        :param float z: Redshift
+        
+        :returns: Maximum circular velocity in km/s
             
         """
         return NFWModel.Vvir_to_Vmax(NFWModel.Mvir_to_Vvir(Mvir,z))
@@ -837,6 +881,11 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Vmax: Maximum circular velocity in km/s
+        :param float z: Redshift
+        
+        :returns: Virial mass in Msun
+            
         """
         return NFWModel.Vvir_to_Mvir(NFWModel.Vmax_to_Vvir(Vmax),z)
     
@@ -848,8 +897,53 @@ class NFWModel(FunctionModel1DAuto):
         .. warning::
             These scalings are approximations.
             
+        :param float Vmax: Maximum circular velocity in km/s
+        :param float z: Redshift
+        
+        :returns: Virial radius in kpc
+            
         """
         return NFWModel.Mvir_to_Rvir(NFWModel.Vmax_to_Mvir(Vmax),z)
+    
+    @staticmethod
+    def RvirMvir_to_Vvir(Rvir,Mvir):
+        """
+        Computes virial velocity from virial radius and virial mass.
+        
+        :param float Rvir: Virial Radius in kpc
+        :param float Mvir: Virial Mass in Msun
+        
+        :returns: Virial Velocity in km/s
+        """
+        from .constants import G
+        
+        return (G*Mvir/Rvir)**0.5
+    
+    @staticmethod
+    def Vvir_to_Tvir(Vvir,mu=.59):
+        r"""
+        Compute the Virial temperature for a given virial radius.
+        
+        From Barkana & Loeb 2001:
+        :math:`T_{\rm vir} = \frac{\mu m_p V_c^2}{2 k_B}`
+        
+        :math:`\mu` is the mean molecular weight, which is 0.59 for fully
+        ionized primordial gas, .61 for fully ionized hydrogen but singly
+        ionized helium, and 1.22 neutral. :math:`m_p` is the proton mass,
+        :math:`k_B` is the Boltzmann constant, and :math:`V_c` is the virial
+        velocity.
+        
+        
+        :param float Vvir: Virial velocity in km/s
+        :param float mu: Mean molecular weight
+        
+        :returns: Virial Temperatur in Kelvin
+            
+        
+        """
+        from constants import mp,kb
+        
+        return  mu*mp*Vvir**2/(2*kb)*1e10 #(km/s)^2 -> (cm/2)^2
     
     @staticmethod
     def create_Mvir(Mvir,z=0):
@@ -859,6 +953,13 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Mvir: Virial Mass in Msun
+        :param float z: Redshift at which model is valid
+        
+        :returns: 
+            A :class:`NFWModel` object with the provided Mvir and concentration
+            set by the approximate scalings here.
         
         """
         m = NFWModel()
@@ -875,6 +976,13 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Rvir: Virial Radius in kpc
+        :param float z: Redshift at which the model is valid 
+        
+        :returns: 
+            A :class:`NFWModel` object with the provided Rvir and concentration
+            set by the approximate scalings here.
         
         """
         m = NFWModel()
@@ -891,6 +999,13 @@ class NFWModel(FunctionModel1DAuto):
         
         .. warning::
             These scalings are approximations.
+            
+        :param float Cvir: Concentration parameter (rvir/rc)
+        :param float z: Redshift at which the model is valid
+        
+        :returns: 
+            A :class:`NFWModel` object with the provided Cvir and normalization
+            set by the approximate scalings here.
         
         """
         m = NFWModel()
