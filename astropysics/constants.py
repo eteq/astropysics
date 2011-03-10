@@ -160,47 +160,58 @@ def fnu_to_flambda_n(fnu,nu):
 #<--------------------------------Cosmology------------------------------------>
 class Cosmology(object):
     """
-    This class represents a cosmology and should be subclassed
+    A base class for a cosmology - intended to be subclassed, as this cosmology
+    only has a hubble constant.
     
-    all cosmologies should have a hubble constant (H0) in km/s/Mpc
+    *Subclassing*
     
-    Cosmologies should also include a sequence called "_params_" with a list of
-    strings that specify the names of the cosmological parameters associated to
-    be exported to the constants module.
+    * All cosmologies should have a hubble constant (H0) in km/s/Mpc
     
-    Error bars for parameters can be specified as "<paramname>_err" as a tuple
-    (lowererr,uppererr)
+    * Subclasses should also define a class variable :attr:`_params` with a list
+      of strings that specify the names of the cosmological parameters for the 
+      subclasses cosmology.  These will be exported to the constants module.
+    
+    * Error bars for parameters in :attr:`_params` can optional be specified as
+      a class variable :attr:`<paramname>_err`.  These should be a tuple
+      ``(lowererr,uppererr)``
+      
     """
-    _params_=('H0',)
+    _params=('H0',)
     _autoupdate = False
     
     H0 = 0
-    
-    def __init__(self,*args,**kwargs):
-        ps = self._params_
+    """
+    Hubble constant :math:`H_0` for this cosmology in units of km s^-1/Mpc.
+    """
         
-    h = property(lambda self:self.H0/100.0)
-    h7 = h70 = property(lambda self:self.H0/70.0)
+    h = property(lambda self:self.H0/100.0,
+                 doc='Reduced Hubble constant: :math:`H_0/100`.')
+    h7 = h70 = property(lambda self:self.H0/70.0,
+                 doc='Reduced Hubble constant: :math:`H_0/70`.')
 
     __params_cache=None
-    def _getParams(self):
+    @property
+    def params(self):
+        """
+        Names of the cosmological parameters for this :class:`Cosmology`.
+        """
         if self.__params_cache is None:
             import inspect
-            pars = [cls._params_ for cls in inspect.getmro(self.__class__) if 
-                    hasattr(cls,'_params_')]
+            pars = [cls._params for cls in inspect.getmro(self.__class__) if 
+                    hasattr(cls,'_params')]
             s = set()
             for p in pars:
                 s.update(p)
             self.__params_cache = tuple(s)
         return self.__params_cache
-    params = property(_getParams)
     
     def getParamWithError(self,parname):
         """
-        this retreives the requested parameter and returns it as a tuple of the
-        form
+        Returns the requested parameter's value and its associated errors.
         
-        (param,lowererr,uppererr)
+        :param parname: The name of the parameter to be retrieved.
+        
+        :returns: A tuple ``(parval,lowererr,uppererr)``
         """
         from operator import isSequenceType
         
@@ -243,7 +254,7 @@ class FRWCosmology(Cosmology):
     
     default values are approximately LambdaCDM
     """
-    _params_=('omega','omegaR','omegaM','omegaL')
+    _params = ('omega','omegaR','omegaM','omegaL')
     
     H0=72
     omega = property(lambda self:self.omegaR+self.omegaM+self.omegaL)
@@ -360,7 +371,7 @@ class WMAP7Cosmology(FRWCosmology):
     """
     WMAP7-only (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7.cfm)
     """
-    _params_ = ('t0','sigma8','omegaB','omegaC','ns')
+    _params = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.71#Gyr
     t0_err = .13
     sigma8 = .801
@@ -382,7 +393,7 @@ class WMAP7BAOH0Cosmology(FRWCosmology):
     """
     WMAP7+BAO+H0 (http://lambda.gsfc.nasa.gov/product/map/dr4/params/lcdm_sz_lens_wmap7_bao_h0.cfm)
     """
-    _params_ = ('t0','sigma8','omegaB','omegaC','ns')
+    _params = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.78#Gyr
     t0_err = .11
     sigma8 = 0.809
@@ -404,7 +415,7 @@ class WMAP5Cosmology(FRWCosmology):
     """
     WMAP5-only (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8','omegaB','omegaC','ns')
+    _params = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.69 #Gyr
     t0_err = .13
     sigma8 = .796
@@ -426,7 +437,7 @@ class WMAP5BAOSNCosmology(FRWCosmology):
     """
     WMAP5+BAO+SN (http://lambda.gsfc.nasa.gov/product/map/dr3/parameters_summary.cfm)
     """
-    _params_=('t0','sigma8','omegaB','omegaC','ns')
+    _params = ('t0','sigma8','omegaB','omegaC','ns')
     t0 = 13.73 #Gyr
     t0_err = .12
     sigma8 = .817
@@ -448,8 +459,8 @@ class WMAP3Cosmology(FRWCosmology):
     """
     WMAP3 only (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_wmap.cfm)
     """
-    #_params_=('t0','sigma8')
-    _params_=('sigma8','omegaB','omegaC','ns')
+    #_params = ('t0','sigma8')
+    _params = ('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
     sigma8 = .761
     sigma8_err = (.048,.049)
@@ -470,8 +481,8 @@ class WMAP3AllCosmology(FRWCosmology):
     """
     WMAP3+all (http://lambda.gsfc.nasa.gov/product/map/dr2/params/lcdm_all.cfm)
     """
-    #_params_=('t0','sigma8')
-    _params_=('sigma8','omegaB','omegaC','ns')
+    #_params = ('t0','sigma8')
+    _params = ('sigma8','omegaB','omegaC','ns')
     #t0=13.69 #Gyr
     sigma8 = .776
     sigma8_err = (.032,.031)

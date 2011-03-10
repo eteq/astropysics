@@ -266,6 +266,93 @@ class EphemerisObject(object):
         """
         raise NotImplementedError
     
+class ProperMotionObject(EphemerisObject):
+    """
+    An object with linear proper motion relative to a specified epoch.
+    """
+    
+    def __init__(self,name,ra0,dec0,dra=0,ddec=0,epoch0=2000,distpc0=None,rv=0,
+                      coordclass=None):
+        """
+        :param str name: Name of the object.
+        :param float ra0: RA in degrees at the starting epoch.
+        :param float dec0: Dec in degrees at the starting epoch.
+        :param float dra: Proper motion in RA, arcsec/yr.
+        :param float ddec: Proper motion in Dec, arcsec/yr.
+        :param epoch0: Epoch for which `ra0`,`dec0`,and`distpc0` are valid.
+        :param distpc0: Distance in pc at the starting epoch.
+        :param float rv: Radial velocity in km/s
+        :param coordclass: 
+            The type of output coordinates. If None, defaults to
+            :class:`~astropysics.coords.coordsys.ICRSCoordinates`.
+        :type coordclass: 
+            :class:`astropysics.coords.coordsys.EpochalLatLongCoordinates`
+        """
+        from ..obstools import epoch_to_jd
+        from .coordsys import ICRSCoordinates
+        
+        self.ra0 = ra0
+        self.dec0 = dec0
+        self.dra = dra
+        self.ddec = ddec
+        self.epoch0 = epoch0
+        self._jd0 = epoch_to_jd(epoch0)
+        self.distpc0 = distpc0
+        self.rv = rv
+        
+        if coordclass is None:
+            self.coordclass = ICRSCoordinates
+        else:
+            self.coordclass = coordclass
+        
+        EphemerisObject.__init__(self,name)
+        self.jd = self._jd0
+        
+    @property
+    def ra(self):
+        """
+        RA at the current :attr:`jd` in degrees.
+        """
+        from math import degrees
+        from ..constants import asecperrad
+        
+        return self.ra0 + degrees(self._dyr*self.dra/asecperrad)
+    
+    @property
+    def dec(self):
+        """
+        Declination at the current :attr:`jd` in degrees.
+        """
+        from math import degrees
+        from ..constants import asecperrad
+        
+        return self.dec0 + degrees(self._dyr*self.ddec/asecperrad)
+    
+    @property
+    def distancepc(self):
+        """
+        Distance at the current :attr:`jd` in parsecs.
+        """
+        from ..constants import cmperpc,secperyr
+        
+        if self.distpc0 is None:
+            return None
+        else:
+            return self.distpc0 + self._dyr*self.rv*secperyr*1e5/cmperpc
+    
+    def _jdhook(self,oldjd,newjd):
+        self._dyr = (newjd - self._jd0)/365.25
+    
+    def _getCoordObj(self):
+        from ..obstools import jd_to_epoch
+        
+        if self.distancepc is None:
+            return self.coordclass(self.ra,self.dec,epoch=jd_to_epoch(self.jd))
+        else:
+            return self.coordclass(self.ra,self.dec,distancepc=self.distancepc,
+                                           epoch=jd_to_epoch(self.jd))
+            
+    
 class KeplerianObject(EphemerisObject):
     """
     An object with Keplerian orbital elements.
@@ -953,8 +1040,13 @@ class Earth(EphemerisObject):
 
 def earth_pos_vel(jd,barycentric=False,kms=True):
     """
-    Computes the earth's position and velocity at a given julian date. Adapted
-    from SOFA function epv00.c from fits to DE405, valid from ~ 1900-2100.  
+    Computes the earth's position and velocity at a given julian date. 
+    
+    Output coordinates are aligned to GCRS/ICRS so that +z is along the
+    spherical GCRS pole and +x points down the spherical GCRS origin.
+    
+    Adapted from SOFA function epv00.c from fits to DE405, valid from ~
+    1900-2100. 
     
     :param jd: The julian date for the positions and velocities.
     :param bool barycentric: 
@@ -963,8 +1055,10 @@ def earth_pos_vel(jd,barycentric=False,kms=True):
     :param bool kms: If True, velocity outputs are in km/s, otherwise AU/yr.
     
     :returns: 
-        2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are positions in AU, and
-        vx,vy, and vz are velocities in km/s (if `kms` is True) or AU/yr.
+        2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are GCRS-aligned
+        positions in AU, and vx,vy, and vz are velocities in km/s (if `kms` is
+        True) or AU/yr.
+        
     
     """
     from ..obstools import jd2000
