@@ -319,39 +319,55 @@ def test_ecliptic_rect():
         assert_almost_equal(z,r2.z,places)
         
 def test_parallax(plot=False):
-    from astropysics.coords.coordsys import ICRSCoordinates,GCRSCoordinates
+    from astropysics.coords.coordsys import ICRSCoordinates,GCRSCoordinates, \
+                        RectangularGCRSCoordinates, RectangularICRSCoordinates
     from astropysics.constants import asecperrad
     from numpy import linspace,array,radians,mean,max
     
-    icoords = [(1,1),(270,66.56),(1,30),(180,-30),(85,-78)]
+    
+    e = 23.439214393375188
+    
+    
+    icoords = [(1,1),(270,90-e),(1,30),(180,-30),(80,-89)]
     distpcs = [1,1,1,1,1]
     epochs = linspace(2000,2001,50)
     
     ras = []
     decs = []
+    posis = []
+    posgs = []
     
     for (ra,dec),d in zip(icoords,distpcs):
         rai = []
         deci = []
+        posii = []
+        posgi = []
         for e in epochs:
             i = ICRSCoordinates(ra,dec,distancepc=d,epoch=e)
             g = i.convert(GCRSCoordinates)
+            ri = i.convert(RectangularICRSCoordinates)
+            rg = g.convert(RectangularGCRSCoordinates)
             
             rai.append(g.ra.d)
             deci.append(g.dec.d)
+            posii.append((ri.x,ri.y,ri.z))
+            posgi.append((rg.x,rg.y,rg.z))
+            
         ras.append(rai)
         decs.append(deci)
+        posis.append(posii)
+        posgs.append(posgi)
     
     ras = array(ras)
     decs = array(decs)
+    posis = array(posis)
+    posgs = array(posgs)
     
     dras = []
     ddecs = []
     for ra,dec,ic in zip(ras,decs,icoords):
         dras.append(radians(ra - mean(ra))*asecperrad)
         ddecs.append(radians(dec - mean(dec))*asecperrad)
-        assert max(dras[-1]) < 1,'RA difference  1 pc away is greater that 1: %f'%max(dras[-1])
-        assert max(ddecs[-1]) < 1,'Dec difference 1 pc away is greater that 1: %f'%max(ddecs[-1])
     
     if plot:
         from matplotlib import pyplot as plt
@@ -368,7 +384,9 @@ def test_parallax(plot=False):
         plt.ylim(-3,3)
         plt.legend(loc=0)
     
+    for dra,ddec in zip(dras,ddecs):
+        assert max(dra) < 1,'RA difference  1 pc away is greater that 1: %f'%max(dra)
+        assert max(ddec) < 1,'Dec difference 1 pc away is greater that 1: %f'%max(ddec)
     
-    
-    
+    return dras,ddecs,ras,decs,posis,posgs
         
