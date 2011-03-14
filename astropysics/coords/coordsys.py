@@ -1427,8 +1427,8 @@ class LatLongCoordinates(CoordinateSystem):
         return sep.join(coords)
     
     def __eq__(self,other):
-        if hasattr(other,'_lat') and hasattr(other,'_long'):
-            return self._lat==other._lat and self._long==other._long
+        if hasattr(other,'lat') and hasattr(other,'long'):
+            return self._lat==other.lat and self._long==other.long
         else:
             return False
         
@@ -1436,13 +1436,13 @@ class LatLongCoordinates(CoordinateSystem):
         return not self.__eq__(other)
     
     def __sub__(self,other):        
-        if isinstance(other,self.__class__):
+        if isinstance(other,LatLongCoordinates) or (hasattr(other,'lat') and hasattr(other,'long')):
             from math import cos,degrees,acos,asin,sin,sqrt
             
             b1 = self._lat.radians
-            b2 = other._lat.radians
+            b2 = other.lat.radians
             db = abs(b2 - b1)
-            dl = abs(other._long.radians - self._long.radians)
+            dl = abs(other.long.radians - self._long.radians)
             
             #haversin(theta) = (1-cos(theta))/2 = sin^2(theta/2)
             #has better numerical accuracy if sin for theta ~ 0, cos ~ pi/2
@@ -1929,7 +1929,7 @@ class RectangularICRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         return RectangularCoordinates.__str__(self) + epochstr
         
     def transformToEpoch(self,newepoch):
-        EpochalCoordinates.transformToEpoch(newepoch)
+        EpochalCoordinates.transformToEpoch(self,newepoch)
         
     def _getUnit(self):
         return self._unit
@@ -2152,7 +2152,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     
     @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
     def _toRectICRS(rgc):
-        #TODO:implement abberation, check this
+        #TODO:implement abberation
         from .ephems import earth_pos_vel
         from ..obstools import epoch_to_jd
         from ..constants import auperpc
@@ -2162,20 +2162,22 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         z = rgc.z
         unit = rgc.unit
         epoch = rgc.epoch
-        
+        if epoch is None:
+            raise ValueError('cannot transform GCRS to ICRS without an epoch')
+          
         if unit is None: #infitiely far, so no corrections
             return RectangularICRSCoordinates(x,y,z,epoch,unit=None)
         else:
             xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
             
             if unit == 'au':
-                xp = ric.x - xe
-                yp = ric.y - ye
-                zp = ric.z - ze
+                xp = x - xe
+                yp = y - ye
+                zp = z - ze
             elif unit == 'pc':
-                xp = ric.x - xe/auperpc
-                yp = ric.y - ye/auperpc
-                zp = ric.z - ze/auperpc
+                xp = x - xe/auperpc
+                yp = y - ye/auperpc
+                zp = z - ze/auperpc
             else:
                 raise NotImplementedError('Unit %s not supported by GCRS->ICRS'%unit)
             
@@ -2183,7 +2185,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     
     @CoordinateSystem.registerTransform(RectangularICRSCoordinates,'self')    
     def _fromRectICRS(ric):
-        #TODO:implement abberation, check
+        #TODO:implement abberation
         from .ephems import earth_pos_vel
         from ..obstools import epoch_to_jd
         from ..constants import auperpc
@@ -2194,19 +2196,22 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         unit = ric.unit
         epoch = ric.epoch
         
+        if epoch is None:
+            raise ValueError('cannot transform ICRS to GCRS without an epoch')
+        
         if unit is None: #infitiely far, so no corrections
             return RectangularGCRSCoordinates(x,y,z,epoch,unit=None)
         else:
             xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
             
             if unit == 'au':
-                xp = ric.x - xe
-                yp = ric.y - ye
-                zp = ric.z - ze
+                xp = x - xe
+                yp = y - ye
+                zp = z - ze
             elif unit == 'pc':
-                xp = ric.x - xe/auperpc
-                yp = ric.y - ye/auperpc
-                zp = ric.z - ze/auperpc
+                xp = x - xe/auperpc
+                yp = y - ye/auperpc
+                zp = z - ze/auperpc
             else:
                 raise NotImplementedError('Unit %s not supported by ICRS->GCRS'%unit)
             

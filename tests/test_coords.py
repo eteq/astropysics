@@ -318,75 +318,87 @@ def test_ecliptic_rect():
         assert_almost_equal(y,r2.y,places)
         assert_almost_equal(z,r2.z,places)
         
-def test_parallax(plot=False):
+def test_parallax(plot=False,icoords=None):
     from astropysics.coords.coordsys import ICRSCoordinates,GCRSCoordinates, \
                         RectangularGCRSCoordinates, RectangularICRSCoordinates
     from astropysics.constants import asecperrad
     from numpy import linspace,array,radians,mean,max
     
     
-    e = 23.439214393375188
-    
-    
-    icoords = [(1,1),(270,90-e),(1,30),(180,-30),(80,-89)]
-    distpcs = [1,1,1,1,1]
+    if icoords is None:
+        e = 23.439214393375188
+        icoords = [(1,1),(270,90-e),(1,30),(180,-30),(80,-89)]
+        #icoords = [(1,1),(45,0),(45,-30),(45,-45),(45,-60),(45,-75),(45,-89)]
+        #icoords = [(360.1,0),(145,0),(145,30),(145,45),(145,60),(145,75),(145,89)]
+        
+    distpcs = [1 for i in icoords]
     epochs = linspace(2000,2001,50)
     
-    ras = []
-    decs = []
-    posis = []
-    posgs = []
+    asdiffs = []
+    drasall = []
+    ddecsall = []
+    icsall = []
+    gcsall = []
+    ricsall = []
+    rgcsall = []
     
     for (ra,dec),d in zip(icoords,distpcs):
-        rai = []
-        deci = []
-        posii = []
-        posgi = []
+        
+        ics = []
+        gcs = []
+        rics = []
+        rgcs = []
+        
         for e in epochs:
-            i = ICRSCoordinates(ra,dec,distancepc=d,epoch=e)
-            g = i.convert(GCRSCoordinates)
-            ri = i.convert(RectangularICRSCoordinates)
-            rg = g.convert(RectangularGCRSCoordinates)
-            
-            rai.append(g.ra.d)
-            deci.append(g.dec.d)
-            posii.append((ri.x,ri.y,ri.z))
-            posgi.append((rg.x,rg.y,rg.z))
-            
-        ras.append(rai)
-        decs.append(deci)
-        posis.append(posii)
-        posgs.append(posgi)
+            ics.append(ICRSCoordinates(ra,dec,distancepc=d,epoch=e))
+            gcs.append(ics[-1].convert(GCRSCoordinates))
+            rics.append(ics[-1].convert(RectangularICRSCoordinates))
+            rgcs.append(gcs[-1].convert(RectangularGCRSCoordinates))
     
-    ras = array(ras)
-    decs = array(decs)
-    posis = array(posis)
-    posgs = array(posgs)
-    
-    dras = []
-    ddecs = []
-    for ra,dec,ic in zip(ras,decs,icoords):
-        dras.append(radians(ra - mean(ra))*asecperrad)
-        ddecs.append(radians(dec - mean(dec))*asecperrad)
+        asdiffs.append([(g-ics[0]).arcsec for g in gcs])
+        drasall.append([(g.ra.r-ics[0].ra.r)*asecperrad for g in gcs])
+        ddecsall.append([(g.dec.r-ics[0].dec.r)*asecperrad for g in gcs])
+        
+        icsall.append(ics)
+        gcsall.append(gcs)
+        ricsall.append(rics)
+        rgcsall.append(rgcs)
+        
+        
+    asdiffs = array(asdiffs)
     
     if plot:
         from matplotlib import pyplot as plt
         
+        plt.figure(1)
         if plot != 'notclf':
             plt.clf()
             
-        for dra,ddec,ic in zip(dras,ddecs,icoords):
-            plt.plot(dra,ddec,label='%.2f,%.2f'%ic)
+        for asd,ics in zip(asdiffs,icsall):
+            ic = ics[0]
+            plt.plot(epochs-2000,asd,label='%.2f,%.2f'%(ic.ra.d,ic.dec.d))
+            
+        plt.xlabel('epoch - 2000')
+        plt.ylabel('$\Delta_{\\rm ICRS,GCRS}$')
+        plt.legend(loc=0)
+        
+        
+        plt.figure(2)
+        if plot != 'notclf':
+            plt.clf()
+            
+        for dras,ddecs,ics in zip(drasall,ddecsall,icsall):
+            ic = ics[0]
+            plt.plot(dras,ddecs,label='%.2f,%.2f'%(ic.ra.d,ic.dec.d))
             
         plt.xlabel('$\Delta$RA')
         plt.ylabel('$\Delta$Dec')
         plt.xlim(-3,3)
         plt.ylim(-3,3)
+        
         plt.legend(loc=0)
     
-    for dra,ddec in zip(dras,ddecs):
-        assert max(dra) < 1,'RA difference  1 pc away is greater that 1: %f'%max(dra)
-        assert max(ddec) < 1,'Dec difference 1 pc away is greater that 1: %f'%max(ddec)
+    assert max(asdiffs)<=1.05,'Object at 1 pc moves significantly more than 1 arcsec from center:%.3f'%max(asdiffs)
     
-    return dras,ddecs,ras,decs,posis,posgs
+    return epochs,asdiffs,icsall,gcsall,ricsall,rgcsall
         
