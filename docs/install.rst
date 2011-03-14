@@ -77,9 +77,10 @@ Recommended Packages
 --------------------
 
 A number of other packages are necessary for added functionality in astropysics
-(all are recommended). These packages can be installed with the ``astpys-setup``
-script as described in :ref:`inst-setup`, but if available from your system's
-package management system, it may be better to try installing that way, instead.
+or to provide functionality that has no need to be duplicated. These packages
+can be installed with the ``astpys-setup`` script as described in
+:ref:`inst-setup`, but if available from your system's package management
+system, it may be better to try installing that way, instead.
 
     * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
         *highly recommended*, as it is necessary for all plotting (aside from the GUI applications).
@@ -98,7 +99,15 @@ package management system, it may be better to try installing that way, instead.
         `graphviz <http://www.graphviz.org/>`_ graphs from networkx.
     
     * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
-        Necessary for reading FITS files (astronomy data format) .
+        *highly recommended*, necessary for reading FITS files (the most common astronomy data
+        format).
+        
+    * `asciitable <http://cxc.cfa.harvard.edu/contrib/asciitable/>`
+        A valuable tool for loading and writing ASCII tables.
+        
+    * `ATpy <http://atpy.github.com/>`
+        Astronomical Tables in Python - a general tool for dealing with tabular
+        data, both ASCII (uses asciitable) and other formats.
         
             
     * `Traits <http://code.enthought.com/projects/traits/>`_, `TraitsGUI <http://code.enthought.com/projects/traits_gui/>`_, `Chaco <http://code.enthought.com/projects/chaco/>`_, and `Mayavi <http://code.enthought.com/projects/mayavi/>`_.  Alternatively, `ETS <http://code.enthought.com/projects/index.php>`_ is all bundled in one.
@@ -112,11 +121,6 @@ package management system, it may be better to try installing that way, instead.
             pip install traitsGUI
             pip install chaco
             pip install mayavi
-    
-    * `vo.table <http://stsdas.stsci.edu/astrolib/vo/html/>`_
-        Necessary to write VOTable files, and makes reading them much better, as
-        well. Download from `<http://trac6.assembla.com/astrolib>`_ at the
-        bottom of the page.
         
     
 Astropysics also includes pythonic wrappers around some astronomy-related tools that need to be installed seperately if their functionality is desired:

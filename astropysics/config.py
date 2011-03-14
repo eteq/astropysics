@@ -433,7 +433,9 @@ _recpkgs = [PackageInstaller('ipython','IPython'),
             PackageInstaller('matplotlib',extrainfo='Requires a C-compiler to install.'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
-            PackageInstaller('pygraphviz')]
+            PackageInstaller('pygraphviz'),
+            PackageInstaller('asciitable'),
+            PackageInstaller('atpy')]
             
 _guipkgs = [PackageInstaller('Traits','enthought.traits'),
             PackageInstaller('TraitsGUI','enthought.traits.ui.api',extrainfo='Requires TraitsBackendWX or TraitsBackendQt'),
