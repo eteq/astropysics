@@ -65,7 +65,6 @@ Module API
 
 """
 
-#TODO: implement annual parallax and aberration
 #TODO: implement polar motion lookup techniques
 
 from __future__ import division,with_statement
@@ -2042,10 +2041,16 @@ class GCRSCoordinates(EquatorialCoordinatesBase):
     
 class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     """
-    Rectangular coordinates aligned to the GCRS (identical orientation to the
-    ICRS) with origin at the Earth geocenter. The positive z-axis points to the
-    north celestial pole and the positive x-axis points down the (0,0) point of
-    the equatorial GCRS (and thus, also ICRS).
+    Rectangular coordinates aligned to the GCRS with origin at the Earth
+    geocenter. The positive z-axis points to the north celestial pole and the
+    positive x-axis points down the (0,0) point of the equatorial GCRS (and
+    thus, also ICRS). 
+    
+    The coordinates at this location are actually an "Astrometric place" - the
+    actual location relative to the geocenter. This is disctinct from
+    :class:`GCRSCoordinates` in that :class:`GCRSCoordinates` *includes*
+    aberration and light deflection, while :class:`RectangularGCRSCoordinates`
+    does not.
     
     .. note::
         Units for the coordinates are specified via the :attr:`unit` attribute.
@@ -2115,6 +2120,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     @CoordinateSystem.registerTransform('self',GCRSCoordinates)
     def _toGCRS(rgc):
         from math import asin,atan2,degrees
+        #TODO:implement aberration and light deflection
         
         x,y,z = rgc.x,rgc.y,rgc.z        
         r = (x*x+y*y+z*z)**0.5
@@ -2133,6 +2139,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     @CoordinateSystem.registerTransform(GCRSCoordinates,'self')    
     def _fromGCRS(gc):
         from math import sin,cos
+        #TODO:implement aberration and light deflection
         
         ra,dec = gc.ra.r,gc.dec.r
         if gc.distanceau is None:
@@ -2152,7 +2159,6 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     
     @CoordinateSystem.registerTransform('self',RectangularICRSCoordinates)
     def _toRectICRS(rgc):
-        #TODO:implement abberation
         from .ephems import earth_pos_vel
         from ..obstools import epoch_to_jd
         from ..constants import auperpc
@@ -2167,7 +2173,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
           
         if unit is None: #infitiely far, so no corrections
             return RectangularICRSCoordinates(x,y,z,epoch,unit=None)
-        else:
+        else: #do parallax correction
             xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
             
             if unit == 'au':
@@ -2185,7 +2191,6 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
     
     @CoordinateSystem.registerTransform(RectangularICRSCoordinates,'self')    
     def _fromRectICRS(ric):
-        #TODO:implement abberation
         from .ephems import earth_pos_vel
         from ..obstools import epoch_to_jd
         from ..constants import auperpc
@@ -2201,7 +2206,7 @@ class RectangularGCRSCoordinates(RectangularCoordinates,EpochalCoordinates):
         
         if unit is None: #infitiely far, so no corrections
             return RectangularGCRSCoordinates(x,y,z,epoch,unit=None)
-        else:
+        else: #do parallax correction
             xe,ye,ze = earth_pos_vel(epoch_to_jd(epoch),True)[0]
             
             if unit == 'au':
@@ -2427,7 +2432,7 @@ class CIRSCoordinates(EquatorialCoordinatesBase):
     
     Changes to the :attr:`epoch` will result in the coordinates being updated
     for precession nutation. Nutation currently uses the IAU 2000B model that
-    should be good to ~1 mas. If abberration or annual parallax corrections are
+    should be good to ~1 mas. If aberration or annual parallax corrections are
     necessary, convert to :class:`ICRSCoordinates`, change the epoch, and then
     convert back to :class:`CIRSCoordinates`.
     

@@ -96,6 +96,11 @@ class EphemerisObject(object):
     * Subclasses may implement a :meth:`_jdhook` method to perform an action
       whenever the jd is changed.  It must have a signature f(oldjd,newjd). 
     
+    * Subclasses may implement the :meth:`getVelocity` method to return
+      instantaneous velocities for the coordinate at the current value of 
+      :attr:`jd`.  If this is not implemented, calling it will raise a 
+      :exc:`NotImplementedError`.
+    
     """
     
     __metaclass__ = ABCMeta
@@ -256,13 +261,28 @@ class EphemerisObject(object):
     def _getCoordObj(self):
         """
         Computes and returns the coordinate location of the object at the time
-        given by the current value of the :attr:`jd` attribute of this object.
+        given by the :attr:`jd` attribute's value.
         
         :returns: 
-            With the current coordinates for the object. The exact output
-            coordinate system is not specified, other than that it must be a
-            subclass of :class:`astropysics.coords.coordsys.CooordinateSystem`.
+            The current coordinates for the object. The exact output coordinate
+            system is not specified, other than that it must be a subclass of
+            :class:`astropysics.coords.coordsys.CooordinateSystem`.
             
+        """
+        raise NotImplementedError
+    
+    def getVelocity(self):
+        """
+        Computes and returns the instantaneous velocity for this object at the
+        time given by the :attr:`jd` attribute's value.
+        
+        :returns:
+            The current velocity of this object. The exact type is not
+            specified, but it should be something that can be added to the
+            coordinates that are returned when the object is called.
+        
+        :raises NotImplementedError: 
+            If velocities are not implemented for this class.
         """
         raise NotImplementedError
     
@@ -1056,8 +1076,8 @@ def earth_pos_vel(jd,barycentric=False,kms=True):
     
     :returns: 
         2 3-tuples (x,y,z),(vx,vy,vz) where x,y, and z are GCRS-aligned
-        positions in AU, and vx,vy, and vz are velocities in km/s (if `kms` is
-        True) or AU/yr.
+        positions in AU, and vx,vy, and vz are velocities in km/s if `kms` is
+        True, or AU/yr.
         
     
     """
