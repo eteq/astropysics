@@ -1,19 +1,24 @@
 #!/usr/bin/env python
 """
+<author> <date>
+
+<project description>
+
+<DELETE COMMENTS BELOW HERE AFTER READING>
 This file is a template for a data analysis project (typically to go with a 
 paper or two).  The main usage scenario is to plass functions and classes 
 before the "if __name__=='__main__' line.  Plots/figures go there as well,
 with the @plotfunc decorator.  Then the command line usage can be used to 
 re-generate any/all plots, and interactive work in ipythons supported by doing:
 
-run <filename.py>
-make_plots('plotname',...)
+    run <filename.py>
+    make_plots('plotname',...)
 
 Or if changes are made to some of the plots, the following can be used:
 
-import <filename>
-reload(<filename>)
-<filename>.make_plots('plotname',locals(),...)
+    import <filename>
+    reload(<filename>)
+    <filename>.make_plots('plotname',locals(),...)
 
 Additionally, this script can be called at the command line to show or save
 figures.  This is especially useful in conjunction with the mainfig argument 
@@ -54,8 +59,6 @@ then you could do:
 
 at the command line, and a directory 'paper1' will be created with files 
 'aplot.eps' and 'aplot.pdf'.
-    
-
 
 """
 
