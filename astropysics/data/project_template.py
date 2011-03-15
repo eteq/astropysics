@@ -19,6 +19,44 @@ Additionally, this script can be called at the command line to show or save
 figures.  This is especially useful in conjunction with the mainfig argument 
 of plotfunc to save all figures intended for use in a paper.
 
+
+**Example**
+
+Replace 'ADD CLASSES/FUNCTIONS HERE' with:
+
+@plotfunc(mainfig='paper1')
+def aplot(x,data1,data2):
+    subplot(2,1,1)
+    plot(x,data1,label='1')
+    plot(x,data2,label='2')
+    
+    xlabel('My x')
+    ylabel('My data')
+    legend(loc=0)
+    
+    subplot(2,1,2)
+    scatter(data1,data2)
+    xlabel('data 1')
+    ylabel('data 2')
+    xlim(2,4.5)
+    ylim(1,5)
+    
+and replace 'ADD ON-RUN OPERATIONS HERE' with:
+
+    x = linspace(0,1,100)
+    data1 = x*2.5 + 2
+    data2 = data1 + randn(100)
+    
+    
+then you could do:
+
+./myscrit.py -m paper1
+
+at the command line, and a directory 'paper1' will be created with files 
+'aplot.eps' and 'aplot.pdf'.
+    
+
+
 """
 
 from __future__ import division,with_statement
@@ -34,7 +72,7 @@ defaultsavetypes = ['eps','pdf']
 
 #<--------------------Plot support functions----------------------------------->
 _plotreg = {}
-_mainfigs = []
+_mainfigs = {True:[]}
     
 def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
     """
@@ -60,7 +98,9 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
         tuple or None for the default bounding box.
     :param bool mainfig:
         If True, this is a "main" figure - e.g. one that will actually appear in
-        a paper (used for the command-line call).
+        a paper and is used by the '-m' command line option. Can also be a
+        string, in which case the figures will be saved in a matching name
+        directory and can be selected seperately from those that are True.
     """
     def deco(f):
         fname = f.func_name
@@ -78,7 +118,9 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
             raise ValueError('unrecognized plot type %s'%figtype)
         _plotreg[fname]=(f,fsz,figtype,tweakbbox)
         if mainfig:
-            _mainfigs.append(fname)
+            if mainfig not in _mainfigs:
+                _mainfigs[mainfig] = []
+            _mainfigs[mainfig].append(fname)
         return f
     
     if callable(figtype):
@@ -90,13 +132,14 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
     
 def plot_names():
     """
-    Returns the names of all registered plots for this file, as well as the
-    names of just the 'main' plots.
+    Returns the names of all registered plots for this file.  
+    Also returns the 'main' plots, as a dictiontionary mapping the main types to
+    figure names
     
     :returns: 2-tuple (plotnames,mainnames)
     
     """
-    return _plotreg.keys(),_mainfigs
+    return _plotreg.keys(),_mainfigs.copy()
 
 #To save by default in a different directory, change the "save='.'" line at the
 #start of this function to "save='/path/to/dir'"
@@ -132,8 +175,12 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
     
     if save is True:
         save='.'
-    if type(save) is str and not save.endswith(os.sep):
-        save+=os.sep        
+    if isinstance(save,basestring):
+        if save.endswith(os.sep):
+            save = os.sep[:-len(os.sep)]
+        if not os.path.exists(save):
+            os.mkdir(save)
+        save+=os.sep  
     
     if plots is None:
         plots = _plotreg.keys()
@@ -142,7 +189,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
             import re
             plots = plots.replace('*','.*')
             regex = re.compile(plots)
-            plots = [p for p in plot_names() if regex.match(p)]
+            plots = [p for p in plot_names()[0] if regex.match(p)]
         else:
             plots = plots.split(',')
         
@@ -230,7 +277,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
                 for saveext in saveexts:
                     fn = '%s%s.%s'%(save,fname,saveext)
                     
-                    if not overwrite and exists(fn):
+                    if not overwrite and os.path.exists(fn):
                         print fn,'exists, skipping (use -o at command line to overwrite)'
                     else:
                         print 'saving',fn
@@ -272,13 +319,14 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,
 
 if __name__ == '__main__':
     from optparse import OptionParser
+    import sys
     
     #ADD ON-RUN OPERATIONS HERE - i.e. load data files, name variables, etc.
     
     op = OptionParser()
-    op.usage = '%prog [options] [plot1 plot2 ...]'
+    op.usage = '%prog [options] [plot1 plot2 ...]|[maintype]'
     
-    op.add_option('-m','--main-figs',help='Shows all main figures even if they are not included in command line',
+    op.add_option('-m','--main-figs',help='Shows all main figures.  If an argument is given, it tells which group of main figures to show.',
                         dest='mainfigs',action='store_true',default=False)
     op.add_option('-s','--save',help='save in the specified location',default=None)
     op.add_option('-o','--overwrite',help='Overwrite existing figure',action='store_true',default=False)
@@ -286,12 +334,29 @@ if __name__ == '__main__':
     ops,args = op.parse_args()
     
     if ops.mainfigs:
-        figstomake = _mainfigs[:]
-        figstomake.extend(args)
+        if len(args)==0:
+            figstomake = _mainfigs[True][:]
+            if len(figstomake)>0:    
+                make_plots(set(figstomake),save=ops.save,overwrite=ops.overwrite)
+        else:
+            for arg in args:
+                if arg not in _mainfigs:
+                    print 'Invalid main figure group',arg,'Exiting...'
+                    sys.exit(1)
+            for arg in args:
+                figstomake = _mainfigs[True][:]
+                figstomake.extend(_mainfigs[arg])
+                if ops.save is None:
+                    save = arg
+                else:
+                    save = ops.save
+                if len(figstomake)>0:
+                    make_plots(set(figstomake),save=save,overwrite=ops.overwrite)
+        
+        
     else:
         figstomake = args
-    
-    if len(figstomake)>0:    
-        make_plots(set(figstomake),save=ops.save,overwrite=ops.overwrite)
+        if len(figstomake)>0:    
+            make_plots(set(figstomake),save=ops.save,overwrite=ops.overwrite)
         
         
