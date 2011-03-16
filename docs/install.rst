@@ -83,7 +83,8 @@ can be installed with the ``astpys-setup`` script as described in
 system, it may be better to try installing that way, instead.
 
     * `Matplotlib <http://matplotlib.sourceforge.net/index.html>`_
-        *highly recommended*, as it is necessary for all plotting (aside from the GUI applications).
+        *highly recommended*, as it is necessary for all plotting (aside from 
+        the GUI applications).
             
     * `IPython <http://ipython.scipy.org/>`_
         *highly recommended*, as it is a far better interactive shell than the
@@ -99,8 +100,8 @@ system, it may be better to try installing that way, instead.
         `graphviz <http://www.graphviz.org/>`_ graphs from networkx.
     
     * `pyfits <http://www.stsci.edu/resources/software_hardware/pyfits>`_
-        *highly recommended*, necessary for reading FITS files (the most common astronomy data
-        format).
+        *highly recommended*, necessary for reading FITS files (the most common 
+        astronomy data format).
         
     * `asciitable <http://cxc.cfa.harvard.edu/contrib/asciitable/>`
         A valuable tool for loading and writing ASCII tables.
@@ -108,6 +109,11 @@ system, it may be better to try installing that way, instead.
     * `ATpy <http://atpy.github.com/>`
         Astronomical Tables in Python - a general tool for dealing with tabular
         data, both ASCII (uses asciitable) and other formats.
+        
+    * `pidly <http://astronomy.sussex.ac.uk/~anthonys/pidly/>`
+        IDL within Python.  For those times when someone sends you an IDL code 
+        that you don't have the time to convert to python, but want to be able
+        to call from inside python.  Requires IDL to be installed.
         
             
     * `Traits <http://code.enthought.com/projects/traits/>`_, `TraitsGUI <http://code.enthought.com/projects/traits_gui/>`_, `Chaco <http://code.enthought.com/projects/chaco/>`_, and `Mayavi <http://code.enthought.com/projects/mayavi/>`_.  Alternatively, `ETS <http://code.enthought.com/projects/index.php>`_ is all bundled in one.

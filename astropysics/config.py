@@ -435,7 +435,8 @@ _recpkgs = [PackageInstaller('ipython','IPython'),
             PackageInstaller('networkx'),
             PackageInstaller('pygraphviz'),
             PackageInstaller('asciitable'),
-            PackageInstaller('atpy')]
+            PackageInstaller('atpy'),
+            PackageInstaller('pidly')]
             
 _guipkgs = [PackageInstaller('Traits','enthought.traits'),
             PackageInstaller('TraitsGUI','enthought.traits.ui.api',extrainfo='Requires TraitsBackendWX or TraitsBackendQt'),
