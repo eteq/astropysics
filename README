@@ -32,6 +32,4 @@ docs/ - Sphinx documentation and example code
 logo/ - astropysics logo in various forms
 licenses/ - copyright/license notices for all open source code
 scripts/ - command-line scripts installed with astropysics
-tests/ - unit tests (for use with Nose) and related scripts
-experiments/ - algorithm and science experimentation/validation
-
+tests/ - unit tests (for use with Nose) and algorithmic experiments

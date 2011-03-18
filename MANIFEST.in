@@ -1,4 +1,6 @@
 include distribute_setup.py
 recursive-include astropysics/data *
 recursive-include docs *
+recursive-include licenses *
+recursive-include tests *.c
 prune docs/_build
