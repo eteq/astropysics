@@ -34,8 +34,6 @@ Module API
 
 """
 
-#TODO: implement generalized grid-inverter, possibly tied to modcore.modelgrid1d
-
 from __future__ import division,with_statement
 import numpy as np
 
@@ -51,6 +49,41 @@ except ImportError: #support for earlier versions
     ABCMeta = type
     MutableMapping = type
     
+def nearestsorted(a,val):
+    """
+    Search a sorted sequence for the nearest value.
+    
+    :param a: A sorted sequence to be searched.
+    :type a: array-like
+    :param val: The value(s) at which to find the nearest match in `a`.
+    
+    :returns: nearest,inds
+        Where `nearest` are the elements of `a` that are nearest to the `val`
+        values, and `inds` are the indecies into `a` that give those values.
+    
+    .. seealso::
+        :func:`numpy.sort`, :func:`numpy.searchsorted`
+    
+    """
+    a = np.asarray(a)
+    val = np.asarray(val)
+    scalar = val.shape == ()
+    val = np.atleast_1d(val)
+    
+    i = np.searchsorted(a,val)
+    
+    iabove = i>=len(a)
+    if np.any(iabove):
+        i[iabove] -= 1
+    ai = a[i]
+    am = a[i-1]
+    mbetter = np.abs(am-val)<np.abs(ai-val)
+    i[mbetter] = i[mbetter]-1
+    
+    if scalar:
+        return a[i][0],i[0]
+    else:
+        return a[i],i
 
 def lin_to_log_rescale(val,lower=1,upper=3,base=10):
     """
