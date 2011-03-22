@@ -1838,12 +1838,15 @@ class DerivedValue(FieldValue):
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
             if flinkdict:
+                flinkdict = flinkdict.copy()
                 #populate any function defaults if not given already
                 if defaults is not None:
-                    for a,d in zip(reversed(args),defaults):
+                    for a,d in zip(args,defaults):
                         if a not in flinkdict:
                             flinkdict[a] = d
-                defaults = [flinkdict[a] for a in args if a in flinkdict]
+                defaults = [flinkdict.pop(a) for a in args if a in flinkdict]
+                if len(flinkdict)>0:
+                    raise ValueError('Override link for function arguments in a DerivedValue do not exist:%s'%flinkdict.keys())
                 
             if defaults is None or len(args) != len(defaults) :
                 raise TypeError('DerivedValue does not have enought initial linkage items')
@@ -1923,27 +1926,27 @@ class DerivedValue(FieldValue):
         """
         This marks this derivedValue as incorrect
         """
-        try:
-            if self in DerivedValue.__invcyclestack:
-                from warnings import warn
-                if self.sourcenode is None:
-                    cycleloc = self.idstr()
-                else:
-                    if 'name' in self.sourcenode:
-                        cycleloc = 'Node '+ self.sourcenode['name']
-                    else:
-                        cycleloc = 'Node '+ self.sourcenode.idstr()
-                warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
-                DerivedValue.__invcyclestack.append(self)
-                return
+        if self in DerivedValue.__invcyclestack:
+            from warnings import warn
+            if self.sourcenode is None:
+                cycleloc = self.idstr()
             else:
-                DerivedValue.__invcyclestack.append(self)
-                
-            self._valid = False
+                if 'name' in self.sourcenode:
+                    cycleloc = 'Node "%s"'%self.sourcenode['name']
+                else:
+                    cycleloc = 'Node '+ self.sourcenode.idstr()
+            
             if self.field is not None:
-                self.field.notifyValueChange(self,self)
-        finally:
-            DerivedValue.__invcyclestack.pop()
+                cycleloc += ' in Field %s'%self.field.name
+            warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
+        else:
+            try:
+                DerivedValue.__invcyclestack.append(self)
+                self._valid = False
+                if self.field is not None:
+                    self.field.notifyValueChange(self,self)
+            finally:
+                DerivedValue.__invcyclestack.pop()
     
     @property
     def value(self):
@@ -1989,8 +1992,13 @@ class DerivedValue(FieldValue):
                             cycleloc = ' at Node '+ self.sourcenode.idstr()
                         if self.field is not None:
                             cycleloc += ' Field ' + self.field.name
-                    e.args = (e.args[0]+cycleloc,)
+                            
+                    dcs = DependentSource._DependentSource__depcyclestack
+                    cyclestr = '->'.join(['('+','.join(ds.depstrs)+')' for ds in dcs])
+                    e.args = (e.args[0]+cycleloc+' with Path:->'+cyclestr,)
                     e.message = e.args[0]
+                    
+                    
                 
                 if self.failedvalueaction == 'raise':
                     if len(e.args) == 2 and isinstance(e.args[1],list):
