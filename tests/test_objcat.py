@@ -2,7 +2,8 @@
 from __future__ import division,with_statement
 from astropysics.constants import pi
 import numpy as np
-from astropysics.objcat import StructuredFieldNode,Catalog,Field
+from astropysics.objcat import StructuredFieldNode,Catalog,Field,CycleError
+from nose import tools
 
 class Test1(StructuredFieldNode):
     num = Field('num',(float,int),(4.2,1,2))
@@ -27,17 +28,69 @@ class Test1(StructuredFieldNode):
 class Test2(StructuredFieldNode):
     val = Field('val',float,4.2)
     
-    @StructuredFieldNode.derivedFieldFunc(num='num')
+    @StructuredFieldNode.derivedFieldFunc
     def d1(val='val',d2='d2'):
-        return val+np.exp(d2)
+        if d2 is not None:
+            return val+np.exp(d2)
     
-    @StructuredFieldNode.derivedFieldFunc(num='num')
+    @StructuredFieldNode.derivedFieldFunc(type=float) 
     def d2(d1='d1'):
-        if d1 is not None:
+        if d1 is not None: 
             return np.log(d1)
+
+
+class Test3(StructuredFieldNode):
+    a = Field('a',float)
+    b = Field('b',float)
     
+    @StructuredFieldNode.derivedFieldFunc(units='Msun',b='b')
+    #b2 should fail because it doesn't exist, but b='b' above overrides
+    def d(a='a',b='b2'): 
+        return a - b/2
+    
+def test_deps():
+    """
+    Test DependentValue objects
+
+    They must correctly deduce their values and follow the proper rules.
+    """
+    #check basic dependency results and units
+    o2 = Test2(None)
+    tools.assert_equal(o2.val(),4.2) #default value
+    
+    #these should both result in a cycle with each other
+    tools.assert_raises(CycleError,o2.d1)
+    tools.assert_raises(CycleError,o2.d2)
+
+    #Try setting o2.d2 to various non-float objects
+    def settoval(o,val):
+        o[None] = val
+    tools.assert_raises(TypeError,settoval,o2.d2,'astring')
+    tools.assert_raises(TypeError,settoval,o2.d2,1)
+    tools.assert_raises(TypeError,settoval,o2.d2,[4.0,2.3])
+    tools.assert_raises(TypeError,settoval,o2.d2,np.array(1.5))
+        
+    o2.d2[None] = 1.5
+    #should still fail b/c it is not set to the current value
+    tools.assert_raises(CycleError,o2.d1)
+    o2['d2'] = None #sets current to None/default
+    tools.assert_almost_equal(o2.d1(),8.6816890703380647,12)
+    
+        
+    #make sure derived arguments appear in the proper order - if a nad b are 
+    #swapped, this gives the wrong answer.
+    o3 = Test3(None)
+    o3['a'] = (None,930016275284.81763)
+    o3['b'] = (None,3000000000.0)
+    #print 'should',o3.a()-o3.b()/2.0,'not',o3.b()-o3.a()/2.0
+    tools.assert_equal(o3.d(),o3.a()-o3.b()/2.0)
+
+    return o2,o3
 
 def test_cat():
+    """
+    Test Catalog objects and related basic actions
+    """
     c = Catalog()
     t1 = Test1(c)
     t2 = Test1(c)
@@ -53,6 +106,9 @@ def test_cat():
     return c
 
 def test_sed():
+    """
+    Test SEDField
+    """
     from numpy.random import randn,rand
     from numpy import linspace
     from astropysics.spec import Spectrum
