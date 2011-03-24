@@ -1191,9 +1191,9 @@ class Spectrum(HasSpecUnits):
                     res.append(plt.plot(x[m],scale*e[m],**kwargs))
             if np.sum(~m) > 0:
                 if step:
-                    res.append(plt.step(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                    res.append(plt.step(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',lw=0,mew=0,color=colors[2]))
                 else:
-                    res.append(plt.plot(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',mew=0,color=colors[2]))
+                    res.append(plt.plot(x[~m],scale*np.mean(e[m] if np.sum(m)>0 else y)*np.ones(sum(~m)),'*',lw=0,mew=0,color=colors[2]))
                 
         if plotcontinuum and self.continuum is not None:
             if callable(self.continuum):
