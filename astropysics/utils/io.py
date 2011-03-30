@@ -36,14 +36,6 @@ from .gen import add_docs_and_sig as _add_docs_and_sig
 from .gen import add_docs as _add_docs
 import numpy as np
 
-try:
-    import pyfits
-except ImportError:
-    from warnings import warn
-    warn('pyfits not found - all FITS-related IO will not work')
-    pyfits = None
-    
-    
 def funpickle(fileorname,number=0,usecPickle=True):
     """
     Unpickle a file specified by  and return the pickled contents.
@@ -137,7 +129,43 @@ def fpickle(object,fileorname,usecPickle=True,protocol=None,append=False):
     finally:
         if close:
             f.close()
-    
+            
+            
+
+class _PyfitsOpener(object):
+    """
+    A context manager for use with :func:`open_with_pyfits` (see that docstring
+    for details).
+    """
+    def __init__(self, *args,**kwargs):
+        import pyfits
+        self.f = pyfits.open(*args,**kwargs)
+    def __enter__(self):
+        return self.f
+    def __exit__(self, *exc_info):
+        self.f.close()
+
+def open_with_pyfits(*args,**kwargs):
+    """
+    This is a convinience function for pyfits, allowing the following usage in
+    python 2.5 or above (although in 2.5, ``from __future__ import
+    with_statement`` is needed)::
+        
+        from astropysics.utils.io import open_with_pyfits
+        
+        with open_with_pyfits('filename') as f:
+            h = f[0].header
+            d = f[0].data
+            
+            # ... do something more with the file... 
+            
+        # at this indent level, the pyfits file is now closed. It will also be 
+        # close if an exception is thrown.
+        
+    The arguments are the same as for :func:`pyfits.open`.
+        
+    """
+    return _PyfitsOpener(*args,**kwargs)
     
 #<-----------------------Data retrieval and caching---------------------------->
     
@@ -801,13 +829,18 @@ def load_tipsy_format(fn):
     return dout
 
 #<------------------------VOTable related-------------------------------------->
+#add this back in if anything actually uses vo.table in the future
+#try:
+#    import vo.table
+#except ImportError:
+#    from warnings import warn
+#    warn('vo.table not found - VOTable processing limited to VOTableReader class')
 
 class VOTableReader(object):
     """
     This class represents a VOTable. Currently, it is read-only, and will
-    probably not be enhanced due to the existence of other VO Table packages
-    like `ATpy <http://atpy.github.com/>` and `vo.table
-    <http://trac6.assembla.com/astrolib>`.
+    probably not be enhanced due to the existence of Michael Droettboom's
+    vo.table package (http://trac6.assembla.com/astrolib).
     """
     
     dtypemap = {"boolean":'b',
@@ -1140,8 +1173,8 @@ def load_wcs_spectrum(fn,fluxext=None,errext=None,hdrext=None,errtype='err'):
     :param errext: Fits extension to use for the errors or None to skip errors.
     :type errext: int of None
     :param hdrext: 
-        The fits extension to use to look for the header keywords - if None, this
-        will be the same as `fluxext`, or ignored if `fluxext` is None.
+        The fits extension to use to look for the header keywords - if None,
+        this will be the same as `fluxext`, or ignored if `fluxext` is None.
     :type hdrext: int or None
     :param errtype: Form of error data if present: 'err','ierr','var', or 'ivar'
     :type errtype: str
@@ -1152,12 +1185,9 @@ def load_wcs_spectrum(fn,fluxext=None,errext=None,hdrext=None,errtype='err'):
     :except IOError: If `fluxext` is None and no HDUs have the correct form
     
     """
-    
-    import pyfits
     from ..spec import Spectrum
     
-    f=pyfits.open(fn)
-    try:
+    with open_with_pyfits(fn) as f:
         if fluxext is None:
             for i,hdu in enumerate(f):
                 if 'CRVAL1' in hdu.header and ('CD1_1' in hdu.header or 'CDELT1' in hdu.header):
@@ -1209,8 +1239,6 @@ def load_wcs_spectrum(fn,fluxext=None,errext=None,hdrext=None,errtype='err'):
         
         fobj.name = fn
         return fobj  
-    finally:
-        f.close()
         
 
 def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothing=None):
@@ -1222,7 +1250,6 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
     
     returns Spectrum object with ivar, [bdata,rdata]
     """
-    import pyfits
     from ..spec import Spectrum
     if 'spec1d' not in fn or 'fits' not in fn:
         raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
@@ -1234,8 +1261,7 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
     else:
         raise ValueError('unrecgnized extraction type %s'%extraction)
     
-    f=pyfits.open(fn)
-    try:
+    with open_with_pyfits(fn) as f:
         extd = dict([(f[i].header['EXTNAME'],i) for i in range(1,len(f))])
         if extname+'-B' in extd and extname+'-R' in extd:
             bi,ri = extd[extname+'-B'],extd[extname+'-R']
@@ -1282,8 +1308,6 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
             return fobj,bd,rd
         else:
             return fobj
-    finally:
-        f.close()
         
 def load_all_deimos_spectra(dir='.',pattern='spec1d*',extraction='horne',
                             smoothing=None,verbose=True):
