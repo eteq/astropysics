@@ -2,7 +2,7 @@
 from __future__ import division,with_statement
 from astropysics.constants import pi
 import numpy as np
-from astropysics.objcat import StructuredFieldNode,Catalog,Field,CycleError
+from astropysics.objcat import StructuredFieldNode,Catalog,Field,CycleError,CycleWarning
 from nose import tools
 
 class Test1(StructuredFieldNode):
@@ -54,6 +54,11 @@ def test_deps():
 
     They must correctly deduce their values and follow the proper rules.
     """
+    import warnings
+    
+    #supress warnings from initialization of cycle-producing objects
+    warnings.simplefilter('ignore',CycleWarning)
+    
     #check basic dependency results and units
     o2 = Test2(None)
     tools.assert_equal(o2.val(),4.2) #default value
