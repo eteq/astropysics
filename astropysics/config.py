@@ -433,10 +433,7 @@ _recpkgs = [PackageInstaller('ipython','IPython'),
             PackageInstaller('matplotlib',extrainfo='Requires a C-compiler to install.'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
-            PackageInstaller('pygraphviz'),
-            PackageInstaller('asciitable'),
-            PackageInstaller('atpy'),
-            PackageInstaller('pidly')]
+            PackageInstaller('pygraphviz')]
             
 _guipkgs = [PackageInstaller('Traits','enthought.traits'),
             PackageInstaller('TraitsGUI','enthought.traits.ui.api',extrainfo='Requires TraitsBackendWX or TraitsBackendQt'),
@@ -567,6 +564,7 @@ def run_ipython_setup():
     """
     from .utils.io import get_package_data
     from os import path
+    import platform
     
     try:
         import IPython
@@ -595,9 +593,10 @@ def run_ipython_setup():
         cfgstr = get_package_data(ipcfgfn)
         
         #Identify the current matplotlib backend and prompt for it if necessary
+    
         try:
-            import matplotlib
-            mplbk = matplotlib.rcParams['backend']
+            from matplotlib import backends
+            mplbk = backends.backend
             bkstr = ' (for default %s, leave blank)'%mplbk
         except:
             mplbk = None
@@ -614,20 +613,25 @@ def run_ipython_setup():
         cfgstr = cfgstr.replace('{MPLBACK}',mplbk)
         
         #Choose the GUI toolkit to start in ipython
-        #try gui toolkits in order of preference
-        tkpkgnms = ('wx','PyQt4','gtk','Tkinter','tkinter')
-        tkguinms = ('wx','qt','gtk','tk','tk')
-        for tkp,tkg in zip(tkpkgnms,tkguinms):
-            try:
-                __import__(tkp)
-                guitk = tkg
-                tkstr = ' (for default %s, leave blank)'%tkg
-                break
-            except ImportError:
-                pass
-        else:
-            guitk = None
-            tkstr = ''
+        if platform.system() == 'Darwin':
+            #use the mac gui
+            guitk = tkg = 'osx'
+            tkstr = ' (for default %s, leave blank)'%tkg
+        else:    
+            #try gui toolkits in order of preference
+            tkpkgnms = ('wx','PyQt4','gtk','Tkinter','tkinter')
+            tkguinms = ('wx','qt','gtk','tk','tk')
+            for tkp,tkg in zip(tkpkgnms,tkguinms):
+                try:
+                    __import__(tkp)
+                    guitk = tkg
+                    tkstr = ' (for default %s, leave blank)'%tkg
+                    break
+                except ImportError:
+                    pass
+            else:
+                guitk = None
+                tkstr = ''
             
         res = None
         while res is None:

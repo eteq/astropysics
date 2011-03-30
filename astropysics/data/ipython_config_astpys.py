@@ -27,7 +27,7 @@ mpllines = """
 import matplotlib
 matplotlib.interactive(True)
 matplotlib.use('{MPLBACK}')
-wxapp = %gui {GUITK}
+guiapp = %gui {GUITK}
 from matplotlib import pyplot as plt
 from matplotlib.pyplot import *
 """
