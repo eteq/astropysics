@@ -14,12 +14,21 @@ from numpy.random import rand,randn,randint
 import scipy
 from scipy import stats,optimize,ndimage,integrate,interpolate,special
 
-import pyfits
 try:
     import astropysics
     from astropysics import phot,spec,coords,models,constants,objcat,obstools,plotting,utils
 except ImportError:
     print "Unable to start astropysics profile, try re-running astpys-setup (or re-installing astropysics)"
+
+#silently ignore pyfits and asciitable if they are not present,as they are optional
+try:
+	import pyfits
+except ImportError:
+	pass
+try:
+	import asciitable
+except ImportError:
+	pass
 
 """
 
