@@ -1250,7 +1250,9 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
     
     returns Spectrum object with ivar, [bdata,rdata]
     """
+    import pyfits
     from ..spec import Spectrum
+    
     if 'spec1d' not in fn or 'fits' not in fn:
         raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
     
