@@ -1256,10 +1256,14 @@ def load_deimos_spectrum(fn,plot=False,extraction='horne',retdata=False,smoothin
     if 'spec1d' not in fn or 'fits' not in fn:
         raise ValueError('loaded file must be a 1d spectrum from DEEP/spec2d pipeline')
     
+    if hasattr(pyfits,'NP_pyfits'):
+        from pyfits.NP_pyfits import _extensionNameCaseSensitive as pfcasesen
+    else:
+        from pyfits.core import _extensionNameCaseSensitive as pfcasesen
     if extraction == 'horne':
-        extname = 'Horne' if pyfits.NP_pyfits._extensionNameCaseSensitive else 'HORNE'
+        extname = 'Horne' if pfcasesen else 'HORNE'
     elif extraction == 'boxcar':
-        extname = 'Bxspf'if pyfits.NP_pyfits._extensionNameCaseSensitive else 'BXSPF'
+        extname = 'Bxspf'if pfcasesen else 'BXSPF'
     else:
         raise ValueError('unrecgnized extraction type %s'%extraction)
     
