@@ -17,7 +17,16 @@ ip.ex("from numpy.random import rand,randn,randint")
 ip.ex("import scipy")
 ip.ex("from scipy import stats,optimize,ndimage,integrate,interpolate,special")
 
-ip.ex("import pyfits")
+#import pyfits and asciitable if they are present
+try:
+    ip.ex("import pyfits")
+except ImportError:
+	pass
+	try:
+ip.ex("import asciitable")
+	except ImportError:
+		pass
+		
 try:
     ip.ex("import astropysics")
     #import typical modules
