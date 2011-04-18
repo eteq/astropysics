@@ -38,7 +38,7 @@ import numpy as np
 
 def funpickle(fileorname,number=0,usecPickle=True):
     """
-    Unpickle a file specified by  and return the pickled contents.
+    Unpickle a pickled object from a specified file and return the contents.
     
     :param fileorname: The file from which to unpickle objects
     :type fileorname: a file name string or a :class:`file` object
