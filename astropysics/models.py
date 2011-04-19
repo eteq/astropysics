@@ -519,7 +519,8 @@ class NFWModel(FunctionModel1DAuto):
     .. math::
         \\rho(r) = \\frac{\\rho_0}{r/r_c (1+r/r_c)^2} .
     
-    Where relevant, units are r in kpc and rho in Msun pc^-3
+    Where unspecified, units are r in kpc and rho in Msun pc^-3, although units can
+    always be arbitrarily scaled by rescaling `rho0`.
     
     .. note::
         This form is equivalent to an :class:`AlphaBetaGammaModel` with
