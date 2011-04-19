@@ -61,6 +61,12 @@ The following unit conversion factors are also provided:
 * `asecperrad`
 * `auperpc` (same as `asecperrad`)
 
+Additional, convinience or derived values include:
+
+* `GMskm`: Standard gravitational parameter for the sun in km^3 s^-2
+* `GMsau`: Standard gravitational parameter for the sun in AU km^2 s^-2
+* `GMspc`: Standard gravitational parameter for the sun in pc km^2 s^-2
+
 The package also includes classes representing various cosmologies that are used
 to derive relevant cosmological parameters. The current default is the
 :class:`WMAP7Cosmology`, based on the LCDM cosmology with parameters favored by
@@ -142,6 +148,11 @@ cmperau = 1.49597887e13
 aupercm = 1.0/cmperau
 asecperrad = 206264.8062470963551564734
 auperpc = asecperrad #definitionally true
+
+#<----------------------Derived/Convinience------------------------------------>
+GMskm = 1.3271244002e11 #m^3 s^-2 - from http://ssd.jpl.nasa.gov/?constants
+GMsau = GMskm * aupercm * 1e5 #AU km^2 s^-2
+GMspc = GMskm * pcpercm * 1e5 #pc km^2 s^-2
 
 #TODO:remove this once these are no longer in use in favor of spec.HasSpectrumUnits?
 def flambda_to_fnu_l(flambda,lamb):
