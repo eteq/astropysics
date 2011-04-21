@@ -150,7 +150,7 @@ asecperrad = 206264.8062470963551564734
 auperpc = asecperrad #definitionally true
 
 #<----------------------Derived/Convinience------------------------------------>
-GMskm = 1.3271244002e11 #m^3 s^-2 - from http://ssd.jpl.nasa.gov/?constants
+GMskm = 1.3271244002e11 #km^3 s^-2 - from http://ssd.jpl.nasa.gov/?constants
 GMsau = GMskm * aupercm * 1e5 #AU km^2 s^-2
 GMspc = GMskm * pcpercm * 1e5 #pc km^2 s^-2
 
