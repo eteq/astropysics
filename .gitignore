@@ -1,7 +1,6 @@
-syntax:glob
 
-docs/_build
-build
+docs/_build/**/*
+build/**/*
 Astropysics.egg-info
 *.pyc
 *.egg
