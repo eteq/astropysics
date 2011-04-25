@@ -3,6 +3,7 @@ Astropysics
 
 A python library for astronomy/astrophysics calculations and data analysis.
 Web Page: http://packages.python.org/Astropysics/
+
 License: Apache License v2.0
 
 Installation
@@ -27,9 +28,11 @@ to build html documentation and place it in docs/_build/html.  Note that this re
 
 Source Distribution Directory Structure
 ---------------------------------------
-astropysics/ - source code for all astropysics modules
-docs/ - Sphinx documentation and example code
-logo/ - astropysics logo in various forms
-licenses/ - copyright/license notices for all open source code
-scripts/ - command-line scripts installed with astropysics
-tests/ - unit tests (for use with Nose) and algorithmic experiments
+
+* astropysics/ - source code for all astropysics modules
+* docs/ - Sphinx documentation and example code
+* logo/ - astropysics logo in various forms
+* licenses/ - copyright/license notices for all open source code
+* scripts/ - command-line scripts installed with astropysics
+* tests/ - unit tests (for use with Nose) and algorithmic experiments
+
