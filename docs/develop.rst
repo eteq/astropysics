@@ -2,23 +2,24 @@ Developer Guidelines for Astropysics
 ====================================
 
 Astropysics welcomes contributions from anyone interested, from simple bugfixes to contributing new functionality.  
-If you want to check out the most recent version to contribute (or just want the latest and greatest), you can pull the current development version from  the `google code page <http://code.google.com/p/astropysics/>`_.  
+If you want to check out the most recent version to contribute (or just want the latest and greatest), you can pull the current development version from  the `github page <http://github.com/eteq/astropysics>`_.  
 
 
 Getting the Code
 ----------------
 
-You will need to have `mercurial <http://mercurial.selenic.com/>`_ installed.  Once you do, simply execute::
+You will need to have `git <http://git-scm.com/>`_ installed - it is available for all major OSes.  Once you have it working, simply execute::
 
-    hg clone https://astropysics.googlecode.com/hg/ astropysics-dev
+    git clone git://github.com/eteq/astropysics.git astropysics-dev
     
 This will create a directory with the name ``astropysics-dev`` containing the latest and greatest version of astropysics.  
 If at any time you want to update this version, go into the directory and do::
 
-    hg pull
-    hg update
+    git pull
     
-then re-install following the directions above.  If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
+then re-install following the directions at :doc:`install`.  Usage of git to edit source code is well-documented elsewhere - github's `help page <http://help.github.com/>`_ covers the important basics. 
+
+If you plan on editing the astropysics source code (please do so, and submit patches/new features!), a useful way to immediately see changes without having to re-install every time is to use the command::
 
     python setup.py develop
 
@@ -27,11 +28,9 @@ possibly prefixed with ``sudo`` depending on your OS.  This will install links t
 Cloning the Repository to Submit Code
 -------------------------------------
 
-If you intend to regularly contribute changes or patches to astropysics, a more convinient way to submit changes is with a public clone of the main astropysics repository.
-Go to the `source tab  <http://code.google.com/p/astropysics/source/checkout>`_ of the `google code project <http://code.google.com/p/astropysics>`_, and click on the ``create clone`` button.  
-Fill in the necessary information, and clone *your* repository to your computer instead of the main astropysics repository.  
-Make your changes, using ``hg commit -m "a message"`` to describe changes as you make them.
-You can then use ``hg push`` to send changes back to your repository on google code, and those can easily be merged with the main repository with a pull request.
+If you intend to regularly contribute changes or patches to astropysics, a great way to submit changes is to use github's "fork" feature.  Just go to the  `astropysics page <http://github.com/eteq/astropysics>`_
+and click the "fork" button in the upper-right.  Make a new branch in your fork with whatever change you want to make, and when you've fixed the bug of added whatever new fancy
+thing you want to add, just submit a pull request (button in the upper-right) to the main astropysics project.
    
 Coding Style Guidelines
 -----------------------
