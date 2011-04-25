@@ -158,7 +158,7 @@ def _get_git_devstr(sha=False):
         nrev = stdout.count('\n')
         return  'dev-r%i'%nrev
     
-_get_devstr = _get_hg_devstr
+_get_devstr = _get_git_devstr
     
 version = str(major)+'.' +\
           str(minor) +\
