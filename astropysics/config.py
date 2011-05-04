@@ -430,10 +430,11 @@ class _PyfitsInstaller(PackageInstaller,_HTMLParser):
 #<-------------------Recommended Packages-------------------------------------->
 
 _recpkgs = [PackageInstaller('ipython','IPython'),
-            PackageInstaller('matplotlib',extrainfo='Requires a C-compiler to install.'),
+            PackageInstaller('matplotlib',extrainfo='Requires a C compiler to install.'),
             _PyfitsInstaller(),
             PackageInstaller('networkx'),
-            PackageInstaller('pygraphviz')]
+            PackageInstaller('pygraphviz'),
+            PackageInstaller('pywcs',extrainfo='Requires WCSLIB to be installed and a C compiler.')]
             
 _guipkgs = [PackageInstaller('Traits','enthought.traits'),
             PackageInstaller('TraitsGUI','enthought.traits.ui.api',extrainfo='Requires TraitsBackendWX or TraitsBackendQt'),
