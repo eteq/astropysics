@@ -73,6 +73,22 @@ Bug Reports
 
 The best place to report bugs is via the `google code bug tracker <http://code.google.com/p/astropysics/issues>`_.  That way they won't be forgotten unless an asteroid impact destroys all of google's servers.
 
+People
+============
+
+Lead Developer
+--------------
+
+* Erik Tollerud
+
+Contributors
+------------
+
+* Sebastian Gurevich
+* Alex Hagen
+* Frederic Grollier
+
+
 Logo Image Credit
 =================
 
