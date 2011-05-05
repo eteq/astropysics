@@ -988,7 +988,7 @@ class CoordinateSystem(object):
                     raise NotImplementedError(failstr+'; no transform path could be found')
                 return path
             except ImportError,e:
-                if e2.args[0] == 'No module named networkx':
+                if e.args[0] == 'No module named networkx':
                     raise NotImplementedError(failstr+'; networkx not installed')
                 else:
                     raise
