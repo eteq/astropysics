@@ -47,8 +47,8 @@ Module API
 """
 from __future__ import division,with_statement
 import numpy as np
-#from pymodelfit.core import *
-from pymodelfit.builtins import * #includes core
+from pymodelfit.core import *
+from pymodelfit.builtins import *
 from .spec import HasSpecUnits as _HasSpecUnits
 
     
