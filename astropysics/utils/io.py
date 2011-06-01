@@ -147,9 +147,9 @@ class _PyfitsOpener(object):
 
 def open_with_pyfits(*args,**kwargs):
     """
-    This is a convinience function for pyfits, allowing the following usage in
-    python 2.5 or above (although in 2.5, ``from __future__ import
-    with_statement`` is needed)::
+    This is a convinience function for :mod:`pyfits`, allowing the following
+    usage in python 2.5 or above (in 2.5, ``from __future__ import
+    with_statement`` is needed at the beginning of the file)::
         
         from astropysics.utils.io import open_with_pyfits
         
@@ -160,7 +160,7 @@ def open_with_pyfits(*args,**kwargs):
             # ... do something more with the file... 
             
         # at this indent level, the pyfits file is now closed. It will also be 
-        # close if an exception is thrown.
+        # closed if an exception is thrown.
         
     The arguments are the same as for :func:`pyfits.open`.
         
