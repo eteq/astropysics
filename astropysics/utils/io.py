@@ -34,7 +34,10 @@ Module API
 from __future__ import division,with_statement
 from .gen import add_docs_and_sig as _add_docs_and_sig
 from .gen import add_docs as _add_docs
+from ..config import get_config
 import numpy as np
+
+_io_config = get_config('io')
 
 def funpickle(fileorname,number=0,usecPickle=True):
     """
@@ -192,38 +195,135 @@ def get_package_data(dataname):
     path = dirname(rootfile)+'/data/'+dataname
     return get_loader(rootname).get_data(path)
 
-def get_data(dataurl,asfile=False,store=True,localfn=None):
+def _readrem(remote,reportprogress=False):
+    """
+    Reads the provided remote url and returns the result, possible reporting
+    on progress.
+    
+    Progress will be approximately once every percent, or less often for files
+    under 100 kb. If the file size is unknown, messages progress will slowly 
+    become less frequent.
+    
+    :param remote: A :class:`urllib.addinfourl` object with the remote url.
+    :param reportprogress: 
+        See :func:`set_data_download_reporter`
+    
+    :returns: The read data of the remote, e.g. remote.read()
+    """
+    from math import ceil
+    
+    if reportprogress:
+        if reportprogress is True:
+            def reportprogress(progress,started,ended,url):
+                from sys import stdout
+                
+                if started is False:
+                    stdout.write('Downloading file from '+url)
+                    stdout.write('\nDownload progress:  0%')
+                    stdout.flush()
+                elif ended is True:
+                    stdout.write('\n')
+                    stdout.flush()
+                elif type(progress) is float:
+                    perc = progress*100.
+                    stdout.write('\rDownload progress:%3i%%'%perc)
+                    stdout.flush()
+                else: #type must be int
+                    kb = progress/1000.
+                    mb = kb/1000. if kb > 1000 else None
+                    gb = mb/1000. if mb > 1000 else None
+                    if gb is not None:
+                        stdout.write('\rDownload progress:%.1f GB'%gb)
+                    elif gb is not None:
+                        stdout.write('\rDownload progress:%.1f MB'%mb)
+                    else:
+                        stdout.write('\rDownload progress:%.1f kB'%kb)
+                    stdout.flush()
+                    
+        if not callable(reportprogress):
+            raise TypeError('Invalid reportprogress argument %s'%reportprogress)
+            
+        if 'content-length' in remote.info():
+            totbytes = int(remote.info()['content-length'])
+            if totbytes > 102400:
+                nbytesper = int(ceil(totbytes/100.))
+            else:
+                nbytesper = 1024
+        else:
+            totbytes = 1
+            nbytesper = 1024
+            
+        res = []
+        currres = True
+        donebytes = 0
+        reportprogress(0,False,False,remote.url)
+        while currres!='':
+            currres = remote.read(nbytesper)
+            res.append(currres)
+            donebytes += len(currres)
+            fracorbytes = donebytes/totbytes
+            reportprogress(fracorbytes,True,False,remote.url)
+        reportprogress(fracorbytes,True,True,remote.url)
+        return ''.join(res)
+        
+    else:
+        return remote.read()
+
+#TODO: Document these in future config docs
+_data_store = _io_config.get('data_store',True)
+_data_reporter = _io_config.get('data_reporter',True)
+
+def get_data(dataurl,asfile=False,localfn=None):
     """
     Retrieves a data file from a remote source (usually the internet), and
-    optionally caches that data locally.
+    optionally caches that data locally. See :func:`set_data_store` for control
+    of caching behavior, and :func:`set_data_download_reporter` for control of
+    download progress reporting.
     
-    :param str dataurl: The URL of the data to be retrieved.
+    :param str dataurl: 
+        The URL of the data to be retrieved. If not a URL (i.e. does not have a
+        ':' somewhere), this will be interpreted as a local file name inside the
+        astrpysics data directory.
     :param bool asfile: 
         If True, a file-like object is returned that can be used to access the
         data. Otherwise, a string with the full content of the file is returned.
-    :param store: 
-        If True, the data file will only be downloaded if that URL is accessed
-        for the first time. If False, the data will always be retrieved from the
-        remote source and not saved. If it is the string 'refresh', the file is
-        downloaded regardless of whether or not it is present, but the
-        downloaded version will be used in future calls where it is True.
     :param localfn: 
         The filename to use for saving (or loading, if the file is present)
         locally. If it is None, the filename will be inferred from the URL 
         if possible. This file name is always relative to the astropysics data
-        directory (see :func:`astropysics.config.get_data_dir`).
-    
+        directory (see :func:`astropysics.config.get_data_dir`). This has no
+        effect if :func:`set_data_store` is set to False.
         
     :returns: A file-like object or a string (see `asfile`)
     
+    :raises urllib2.URLError:
+        If the `dataurl` request is a URL and cannot be found.
+    :raises IOError:
+        If the dataurl is requested as a local data file and not found.
+        
     .. note::
         The data accessed by this function is distinct from the data accessed
         via :func:`get_package_data`. Package data is crucial basic data
         included in the astropysics source distribution, while standard data is
         for larger or optional data files that are downloaded as needed.
+        
     """
     import os,urlparse,urllib2,shelve,contextlib
     from ..config import get_data_dir
+    
+    global _data_store,_data_reporter
+    
+    #if not a URL, just look locally
+    if urllib2.splittype(dataurl)[0] is None:
+        fn = os.path.join(get_data_dir(),dataurl)
+        if asfile:
+            return open(fn)
+        else:
+            with open(fn) as f:
+                return f.read()
+    
+    store = _data_store
+    reportprogress = _data_reporter
     
     if store:
         datadir = get_data_dir()
@@ -241,12 +341,12 @@ def get_data(dataurl,asfile=False,store=True,localfn=None):
                             localfn = rinfo['Content-Disposition'].split('filename=')[1]
                         else:
                             #otherwise fallback on the url filename
-                            localfn = urlparse.urlsplit[2].split('/')[-1]
+                            localfn = urlparse.urlsplit(dataurl)[2].split('/')[-1]
                             if localfn.strip()=='':
                                 #url does not have a path, so try to use the title of the page
                                 localfn = None
                                 if 'html' in rinfo['content-type']:
-                                    urldata = remote.read()
+                                    urldata = _readrem(remote,reportprogress)
                                     starttag = urldata.find('<title>')
                                     endtag = urldata.find('<title>')
                                     if startag>-1 and endtag>-1:
@@ -254,7 +354,7 @@ def get_data(dataurl,asfile=False,store=True,localfn=None):
                         if localfn is None:
                             raise urllib2.URLError('Could not determine local file name for the URL '+dataurl)
                     if urldata is None:
-                        urldata = remote.read()
+                        urldata = _readrem(remote,reportprogress)
                 #now save the downloaded data
                 with open(os.path.join(datadir,localfn),'w') as f:
                     f.write(urldata)
@@ -268,6 +368,93 @@ def get_data(dataurl,asfile=False,store=True,localfn=None):
         return handle
     else:
         return handle.read()
+        
+def set_data_store(store=_data_store):
+    """
+    Sets the behavior of the caching mechanism when :func:`get_data` is called.
+    The value can subsequently be retrieved via :func:`get_data_store`.
+    
+    :param store: 
+        If True, when :func:`get_data` is called the data file will only be
+        downloaded if that URL is accessed for the first time. If False, the
+        data will always be retrieved from the remote source and not saved. If
+        it is the string 'refresh', the file is downloaded regardless of whether
+        or not it is present, but the downloaded version will be used in future
+        calls where it is True.
+    
+    :raises TypeError: If `store` is an inappropriate type
+    
+    """
+    if isinstance(store,basestring):
+        if store!='refresh':
+            raise TypeError('invalid data store string '+store)
+    elif store is not True and store is not False:
+        raise TypeError('data store must be True, False, or a string')
+    
+    global _data_store
+    _data_store = store
+    
+def get_data_store():
+    """
+    Returns the current behavior of the caching mechanism for :func:`get_data`.
+    See :func:`set_data_store` for details of the possible values
+    
+    :returns: 
+        The current value of the data store. Possible values are listed in
+        :func:`set_data_store`.
+    
+    """
+    return _data_store
+    
+def set_data_download_reporter(reportprogress=_data_reporter):
+    """
+    Sets the behavior of the download progress reporter for :func:`get_data`.
+    The value can subsequently be retrieved via
+    :func:`get_data_download_reporter`.  
+    
+    :param reportprogress: 
+        If False, no progress reports go out while file is downloading. If True,
+        a progress message is printed at the command line. Otherwise, this must
+        be a callable. 
+        
+    .. note::
+        If `reportprogress` is a callable, it will be called as
+        func(progress,started,finished,url), where `progress` is either a float
+        between 0 and 1 indicating the fraction of the file downloaded (if the
+        file size is known), or the number of bytes downloaded if the file size
+        is unknown (1 or larger). `started` is True if the download has begun,
+        and `finished` is True when the download has finished. The function will
+        always be called at the beginning as func(0,False,False) and once at the
+        end as func(?,True,True). `url` is a string with the target URL.
+        
+    :raises TypeError: If `reportprogress` is an inappropriate type
+        
+    .. note::
+        If :func:`set_data_store` has been set to False, no download progress
+        will be reported, as the data will be retrieved immediately without 
+        download to a local file.
+        
+    """
+    if not (callable(reportprogress) or \
+            reportprogress is True or reportprogress is False):
+        raise TypeError('data store must be True, False, or a callable')
+    
+    global _data_reporter
+    _data_reporter = reportprogress
+    
+def get_data_download_reporter():
+    """
+    Returns the current behavior of the download progress reporter for
+    :func:`get_data`. See :func:`set_data_download_reporter` for details of the
+    possible values.
+    
+    :returns: 
+        The current value of the data store. Possible values are listed in
+        :func:`set_data_download_reporter`.
+        
+    """
+    return _data_reporter
+
 
 #<-----------------------General IO utilities---------------------------------->
 
@@ -1360,3 +1547,7 @@ def _load__old_spylot_spectrum(s,bandi):
     else:
         e=s.getWindowedRMSError(bandi=bandi)
     return Spectrum(x,f,e)
+    
+    
+#clean up namespace
+del get_config
