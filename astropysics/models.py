@@ -567,6 +567,48 @@ class NFWModel(FunctionModel1DAuto):
         x = upper/self.rc
         return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
+    def getV(self,r,**kwargs):
+        """
+        Computes the circular velocity of the halo at a given radius.  i.e.
+        :math:`v = \\sqrt{\frac{G M(<r)}{r}}`.
+        
+        :param r: 
+            The radius (or radii) at which to compute the circular velocity, in
+            kpc.
+            
+        Additional keyword arguments are passed into :meth:`integrateSpherical`.
+        
+        :returns: 
+            The circular velocity at `r` (if `r` is a scalar, this will return a
+            scalar, otherwise an array)
+        
+        """
+        from .constants import GMspc
+        
+        r = np.array(r,copy=False)
+        
+        call = self.getCall()
+        try:
+            M = self.integrateSpherical(0,r,**kwargs)
+        finally:
+            if call is None:
+                self.setCall(None)
+            else:
+                self.setCall(*call)
+        
+        return ((GMspc/1000)*M/r)**0.5 #GMspc/1000 converts from pc to kpc
+    
+    #numerically computed derivative of spherical integral divided by x
+    #_xmin = scipy.optimize.fmin(finv,1,xtol=1e-16,ftol=1e-16,disp=1)[0]    
+    _xmin = 2.16258158706460983485655366960326457351
+    def getVmax(self,r0=1):
+        """
+        Numerically computes the maximum circular velocity of this profile
+        """
+        
+        rmin = self.rc*NFWModel._xmin
+        return rmin,self.getV(rmin)
+        
     def setC(self,c,Rvir=None,Mvir=None,z=0):
         """
         Sets the model parameters to match a given concentration given virial
