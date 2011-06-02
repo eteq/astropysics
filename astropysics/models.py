@@ -603,11 +603,16 @@ class NFWModel(FunctionModel1DAuto):
     _xmin = 2.16258158706460983485655366960326457351
     def getVmax(self,r0=1):
         """
-        Numerically computes the maximum circular velocity of this profile
+        Computes the maximum circular velocity of this profile.
+        
+        :returns: 
+            (vmax,rvmax) where vmax is the maximum circular velocity in km/s and
+            rvmax is the radius at which the circular velocity is maximized.
+        
         """
         
         rmin = self.rc*NFWModel._xmin
-        return rmin,self.getV(rmin)
+        return self.getV(rmin),rmin
         
     def setC(self,c,Rvir=None,Mvir=None,z=0):
         """
