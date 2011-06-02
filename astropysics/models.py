@@ -601,7 +601,7 @@ class NFWModel(FunctionModel1DAuto):
     #numerically computed derivative of spherical integral divided by x
     #_xmin = scipy.optimize.fmin(finv,1,xtol=1e-16,ftol=1e-16,disp=1)[0]    
     _xmin = 2.16258158706460983485655366960326457351
-    def getVmax(self,r0=1):
+    def getVmax(self):
         """
         Computes the maximum circular velocity of this profile.
         
