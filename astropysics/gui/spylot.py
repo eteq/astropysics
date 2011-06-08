@@ -21,6 +21,7 @@ Plotter.
 #TODO: objcat support
 #TODO: remember line lists (better placed in spec)
 #TODO: add diagnostics like SNR
+#TODO: make z coarser/finer compatible with negative Zs and have option to have z be v
 
 from __future__ import division,with_statement
 import numpy as np
