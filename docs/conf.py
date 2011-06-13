@@ -250,6 +250,16 @@ todo_include_todos = 'dev' in release
 graphviz_output_format = 'png' #can be 'svg' or 'png'
 inheritance_graph_attrs = dict(size='"12.0, 12.0"',fontsize=12)
 
+# This string is included at the bottom of all source documents, and has 
+#global replacements.
+rst_epilog = """
+.. _ADS: http://www.adsabs.harvard.edu/
+"""
+
+
+
+
+
 #This makes the add_doc family of functions in astropysics do nothing, as those
 #are intended for in-shell use - Sphinx links are better
 import astropysics

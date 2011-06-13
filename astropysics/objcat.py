@@ -378,16 +378,27 @@ class CatalogNode(object):
     @staticmethod
     def load(file):
         """
-        load the file name or file-like object
+        Load a previously saved :class:`CatalogNode`. 
+        
+        :param file: 
+            A file name or file-like object for a file storing a pickled
+            :class:`CatalogNode`.
+            
+        :raises TypeError: If `file` does not contain a :class:`CatalogNode`. 
         """
         import cPickle
         if isinstance(file,basestring):
             #filename
-            with open(file,'r') as f:
-                return cPickle.load(f)
+            fn = file
+            with open(fn,'r') as f:
+                res = cPickle.load(f)
         else:
-            return cPickle.load(file)
-
+            fn = file.name
+            res = cPickle.load(file)
+        
+        if not isinstance(res,CatalogNode):
+            raise TypeError('File %s does not contain a CatalogNode'%fn)
+        
 #these place save/load at module-level, as well
 def save(node,file,savechildren=True):
     """
@@ -1406,8 +1417,8 @@ class _SourceMeta(type):
         obj = type.__call__(cls,*args,**kwargs)
         if obj._str in Source._singdict:
             singobj = Source._singdict[obj._str]
-            ol = obj.location
-            sl = singobj.location
+            ol = obj.getBibcode()
+            sl = singobj.getBibcode()
             if ol is not None and ol != sl:
                 from warnings import warn
                 warn('overwriting location %s with %s in %s'%(sl,ol,singobj))
@@ -1426,10 +1437,10 @@ class Source(object):
     The source can optionally include a URL location to look up metadata 
     like authors, publication date, etc (location property)
     
-    the constructor string can be of the form 'str/loc' in which case
-    loc will be interpreted as the location, if it is not specified
-    in the argument.  If it is 'str//loc', the loc will not be validated
-    (e.g. it is assumed to be a correct ADS abstract code)
+    the constructor string can be of the form 'str/loc' in which case loc will be
+    interpreted as the bibcode (see :meth:`setBibcode` for valid forms) if it is
+    not specified in the argument. If it is 'str//loc', the loc will not be
+    validated (e.g. it is assumed to be a correct ADS abstract code).
     """
     __metaclass__ = _SourceMeta
     __slots__=['_str','_adscode','__weakref__']
@@ -1438,7 +1449,7 @@ class Source(object):
     _singdict = WeakValueDictionary()
     del WeakValueDictionary
     
-    def __init__(self,src,location=None):
+    def __init__(self,src,bibcode=None):
         src = src._str if hasattr(src,'_str') else str(src)
         
         if location is None and '/' in src:
@@ -1450,29 +1461,64 @@ class Source(object):
 
             else:
                 self._str = '/'.join(srcsp[:-1]).strip()
-                self.location = srcsp[-1].strip()
+                self.setBibcode(srcsp[-1].strip())
         else:
             self._str = src
-            self.location = location
+            self.setBibcode(bibcode)
         
     def __reduce__(self):
         return (Source,(self._str+('' if self._adscode is None else ('//'+self._adscode)),))
         
     def __str__(self):
-        return self._str + ((' @' + self.location) if self._adscode is not None else '')
+        return self._str + ((' @' + self.getBibcode()) if self._adscode is not None else '')
     
     adsurl = 'adsabs.harvard.edu'
     
-    def _getLoc(self):
+    def getBibcode(self):
+        """
+        Returns the ADS_ bibliographic code for this source.
+        
+        :returns: 
+            A string with the ADS_ bibcode or None if no bibcode is defined.
+        """
         return self._adscode
-    def _setLoc(self,val):
+    
+    def setBibcode(self,val):
+        """
+        Sets the ADS_ bibliographic code for this :class:`Source`
+        
+        :param val: 
+            The location reference for this bibcode. It may be any of the
+            following:
+        
+                * A string of the form 'arxiv: ####.####'
+                    The location is an ArXiv article identifier.
+                * A string of the form 'astro-ph: ####.####'
+                    Same as above.
+                * A string of the form 'doi: #.##/###
+                    The location is a Digital Object Identifier, commonly used by
+                    publishers to uniquely identify publications.
+                * A string of the form 'http://www.whatever.com/somewhere'
+                    A direct URL to an ADS record.
+                *  Any other string
+                    Any other form will be interpreted as an ADS bibcode.
+                * None
+                    The bibcode will be unset, and any ADS-related lookups for
+                    this source will fail. 
+                    
+        :raises TypeError: If an improper type is provided for `val`.
+        :raises SourceDataError: if the record cannot be located.
+        
+        """
+        
         if val is not None:
+            if not isinstance(val,basestring):
+                raise TypeError('bibcodes must be strings or None')
             if val == '':
                 val = None
             else:
                 val = self._findADScode(val)
         self._adscode = val
-    location = property(_getLoc,_setLoc)
     
     @staticmethod
     def _findADScode(loc):
@@ -1558,8 +1604,15 @@ class Source(object):
         
     def getBibEntry(self):
         """
-        returns a string with the BibTeX formatted entry for this source, retrieved from ADS
-        (requires network connection)
+        Retrieves the BibTeX entry for this :class:`Source`. This data is 
+        retrieved from ADS_ and thus requires a network connection if it is not
+        already cached.
+        
+        :raises SourceDataError: 
+            If no bibcode is defined (see :meth:`setBibcode`).
+        
+        :returns: A string with the BibTeX formatted entry for this source.
+        
         """
         from urllib2 import urlopen
         
