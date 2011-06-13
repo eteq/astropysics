@@ -22,6 +22,7 @@ Plotter.
 #TODO: remember line lists (better placed in spec)
 #TODO: add diagnostics like SNR
 #TODO: make z coarser/finer compatible with negative Zs and have option to have z be v
+#TODO: figure out why "dosmoothing" resets redshift
 
 from __future__ import division,with_statement
 import numpy as np
@@ -1126,7 +1127,7 @@ def _get_default_lines(linetypes):
         major=['Ly_alpha','H_alpha','H_beta','H_gamma','[OIII]_5007','[OIII]_4959','[OII]_3727','Balmer_limit','[SII]_6717','[SII]_6731']
         return candidates,[str(c) for c in candidates if c.name in major],[str(c) for c in candidates if c.name not in major]
     elif linetypes == 'stellar':
-        major = ['Halpha']
+        major = ['H_alpha','H_beta','CaII_a','CaII_b','CaII_c','NaI_a','NaI_b']
         return candidates,[str(c) for c in candidates if c.name in major],[str(c) for c in candidates if c not in major]
     else:
         return candidates,[],[]
