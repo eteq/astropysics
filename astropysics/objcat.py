@@ -1420,8 +1420,9 @@ class _SourceMeta(type):
             ol = obj.getBibcode()
             sl = singobj.getBibcode()
             if ol is not None and ol != sl:
-                from warnings import warn
-                warn('overwriting location %s with %s in %s'%(sl,ol,singobj))
+                if sl is not None:
+                    from warnings import warn
+                    warn('overwriting location %s with %s in %s'%(sl,ol,singobj))
                 singobj._adscode = obj._adscode
         else:
             Source._singdict[obj._str] = obj
@@ -1452,7 +1453,7 @@ class Source(object):
     def __init__(self,src,bibcode=None):
         src = src._str if hasattr(src,'_str') else str(src)
         
-        if location is None and '/' in src:
+        if bibcode is None and '/' in src:
             srcsp = src.split('/')
             
             if srcsp[-2] == '': #don't do checking for // case
@@ -1615,11 +1616,12 @@ class Source(object):
         
         """
         from urllib2 import urlopen
+        from contextlib import closing
         
         if self._adscode is None:
             raise SourceDataError('No location provided for additional source data')
         
-        with closing(urllib2.urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
+        with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
             return xf.read()
         
     @property
