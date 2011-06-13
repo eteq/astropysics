@@ -568,9 +568,9 @@ class NFWModel(FunctionModel1DAuto):
         return 4*pi*self.rho0*self.rc**3*(np.log(1+x)-x/(1+x))
         
     def getV(self,r,**kwargs):
-        """
+        r"""
         Computes the circular velocity of the halo at a given radius.  i.e.
-        :math:`v = \\sqrt{\frac{G M(<r)}{r}}`.
+        :math:`v = \sqrt{\frac{G M(<r)}{r}}`.
         
         :param r: 
             The radius (or radii) at which to compute the circular velocity, in
