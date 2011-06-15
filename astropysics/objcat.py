@@ -1623,6 +1623,28 @@ class Source(object):
         
         with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
             return xf.read()
+            
+    @staticmethod
+    def build_bibliography(sources='all',fn=None):
+        """
+        Generates and returns BibTeX bibliography for :class:`Source` objects.
+        
+        :param sources: 
+            A sequence of :class:`Source` objects or the string 'all' to use all
+            :class:`Source` objects.
+        :param fn: 
+            A filename at which to save the BibTeX content, or None to not save.
+        
+        :returns: 
+            bibstr,fail where `bibstr` is a string with the BibTeX content and
+            `fail` is a list of :class:`Source` objects for which the lookup failed
+            (usually because the :class:`Source` has no bibcode)
+            
+        :raises TypeError: 
+            If `sources` is not a list of :class:`Source` objects or 'all'
+        """
+        
+        
         
     @property
     def authors(self):
