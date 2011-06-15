@@ -1231,19 +1231,23 @@ class Spectrum(HasSpecUnits):
     
     def plotSpylot(self,spylotinstance=None,show=True):
         """
-        Displays the spectrum using the astropysics.gui.spylot spectrum plotter.
+        Displays the spectrum using the :mod:`astropysics.gui.spylot` spectrum
+        plotter.
         
-        if `spylotinstance` is None, a new instance of Spylot will be generated
-        with this Spectrum as the only Spectrum.  If it is a Spylot instance,
-        this Spectrum will be added to the end of the list on that instance.
+        :param spylotinstance:
+            If None, a new instance of Spylot will be generated with this Spectrum
+            as the only Spectrum. If it is a Spylot instance, this Spectrum will be
+            added to the end of the list on that instance.
+        :param show:
+            If True and `spylotinstance` is None, the GUI will be shown using
+            :meth:`enthought.traits.has_traits.HasTraits.edit_traits` (kwargs will
+            be passed to :meth:`~enthought.traits.has_traits.HasTraits.edit_traits`
+            if show is a dictionary),  If a `spylotinstance` is provided, the GUI
+            for that instace will be switched to this :class:`Spectrum`.
+            Otherwise, nothing will be done to the GUI.
         
-        If `show` is true and `spylotinstance` is None, the GUI will be shown
-        using edit_traits (kwargs can be passed in if show is a dictionary),
-        and if `spylotinstance` is an instance, the current Spectrum in that 
-        instance will be switched to this Spectrum.  Otherwise, no GUI changes
-        will occur.
+        :returns: A :class:`~astropysics.gui.spylot.Spylot` instance.
         
-        returns the Spylot instance
         """
         from operator import isMappingType
         from .gui.spylot import Spylot
