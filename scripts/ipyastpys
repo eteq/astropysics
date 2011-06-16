@@ -11,6 +11,9 @@ from optparse import OptionParser
 from astropysics import config
         
 ipdir = get_ipython_dir()
+#get version info to figure out how to launch ipy
+majver,minver = IPython.__version__.split('.')[:2]
+majver,minver = int(majver),int(minver)
 
 op = OptionParser()
 op.usage = '%prog [options] [projdir projfile]'
@@ -80,11 +83,16 @@ if ops.iargs:
     ipyargs.insert(0,sys.argv[0])
     #insert necessary ipython arguments if they aren't already there
     if '-p' not in ipyargs and '--profile' not in ipyargs:
-        ipyargs.append('-p')
-        ipyargs.append('astpys')
-        
+        if majver>0 or minver>=11:
+            ipyargs.append('profile=astpys')
+        else:
+            ipyargs.append('-p')
+            ipyargs.append('astpys')
 else:
-    ipyargs = [sys.argv[0],'-p','astpys']
+    if majver>0 or minver>=11:
+        ipyargs = [sys.argv[0],'profile=astpys']
+    else:
+        ipyargs = [sys.argv[0],'-p','astpys']
 #replace sys.argv with args appropriate for ipython
 sys.argv[:] = ipyargs
 
@@ -92,29 +100,37 @@ if pdir is not None:
     os.chdir(pdir)
     
 if pfn is not None:
-    if '-c' in sys.argv:
-        print 'Cannot run a profile script if "-c" is in the ipython arguments.'
-        sys.exit(3)
-    
     runstr = ['run',pfn]
     if ops.sargs:
         runstr.extend(ops.sargs.split())
     runstr = ' '.join(runstr)
-    print 'Executing "'+runstr+'" on startup.'
+
+    if majver>0 or minver>=11:
+        if any([a.startswith('c=') for a in sys.argv]):
+            print 'Cannot run a profile script if "c" is in the ipython arguments.'
+            sys.exit(3)
     
-    sys.argv.append('-c')
-    sys.argv.append(runstr)
-    if '-i' not in sys.argv:
-        sys.argv.append('-i')
-        
+        print 'Executing "'+runstr+'" on startup.'
+        sys.argv.append('c="%s"'%runstr)
+        if '--i' not in sys.argv:
+            sys.argv.append('--i')
+    else:
+        if '-c' in sys.argv:
+            print 'Cannot run a profile script if "c" is in the ipython arguments.'
+            sys.exit(3)
     
-#get version info to figure out how to launch ipy
-majver,minver = IPython.__version__.split('.')[:2]
-majver,minver = int(majver),int(minver)
+        print 'Executing "'+runstr+'" on startup.'
+        sys.argv.append('-c')
+        sys.argv.append(runstr)
+        if '-i' not in sys.argv:
+            sys.argv.append('-i')
 
 if majver>0 or minver>=11:
-    #check to make sure profile file is present
-    if not os.path.exists(os.path.join(ipdir,'ipython_config_astpys.py')):
+    #check to make sure profile file is present - these two locations are due
+    #to changes in the profile system during the course of 0.11's dev cycle
+    betaloc = os.path.exists(os.path.join(ipdir,'ipython_config_astpys.py'))
+    newapploc = os.path.exists(os.path.join(ipdir,'profile_astpys'))
+    if not (betaloc or newapploc):
         print 'Astropysics IPython profile missing - run astpys-setup'
         sys.exit(2)
         
