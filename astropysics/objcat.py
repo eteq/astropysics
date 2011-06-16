@@ -398,6 +398,8 @@ class CatalogNode(object):
         
         if not isinstance(res,CatalogNode):
             raise TypeError('File %s does not contain a CatalogNode'%fn)
+            
+        return res
         
 #these place save/load at module-level, as well
 def save(node,file,savechildren=True):
