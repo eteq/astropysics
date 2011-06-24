@@ -2530,8 +2530,6 @@ class SExtractor(object):
         try:
             pconf = Popen('sex -dd'.split(),executable='sex',stdout=PIPE,stderr=PIPE)
             pparm = Popen('sex -dp'.split(),executable='sex',stdout=PIPE,stderr=PIPE)
-            pconf.wait()
-            pparm.wait()
             confstr = pconf.communicate()[0]
             parmstr = pparm.communicate()[0]
         except OSError:
