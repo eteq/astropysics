@@ -1413,6 +1413,7 @@ class Field(MutableSequence):
     @property
     def errors(self):
         return [v.errors if hasattr(v,'errors') else (0,0) for v in self._vals]
+        
     
 class _SourceMeta(type):
     def __call__(cls,*args,**kwargs):
@@ -2314,6 +2315,67 @@ class DependentSource(Source):
                 return [fi() for fi in fieldvals]
         finally:
             DependentSource.__depcyclestack.pop()
+            
+            
+class LinkField(Field):
+    """
+    A `Field` that only has values that point to other nodes.
+    
+    :param str name: A string with the field's name.
+    :param class nodetype:
+        The type of node that this link can accept. Must be `CatalogNode` or a
+        subclass.
+    
+    .. note::
+        If the current linked node has been removed, calling this will change the 
+        current object to the next valid link.
+    
+    
+    """
+    def __init__(self,name,nodetype=CatalogNode):
+        if nodetype is not CatalogNode or not issubclass(nodetype,Catalog):
+            raise TypeError('nodetype must be a CatalogNode or subclass')
+        Field.__init__(self,name,type,defaultval=None,usedef=None,units=None)
+        
+    def _checkConvInVal(self,val,dosrccheck=True):
+        if isSequenceType(val) and len(val)==2:
+            val = LinkValue(val[0],val[1])
+            
+        if not isinstance(val,LinkValue):
+            raise TypeError('LinkFields can only take LinkValues')
+        
+        val.checkType(self._type)
+        
+        return val
+        
+    def __call__(self):
+        res = self.currentobj.value
+        if res is None:
+            del self[self.currentobj.source]
+            self() #recurses until there is no currentobj or we reach something
+        
+class LinkValue(FieldValue):
+    """
+    A `FieldValue` that points to a node.
+    """
+    __slots__ = ('_linkwr',)
+    def __init__(self,src,nodeval):
+        from weakref import ref
+        
+        self._source = src
+        self._linkwr = ref(nodeval)
+        
+    def checkType(self,type):
+        node = self.value
+        if not isinstance(node.__class__,type):
+            raise TypeError('linked node %s does not match expected node type %s'%(node,type))
+            
+    @property
+    def value(self):
+        return self._linkwr()
+        
+            
+            
     
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
@@ -2957,6 +3019,9 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
         return nodes
     else:
         return parent
+    
+    
+    
     
     
 #<--------------------builtin/special purpose classes-------------------------->
