@@ -1065,7 +1065,7 @@ class Field(MutableSequence):
     as well as all the other possible values.
 
     The values, sources, and default properties will return the actual values 
-    contained in the FieldValues, while currentobj and iterating 
+    contained in the FieldValues, while :attr:`currentobj` and iterating 
     over the Field will return FieldValue objects.  Calling the 
     Field (no arguments) will return the current value itself
     
@@ -2449,13 +2449,18 @@ class _StructuredFieldNodeMeta(ABCMeta):
     def __new__(mcs,name,bases,dct):
         cls = super(_StructuredFieldNodeMeta,mcs).__new__(mcs,name,bases,dct)
         for k,v in dct.iteritems():
-            if isinstance(v,Field) and k != v.name:
-                raise ValueError('StructuredFieldNode class %s has conficting \
+            if isinstance(v,Field):
+                if v._name is None:
+                    v._name = k
+                elif k != v._name:
+                    raise ValueError('StructuredFieldNode class %s has conficting \
                       field names - Node attribute:%s, Field.name:%s'%(name,k,v.name))
-            elif isinstance(v,tuple) and len(v)==2 and \
-                 isinstance(v[1],Field) and k != v[1].name: 
-                 #derived values in the class should also be checked
-                raise ValueError('StructuredFieldNode class %s has conficting \
+            elif isinstance(v,tuple) and len(v)==2 and isinstance(v[1],Field):
+                #derived values in the class should also be checked
+                if v._name is None:
+                    v._name = k
+                elif k != v._name:
+                    raise ValueError('StructuredFieldNode class %s has conficting \
                       derived field names - Node attribute:%s, Field.name:%s'%(name,k,v[1].name))
         return cls
 
