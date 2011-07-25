@@ -133,7 +133,7 @@ class Pipeline(object):
         data.
         
         :param int stagenum: The stage number for the new element.
-        :param element: The :class:`PipelineElement` object to insert.
+        :param PipelineElement element: The :class:`PipelineElement` object to insert.
         
         :except TypeError: If the input is not a :class:`PipelineElement`
         """
