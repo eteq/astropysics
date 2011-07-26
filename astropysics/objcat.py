@@ -2328,8 +2328,8 @@ class LinkField(Field):
     
     
     """
-    def __init__(self,name,type=CatalogNode):
-        if not (type is CatalogNode or issubclass(type,Catalog)):
+    def __init__(self,name=None,type=CatalogNode):
+        if not (type is CatalogNode or issubclass(type,CatalogNode)):
             raise TypeError('nodetype must be a CatalogNode or subclass')
         Field.__init__(self,name,type,defaultval=None,usedef=None,units=None)
         
