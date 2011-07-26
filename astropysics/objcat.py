@@ -788,7 +788,9 @@ class FieldNode(CatalogNode,Sequence):
             * 'exception'
                 raise an exception if the field is missing
             * 'skip'
-                do not include this object in the final array
+                do not include this object in the final array.  If `fieldnames` 
+                references more than one field, only the first field will be 
+                used to determine if the node is skipped.
             * 'mask'
                 put 0 in the array location and return a mask of missing values as
                 the second return value
@@ -911,7 +913,8 @@ class FieldNode(CatalogNode,Sequence):
             masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=maskfilterp,includeself=includeself))
         
         if missing=='skip':
-            lsts = [np.array(l)[np.array(m)] for l,m in zip(lsts,masks)]
+            m = np.array(masks[0])
+            lsts = [np.array(l)[m] for l in lsts]
         else:
             lsts = [np.array(l) for l in lsts]
         
@@ -988,6 +991,7 @@ class FieldNode(CatalogNode,Sequence):
             
         else:
             arr = np.array(lsts)
+            
             if errors:
                 errmsk = np.array([[2*[err == (0,0)] for err in fi] for fi in errs])
                 errs = np.array(errs)
