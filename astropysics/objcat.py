@@ -2201,55 +2201,44 @@ class DependentSource(Source):
         
         see :class:`DependentSource` docs for a description of the mini-language
         """
-        #TODO:REIMPLEMENT!
-        upd = {}
-        for i,c in enumerate(s):
-            if c is '^':
-                d[i] = True
-            if c is '.':
-                d[i] = False
-        if len(upd) == 0:
+        if '-' not in s:
             return getattr(node,s)
-        if len(s)-1 in upd:
-            raise ValueError('Improperly formatted field string - no field name')
-        
-        pairs = []
-        sortk = sorted(upd.keys())
-        lasti = sortk[0]
-        for i in sortk[1:]:
-            pairs.append((lasti,i))
-            lasti = i
-        if len(pairs) == 0:
-            pairs.append((sortk[0]-1,sortk[0]))
             
-        for i1,i2 in pairs:
-            if i2-i1 == 1:
-                if upd[i1]:
-                    node = node.parent
-                else:
-                    node = node.children[0]
-            else:
-                subs = s[i1:i2]
-                if upd[i1]:
-                    try:
-                        node = node.parent
-                        while node.__class__!=substr and node['name']!=substr:
-                            node = node.parent
-                    except AttributeError:
-                        raise ValueError('No parent matching "%s" found'%substr)
-                else:
-                    try:
-                        nchild = int(subs)
-                        node = node.children[nchild]
-                    except ValueError:
-                        startnode = node
-                        for n in node.children:
-                            if node.__class__==substr or node['name']==substr:
-                                node = n
-                                break
-                        if node is startnode:
-                            raise ValueError('No child matching "%s" found'%substr)
+        sp = s.split('-')
+        if len(sp)>2:
+            raise ValueError('locator string has more than one "-" character')
+        path,nm = sp
         
+        sp2 = path.split('^')
+        for subs in sp2:
+            if subs=='':
+                node = node.parent
+                if node is None:
+                    raise ValueError('locator string leads to empty node')
+            else:
+                sp3 = subs.split('.')
+                if len(sp3)>1:
+                    if sp3[0] != '':
+                        raise ValueError('name before "." character in locator string')
+                    del sp3[0]
+                for subs2 in sp3:
+                    if hasattr(node,subs2):
+                        try:
+                            fi = getattr(node,subs2)
+                        except ValueError,e:
+                            raise ValueError('locator string has invalid link name "%s"'%subs2,e)
+                        if not isinstance(fi,LinkField):
+                            raise TypeError('locator string leads to a non-link Field')
+                        node = fi()
+                    else:
+                        try:
+                            node = node.children[int(subs2)]
+                        except ValueError,e:
+                            raise ValueError('locator string has invalid child request "%s"'%subs2,e)
+                    
+                    if node is None:
+                        raise ValueError('locator string leads to broken link')
+        return getattr(node,nm)
     
     def populateFieldRefs(self):
         """
@@ -2322,7 +2311,7 @@ class LinkField(Field):
     A `Field` that only has values that point to other nodes.
     
     :param str name: A string with the field's name.
-    :param class nodetype:
+    :param class type:
         The type of node that this link can accept. Must be `CatalogNode` or a
         subclass.
     
@@ -2332,12 +2321,14 @@ class LinkField(Field):
     
     
     """
-    def __init__(self,name,nodetype=CatalogNode):
-        if nodetype is not CatalogNode or not issubclass(nodetype,Catalog):
+    def __init__(self,name,type=CatalogNode):
+        if not (type is CatalogNode or issubclass(type,Catalog)):
             raise TypeError('nodetype must be a CatalogNode or subclass')
         Field.__init__(self,name,type,defaultval=None,usedef=None,units=None)
         
     def _checkConvInVal(self,val,dosrccheck=True):
+        from operator import isSequenceType
+        
         if isSequenceType(val) and len(val)==2:
             val = LinkValue(val[0],val[1])
             
@@ -2345,14 +2336,14 @@ class LinkField(Field):
             raise TypeError('LinkFields can only take LinkValues')
         
         val.checkType(self._type)
-        
         return val
         
     def __call__(self):
         res = self.currentobj.value
         if res is None:
             del self[self.currentobj.source]
-            self() #recurses until there is no currentobj or we reach something
+            res = self() #recurses until there is no currentobj or we reach something
+        return res
         
 class LinkValue(FieldValue):
     """
@@ -2367,7 +2358,7 @@ class LinkValue(FieldValue):
         
     def checkType(self,type):
         node = self.value
-        if not isinstance(node.__class__,type):
+        if not isinstance(node,type):
             raise TypeError('linked node %s does not match expected node type %s'%(node,type))
             
     @property
@@ -2519,9 +2510,9 @@ class _StructuredFieldNodeMeta(ABCMeta):
                       field names - Node attribute:%s, Field.name:%s'%(name,k,v.name))
             elif isinstance(v,tuple) and len(v)==2 and isinstance(v[1],Field):
                 #derived values in the class should also be checked
-                if v._name is None:
-                    v._name = k
-                elif k != v._name:
+                if v[1]._name is None:
+                    v[1]._name = k
+                elif k != v[1]._name:
                     raise ValueError('StructuredFieldNode class %s has conficting \
                       derived field names - Node attribute:%s, Field.name:%s'%(name,k,v[1].name))
         return cls
