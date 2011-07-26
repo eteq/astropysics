@@ -1075,9 +1075,10 @@ class Field(MutableSequence):
     """
     __slots__=('_name','_type','_vals','_nodewr','_notifywrs','_units')
     
-    def __init__(self,name,type=None,defaultval=None,usedef=None,units=None):
+    def __init__(self,name=None,type=None,defaultval=None,usedef=None,units=None):
         """
-        The field must have a name, and can optionally be given a type
+        The field should have a name, and can optionally be given a type.  If the
+        name is None, it will be inferred from the node it is placed inside.
         """        
         self._name = name
         self._vals = []
