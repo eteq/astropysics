@@ -78,14 +78,14 @@ def check_type(types,val,acceptnone=True):
         
     if types is not None:
         from operator import isSequenceType
-        if np.iterable(types):
+        if isSequenceType(types):
             err = 'Type checking problem'
             for ty in types:
                 if isinstance(ty,np.dtype):
                     if not isinstance(val,np.ndarray):
                         err = 'Value %s not a numpy array'%val
                         continue
-                    if self.value.dtype != ty:
+                    if val.dtype != ty:
                         err = 'Array %s does not match dtype %s'%(val,ty)
                         continue
                 elif not isinstance(val,ty):
@@ -93,7 +93,7 @@ def check_type(types,val,acceptnone=True):
                     continue
                 return
             raise TypeError(err)
-        elif isinstance(types,type):
+        elif isinstance(types,type) or isinstance(types,np.dtype):
             check_type((types,),val)
         elif callable(types):
             if not types(val):
