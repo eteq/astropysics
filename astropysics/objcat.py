@@ -2119,9 +2119,15 @@ class DependentSource(Source):
     inhabit to properly interpret string codes for fields. Otherwise, the input
     fields must be :class:`Field` objects.
     
-    References to parent objects or (first) child objects may be performed
-    achieved by putting '^' or '.', respectively in front of the field name
-    string (this can be done for multiple layers by chaining characters).
+    If locator strings are given to `depfields`, these strings follow a simple 
+    mini-language to locate their target field.  If they are strings without the
+    '-' character, they will simply be treated as names within the same node. If
+    a '-' is present, the text before the '-' follows the form "^^^.0.st"
+    where a '^' character indicates that the path should go up to the parent of
+    the current node, ".0" indicates to go to the first child, and ".st" 
+    indicates that a `LinkField` with the name 'st' should be followed.  Once
+    the correct node is located, the text after the "-" indicates the name of
+    the field on that node.
     """
     
     __slots__ = ('depfieldrefs','depstrs','_pathnoderef','notifierfunc')
