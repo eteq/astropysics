@@ -69,12 +69,13 @@ A new directory "paper1" will be created with the 'aplot.eps' and 'aplot.pdf'
 figures.
 
 
-Finally, keep in mind that this script was written to be used with ipython - 
-you can just do "run myscript.py <command line args>" and it will load all 
-your variables from on_run into the ipython namespace.  You can then
-"import myscript", and whenever you want to try to re-make a plot, either
-because you changed the value of some variable or because you changed the plot
-function, just do:
+Finally, keep in mind that this script was written to be used with ipython.
+Be sure to start ipython as "ipython -pylab" (or "ipython --pylab" if you have
+an old version of ipython). You can then just do 
+"run myscript.py <command line args>" and it will load all your variables from
+on_run into the ipython namespace.  You can then "import myscript", and 
+whenever you want to try to re-make a plot, either because you changed the 
+value of some variable or because you changed the plot function, just do:
 
 reload(myscript)
 myscript.make_plot('plotname',locals())
