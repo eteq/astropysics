@@ -27,9 +27,9 @@ of plotfunc to save all figures intended for use in a paper.
 
 **Example**
 
-Replace 'ADD CLASSES/FUNCTIONS HERE' with:
+Replace "ADD CLASSES/FUNCTIONS HERE" with:
 
-@plotfunc(mainfig='paper1')
+@plotfunc(mainfig=True)
 def aplot(x,data1,data2):
     subplot(2,1,1)
     plot(x,data1,label='1')
@@ -46,7 +46,7 @@ def aplot(x,data1,data2):
     xlim(2,4.5)
     ylim(1,5)
     
-and replace 'ADD ON-RUN OPERATIONS HERE' with:
+and put the following in the "on_run" function:
 
     x = linspace(0,1,100)
     data1 = x*2.5 + 2
@@ -55,10 +55,18 @@ and replace 'ADD ON-RUN OPERATIONS HERE' with:
     
 then you could do:
 
-./myscrit.py -m paper1
+./myscript.py -m
 
-at the command line, and a directory 'paper1' will be created with files 
-'aplot.eps' and 'aplot.pdf'.
+at the command line, and figues 'aplot.eps' and 'aplot.pdf' will be saved in 
+the current directory.
+
+Also, if you replace the "@plotfunc(mainfig=True)" with 
+"@plotfunc(mainfig='paper1')", and call it as:
+
+./myscript.py -m paper1
+
+A new directory "paper1" will be created with the 'aplot.eps' and 'aplot.pdf'
+figures.
 
 """
 from __future__ import division,with_statement
@@ -68,10 +76,11 @@ from numpy.random import *
 import numpy as np
 from matplotlib.pyplot import *
 import matplotlib.pyplot as plt
+from collections import defaultdict
 
 #<--------------------Plot support functions----------------------------------->
 _plotreg = {}
-_mainfigs = []
+_mainfigs = defaultdict(list)
     
 def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
     """
@@ -97,7 +106,9 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
         tuple or None for the default bounding box.
     :param bool mainfig:
         If True, this is a "main" figure - e.g. one that will actually appear in
-        a paper (used for the command-line call)
+        a paper (if '-m' is used as a command line argument).  If it is a 
+        string, this figure will be registered as a figure to be generated when 
+        the '-m string' syntax is used as a command line argument.
     """
     def deco(f):
         fname = f.func_name
@@ -115,7 +126,7 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
             raise ValueError('unrecognized plot type %s'%figtype)
         _plotreg[fname]=(f,fsz,figtype,tweakbbox)
         if mainfig:
-            _mainfigs.append(fname)
+            _mainfigs[mainfig].append(fname)
         return f
     
     if callable(figtype):
@@ -125,15 +136,47 @@ def plotfunc(figtype='mpl',figsize=None,tweakbbox=None,mainfig=False):
     else:
         return deco
     
-def plot_names():
+def plot_names(printnms=False):
     """
     Returns the names of all registered plots for this file, as well as the
     names of just the 'main' plots.
     
-    :returns: 2-tuple (plotnames,mainnames)
+    :params printnms: If True, the plot names will be printed.
+    
+    :returns: 
+        2-tuple (plotnames,mainnamedict) where `mainnamedict` is a dict mapping
+        main group names to main figure names (the 'True' key maps to those
+        without a group name).
     
     """
-    return _plotreg.keys(),_mainfigs
+    if printnms:
+        if len(_mainfigs)>0:
+            mainnms = []
+        
+            print 'Main figure names:'
+            for n in _mainfigs[True]:
+                print n
+                mainnms.append(n)
+            for grp in _mainfigs:
+                if grp != True:
+                    print 'Group "%s":'%grp
+                    for n in _mainfigs[grp]:
+                        print n
+                        mainnms.append(n)
+                
+            if len(_plotreg)>len(mainnms):
+                print '\nOther plot names:'
+                for n in _plotreg.keys():
+                    if n not in mainnms:
+                        print n
+        elif len(_plotreg)>0:
+            print 'Plot names:'
+            for n in _plotreg.keys():
+                print n
+        else:
+            print 'No plots defined.'
+        
+    return _plotreg.keys(),dict(_mainfigs)
 
 def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True):
     """
@@ -170,7 +213,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
             import re
             plots = plots.replace('*','.*')
             regex = re.compile(plots)
-            plots = [p for p in plot_names() if regex.match(p)]
+            plots = [p for p in plot_names()[0] if regex.match(p)]
         else:
             plots = plots.split(',')
         
@@ -290,21 +333,42 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
         plt.draw()
 
 def main():
+    """
+    Runs when the function is called from the command line.  Don't alter this 
+    function directly - instead, edit :func:`on_run` and :func:`add_to_parser`
+    
+    :returns: A dictionary of the local variables from :func:`on_run`.
+    """
     try: 
         from argparse import ArgumentParser
         p = ArgumentParser()
         
-        p.add_argument('-m','--main-figs',help='Shows all main figures even if they are not included in command line',
-                            dest='mainfigs',action='store_true',default=False)
+        p.add_argument('-l','--list',help='Show plot names and exit (overrides all other arguments)',action='store_true',default=False)
+        p.add_argument('-m','--main-figs',dest='mainfigs',const=True,default=False,nargs='?',
+            help='Shows all main figures even if they are not included in the command line.'+
+                 ' Can also provide a mainfig group name to create only mainfigs associated with that group.')
         p.add_argument('-s','--save',help='save in the specified location',default=None)
         p.add_argument('-o','--overwrite',help='Overwrite existing figure',action='store_true',default=False)
+        p.add_argument('plots',metavar='pltnm',nargs='*',help='Names of plots to show')
         
         add_to_parser(p)
         args = p.parse_args()
-        on_run(args)
+        
+        if args.list:
+            plot_names(True)
+            return {}
+                
+        rvars = on_run(args)
         
         if args.mainfigs:
-            figstomake = _mainfigs[:]
+            if args.mainfigs==True:
+                figstomake = []
+                for fs in _mainfigs.values():
+                    figstomake.extend(fs)
+            else:
+                if args.mainfigs not in _mainfigs:
+                    raise KeyError('Main group %s not found!'%args.mainfigs)
+                figstomake = _mainfigs[args.mainfigs][:]
             figstomake.extend(args.plots)
         else:
             figstomake = args.plots
@@ -318,17 +382,33 @@ def main():
         op = OptionParser()
         op.usage = '%prog [options] [plot1 plot2 ...]'
         
-        op.add_option('-m','--main-figs',help='Shows all main figures even if they are not included in command line',
-                            dest='mainfigs',action='store_true',default=False)
+        op.add_option('-l','--list',help='Show plot names and exit (overrides all other arguments)',action='store_true',default=False)
+        op.add_option('-m','--main-figs',dest='mainfigs',action='store_true',default=False,
+            help='Shows all main figures even if they are not included in the command line.'+
+                 ' Can also provide a mainfig group name to create only mainfigs associated with that group.')
         op.add_option('-s','--save',help='save in the specified location',default=None)
         op.add_option('-o','--overwrite',help='Overwrite existing figure',action='store_true',default=False)
         
         add_to_parser(op)
         ops,args = op.parse_args()
-        on_run((ops,args))
+        
+        if ops.list:
+            plot_names(True)
+            return {}
+        
+        rvars = on_run((ops,args))
         
         if ops.mainfigs:
-            figstomake = _mainfigs[:]
+            try:
+                mainfigrp = args.pop(0)
+                if mainfigrp not in _mainfigs:
+                    raise KeyError('Main group %s not found!'%mainfigrp)
+                figstomake = _mainfigs[mainfigrp][:]
+            except IndexError:
+                figstomake = []
+                for fs in _mainfigs.values():
+                    figstomake.extend(fs)
+                
             figstomake.extend(args)
         else:
             figstomake = args
@@ -338,6 +418,8 @@ def main():
     
     if len(figstomake)>0:    
         make_plots(set(figstomake),save=save,overwrite=overwrite)
+        
+    return rvars
 
 #<-------------------------THESE CAN BE CUSTOMIZED----------------------------->
 def add_to_parser(p):
@@ -354,15 +436,21 @@ def on_run(args):
     """
     Run additional tasks before plotting begins for this script.
     
+    Any local variables in this function will end up in *global* scope when 
+    this script is run, so this is where you should define the variables that
+    the plots are going to use.
+    
     :param args: Either an :class:`argparse.Namespace` object or an (ops,args) 
     tuple, depending on whether or not :mod:`argparse` is supported by your
     python version.
+    
+    :returns: A dictionary of all the local variables created in this function.
     """
+    return locals()
 
-#<--ADD CLASSES/FUNCTIONS BELOW HERE - decorate plot functions with @plotfunc-->
-
+#<----ADD YOUR OWN CODE BELOW HERE - decorate plot functions with @plotfunc---->
 
 
 #DON'T DELETE THIS:
 if __name__ == '__main__':
-    main()
+    globals().update(main())
