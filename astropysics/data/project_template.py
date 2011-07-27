@@ -68,6 +68,20 @@ Also, if you replace the "@plotfunc(mainfig=True)" with
 A new directory "paper1" will be created with the 'aplot.eps' and 'aplot.pdf'
 figures.
 
+
+Finally, keep in mind that this script was written to be used with ipython - 
+you can just do "run myscript.py <command line args>" and it will load all 
+your variables from on_run into the ipython namespace.  You can then
+"import myscript", and whenever you want to try to re-make a plot, either
+because you changed the value of some variable or because you changed the plot
+function, just do:
+
+reload(myscript)
+myscript.make_plot('plotname',locals())
+
+And your new plot should appear with your changes and using the value of any
+of the plot functions arguments from the same-name variable in ipython.
+
 """
 from __future__ import division,with_statement
 
