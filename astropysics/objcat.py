@@ -146,7 +146,13 @@ class CatalogNode(object):
             val._children.append(self)
             
         if self._parent is not None:
-            self._parent._children.remove(self)
+            #TODO: optimize this by storing index somewhere?
+            for i,c in enumerate(self._parent._children):
+                if c is self:
+                    break
+            else:
+                raise ValueError('Node '+str(self)+" not in parent's children! This should be impossible.")
+            del self._parent._children[i]
         self._parent = val
         
     parent=property(_getParent,_setParent)
@@ -3246,7 +3252,7 @@ class SEDField(Field):
             f = np.r_[f,pf.ravel()]
             e = np.r_[e,pe.ravel()]
             
-        return Spectrum(x,f,e,unit=self.unit)
+        return Spectrum(x,f,e,unit=self._specunits)
         
     def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),log='',clf=True):
         """
