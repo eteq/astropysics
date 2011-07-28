@@ -1091,8 +1091,6 @@ class Field(MutableSequence):
         self._notifywrs = None
         self._nodewr = None
         self._units = units
-        if descr is not None:
-            print 'here',descr
         self._descr = descr
         
         if usedef or (usedef is None and defaultval is not None):
