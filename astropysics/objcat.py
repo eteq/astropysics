@@ -1077,9 +1077,10 @@ class Field(MutableSequence):
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
-    __slots__=('_name','_type','_vals','_nodewr','_notifywrs','_units')
+    __slots__=('_name','_type','_vals','_nodewr','_notifywrs','_units','_descr')
     
-    def __init__(self,name=None,type=None,defaultval=None,usedef=None,units=None):
+    def __init__(self,name=None,type=None,defaultval=None,usedef=None,
+                      descr=None,units=None):
         """
         The field should have a name, and can optionally be given a type.  If the
         name is None, it will be inferred from the node it is placed inside.
@@ -1090,6 +1091,9 @@ class Field(MutableSequence):
         self._notifywrs = None
         self._nodewr = None
         self._units = units
+        if descr is not None:
+            print 'here',descr
+        self._descr = descr
         
         if usedef or (usedef is None and defaultval is not None):
             self.default = defaultval
@@ -1106,12 +1110,15 @@ class Field(MutableSequence):
                     warn("can't pickle DerivedValue in %s"%self)
             else:
                 prunedvals.append(v)
-        return {'_name':self._name,'_type':self._type,'_vals':prunedvals}
+        return {'_name':self._name,'_type':self._type,'_vals':prunedvals,
+                '_units':self._units,'_descr':self._descr}
         
     def __setstate__(self,d):
         self._name = d['_name']
         self._type = d['_type']
         self._vals = d['_vals']
+        self._units = d['_units']
+        self._descr = d['_descr']
         self._notifywrs = None
         self._nodewr = None
         #notifiers should late-attach when values are first accessed, and  
@@ -1319,12 +1326,20 @@ class Field(MutableSequence):
     def name(self):
         return self._name
     
-    #TODO: some sort of unit support beyond just names?
-    def _getUnits(self):
+    #TODO: some sort of unit/conversion support beyond just names
+    @property
+    def units(self):
+        """
+        The units of this :class:`Field`.
+        """
         return self._units
-    def _setUnits(self,val):
-        self._units = val
-    units = property(_getUnits,_setUnits)
+    
+    @property
+    def description(self):
+        """
+        The description of this :class:`Field`.
+        """
+        return self._descr
     
     def _getNode(self):
         return None if self._nodewr is None else self._nodewr()
@@ -1338,23 +1353,17 @@ class Field(MutableSequence):
             d.sourcenode = val
     node = property(_getNode,_setNode,doc='the node to which this Field belongs')
     
-    def _getType(self):
+    @property
+    def type(self):
+        """
+        Selects the type to enforce for this field. if None, no type-checking 
+        will be performed if a numpy dtype, the value must be an array matching
+        the dtype can also be a sequence of types (accepts all) or a function 
+        that will be called directly on the function that returns True if the 
+        type is valid.
+        """
         return self._type
-    def _setType(self,newtype):
-        if newtype is None:
-            self._type = None
-        else:
-            for v in self._vals:
-                v.checkType(newtype)
-            self._type = newtype
-    type = property(_getType,_setType,doc="""
-    Selects the type to enforce for this field.  
-    if None, no type-checking will be performed
-    if a numpy dtype, the value must be an array matching the dtype
-    can also be a sequence of types (accepts all) or a function
-    that will be called directly on the function that returns True if
-    the type is valid
-    """)
+
     #TODO:default should be Catalog-level?    
     def _getDefault(self):
         return self[None].value
@@ -2332,10 +2341,15 @@ class LinkField(Field):
     
     
     """
-    def __init__(self,name=None,type=CatalogNode):
+    def __init__(self,name=None,type=CatalogNode,units=None,descr=None):
         if not (type is CatalogNode or issubclass(type,CatalogNode)):
             raise TypeError('nodetype must be a CatalogNode or subclass')
-        Field.__init__(self,name,type,defaultval=None,usedef=None,units=None)
+        
+        if units is not None:
+            raise ValueError('LinkFields cannot have units')
+            
+        Field.__init__(self,name,type,defaultval=None,usedef=None,
+                            units=units,descr=descr)
         
     def _checkConvInVal(self,val,dosrccheck=True):
         from operator import isSequenceType
@@ -2579,11 +2593,15 @@ class StructuredFieldNode(FieldNode):
             else:
                 fi = v
                 dv = None
-
+            
+            #make a new Field object (or subclass) for the new fields
             if None in fi:
-                fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi[None], usedef=True)
+                fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi[None],
+                                    usedef=True,descr=fi.description,
+                                    units=fi.units)
             else:
-                fobj = fi.__class__(fi.name,type=fi.type)
+                fobj = fi.__class__(fi.name,type=fi.type,
+                                    descr=fi.description,units=fi.units)
             setattr(self,k,fobj)
             fobj.node = self
             
@@ -3034,23 +3052,27 @@ class SEDField(Field):
     """
     
     
-    __slots__ = ['_maskedsedvals','_unit']
+    __slots__ = ['_maskedsedvals','_specunits']
     
-    def __init__(self,name='SED',unit='angstroms',type=None,defaultval=None, usedef=None):
+    def __init__(self,name='SED',specunits='angstroms',defaultval=None,
+                      usedef=None,units=None,type=None,descr=None):
         from .spec import Spectrum,HasSpecUnits
         from .phot import PhotObservation
         
-        super(SEDField,self).__init__(name)
+        super(SEDField,self).__init__(name,descr=descr)
         
         
         
-        self._type = tuple((Spectrum,PhotObservation))
+        self._type = (Spectrum,PhotObservation)
         self._maskedsedvals = set()
-        unittuple = HasSpecUnits.strToUnit(unit)
-        self._unit = unittuple[0]+'-'+unittuple[1]
+        unittuple = HasSpecUnits.strToUnit(specunits)
+        self._specunits = unittuple[0]+'-'+unittuple[1]
         
         if type is not None and set(type) != set(self._type):
             raise ValueError("SEDFields only accept Spectrum and PhotObservation objects - can't set type")
+        if units is not None:
+            raise ValueError('SEDFields use non-standard units')
+        
         
         if defaultval:
             self[None] = defaultval
@@ -3059,13 +3081,13 @@ class SEDField(Field):
     def __getstate__(self):
         d = super(SEDField,self).__getstate__()
         d['_maskedsedvals'] = self._maskedsedvals
-        d['_unit'] = self._unit
+        d['_specunits'] = self._specunits
         return d
     
     def __setstate__(self,d):
         super(SEDField,self).__setstate__(d)
         self._maskedsedvals = d['_maskedsedvals']
-        self._unit = d['_unit']
+        self._specunits = d['_specunits']
         
     def __call__(self):
         return self.getFullSED()
@@ -3108,24 +3130,24 @@ class SEDField(Field):
         return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
     
     def _getUnit(self):
-        return self._unit
+        return self._specunits
     def _setUnit(self,val):
         from .spec import HasSpecUnits
         #this checks to make sure the unit is valid
         val = HasSpecUnits.strToUnit(val)
         val = val[0]+'-'+val[1]
         
-        oldu = self._unit
+        oldu = self._specunits
         try:
             for obj in self:
                 if hasattr(obj,'unit'):
-                    obj.unit = val
-            self._unit = val
+                    obj.specunits = val
+            self._specunits = val
         except:
             for obj in self:
-                obj.unit = oldu
+                obj.specunits = oldu
             raise
-    unit = property(_getUnit,_setUnit,doc="""
+    specunits = property(_getUnit,_setUnit,doc="""
     The units to use in the objects of this SED - see 
     astropysics.spec.HasSpecUnits for valid units
     """)
