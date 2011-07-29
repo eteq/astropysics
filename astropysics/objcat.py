@@ -1208,7 +1208,7 @@ class Field(MutableSequence):
                     if v.source == val.source:
                         raise ValueError('value with %s already present in Field'%v.source)
         
-        val.checkType(self.type)
+            val.checkType(self.type)
         
         if isinstance(val,DerivedValue):
             if val.field is not None:
@@ -1316,8 +1316,16 @@ class Field(MutableSequence):
         del self._vals[i]
             
     def insert(self,key,val):
-        val = self._checkConvInVal(val,dosrccheck=True)
+        """
+        Insert a value into this :class:`Field`.
         
+        :param key: The index or source at which to insert.
+        :param val: The :class:`FieldValue` to add.
+        """
+        val = self._checkConvInVal(val,dosrccheck=checktype)
+        self._nocheckinsert(key,val)
+        
+    def _nocheckinsert(self,key,val):        
         if type(key) is int:
             i = key
         else:
@@ -2615,7 +2623,8 @@ class StructuredFieldNode(FieldNode):
             self._fieldnames.append(k)
             
         for dv,fobj in dvs:
-            fobj.insert(0,DerivedValue(dv._f,sourcenode=self,flinkdict=dv.flinkdict,ferr=dv._ferr))
+            fobj._nocheckinsert(0,DerivedValue(dv._f,sourcenode=self,
+                          flinkdict=dv.flinkdict,ferr=dv._ferr))
             
         for k,v in kwargs.iteritems():
             self[k] = v
@@ -2769,14 +2778,18 @@ def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
     
     Arguments are the same as for the Field constructor, except that 
     leftover kwargs are passed in as links that override the 
-    defaults of the function
+    defaults of the function.
+    
+    The docstrung of the function will be taken as the field's 
+    :attr:`description`.
     """
     if f is None: #allow for decorator arguments
         return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,units,ferr,**kwargs)
     else: #do actual operation
         if name is None:
             name = f.__name__
-        fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,units=units)
+        fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,
+                   units=units,descr=f.__doc__)
         
         dv = DerivedValue(f,sourcenode=None,flinkdict=kwargs,ferr=ferr)
         return dv,fi
