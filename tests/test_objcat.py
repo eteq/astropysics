@@ -2,7 +2,8 @@
 from __future__ import division,with_statement
 from astropysics.constants import pi
 import numpy as np
-from astropysics.objcat import StructuredFieldNode,Catalog,Field,CycleError,CycleWarning
+from astropysics.objcat import StructuredFieldNode,Catalog,Field,CycleError, \
+                               CycleWarning,LinkField
 from nose import tools
 
 class Test1(StructuredFieldNode):
@@ -48,9 +49,24 @@ class Test3(StructuredFieldNode):
     def d(a='a',b='b2'): 
         return a - b/2
     
+class Test4(StructuredFieldNode):
+    """
+    Tests the string locator mini-language with test_deps below.
+    """
+    val4 = Field(type=float)
+    top = LinkField(type=Test1)
+    
+    @StructuredFieldNode.derivedFieldFunc
+    def d1(val4='val4',val='^-val',num='^^-num'):
+        return val4+val+num
+    
+    @StructuredFieldNode.derivedFieldFunc
+    def d2(val4='^.0-val4',val='^^.0-val',num='.top-num'):
+        return val4+val+num
+    
 def test_deps():
     """
-    Test DependentValue objects
+    Test DependentValue objects.
 
     They must correctly deduce their values and follow the proper rules.
     """
@@ -81,16 +97,32 @@ def test_deps():
     o2['d2'] = None #sets current to None/default
     tools.assert_almost_equal(o2.d1(),8.6816890703380647,12)
     
-        
-    #make sure derived arguments appear in the proper order - if a nad b are 
-    #swapped, this gives the wrong answer.
+def test_locator_language():
+    """
+    Test derived value locator mini-language.
+    """
+    #need tree of the form T1->T2->T4 for T4 to work correctly.
+    o1 = Test1(None)
+    o2 = Test2(o1)
+    o4 = Test4(o2)
+    
+    o4.top[None] = o1
+    o4.val4[None] = 4.2
+    
+    #both derived values should give the same result
+    tools.assert_equal(o4.d1(),o4.d2())
+    
+def test_derived_order():
+    """
+    Test that drived value arguments appeare in proper order.
+    """
     o3 = Test3(None)
     o3['a'] = (None,930016275284.81763)
     o3['b'] = (None,3000000000.0)
-    #print 'should',o3.a()-o3.b()/2.0,'not',o3.b()-o3.a()/2.0
+    
+    #If a and b are swapped, this gives the wrong answer.
     tools.assert_equal(o3.d(),o3.a()-o3.b()/2.0)
-
-    return o2,o3
+    
 
 def test_cat():
     """
