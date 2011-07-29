@@ -2153,7 +2153,11 @@ class DependentSource(Source):
     the current node, ".0" indicates to go to the first child, and ".st" 
     indicates that a `LinkField` with the name 'st' should be followed.  Once
     the correct node is located, the text after the "-" indicates the name of
-    the field on that node.
+    the field on that node.  
+    
+    Thus,'^^^.0.st-field' would go three needs up, into the first child, then
+    into the node from a link named 'st', and would return the value of the 
+    field named "field".
     """
     
     __slots__ = ('depfieldrefs','depstrs','_pathnoderef','notifierfunc')
@@ -2242,11 +2246,13 @@ class DependentSource(Source):
         path,nm = sp
         
         sp2 = path.split('^')
-        for subs in sp2:
+        lasti = len(sp2)-1
+        for i,subs in enumerate(sp2):
             if subs=='':
-                node = node.parent
-                if node is None:
-                    raise ValueError('locator string leads to empty node')
+                if i!=lasti:
+                    node = node.parent
+                    if node is None:
+                        raise ValueError('locator string leads to empty node')
             else:
                 sp3 = subs.split('.')
                 if len(sp3)>1:
@@ -2624,7 +2630,7 @@ class StructuredFieldNode(FieldNode):
             
         for dv,fobj in dvs:
             fobj._nocheckinsert(0,DerivedValue(dv._f,sourcenode=self,
-                          flinkdict=dv.flinkdict,ferr=dv._ferr))
+                                  flinkdict=dv.flinkdict,ferr=dv._ferr))
             
         for k,v in kwargs.iteritems():
             self[k] = v
