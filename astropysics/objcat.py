@@ -2760,28 +2760,29 @@ class StructuredFieldNode(FieldNode):
         self.delField = super(StructuredFieldNode,self).delField
         self.delField(fieldname)
     
-    @staticmethod
-    def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
-                         usedef=None,units=None,ferr=False,**kwargs):
-        """
-        this method is to be used as a function decorator to generate a 
-        field with a name matching that of the function.  Note that the
-        function should NOT have self as the leading argument
+def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
+                     usedef=None,units=None,ferr=False,**kwargs):
+    """
+    This method is to be used as a function decorator to generate a 
+    field with a name matching that of the function.  Note that the
+    function should NOT have self as the leading argument
+    
+    Arguments are the same as for the Field constructor, except that 
+    leftover kwargs are passed in as links that override the 
+    defaults of the function
+    """
+    if f is None: #allow for decorator arguments
+        return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,units,ferr,**kwargs)
+    else: #do actual operation
+        if name is None:
+            name = f.__name__
+        fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,units=units)
         
-        Arguments are the same as for the Field constructor, except that 
-        leftover kwargs are passed in as links that override the 
-        defaults of the function
-        """
-        if f is None: #allow for decorator arguments
-            return lambda f:StructuredFieldNode.derivedFieldFunc(f,name,type,defaultval,usedef,units,ferr,**kwargs)
-        else: #do actual operation
-            if name is None:
-                name = f.__name__
-            fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,units=units)
-            
-            dv = DerivedValue(f,sourcenode=None,flinkdict=kwargs,ferr=ferr)
-            return dv,fi
-        
+        dv = DerivedValue(f,sourcenode=None,flinkdict=kwargs,ferr=ferr)
+        return dv,fi
+    
+#add this as a static class function for compatibility with older versions (for now)
+StructuredFieldNode.derivedFieldFunc = staticmethod(derivedFieldFunc)
         
 def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
                  converters=None,namefield=None,setcurr=True):
