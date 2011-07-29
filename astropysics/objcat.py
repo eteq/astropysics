@@ -2060,7 +2060,7 @@ class DerivedValue(FieldValue):
                 else:
                     depvals = [d[0] for d in deps]
                     self._value = val = self._f(*depvals)
-                    if np.all([(d[1]==0 and d[2]==0) for d in deps]):
+                    if np.all([(np.all(d[1]==0) and np.all(d[2]==0)) for d in deps]):
                         
                         #if errors are all zero in dependencies, set to zero straight
                         self._errs = (0,0)
