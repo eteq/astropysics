@@ -1557,8 +1557,11 @@ class Source(object):
         from urllib2 import urlopen,HTTPError
         from contextlib import closing
 
+        #assume all is correct if the adsurl is not available
+        if not Source.adsurl:
+            return loc
 
-        lloc = loc.lower()
+        lloc = loc.lower()        
         if 'arxiv' in lloc:
             url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,lloc.replace('arxiv:','').replace('arxiv','').strip())
         elif 'astro-ph' in lloc:
@@ -1613,7 +1616,9 @@ class Source(object):
         adscode = self._adscode
         if adscode is None:
             raise SourceDataError('No location provided for additional source data')
-        
+        if not Source.adsurl:
+            raise SourceDataError('ADS URL not provided, so bibliographic lookup cannot occur.')
+            
         if Source._adsxmlcache is not None and adscode in Source._adsxmlcache:
             xmlrec = Source._adsxmlcache[adscode]
         else:
@@ -1651,6 +1656,8 @@ class Source(object):
         
         if self._adscode is None:
             raise SourceDataError('No location provided for additional source data')
+        if not Source.adsurl:
+            raise SourceDataError('ADS URL not provided, so bibliographic lookup cannot occur.')
         
         with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
             return xf.read()
