@@ -918,13 +918,15 @@ class FieldNode(CatalogNode,Sequence):
                 maskfilterp = partial(maskfilter,fieldname=fn)                
             masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=maskfilterp,includeself=includeself))
         
+        lsts = [np.array(l) for l in lsts]
+        #lists of objects sometimes becomes arrays of lists instead of the intended result - this fixes that
+        lsts = [np.array(a.ravel()[0],dtype=object) if a.shape==tuple() else a for a in lsts]
+        #now skip over anything that's masked as missing
         if missing=='skip':
             m = np.array(masks[0])
-            lsts = [np.array(l)[m] for l in lsts]
-        else:
-            lsts = [np.array(l) for l in lsts]
+            lsts = [a[m] for a in lsts]
         
-
+        
         if sources:
             def srcfunc(node,fieldname):
                 try:
@@ -996,7 +998,7 @@ class FieldNode(CatalogNode,Sequence):
                 return res
             
         else:
-            arr = np.array(lsts)
+            arr = np.array(lsts,dtype=object)
             
             if errors:
                 errmsk = np.array([[2*[err == (0,0)] for err in fi] for fi in errs])
