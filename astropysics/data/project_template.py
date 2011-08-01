@@ -9,7 +9,7 @@ This file is a template for a data analysis project (typically to go with a
 paper or two).  The main usage scenario is to plass functions and classes 
 before the "if __name__=='__main__' line.  Plots/figures go there as well,
 with the @plotfunc decorator.  Then the command line usage can be used to 
-re-generate any/all plots, and interactive work in ipythons supported by doing:
+re-generate any/all plots, and interactive work in ipython is supported by doing:
 
     run <filename.py>
     make_plots('plotname',...)
@@ -469,3 +469,4 @@ def on_run(args):
 #DON'T DELETE THIS:
 if __name__ == '__main__':
     globals().update(main())
+
