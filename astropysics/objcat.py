@@ -951,7 +951,8 @@ class FieldNode(CatalogNode,Sequence):
                 errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=partial(maskfilter,fieldname=fn),includeself=includeself) for fn in fieldnames]
             else:
                 errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=maskfilter,includeself=includeself) for fn in fieldnames]
-
+            
+                
         if asrec:
             from operator import isMappingType,isSequenceType
             
@@ -1003,6 +1004,7 @@ class FieldNode(CatalogNode,Sequence):
             if errors:
                 errmsk = np.array([[2*[err == (0,0)] for err in fi] for fi in errs])
                 errs = np.array(errs)
+                
             
             if len(arr)==1:
                 arr = arr[0]
@@ -1011,6 +1013,8 @@ class FieldNode(CatalogNode,Sequence):
                     srcs = srcs[0]
                 if errors:
                     errs = errs[0]
+                
+                
                     
             if missing == 'mask':
                 res = arr,np.array(masks)
@@ -1018,6 +1022,12 @@ class FieldNode(CatalogNode,Sequence):
                 res = np.ma.MaskedArray(arr,~np.array(masks))
                 if errors:
                     errs = np.ma.MaskedArray(errs,errmsk)
+            elif missing=='skip':
+                if sources:
+                    srcs = srcs[m]
+                if errors:
+                    errs = errs[m]
+                res = arr
             else:
                 res = arr
             
@@ -3380,7 +3390,7 @@ class PlottingAction2D(ActionNode):
     """
     def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
                  plottype='plot',plotkwargs=None,clf=True,savefile=None,
-                 logify=None,ordering='postorder'):
+                 logify=None,ordering='postorder',filter=False):
         
         ActionNode.__init__(self,parent,nodename)
         self.xaxisname = xaxisname
@@ -3398,10 +3408,13 @@ class PlottingAction2D(ActionNode):
         """
         self.plottype = plottype
         """
-        A string specifying the type of plot to make - 'plot', 'errorbar', or
-        'scatter' are the only options, currently. These call
-        :func:`matplotlib.pyplot.plot`, :func:`matplotlib.pyplot.errorbar`, and
-        :func:`matplotlib.pyplot.scatter` , respectively.
+        A string specifying the type of plot to make.  Must be one of:
+        
+            * 'plot' - :func:`matplotlib.pyplot.plot`
+            * 'errorbar' - :func:`matplotlib.pyplot.errorbar`
+            * 'scatter' - :func:`matplotlib.pyplot.scatter`
+            * 'hist' - :func:`matplotlib.pyplot.hist` (yaxisname is ignored).
+            
         """
         self.plotkwargs = plotkwargs
         """
@@ -3421,12 +3434,20 @@ class PlottingAction2D(ActionNode):
         None, no axes will be log, otherwise, should be either 'x', 'y', or
         'xy', specifying which axes should be made logarithmic.
         """
+        
         self.ordering = ordering
         """
         Determines the order of the plotted arrays. If 'sortx' or 'sorty', the
         values will be sorted on the x and y axis, respectively. Otherwise,
         specifies the `traversal` argument for
         :meth:`FieldNode.extractFieldAtNode` .
+        """
+        
+        self.filter = filter
+        """
+        Can be used to filter out unwanted values by setting to a callable that
+        takes in a node and reurns True if it should be processed, or False if
+        not.  See :meth:`FieldNode.extractFieldAtNode` for more details.
         """
         
         self.clf = clf
@@ -3457,9 +3478,9 @@ class PlottingAction2D(ActionNode):
         ics = isinstance(node,FieldNode)
             
         xarr,xerr = FieldNode.extractFieldAtNode(node,self.xaxisname,traversal,
-                                missing='masked',includeself=ics,errors=True)
+                missing='masked',filter=self.filter,includeself=ics,errors=True)
         yarr,yerr = FieldNode.extractFieldAtNode(node,self.yaxisname,traversal,
-                                missing='masked',includeself=ics,errors=True)
+                missing='masked',filter=self.filter,includeself=ics,errors=True)
                                 
         if self.logify:
             if 'x' in self.logify:
@@ -3522,6 +3543,13 @@ class PlottingAction2D(ActionNode):
             if self.clf:
                 clf()
             scatter(xarr.astype(float),yarr.astype(float),**pkwargs)
+        elif self.plottype == 'hist':
+            from matplotlib.pyplot import hist,clf
+            
+            pkwargs = {} if self.plotkwargs is None else self.plotkwargs
+            if self.clf:
+                clf()
+            host(xarr.astype(float),**pkwargs)
         else:
             raise ValueError('invalid plottype '+str(self.plottype))
         
