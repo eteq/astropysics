@@ -1515,6 +1515,9 @@ class Source(object):
         return self._str + ((' @' + self.getBibcode()) if self._adscode is not None else '')
     
     adsurl = 'adsabs.harvard.edu'
+    #the URL to use for looking up ADS entries
+    adstimeout = 1
+    #time in seconds before 
     
     def getBibcode(self):
         """
@@ -1564,7 +1567,7 @@ class Source(object):
     
     @staticmethod
     def _findADScode(loc):
-        from urllib2 import urlopen,HTTPError
+        from urllib2 import urlopen,HTTPError,URLError
         from contextlib import closing
 
         #assume all is correct if the adsurl is not available
@@ -1585,12 +1588,22 @@ class Source(object):
             
         url += '?data_type=PLAINTEXT'
         try:
-            with closing(urlopen(url)) as page: #raises exceptions if url DNE
-                for l in page:
-                    if 'Bibliographic Code:' in l: 
-                        return l.replace('Bibliographic Code:','').strip()
+            if Source.adstimeout is None:
+                with closing(urlopen(url)) as page: #raises exceptions if url DNE
+                    for l in page:
+                        if 'Bibliographic Code:' in l: 
+                            return l.replace('Bibliographic Code:','').strip()
+            else:
+                with closing(urlopen(url,timeout=Source.adstimeout)) as page: #raises exceptions if url DNE
+                    for l in page:
+                        if 'Bibliographic Code:' in l: 
+                            return l.replace('Bibliographic Code:','').strip()
         except HTTPError:
             raise SourceDataError('Requested location %s does not exist at url %s'%(loc,url))
+        except URLError,e:
+            if e.reason=='timed out':
+                raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
+            raise
         raise SourceDataError('Bibliographic entry for the location %s had no ADS code, or parsing problem'%loc)
     
     
@@ -1661,16 +1674,24 @@ class Source(object):
         :returns: A string with the BibTeX formatted entry for this source.
         
         """
-        from urllib2 import urlopen
+        from urllib2 import urlopen,URLError
         from contextlib import closing
         
         if self._adscode is None:
             raise SourceDataError('No location provided for additional source data')
         if not Source.adsurl:
             raise SourceDataError('ADS URL not provided, so bibliographic lookup cannot occur.')
-        
-        with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
-            return xf.read()
+        try:
+            if source.timeout is None:
+                with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
+                    return xf.read()
+            else:
+                with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode),timeout=Source.adstimeout)) as xf:
+                    return xf.read()
+        except URLError,e:
+            if e.reason=='timed out':
+                raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
+            raise
             
     @staticmethod
     def build_bibliography(sources='all',fn=None):
