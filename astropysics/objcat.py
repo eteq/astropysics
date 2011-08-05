@@ -3403,30 +3403,76 @@ class AstronomicalObject(StructuredFieldNode):
     loc = Field('loc',_CSys)
     sed = SEDField('sed')
     
+class MatplotAction(ActionNode):
+    """
+    This :class:`ActionNode` uses :mod:`matplotlib` to generate plots.
     
-class PlottingAction2D(ActionNode):
+    This class is an abstract class, requiring subclasses to implement the 
+    :meth:`makePlot` method.
     """
-    This :class:`ActionNode` uses :mod:`matplotlib` to generate 2D plots of data
-    in an objcat catalog.
-    """
-    def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
-                 plottype='plot',plotkwargs=None,clf=True,savefile=None,
-                 logify=None,ordering='postorder',filter=False):
-        
+    
+    def __init__(self,parentnodename='Matplotlib Plotting Node',
+                 clf=True,savefile=None):
         ActionNode.__init__(self,parent,nodename)
-        self.xaxisname = xaxisname
-        """
-        A string specifying the name of the field to use for the x-axis.
-        """
-        self.yaxisname = yaxisname
-        """
-        A string specifying the name of the field to use for the y-axis.
-        """
+        
         self.savefile = savefile
         """
         A string specifying the file name to save the plot to when the node is
         called.  If None, the plot will not be saved.
         """
+        
+        self.clf = clf
+        """
+        If True, the figure will be cleared before plotting.
+        """
+        
+    def __call__(self,node=None):
+        """
+        Creates the matplotlib plot.
+        
+        :param node: The node this action is associated with.
+        """
+        from matplotlib.pyplot import savefig,clf
+        
+        if self.clf:
+            clf()
+        self.makePlot(node)
+        if self.savefile:
+            savefig(self.savefile)
+            
+        
+    @abstractmethod
+    def makePlot(self,node):
+        """
+        This method does the actual plotting.
+        
+        :param node: The node this action is associated with.
+        """
+        raise NotImplementedError
+    
+    
+
+class PlottingAction2D(MatplotAction):
+    """
+    Generates 2D plots by extracting fields from the catalog for two specified 
+    variables.
+    """
+    def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
+                 plottype='plot',plotkwargs=None,logify=None,
+                 ordering='postorder',filter=False):
+        
+        ActionNode.__init__(self,parent,nodename)
+        
+        self.xaxisname = xaxisname
+        """
+        A string specifying the name of the field to use for the x-axis.
+        """
+        
+        self.yaxisname = yaxisname
+        """
+        A string specifying the name of the field to use for the y-axis.
+        """
+       
         self.plottype = plottype
         """
         A string specifying the type of plot to make.  Must be one of:
@@ -3437,18 +3483,13 @@ class PlottingAction2D(ActionNode):
             * 'hist' - :func:`matplotlib.pyplot.hist` (yaxisname is ignored).
             
         """
+        
         self.plotkwargs = plotkwargs
         """
         Additional keywords to be passed into the plotting command, or None for
         defaults.
         """
-#        self.source = source
-#        """
-#        Specifies a particular source for all plotted elements. Can be a string
-#        or a :class:`Source` object. Alternatively a 2-tuple (xsource,ysource)
-#        can specify different sources for each axis. If None, the current value
-#        for all the objects is used.
-#        """
+        
         self.logify = logify
         """
         Determines if a particular axis should be in log (base-10) form. If
@@ -3471,10 +3512,6 @@ class PlottingAction2D(ActionNode):
         not.  See :meth:`FieldNode.extractFieldAtNode` for more details.
         """
         
-        self.clf = clf
-        """
-        If True, the figure will be cleared before plotting.
-        """
         
     def __call__(self,node=None):
         """
@@ -3533,11 +3570,9 @@ class PlottingAction2D(ActionNode):
             yerr = yerr[sorti]
         
         if self.plottype == 'plot':
-            from matplotlib.pyplot import plot,clf
+            from matplotlib.pyplot import plot
             
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
-            if self.clf:
-                clf()
             plot(xarr.astype(float),yarr.astype(float),**pkwargs)
             
         elif self.plottype == 'errorbar':
@@ -3553,30 +3588,21 @@ class PlottingAction2D(ActionNode):
                 yerr = None
             else:
                 yerr = yerr.filled(0).T.astype(float)[::-1]
-            if self.clf:
-                clf()
             errorbar(xarr.astype(float),yarr.astype(float),yerr,xerr,**pkwargs)
             
         elif self.plottype == 'scatter':
-            from matplotlib.pyplot import scatter,clf
+            from matplotlib.pyplot import scatter
             
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
-            if self.clf:
-                clf()
             scatter(xarr.astype(float),yarr.astype(float),**pkwargs)
         elif self.plottype == 'hist':
-            from matplotlib.pyplot import hist,clf
+            from matplotlib.pyplot import hist
             
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
-            if self.clf:
-                clf()
             host(xarr.astype(float),**pkwargs)
         else:
             raise ValueError('invalid plottype '+str(self.plottype))
-        
-        if self.savefile:
-            from matplotlib.pyplot import savefig
-            savefig(self.savefile)
+            
             
 class TableTextAction(ActionNode):
     """
