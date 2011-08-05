@@ -3411,7 +3411,7 @@ class MatplotAction(ActionNode):
     :meth:`makePlot` method.
     """
     
-    def __init__(self,parentnodename='Matplotlib Plotting Node',
+    def __init__(self,parent,nodename='Matplotlib Plotting Node',
                  clf=True,savefile=None):
         ActionNode.__init__(self,parent,nodename)
         
@@ -3430,9 +3430,14 @@ class MatplotAction(ActionNode):
         """
         Creates the matplotlib plot.
         
-        :param node: The node this action is associated with.
+        :param node: 
+            The node this action is associated with, or the parent of this
+            :class:`MatplotAction` if None.
         """
         from matplotlib.pyplot import savefig,clf
+        
+        if node is None:
+            node = self.parent
         
         if self.clf:
             clf()
@@ -3450,7 +3455,7 @@ class MatplotAction(ActionNode):
         """
         raise NotImplementedError
     
-def plot_function_action(forname):
+def plot_action_function(forname):
     """
     Generates a plotting action node from a function.
     
@@ -3462,6 +3467,11 @@ def plot_function_action(forname):
     default name for the generated class.
     """
     if callable(forname):
+        class PlotClass(MatplotAction):
+            def makePlot(self,node):
+                return forname(node)
+        return PlotClass
+    else:
         def deco(f):
             class PlotClass(MatplotAction):
                 def __init__(self,parent,name=forname):
@@ -3469,11 +3479,6 @@ def plot_function_action(forname):
                 def makePlot(self,node):
                     return f(self,node)
         return deco
-    else:
-        class PlotClass(MatplotAction):
-            def makePlot(self,node):
-                return forname(self,node)
-        return PlotClass
     
 
 class PlottingAction2D(MatplotAction):
