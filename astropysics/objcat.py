@@ -3450,6 +3450,30 @@ class MatplotAction(ActionNode):
         """
         raise NotImplementedError
     
+def plot_function_action(forname):
+    """
+    Generates a plotting action node from a function.
+    
+    This function is a decorator intended to be used with a function that will
+    then be converted into a :class:`MatplotAction` plotting node with the 
+    function as the :meth:`makePlot` method.
+    
+    If the decorator is given an argument, that argument is interpreted as the
+    default name for the generated class.
+    """
+    if callable(forname):
+        def deco(f):
+            class PlotClass(MatplotAction):
+                def __init__(self,parent,name=forname):
+                    MatplotAction.__init__(self,parent,name)
+                def makePlot(self,node):
+                    return f(self,node)
+        return deco
+    else:
+        class PlotClass(MatplotAction):
+            def makePlot(self,node):
+                return forname(self,node)
+        return PlotClass
     
 
 class PlottingAction2D(MatplotAction):
