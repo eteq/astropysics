@@ -3459,15 +3459,19 @@ def plot_action_function(forname):
     """
     Generates a plotting action node from a function.
     
-    This function is a decorator intended to be used with a function that will
-    then be converted into a :class:`MatplotAction` plotting node with the 
-    function as the :meth:`makePlot` method.
+    This is a function decorator that will converted the decorated function into
+    a :class:`MatplotAction` plotting class with the function as the 
+    :meth:`makePlot` method. The decorated function should take a single 
+    argument, the node the plotting action was called on (usually the parent of
+    the action node).
     
     If the decorator is given an argument, that argument is interpreted as the
-    default name for the generated class.
+    default name for objects of the resulting `MatplotAction` subclass.
     """
     if callable(forname):
         class PlotClass(MatplotAction):
+            def __init__(self,parent,name=forname.__name__):
+                    MatplotAction.__init__(self,parent,name)
             def makePlot(self,node):
                 return forname(node)
         return PlotClass
