@@ -3426,28 +3426,32 @@ class MatplotAction(ActionNode):
         If True, the figure will be cleared before plotting.
         """
         
-    def __call__(self,node=None):
+    def __call__(self,node=None,*args,**kwatgs):
         """
         Creates the matplotlib plot.
         
         :param node: 
             The node this action is associated with, or the parent of this
             :class:`MatplotAction` if None.
+            
+        Additional arguments will be passed into `makePlot`
         """
-        from matplotlib.pyplot import savefig,clf
+        from matplotlib.pyplot import savefig,clf,title,gca
         
         if node is None:
             node = self.parent
         
         if self.clf:
             clf()
-        self.makePlot(node)
+        self.makePlot(node,*args,**kwatgs)
+        if gca().get_title()=='':
+            title(self.name)
         if self.savefile:
             savefig(self.savefile)
             
         
     @abstractmethod
-    def makePlot(self,node):
+    def makePlot(self,node,*args,**kwargs):
         """
         This method does the actual plotting.
         
@@ -3455,34 +3459,47 @@ class MatplotAction(ActionNode):
         """
         raise NotImplementedError
     
-def plot_action_function(forname):
+def plot_action_function(*args,**kwargs):
     """
     Generates a plotting action node from a function.
     
     This is a function decorator that will converted the decorated function into
     a :class:`MatplotAction` plotting class with the function as the 
-    :meth:`makePlot` method. The decorated function should take a single 
-    argument, the node the plotting action was called on (usually the parent of
-    the action node).
+    :meth:`makePlot` method. The decorated function must have the signature
+    f(anode,pnode) where `anode` is the plotting node itself, and pnode is the  
+    node the plotting action was called on (usually the parent of  the plotting 
+    node).
     
     If the decorator is given an argument, that argument is interpreted as the
-    default name for objects of the resulting `MatplotAction` subclass.
+    default name for objects of the resulting `MatplotAction` subclass. Further
+    keyword arguments are assigned as instance variables when the 
+    
     """
-    if callable(forname):
+    if len(args)==1 and callable(args[0]) and len(kwargs)==0:
+        f = args[0]
         class PlotClass(MatplotAction):
-            def __init__(self,parent,name=forname.__name__):
+            def __init__(self,parent,name=f.__name__):
                     MatplotAction.__init__(self,parent,name)
-            def makePlot(self,node):
-                return forname(node)
+            def makePlot(self,node,*args,**kwargs):
+                return f(self,node,*args,**kwargs)
         return PlotClass
-    else:
-        def deco(f):
+    elif len(args)<=1 and not callable(args):
+        instancevars = kwargs.copy()
+        name = args[0] if len(args)==1 else None
+        def deco(f,name=name):
+            if name is None:
+                name = f.__name__
             class PlotClass(MatplotAction):
-                def __init__(self,parent,name=forname):
+                def __init__(self,parent,name=name):
                     MatplotAction.__init__(self,parent,name)
-                def makePlot(self,node):
-                    return f(self,node)
+                    for k,v in instancevars.iteritems():
+                        setattr(self,k,v)
+                def makePlot(self,node,*args,**kwargs):
+                    return f(self,node,*args,**kwargs)
+            return PlotClass
         return deco
+    else:
+        raise TypeError('plot_action_function() got %i arguments and %i keyword args, which is invalid.'%(len(args),len(kwargs)))
     
 
 class PlottingAction2D(MatplotAction):
