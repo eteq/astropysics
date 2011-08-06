@@ -2669,8 +2669,10 @@ class StructuredFieldNode(FieldNode):
             self._fieldnames.append(k)
             
         for dv,fobj in dvs:
-            fobj._nocheckinsert(0,DerivedValue(dv._f,sourcenode=self,
-                                  flinkdict=dv.flinkdict,ferr=dv._ferr))
+            dvo = DerivedValue(dv._f,sourcenode=self,flinkdict=dv.flinkdict,
+                               ferr=dv._ferr)
+            dvo.field = fobj
+            fobj._nocheckinsert(0,dvo)
             
         for k,v in kwargs.iteritems():
             self[k] = v
@@ -2826,7 +2828,7 @@ def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
     leftover kwargs are passed in as links that override the 
     defaults of the function.
     
-    The docstrung of the function will be taken as the field's 
+    The docstring of the function will be taken as the field's 
     :attr:`description`.
     """
     if f is None: #allow for decorator arguments
