@@ -1334,6 +1334,7 @@ class Field(MutableSequence):
         :param key: The index or source at which to insert.
         :param val: The :class:`FieldValue` to add.
         """
+        checktype = key if isinstance(key,Source) else True
         val = self._checkConvInVal(val,dosrccheck=checktype)
         self._nocheckinsert(key,val)
         
