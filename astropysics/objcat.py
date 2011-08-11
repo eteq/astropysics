@@ -1693,6 +1693,32 @@ class Source(object):
             if e.reason=='timed out':
                 raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
             raise
+        
+    def openADSAbstract(self,opentype=None,**kwargs):
+        """
+        Opens the ADS abstract for this source in a web browser.
+        
+        :param opentype: The type of web browser window to open.  Can be:
+            
+            * None
+                Uses the :func:`webbrowser.open` function.
+            * 'new' 
+                Uses the :func:`webbrowser.open_new` function.
+            * 'tab'
+                Uses the :func:`webbrowser.open_new_tab` function.
+        
+        Additionaly keyword arguments will be passed into the relevant function.
+        """
+        if opentype is None:
+            openfunc = webbrowser.open
+        elif opentype=='new':
+            openfunc = webbrowser.open_new
+        elif opentype=='tab':
+            openfunc = webbrowser.open_new_tab
+        else:
+            raise ValueError('invalid opentype in openADSAbstract')
+            
+        openfunc(self.adsabs,**kwargs)
             
     @staticmethod
     def build_bibliography(sources='all',fn=None):
