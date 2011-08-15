@@ -19,7 +19,7 @@ descrip = """
 See http://packages.python.org/Astropysics/ for detailed documentation.
 """
 
-apyspkgs = find_packages()
+apyspkgs = find_packages(exclude=['tests'])
 scripts = glob('scripts/*')
 
 #recommended/gui packages are stored in config module - used in extras
