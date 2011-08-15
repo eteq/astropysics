@@ -608,6 +608,20 @@ class AngularSeparation(AngularCoordinate):
             return res
         else:
             return AngularCoordinate.__add__(self,other)
+            
+    #comparisons
+    def __lt__(self,other):
+        return self._decval < other._decval
+    def __le__(self,other):
+        return self._decval <= other._decval
+    def __gt__(self,other):
+        return self._decval > other._decval
+    def __ge__(self,other):
+        return self._decval >= other._decval
+    def __eq__(self,other):
+        return self._decval == other._decval
+    def __ne__(self,other):
+        return self._decval != other._decval
         
     def _getArcsec(self):
         return self.degrees*3600
@@ -1764,6 +1778,7 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
         * EquatorialCoordinatesBase()
         * EquatorialCoordinatesBase(:class:`EquatorialCoordinatesBase`)
         * EquatorialCoordinatesBase('rastr decstr')
+        * EquatorialCoordinatesBase((ra,dec))
         * EquatorialCoordinatesBase(ra,dec)
         * EquatorialCoordinatesBase(ra,fdec,raerr,decerr)
         * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch)
@@ -1786,6 +1801,8 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
                 sargs = args[0].split()
                 posargs['ra'] = sargs[0]
                 posargs['dec'] = sargs[1]
+            else:
+                posargs['ra'],posargs['dec'] = args[0]
         elif len(args) == 2:
             posargs['ra'] = args[0]
             posargs['dec'] = args[1]
