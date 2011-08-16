@@ -397,6 +397,10 @@ class Spylot(HasTraits):
     z = Float
     lowerz = Float(0.0)
     upperz = Float(1.0)
+    zviewtype = Enum('redshift','velocity')
+    zview = Property(Float,depends_on='z,zviewtype')
+    uzview = Property(Float,depends_on='upperz,zviewtype')
+    lzview = Property(Float,depends_on='lowerz,zviewtype')
     coarserz = Button('Coarser')
     finerz = Button('Finer')
     _zql,_zqh = min(spec.Spectrum._zqmap.keys()),max(spec.Spectrum._zqmap.keys())
@@ -495,14 +499,16 @@ class Spylot(HasTraits):
                             Item('smoothing',show_label=False,enabled_when='dosmoothing'),
                             spring)
                     
-    zgroup = VGroup(Item('z',editor=RangeEditor(low_name='lowerz',high_name='upperz',format='%.4f')),
-                    HGroup(Item('lowerz',show_label=False),
+    zgroup = VGroup(HGroup(Item('zviewtype',show_label=False),
+                           Item('zview',editor=RangeEditor(low_name='lzview',high_name='uzview',format='%5.4g '),show_label=False,springy=True)
+                          ),
+                    HGroup(Item('lzview',show_label=False),
                            Item('coarserz',show_label=False),
                            spring,
                            Item('zqual',style='custom',label='Z quality',editor=RangeEditor(cols=_zqh-_zql+1,low=_zql,high=_zqh)),
                            spring,
                            Item('finerz',show_label=False),
-                           Item('upperz',show_label=False))
+                           Item('uzview',show_label=False))
                    )
                    
     features_view = View(VGroup(HGroup(Item('showfeatures',label='Show'),
@@ -714,6 +720,19 @@ class Spylot(HasTraits):
     def _zqual_changed(self):
         self.currspec.zqual = self.zqual
         
+    def _get_lzview(self):
+        return self.lowerz if self.zviewtype=='redshift' else 3.e5*self.lowerz
+    def _set_lzview(self,val):
+        self.lowerz = val if self.zviewtype=='redshift' else val/3.e5
+    def _get_uzview(self):
+        return self.upperz if self.zviewtype=='redshift' else 3.e5*self.upperz
+    def _set_uzview(self,val):
+        self.upperz = val if self.zviewtype=='redshift' else val/3.e5
+    def _get_zview(self):
+        return self.z if self.zviewtype=='redshift' else 3.e5*self.z
+    def _set_zview(self,val):
+        self.z = val if self.zviewtype=='redshift' else val/3.e5
+        
     def _scaleerr_changed(self,new):
         if new:
             self._scaleerrfrac_changed()
@@ -779,13 +798,16 @@ class Spylot(HasTraits):
         cmodel = self.currspec.continuum
         p.data.set_data('continuum',np.zeros_like(x) if cmodel is None else cmodel(x))
         
-        rng = self.upperz - self.lowerz
-        self.z = z = s.z
-        if (z - rng/2.0) >=0:
-            self.upperz,self.lowerz = z+rng/2.0,z-rng/2.0
-        else:
-            self.lowerz = 0
-            self.upperz = rng
+        #if the z is unchanged, don't touch the ranges
+        if self.z != s.z:
+            rng = self.upperz - self.lowerz
+            self.z = z = s.z
+            if (z - rng/2.0) >=0:
+                self.upperz,self.lowerz = z+rng/2.0,z-rng/2.0
+            else:
+                self.lowerz = 0
+                self.upperz = rng
+                
         self.zqual = s.zqual
         
         #must have the SAME feature list instance in the spylot gui and the Spectrum
