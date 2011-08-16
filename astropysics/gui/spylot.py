@@ -500,7 +500,7 @@ class Spylot(HasTraits):
                             spring)
                     
     zgroup = VGroup(HGroup(Item('zviewtype',show_label=False),
-                           Item('zview',editor=RangeEditor(low_name='lzview',high_name='uzview',format='%5.4g '),show_label=False,springy=True)
+                           Item('zview',editor=RangeEditor(low_name='lzview',high_name='uzview',format='%5.4g ',mode='slider'),show_label=False,springy=True)
                           ),
                     HGroup(Item('lzview',show_label=False),
                            Item('coarserz',show_label=False),
