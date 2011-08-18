@@ -1201,8 +1201,14 @@ class Field(MutableSequence):
                 for v in self._vals:
                     if v.source == val.source:
                         raise ValueError('value with %s already present in Field'%v.source)
-        
-            val.checkType(self.type)
+            
+            try:
+                val.checkType(self.type)
+            except TypeError:
+                if self.type==float:
+                    val._value = float(val._value)
+                else:
+                    raise
         
         if isinstance(val,DerivedValue):
             if val.field is not None:
