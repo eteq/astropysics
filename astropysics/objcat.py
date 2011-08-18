@@ -421,64 +421,46 @@ def save(node,file,savechildren=True):
     return node.save(file,savechildren)
 load = CatalogNode.load
 
-class ActionNode(object):
+class ActionNode(CatalogNode):
     """
     This object is the superclass for nodes of a catalog that perform an action
-    but do not store data and hence are not a part of the :class:`CatalogNode`
-    heirarchy. Thus, they have a parent, but no children.
-    
-    The parent for these nodes should be a :class:`Catalog` object or None, as
-    other :class:`CatalogNode` objects cannot store an :class:`ActionNode`. An
-    :class:`ActionNode` generally assume that the :class:`Catalog` methods are
-    available if the parent is not None.
+    but do not store data. Thus, they have a parent, but no children.
     
     *Subclassing*
     
     * If :meth:`__init__` is defined in a subclass, :meth:`ActionNode.__init__` 
       must be called with a parent.
-    * Subclasses must override the abstract :meth:`__call__` method to define
-      the action for the node. The first argument should be the node to act on
-      or None to use the parent - this first argument is not strictly required,
-      but is recommended.
+    * Subclasses must override the abstract :meth:`_doAction` method to define
+      the action for the node. The first argument should be the node to act on.
     
     If an action is desired without inserting the :class:`ActionNode` into the
-    graph, the following technique is usually supported::
+    graph, the following method is typically used::
         
-        output = SubActionNode(None)(targetnode)
-        
-    Or if the action does not support a node as the first argument::
-    
-        action = SubActionNode(targetnode)
-        output = action()
-        action.parent = None
+        output = SomeActionClass(None,param1=foo,param2=bar)(targetnode)
     
     """
     
     __metaclass__ = ABCMeta
     
+    #no slots - makes ActionNodes more adaptable, as they don't store data
+
     def __init__(self,parent,name='default action node'):
-        self._parent = None
-        
-        if parent is not None:
-            self.parent = parent
-            
+        CatalogNode.__init__(self,parent)
         self.name = name
+        self._children = tuple() #ActionNodes are always childless
     
-    def _getParent(self):
-        return self._parent 
-    def _setParent(self,val):            
-        if self._parent is not None:
-            self._parent._actchildren.remove(self)
-        if not hasattr(val,'_actchildren'):
-            raise AttributeError('Attempted to assign to parent that does not support action nodes')
-        val._actchildren.append(self)
-        self._parent = val
-    parent=property(_getParent,_setParent)
-    
+    def __call__(self,node=None,*args,**kwargs):
+        if node is None:
+            node = self.parent
+        return self._doAction(node,*args,**kwargs)
+
     @abstractmethod
-    def __call__(self,*args,**kwargs):
+    def _doAction(self,node,*args,**kwargs):
+        """
+        Subclasses must override this method to actionally perform the action
+        this node expects. Whatever it returns will be returned by `__call__`
+        """
         raise NotImplementedError
-        
     
 class FieldNode(CatalogNode,Sequence):
     """
@@ -2496,7 +2478,6 @@ class Catalog(CatalogNode):
     def __init__(self,name='default Catalog',parent=None):
         super(Catalog,self).__init__(parent)
         self.name = name
-        self._actchildren = []
         
     def __str__(self):
         return 'Catalog %s'%self.name  
@@ -2520,7 +2501,7 @@ class Catalog(CatalogNode):
     
     @property
     def actionchildren(self):
-        return tuple(self._actchildren)
+        return tuple([c for c in self.children if isinstance(c,ActionNode)])
     
     def mergeNode(self,node,skipdup=False,testfunc=None):
         """
@@ -3438,6 +3419,8 @@ class MatplotAction(ActionNode):
     
     This class is an abstract class, requiring subclasses to implement the 
     :meth:`makePlot` method.
+    
+    Additional arguments passed into `__call__`  will be passed on to `makePlot`
     """
     
     def __init__(self,parent,nodename='Matplotlib Plotting Node',
@@ -3455,7 +3438,7 @@ class MatplotAction(ActionNode):
         If True, the figure will be cleared before plotting.
         """
         
-    def __call__(self,node=None,*args,**kwatgs):
+    def _doAction(self,node=None,*args,**kwatgs):
         """
         Creates the matplotlib plot.
         
@@ -3592,7 +3575,7 @@ class PlottingAction2D(MatplotAction):
         """
         
         
-    def __call__(self,node=None):
+    def _doAction(self,node=None):
         """
         Perform the plotting (and saves the plot if :attr:`savefile` is not
         None).
@@ -3686,6 +3669,21 @@ class PlottingAction2D(MatplotAction):
 class TableTextAction(ActionNode):
     """
     This :class:`ActionNode` generates and returns formatted text tables.
+    
+    Calling this action generates the and returns the table, and saves it if
+    the :attr:`savefile` attribute is not None:
+    
+    :param node: 
+        The node at which to start plotting. If None, the parent will be
+        used.
+    :param reorder: 
+        An array of indicies to change the order of the table before
+        writing, or None to use the catalog ordering.
+    :type: int array or None
+        
+    :returns: A string with the table data
+    
+    
     """
     def __init__(self,parent,arrnames,titles=None,details=None,caption=None,
                 nodename='Table Node',tabformat='ascii',fmt='%.18e',errors=True,
@@ -3746,7 +3744,7 @@ class TableTextAction(ActionNode):
         `traversal` argument for :meth:`FieldNode.extractFieldAtNode` . 
         """
         
-    def __call__(self,node=None,reorder=None):
+    def _doAction(self,node=None,reorder=None):
         """
         Generate the table (and saves the if :attr:`savefile` is not None).
         
@@ -3989,6 +3987,8 @@ class GraphAction(ActionNode):
     representing the node and its children. Note that :mod:`networkx` must be
     installed for this to work.
     
+    When this object is called, it returns a :class:`networkx.DiGraph` object.
+    
     """
     
     #set the default drawlayout - special because it depends on whether or not
@@ -4042,7 +4042,7 @@ class GraphAction(ActionNode):
         """
     del dldef    
         
-    def __call__(self,node=None):
+    def _doAction(self,node):
         """
         Generate the graph (and save if :attr:`savefile` is not None).
         
