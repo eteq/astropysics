@@ -3478,8 +3478,7 @@ class MatplotAction(ActionNode):
         raise NotImplementedError
     
 def plot_action_function(*args,**kwargs):
-    """
-    Generates a plotting action node from a function.
+    """ Converts a function into a plotting action node class.
     
     This is a function decorator that will converted the decorated function into
     a :class:`MatplotAction` plotting class with the function as the 
@@ -3490,14 +3489,45 @@ def plot_action_function(*args,**kwargs):
     
     If the decorator is given an argument, that argument is interpreted as the
     default name for objects of the resulting `MatplotAction` subclass. Further
-    keyword arguments are assigned as instance variables when the 
+    keyword arguments are assigned as instance variables of objects 
+    
+    
+    Example
+    -------
+    
+    Define the :class:`PlotXY` object by doing:
+    
+        @plot_action_function
+        def PlotXY(self,node,'xy plotter',logx=False):
+            from numpy import log10
+            
+            x,y = node.extractField('x,y')
+            if self.logx:
+                x = log10(x)
+            scatter(x,y)
+            xlabel('x')
+            ylabel('y')
+        
+    If `c` is a Catalog object with children that have `x` and `y` fields)::
+    
+        PlotXY(c)()
+    
+    will produce a plot of x vs y, as well as adding the PlotXY object as a child
+    of `c`. similarly::
+        
+        PlotXY(logx=True)(c)
+    
+    Will produce a plot of log(x) vs. y for `c`'s chilren, but will *not* add
+    the `PlotXY` object as a child of `c`. 
     
     """
     if len(args)==1 and callable(args[0]) and len(kwargs)==0:
         f = args[0]
         class PlotClass(MatplotAction):
-            def __init__(self,parent,name=f.__name__):
+            def __init__(self,parent,name=f.__name__,**kwargs):
                     MatplotAction.__init__(self,parent,name)
+                    for k,v in kwargs.iteritems():
+                        setattr(self,k,c)
             def makePlot(self,node,*args,**kwargs):
                 return f(self,node,*args,**kwargs)
         return PlotClass
