@@ -218,7 +218,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
     
     if save is True:
         save='.'
-    if type(save) is str and not save.endswith(os.sep):
+    if isinstance(save,basestring) and not save.endswith(os.sep):
         save+=os.sep        
     
     if plots is None:
@@ -313,7 +313,7 @@ def make_plots(plots,argd=None,figs=None,save=False,overwrite=True,showfigs=True
                     fn = '%s%s.%s'%(save,fname,saveext)
                     epsfns = None
                     
-                    if not overwrite and exists(fn):
+                    if not overwrite and os.path.exists(fn):
                         print fn,'exists, skipping (use -o at command line to overwrite)'
                     else:
                         print 'saving',fn
@@ -431,8 +431,10 @@ def main():
         save = ops.save
         overwrite = ops.overwrite
     
-    if len(figstomake)>0:    
-        make_plots(set(figstomake),save=save,overwrite=overwrite)
+    if len(figstomake)>0:
+        indict = rvars.copy()
+        indict.update(globals())
+        make_plots(set(figstomake),indict,save=save,overwrite=overwrite)
         
     return rvars
 
@@ -469,4 +471,3 @@ def on_run(args):
 #DON'T DELETE THIS:
 if __name__ == '__main__':
     globals().update(main())
-
