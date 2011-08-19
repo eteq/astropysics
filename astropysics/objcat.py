@@ -3426,7 +3426,9 @@ class MatplotAction(ActionNode):
     This class is an abstract class, requiring subclasses to implement the 
     :meth:`makePlot` method.
     
-    Additional arguments passed into `__call__`  will be passed on to `makePlot`
+    Additional keyword arguments passed into `__call__`  will change the
+    value of the variable with the same name as the keyword temporarily for 
+    only that call.
     """
     
     def __init__(self,parent,nodename='Matplotlib Plotting Node',
@@ -3444,7 +3446,7 @@ class MatplotAction(ActionNode):
         If True, the figure will be cleared before plotting.
         """
         
-    def _doAction(self,node=None,*args,**kwatgs):
+    def _doAction(self,node=None,**kwargs):
         """
         Creates the matplotlib plot.
         
@@ -3459,17 +3461,23 @@ class MatplotAction(ActionNode):
         if node is None:
             node = self.parent
         
-        if self.clf:
-            clf()
-        self.makePlot(node,*args,**kwatgs)
-        if gca().get_title()=='':
-            title(self.name)
-        if self.savefile:
-            savefig(self.savefile)
-            
+        oldvars = dict([(k,getattr(self,k)) for k in kwargs])
+        try:
+            for k,v in kwargs.iteritems():
+                setattr(self,k,v)
+            if self.clf:
+                clf()
+            self.makePlot(node)
+            if gca().get_title()=='':
+                title(self.name)
+            if self.savefile:
+                savefig(self.savefile)
+        finally:
+            for k,v in oldvars.iteritems():
+                setattr(self,k,v)
         
     @abstractmethod
-    def makePlot(self,node,*args,**kwargs):
+    def makePlot(self,node):
         """
         This method does the actual plotting.
         
@@ -3528,8 +3536,8 @@ def plot_action_function(*args,**kwargs):
                     MatplotAction.__init__(self,parent,name)
                     for k,v in kwargs.iteritems():
                         setattr(self,k,c)
-            def makePlot(self,node,*args,**kwargs):
-                return f(self,node,*args,**kwargs)
+            def makePlot(self,node):
+                return f(self,node)
         return PlotClass
     elif len(args)<=1 and not callable(args):
         instancevars = kwargs.copy()
@@ -3542,8 +3550,8 @@ def plot_action_function(*args,**kwargs):
                     MatplotAction.__init__(self,parent,name)
                     for k,v in instancevars.iteritems():
                         setattr(self,k,v)
-                def makePlot(self,node,*args,**kwargs):
-                    return f(self,node,*args,**kwargs)
+                def makePlot(self,node):
+                    return f(self,node)
             return PlotClass
         return deco
     else:
@@ -3702,7 +3710,7 @@ class PlottingAction2D(MatplotAction):
             raise ValueError('invalid plottype '+str(self.plottype))
             
             
-class TableTextAction(ActionNode):
+class TextTableAction(ActionNode):
     """
     This :class:`ActionNode` generates and returns formatted text tables.
     
