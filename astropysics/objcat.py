@@ -1115,8 +1115,14 @@ class Field(MutableSequence):
         self._name = d['_name']
         self._type = d['_type']
         self._vals = d['_vals']
-        self._units = d['_units']
-        self._descr = d['_descr']
+        if '_units' in d:
+            self._units = d['_units']
+        else:
+            self._units = None
+        if '_descr' in d:
+            self._descr = d['_descr']
+        else:
+            self._descr = None
         self._notifywrs = None
         self._nodewr = None
         #notifiers should late-attach when values are first accessed, and  
