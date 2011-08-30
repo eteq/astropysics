@@ -1307,11 +1307,11 @@ class LatLongCoordinates(CoordinateSystem):
             self.longerr = longerr
         
     def __getstate__(self):
-        return dict([(k,getattr(k)) for k in LatLongCoordinates.__slots__])
+        return dict([(k,getattr(self,k)) for k in LatLongCoordinates.__slots__])
     
     def __setstate__(self,d):
         for k in LatLongCoordinates.__slots__:
-            setattr(k,d[k])
+            setattr(self,k,d[k])
             
     def _getDistancepc(self):
         if callable(self._dpc):

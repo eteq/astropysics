@@ -392,15 +392,16 @@ class CatalogNode(object):
             
         :raises TypeError: If `file` does not contain a :class:`CatalogNode`. 
         """
-        import cPickle
+        import cPickle as pickle
+        
         if isinstance(file,basestring):
             #filename
             fn = file
             with open(fn,'r') as f:
-                res = cPickle.load(f)
+                res = pickle.load(f)
         else:
             fn = file.name
-            res = cPickle.load(file)
+            res = pickle.load(file)
         
         if not isinstance(res,CatalogNode):
             raise TypeError('File %s does not contain a CatalogNode'%fn)
@@ -2147,7 +2148,7 @@ class DerivedValue(FieldValue):
                         lerr = np.sum(np.power(lerrs,2))**0.5
                         self._errs = (uerr,lerr)
                 self._valid = True
-            except (ValueError,IndexError,CycleError),e:
+            except (ValueError,IndexError,CycleError,AttributeError,TypeError),e:
                 if isinstance(e,CycleError) and ' at ' not in e.args[0]:
                     #TODO: remove this node locating if it is too burdensome?
                     if self.sourcenode is None:
