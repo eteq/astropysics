@@ -885,7 +885,9 @@ class NFWModel(FunctionModel1DAuto):
         :returns: Concentration parameter (rvir/rc)
             
         """
-        cvir = 9.6*(Mvir*(c.h/.72)/1e13)**-.13*(1+z)**-1
+        from .constants import H0
+        
+        cvir = 9.6*(Mvir*(H0/72.)/1e13)**-.13*(1+z)**-1
         return cvir if cvir>4 else 4.0
     
     @staticmethod
