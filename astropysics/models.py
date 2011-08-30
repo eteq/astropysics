@@ -1064,6 +1064,37 @@ class NFWModel(FunctionModel1DAuto):
         m.setC(Cvir,Rvir=Rvir,Mvir=Mvir)
         return m
     
+    @staticmethod
+    def create_VmaxRvmax(vmax,rvmax):
+        """
+        Generates a new NFWModel with the given Vmax and R_Vmax.
+        
+        :param float vmax: maximum circular velocity in km/s.
+        :param float rvmax: radius of maximum circular velocity in kpc.
+        
+        See Bullock et al. 2001 for reflated reference.
+        
+        :returns: 
+            A :class:`NFWModel` object matching the supplied `vmax` and `rvmax`
+        
+        """
+        from scipy.optimize import fmin
+        
+        #generate an approximate "best guess" from the scalings at z=0
+        m = NFWModel.create_Mvir(NFWModel.Vmax_to_Mvir(vmax),z=0)
+        
+        #from Bullock+ 01
+        m.rc = rvmax/2.16
+        
+        def toopt(v,vmaxwanted,model):
+            model.rho0 = v[0]
+            return (model.getVmax()[0]-vmaxwanted)**2
+        
+        fmin(toopt,(m.rho0,),(vmax,m),disp=0)
+        #rho0 is now set correctly
+        
+        return m
+    
 class NFWProjectedModel(FunctionModel1DAuto):
     
     def f(self,R,rc=1,sig0=1):
