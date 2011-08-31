@@ -429,10 +429,12 @@ class ActionNode(CatalogNode):
     
     *Subclassing*
     
-    * If :meth:`__init__` is defined in a subclass, :meth:`ActionNode.__init__` 
-      must be called with a parent.
+    * If :meth:`__init__` is overridden in a subclass,
+      :meth:`ActionNode.__init__` must be called.
     * Subclasses must override the abstract :meth:`_doAction` method to define
       the action for the node. The first argument should be the node to act on.
+      Additional arguments (passed on from :meth:`__call__` should be documented
+      in the class docstring.
     
     If an action is desired without inserting the :class:`ActionNode` into the
     graph, the following method is typically used::
@@ -445,12 +447,28 @@ class ActionNode(CatalogNode):
     
     #no slots - makes ActionNodes more adaptable, as they don't store data
 
-    def __init__(self,parent,name='default action node'):
+    def __init__(self,parent,name=None):
+        """
+        :param parent: The parent of this node or None for no parent.
+        :param name:
+            The name of this node or None to use a default based on the class
+            name.
+        """
         CatalogNode.__init__(self,parent)
-        self.name = name
+        self.name = self.__class__.__name__ + ' node'
         self._children = tuple() #ActionNodes are always childless
     
     def __call__(self,node=None,*args,**kwargs):
+        """
+        Call this object to perform the action of this node.  
+        
+        :param node: 
+            The node this action is to operate on, or None to use this node's
+            parent.
+            
+        Additional arguments or keyword arguments are particular to a given node
+        class - see the class docstring for details.
+        """
         if node is None:
             node = self.parent
         return self._doAction(node,*args,**kwargs)
@@ -462,6 +480,17 @@ class ActionNode(CatalogNode):
         this node expects. Whatever it returns will be returned by `__call__`
         """
         raise NotImplementedError
+    
+    def __getstate__(self):
+        d = super(ActionNode,self).__getstate__()
+        d.update(self.__dict__)
+        return d
+    
+    def __setstate__(self,d):
+        super(ActionNode,self).__setstate__(d)
+        for k,v in d.iteritems():
+            if not hasattr(self,k):
+                self.__dict__[k] = v
     
 class FieldNode(CatalogNode,Sequence):
     """
@@ -2418,9 +2447,11 @@ class LinkField(Field):
     .. note::
         If the current linked node has been removed, calling this will change the 
         current object to the next valid link.
-    
-    
+        
     """
+    
+    __slots__ = tuple()
+    
     def __init__(self,name=None,type=CatalogNode,units=None,descr=None):
         if not (type is CatalogNode or issubclass(type,CatalogNode)):
             raise TypeError('nodetype must be a CatalogNode or subclass')
@@ -2469,9 +2500,16 @@ class LinkValue(FieldValue):
     @property
     def value(self):
         return self._linkwr()
-        
-            
-            
+    
+    def __getstate__(self):
+        d = super(LinkValue,self).__getstate__()
+        d['_linkwr'] = self._linkwr()
+        return d
+    
+    def __setstate__(self,d):
+        from weakref import ref
+        super(LinkValue,self).__setstate__(d)
+        self._linkwr = ref(d['_linkwr'])
     
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
@@ -2743,7 +2781,7 @@ class StructuredFieldNode(FieldNode):
                         ind = 0
                     if ind > len(fi):
                         ind = len(fi)
-                    fi.insert(ind,DerivedValue(v[0]._f,self,v[0].flinkdict))
+                    fi.insert(ind,DerivedValue(v[0]._f,self,v[0].flinkdict,v[0]._ferr))
             
                     
             #consistency check to ensure that the object has the necessary fields
@@ -2822,7 +2860,7 @@ class StructuredFieldNode(FieldNode):
         self._fieldnames = fields
         
         for dv,fobj in dvs:
-            fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict))
+            fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict,dv._ferr))
         
         self._altered = False
         self.addField = types.MethodType(StructuredFieldNode.addField,self,StructuredFieldNode)
@@ -3433,25 +3471,77 @@ class MatplotAction(ActionNode):
     This class is an abstract class, requiring subclasses to implement the 
     :meth:`makePlot` method.
     
-    Additional keyword arguments passed into `__call__`  will change the
-    value of the variable with the same name as the keyword temporarily for 
-    only that call.
+    Keyword arguments when this action is called will be used to change the
+    value of the object attribute with the same name as the keyword temporarily
+    for *only* that call.
+    
+    The :attr:`defaultattrs` class variable can be set for a class, and it must
+    be a dictionary where the keys are strings. It will be used to initialize
+    class variables, where the defaults are given by the values of
+    :attr:`defaultattrs`.
+    
+    
+     Example
+    -------
+    
+    Define the :class:`PlotXY` by doing:
+    
+        class PlotXY(MatplotAction):
+            defaultattrs = dict(logx=False)
+            
+            def makePlot(self,node):
+                from numpy import log10
+                
+                x,y = node.extractField('x,y')
+                if self.logx:
+                    x = log10(x)
+                scatter(x,y)
+                xlabel('x')
+                ylabel('y')
+    
+    Then, if `c` is a `Catalog` with children that have `x` and `y` fields)::
+    
+        PlotXY(c)()
+    
+    will produce a plot of x vs y, as well as adding the `PlotXY` object as a
+    child of `c`. similarly::
+        
+        PlotXY(logx=True)(c)
+    
+    Will produce a plot of log(x) vs. y for `c`'s chilren, but will *not* add
+    the `PlotXY` object as a child of `c`. 
+    
     """
     
-    def __init__(self,parent,nodename='Matplotlib Plotting Node',
-                 clf=True,savefile=None):
+    defaultattrs = {}
+    
+    def __init__(self,parent,nodename=None,clf=True,savefile=None,**kwargs):
+        """
+        :param parent: The parent to assign this node to or None for no parent.
+        :param nodename: 
+            The name of this node or None to use the default derived from the
+            class name.
+        :param clf: If True, the figure will be cleared before plotting.
+        :param savefile: 
+            A string specifying the file name to save the plot to when the node
+            is called. If None, the plot will not be saved.
+        
+        Additional keyword can be used to set attributes that have defaults
+        given by :attr:`defaultattrs`.
+        """
         ActionNode.__init__(self,parent,nodename)
         
-        self.savefile = savefile
-        """
-        A string specifying the file name to save the plot to when the node is
-        called.  If None, the plot will not be saved.
-        """
-        
+        self.savefile = savefile        
         self.clf = clf
-        """
-        If True, the figure will be cleared before plotting.
-        """
+        
+        for k,v in self.defaultattrs.iteritems():
+            if k in kwargs:
+                v = kwargs.pop(k)
+            setattr(self,k,v)
+            
+        if len(kwargs)>0:
+            raise TypeError(self.__class__.__name__+' does not have attributes '+str(kwargs.keys()))
+        
         
     def _doAction(self,node=None,**kwargs):
         """
@@ -3491,78 +3581,6 @@ class MatplotAction(ActionNode):
         :param node: The node this action is associated with.
         """
         raise NotImplementedError
-    
-def plot_action_function(*args,**kwargs):
-    """ Converts a function into a plotting action node class.
-    
-    This is a function decorator that will converted the decorated function into
-    a :class:`MatplotAction` plotting class with the function as the 
-    :meth:`makePlot` method. The decorated function must have the signature
-    f(anode,pnode) where `anode` is the plotting node itself, and pnode is the  
-    node the plotting action was called on (usually the parent of  the plotting 
-    node).
-    
-    If the decorator is given an argument, that argument is interpreted as the
-    default name for objects of the resulting `MatplotAction` subclass. Further
-    keyword arguments are assigned as instance variables of objects 
-    
-    
-    Example
-    -------
-    
-    Define the :class:`PlotXY` object by doing:
-    
-        @plot_action_function
-        def PlotXY(self,node,'xy plotter',logx=False):
-            from numpy import log10
-            
-            x,y = node.extractField('x,y')
-            if self.logx:
-                x = log10(x)
-            scatter(x,y)
-            xlabel('x')
-            ylabel('y')
-        
-    If `c` is a Catalog object with children that have `x` and `y` fields)::
-    
-        PlotXY(c)()
-    
-    will produce a plot of x vs y, as well as adding the PlotXY object as a child
-    of `c`. similarly::
-        
-        PlotXY(logx=True)(c)
-    
-    Will produce a plot of log(x) vs. y for `c`'s chilren, but will *not* add
-    the `PlotXY` object as a child of `c`. 
-    
-    """
-    if len(args)==1 and callable(args[0]) and len(kwargs)==0:
-        f = args[0]
-        class PlotClass(MatplotAction):
-            def __init__(self,parent,name=f.__name__,**kwargs):
-                    MatplotAction.__init__(self,parent,name)
-                    for k,v in kwargs.iteritems():
-                        setattr(self,k,c)
-            def makePlot(self,node):
-                return f(self,node)
-        return PlotClass
-    elif len(args)<=1 and not callable(args):
-        instancevars = kwargs.copy()
-        name = args[0] if len(args)==1 else None
-        def deco(f,name=name):
-            if name is None:
-                name = f.__name__
-            class PlotClass(MatplotAction):
-                def __init__(self,parent,name=name):
-                    MatplotAction.__init__(self,parent,name)
-                    for k,v in instancevars.iteritems():
-                        setattr(self,k,v)
-                def makePlot(self,node):
-                    return f(self,node)
-            return PlotClass
-        return deco
-    else:
-        raise TypeError('plot_action_function() got %i arguments and %i keyword args, which is invalid.'%(len(args),len(kwargs)))
     
 
 class PlottingAction2D(MatplotAction):
