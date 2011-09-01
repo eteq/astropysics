@@ -455,7 +455,10 @@ class ActionNode(CatalogNode):
             name.
         """
         CatalogNode.__init__(self,parent)
-        self.name = self.__class__.__name__ + ' node'
+        if name:
+            self.name = name
+        else:
+            self.name = self.__class__.__name__ + ' node'
         self._children = tuple() #ActionNodes are always childless
     
     def __call__(self,node=None,*args,**kwargs):
