@@ -641,7 +641,7 @@ class Spectrum(HasSpecUnits):
         
         if filtertype is None:
             if width > 0:
-                fitertype = 'gaussian'
+                filtertype = 'gaussian'
             else:
                 filtertype = 'boxcar'
                 width = -1*width
@@ -1105,7 +1105,7 @@ class Spectrum(HasSpecUnits):
         
     def plot(self,fmt=None,ploterrs=.1,plotcontinuum=True,smoothing=None,
                   step=True,clf=True,colors=('b','g','r','k'),restframe=True,
-                  **kwargs):
+                  xrng=None,**kwargs):
         """
         Use :mod:`matplotlib` to plot the :class:`Spectrum` object. The
         resulting plot shows the flux, error (if present), and continuum (if
@@ -1124,6 +1124,9 @@ class Spectrum(HasSpecUnits):
         value. If either are True, the scaling will match the actual value. If
         False, the plots will not be shown.
         
+        `xrng` can specify the range of x-values to plot (lowerx,upperx), or can
+        be None to plot the whole spectrum.
+        
         kwargs are passed into either the :func:`matplotlib.pyplot.plot` or
         :func:`matplotlib.pyplot.step` function.
         """
@@ -1134,7 +1137,7 @@ class Spectrum(HasSpecUnits):
             kwargs.setdefault('where','mid')
         
         if smoothing:
-            x,(y,e) = self.x0 if restframe else self.x,self.smooth(smoothing,replace=False)
+            x,(y,e) = self.x0 if restframe else self.x,self.smooth(smoothing,filtertype=None,replace=False)
         else:
             x,y,e = self.x0 if restframe else self.x,self.flux,self.err
             
@@ -1154,6 +1157,16 @@ class Spectrum(HasSpecUnits):
             y = np.array((y[0],y[0]))
             e = np.array((e[0],e[0]))
             
+        if xrng is not None:
+            xl,xu = xrng
+            if xl>xu:
+                xl,xu = xu,xl
+                
+            msk = (xl<x)&(x<xu)
+            x = x[msk]
+            y = y[msk]
+            e = e[msk]
+            
         if clf:
             plt.clf()
             
@@ -1171,17 +1184,25 @@ class Spectrum(HasSpecUnits):
             
         if ploterrs and np.any(e):
             from operator import isMappingType
+            if isMappingType(ploterrs):
+                ploterrs = ploterrs.copy()
             
             m = (e < np.max(y)*2) & np.isfinite(e)
             
-            if ploterrs is True:
-                scale = 1
+            if isMappingType(ploterrs) and 'scale' in ploterrs:
+                scale = ploterrs.pop('scale')
             elif np.isscalar(ploterrs):
                 scale = float(ploterrs)*np.mean(y)/np.mean(e[m])
+            elif ploterrs is True:
+                scale = 1
+            else:
+                scale = .1*np.mean(y)/np.mean(e[m])
             
             if not isMappingType(ploterrs):
                 ploterrs = {}
-            ploterrs.setdefault('ls','-')
+            kwargs.update(ploterrs)
+            kwargs.setdefault('ls','-')
+            
             
             if np.sum(m) > 0:
                 kwargs['c'] = colors[1]
