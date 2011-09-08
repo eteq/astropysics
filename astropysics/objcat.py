@@ -1545,7 +1545,7 @@ class Source(object):
     adsurl = 'adsabs.harvard.edu'
     #the URL to use for looking up ADS entries
     adstimeout = 1
-    #time in seconds before 
+    #time in seconds before giving up on a search for ADS entries
     
     def getBibcode(self):
         """
@@ -1710,16 +1710,18 @@ class Source(object):
         if not Source.adsurl:
             raise SourceDataError('ADS URL not provided, so bibliographic lookup cannot occur.')
         try:
-            if source.timeout is None:
+            if Source.adstimeout is None:
                 with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode))) as xf:
-                    return xf.read()
+                    res = xf.read()
             else:
                 with closing(urlopen('http://%s/abs/%s>data_type=BIBTEX'%(Source.adsurl,self._adscode),timeout=Source.adstimeout)) as xf:
-                    return xf.read()
+                    res = xf.read()
         except URLError,e:
             if e.reason=='timed out':
                 raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
             raise
+        
+        return res[(res.index('@')):]
         
     def openADSAbstract(self,opentype=None,**kwargs):
         """
