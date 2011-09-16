@@ -1738,6 +1738,8 @@ class Source(object):
         
         Additionaly keyword arguments will be passed into the relevant function.
         """
+        import webbrowser
+        
         if opentype is None:
             openfunc = webbrowser.open
         elif opentype=='new':
