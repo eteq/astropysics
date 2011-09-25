@@ -626,8 +626,10 @@ class Spectrum(HasSpecUnits):
     
     def smooth(self,width=1,filtertype='gaussian',replace=True):
         """
-        smooths the flux in this object by a filter of the given filtertype 
-        (can be either 'gaussian' or 'boxcar'/'uniform')
+        smooths the flux in this object by a filter of the given `filtertype`
+        (can be either 'gaussian' or 'boxcar'/'uniform'). Note that `filtertype`
+        can also be None, in which case a gaussian filter will be used if 
+        width>0, or boxcar if width<0.
         
         if replace is True, the flux in this object is replaced by the smoothed
         flux and the error is smoothed in the same fashion
@@ -1112,6 +1114,9 @@ class Spectrum(HasSpecUnits):
         present).
         
         If `step` is True, the plot will be a step plot instead of a line plot.
+        
+        `smoothing` is passed into the :meth:`Spectrum.smooth` method - see that
+        method for details.
         
         `colors` should be a 3-tuple that applies to
         (spectrum,error,invaliderror,continuum) and kwargs go into spectrum and
