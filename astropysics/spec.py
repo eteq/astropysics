@@ -650,14 +650,18 @@ class Spectrum(HasSpecUnits):
         
         if filtertype == 'gaussian':
             filter = ndi.gaussian_filter1d
+            err = self._err
         elif filtertype == 'boxcar' or type == 'uniform':
             filter = ndi.uniform_filter1d
             width = 2*width
+            err = self._err.copy()
+            err[~np.isfinite(err)] = 0
+
         else:
             raise ValueError('unrecognized filter type %s'%filtertype)
         
         smoothedflux = filter(self._flux,width)
-        smoothederr = filter(self._err,width)
+        smoothederr = filter(err,width)
         
         if replace:
             self.flux = smoothedflux
