@@ -264,8 +264,9 @@ def sigma_clip(data,sig=3,iters=1,cenfunc='median',varfunc=np.var,maout=False):
         The number of standard deviations to use as the clipping limit, or 
         the square root of the variance limit.
     :type sig: scalar
-    :param iters: number of iterations to perform clipping
-    :type iters: int
+    :param iters: 
+        The number of iterations to perform clipping for, or None to clip until
+        convergence is achieved
     :param cenfunc: 
         The technique to compute the center for the clipping - may be any valid
         input to :func:`estimate_background`
@@ -289,9 +290,16 @@ def sigma_clip(data,sig=3,iters=1,cenfunc='median',varfunc=np.var,maout=False):
     data = data.ravel()
     
     mask = np.ones(data.size,bool)
-    for i in range(iters):
-        do = data-estimate_background(data[mask],cenfunc)
-        mask = do*do <= varfunc(data[mask])*sig**2
+    if iters is None:
+        lastrej = sum(mask)+1
+        while(sum(mask)!=lastrej):
+            lastrej = sum(mask)
+            do = data-estimate_background(data[mask],cenfunc)
+            mask = do*do <= varfunc(data[mask])*sig**2
+    else:
+        for i in range(iters):
+            do = data-estimate_background(data[mask],cenfunc)
+            mask = do*do <= varfunc(data[mask])*sig**2
         
     if maout:
         return np.ma.MaskedArray(data,~mask,copy='maout'=='copy')
