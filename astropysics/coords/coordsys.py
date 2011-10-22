@@ -1625,6 +1625,8 @@ class LatLongCoordinates(CoordinateSystem):
         
         :except: raises NotImplementedError if converters are not present
         """
+        if tosys is self.__class__:
+            return self
         
         if optimize:
             cache = CoordinateSystem._transformcache['smatrix']
