@@ -84,13 +84,13 @@ if ops.iargs:
     #insert necessary ipython arguments if they aren't already there
     if '-p' not in ipyargs and '--profile' not in ipyargs:
         if majver>0 or minver>=11:
-            ipyargs.append('profile=astpys')
+            ipyargs.append('--profile=astpys')
         else:
             ipyargs.append('-p')
             ipyargs.append('astpys')
 else:
     if majver>0 or minver>=11:
-        ipyargs = [sys.argv[0],'profile=astpys']
+        ipyargs = [sys.argv[0],'--profile=astpys']
     else:
         ipyargs = [sys.argv[0],'-p','astpys']
 #replace sys.argv with args appropriate for ipython
