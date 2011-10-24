@@ -3485,13 +3485,11 @@ class MatplotAction(ActionNode):
     The :attr:`defaultattrs` class variable can be set for a class, and it must
     be a dictionary where the keys are strings. It will be used to initialize
     class variables, where the defaults are given by the values of
-    :attr:`defaultattrs`.
+    :attr:`defaultattrs` .
     
     
-     Example
-    -------
-    
-    Define the :class:`PlotXY` by doing:
+    The following example illustrates the use of the of a :class:`MatplotAction`.
+    Define the :class:`PlotXY` by doing::
     
         class PlotXY(MatplotAction):
             defaultattrs = dict(logx=False)
