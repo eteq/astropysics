@@ -140,12 +140,17 @@ def _get_git_devstr(sha=False):
 #        if currdir=='/' and not path.exists(gitdir):
 #            warn('No git repository present'+_warntxt)
 #            return 'dev'
-    
-    p = Popen(['git','rev-list','HEAD'],cwd=currdir,
-              stdout=PIPE,stderr=PIPE,stdin=PIPE)
-    stdout,stderr = p.communicate()
-        
-    if p.returncode == 128:
+    try:
+        p = Popen(['git','rev-list','HEAD'],cwd=currdir,
+                  stdout=PIPE,stderr=PIPE,stdin=PIPE)
+        stdout,stderr = p.communicate()
+    except OSError:
+        stdout = stderr = None
+      
+    if stdout is None:
+        warn("git couldn't be run to determine git version number")
+        return 'dev'
+    elif p.returncode == 128:
         warn('No git repository present'+_warntxt)
         return 'dev'
     elif p.returncode != 0:
