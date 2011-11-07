@@ -997,7 +997,10 @@ class CoordinateSystem(object):
                 import networkx as nx
                 
                 g = CoordinateSystem.getTransformGraph()
-                path = nx.shortest_path(g,fromsys,tosys,weighted=True)
+                if nx.__version__>'1.4':
+                    path = nx.shortest_path(g,fromsys,tosys,weight=True)
+                else:
+                    path = nx.shortest_path(g,fromsys,tosys,weighted=True)
                 if not path:
                     raise NotImplementedError(failstr+'; no transform path could be found')
                 return path
