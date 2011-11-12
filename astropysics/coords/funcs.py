@@ -99,7 +99,7 @@ def earth_rotation_angle(jd,degrees=True):
 #polynomials for function greenwich_sidereal_time
 from ..constants import asecperrad
 _gmst_poly_circular179 = np.poly1d(np.array([-0.0000000368,
-                                             0.000029956,
+                                             -0.000029956,
                                              -0.00000044,
                                              1.3915817,
                                              4612.156534,
