@@ -59,8 +59,8 @@ tests = []
 def earth_rotation(epoch,jd):
     ERA = coords.earth_rotation_angle(jd,False)
     print 'ERA',ERA
-    GAST = coords.greenwich_sidereal_time(jd,'simple')*pi/12
-    print 'simple GAST (change to non-simple when ready)',GAST
+    GAST = coords.greenwich_sidereal_time(jd,True)*pi/12
+    print '2000B GAST',GAST
     GMST = coords.greenwich_sidereal_time(jd,False)*pi/12
     print 'GMST', GMST
     

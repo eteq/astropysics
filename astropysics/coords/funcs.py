@@ -99,7 +99,7 @@ def earth_rotation_angle(jd,degrees=True):
 #polynomials for function greenwich_sidereal_time
 from ..constants import asecperrad
 _gmst_poly_circular179 = np.poly1d(np.array([-0.0000000368,
-                                             0.000029956,
+                                             -0.000029956,
                                              -0.00000044,
                                              1.3915817,
                                              4612.156534,
@@ -115,11 +115,14 @@ def greenwich_sidereal_time(jd,apparent=True):
     """
     Computes the Greenwich Sidereal Time for a given Julian Date.
     
-    :param jd: The Julian Date or a sequence of JDs
+    :param jd: The Julian Date or a sequence of JDs, UT1
     :type jd: scalar or array-like
     :param apparent: 
         If True, the Greenwich Apparent Sidereal Time (GAST) is returned,
-        computed from the IAU 2000B nutation model. In the special case that
+        using the method in the SOFA function iauGst00b, which
+        computes nutation from the IAU 2000B nutation model, leaves out
+        complementary terms in the equation of the equinox and uses
+        UT1 instead of TT in the expression for GMST. In the special case that
         'simple' is given, a faster (but much lower precision) nutation model
         will be used. If False, the Greenwich Mean Sidereal Time (GMST) is
         returned, instead.
@@ -130,7 +133,7 @@ def greenwich_sidereal_time(jd,apparent=True):
     .. seealso:: 
         :func:`equation_of_the_equinoxes`, USNO Circular 179,  
         http://www.usno.navy.mil/USNO/astronomical-applications/astronomical-information-center/approx-sider-time, 
-        and SOFA functions iauGmst00 and iauGst00b 
+        IERS Technical Note No. 32 (esp. 5.10 Method (2B)), and SOFA functions iauGmst00 and iauGst00b 
     
     """
     from ..constants import asecperrad
@@ -155,7 +158,6 @@ def greenwich_sidereal_time(jd,apparent=True):
             from .coordsys import _nutation_components2000B
             eps,dpsi,deps = _nutation_components2000B(jd,False)
             dpsi = dpsi
-            raise  NotImplementedError('need to implement complementary terms for equation of the equinoxes from iauEect00 0 use "simple" for now')
             coor = 0
         return ((gmst + dpsi*np.cos(eps))*12/pi + coor)%24
     else:

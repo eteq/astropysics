@@ -1017,13 +1017,13 @@ class Site(object):
         the corrections and formatting.  This method is purely for the 
         coordinate conversion.
         """
-        from .coords import EquatorialCoordinates,HorizontalCoordinates
+        from .coords import EquatorialCoordinatesEquinox,HorizontalCoordinates
         
         latitude = self.latitude.d
         
         if epoch is not None:
             #make copy so as not to change the epoch of the input
-            eqpos = EquatorialCoordinates(eqpos)
+            eqpos = EquatorialCoordinatesEquinox(eqpos)
             eqpos.epoch = epoch
             
         lsts = np.array(lsts,copy=False)
