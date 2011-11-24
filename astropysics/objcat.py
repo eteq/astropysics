@@ -3466,6 +3466,11 @@ class AstronomicalObject(StructuredFieldNode):
     def __str__(self):
         return 'Object %s'%self.name()
         
+    def __repr__(self):
+        return '<%s.%s object "%s" at %s>'%(
+            self.__class__.__module__, self.__class__.__name__,self.name(),
+            hex(id(self)))
+        
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',_CSys)
