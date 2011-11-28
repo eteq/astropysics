@@ -2909,6 +2909,27 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
     
     julianepoch = False
     
+    def __init__(self,*args,**kwargs):
+        """
+        Input for FK4 coordinates. Can follow any of the following forms:
+        
+        * EquatorialCoordinatesBase()
+        * EquatorialCoordinatesBase(:class:`EquatorialCoordinatesBase`)
+        * EquatorialCoordinatesBase('rastr decstr')
+        * EquatorialCoordinatesBase((ra,dec))
+        * EquatorialCoordinatesBase(ra,dec)
+        * EquatorialCoordinatesBase(ra,fdec,raerr,decerr)
+        * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch)
+        * EquatorialCoordinatesBase(ra,dec,raerr,decerr,epoch,distancepc)
+        
+        The epoch of FK4 coordinates defaults to B1950.
+        """
+        args = list(args)
+        args.insert(0,self)
+        EquatorialCoordinatesEquinox.__init__(*args,**kwargs)
+        if self._epoch==2000.:
+            self._epoch = 1950.
+    
     def transformToEpoch(self,newepoch):
         """
         Transforms these :class:`EquatorialCoordinates` to a new epoch. Uses the
@@ -2935,23 +2956,25 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
         zeta2 = 30.240 - 0.27*t1
         zeta3 = 17.995
         pzeta = (zeta3,zeta2,zeta1,0)
-        zeta = np.polyval(pzeta,dt)
+        zeta = np.polyval(pzeta,dt)/3600
         
         z1 = 23035.545 + t1*139.720 + 0.060*t1*t1
         z2 = 109.480 + 0.39*t1
         z3 = 18.325
         pz = (z3,z2,z1,0)
-        z = np.polyval(pz,dt)
+        z = np.polyval(pz,dt)/3600
         
         theta1 = 20051.12 - 85.29*t1 - 0.37*t1*t1
         theta2 = -42.65 - 0.37*t1
         theta3 = -41.8
         ptheta = (theta3,theta2,theta1,0)
-        theta = np.polyval(ptheta,dt)
+        theta = np.polyval(ptheta,dt)/3600
+        
         
         return rotation_matrix(-z,'z') *\
                rotation_matrix(theta,'y') *\
                rotation_matrix(-zeta,'z')
+        
                
     @CoordinateSystem.registerTransform('self',FK5Coordinates,transtype='smatrix')
     def _toFK5(fk4c):
@@ -2962,7 +2985,8 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
         B = np.mat([[0.9999256794956877,-0.0111814832204662,-0.0048590038153592],
                     [0.0111814832391717,0.9999374848933135,-0.0000271625947142],
                     [0.0048590037723143,-0.0000271702937440,0.9999881946023742]])
-        if fk4c.epoch is not None:
+        
+        if fk4c.epoch is not None and fk4c.epoch != 1950:
             jd = epoch_to_jd(fk4c.epoch,False)
             jepoch = jd_to_epoch(jd)
             T = (jepoch - 1950)/100
@@ -2977,11 +3001,10 @@ class FK4Coordinates(EquatorialCoordinatesEquinox):
             B[2,0] += -2.1112979048e-6*T
             B[2,1] += -5.6024448e-9*T
             B[2,2] += 1.02587734e-8*T
-      
-            PB = FK4Coordinates._precessionMatrixB(fk4c.epoch,1950)
-            PJ = FK5Coordinates._precessionMatrixJ(2000,jepoch)
             
-            return PJ*B*PB
+            PB = FK4Coordinates._precessionMatrixB(fk4c.epoch,1950)
+            
+            return B*PB
         else:
             return B
     
