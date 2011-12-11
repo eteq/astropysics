@@ -401,4 +401,18 @@ def test_parallax(plot=False,icoords=None):
     assert max(asdiffs)<=1.05,'Object at 1 pc moves significantly more than 1 arcsec from center:%.3f'%max(asdiffs)
     
     return epochs,asdiffs,icsall,gcsall,ricsall,rgcsall
-        
+
+def test_EquatorialCoordinatesEquinox_initialization():
+    """Check whether EquatorialCooridnatesBase can initialize from objects of its class.
+    """
+    from astropysics.coords.coordsys import EquatorialCoordinatesEquinox
+    m101 = EquatorialCoordinatesEquinox('14:03:12.510 +54:20:53.10 J2000')
+    m101.distancepc = (6.7e6,0)
+    m101_duplicate = EquatorialCoordinatesEquinox(m101)
+    assert m101_duplicate.ra == m101.ra
+    assert m101_duplicate.dec == m101.dec
+    assert m101_duplicate.raerr == m101.raerr
+    assert m101_duplicate.decerr == m101.decerr
+    assert m101_duplicate.epoch == m101.epoch
+    assert m101_duplicate.distancepc == m101.distancepc
+    
