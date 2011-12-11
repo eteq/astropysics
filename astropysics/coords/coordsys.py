@@ -1799,8 +1799,9 @@ class EquatorialCoordinatesBase(EpochalLatLongCoordinates):
             pass
         if len(args) == 1:
             if isinstance(args[0],EquatorialCoordinatesBase):
-                EpochalLatLongCoordinates.__init__(self,args[0])
-                self.epoch = args[0].epoch
+                EpochalLatLongCoordinates.__init__(self, args[0].ra, args[0].dec,
+                                                   args[0].raerr, args[0].decerr,
+                                                   args[0].epoch, args[0].distancepc)
                 return
             elif isinstance(args[0],basestring):
                 sargs = args[0].split()
