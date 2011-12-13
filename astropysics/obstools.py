@@ -1167,10 +1167,10 @@ class Site(object):
         elif hasattr(datetime,'year') or (isSequenceType(datetime) and hasattr(datetime[0],'year')):
             jd = calendar_to_jd(datetime,self.tz).ravel()
         else:
-            jd = np.array(datetime,copy=False)
+            jd = np.array(datetime,copy=False,ndmin=1)
             if len(jd.shape)>1:
                 jd = np.array([calendar_to_jd(v,self.tz) for v in jd])
-        lsts = self.localSiderialTime(jd)
+        lsts = [self.localSiderialTime(d) for d in jd] 
         
         if precess:
             res = self.equatorialToHorizontal(coords,lsts,epoch=jd_to_epoch(jd[0]))
@@ -1192,13 +1192,17 @@ class Site(object):
                 T = 273
             else:
                 T  = float(refraction)
+            if isinstance(res,list):
+                res_list = res
+            else:
+                res_list = [res]
+            for this_res in res_list:
+                h = this_res.alt.radians
+                R = 1.02/tan(h+(10.3/(h+5.11))) #additive correction in arcmin
+                #for inverse problem of apparent h->true/airless h, use:
+                #R = 1/tan(h0+(7.31/(h0+4.4)))
             
-            h = res.alt.radians
-            R = 1.02/tan(h+(10.3/(h+5.11))) #additive correction in arcmin
-            #for inverse problem of apparent h->true/airless h, use:
-            #R = 1/tan(h0+(7.31/(h0+4.4)))
-            
-            res.alt._decval += radians(R/60.)
+                this_res.alt._decval += radians(R/60.)
         
         return res
         
