@@ -193,10 +193,11 @@ class TeXFile(TeXNode):
     document = None
     
     
-    def __init__(self,fn=None):
+    def __init__(self,fn=None,flatteninputs=False):
         self.parent = None
         self.lastsavefn = None
         self.children = []
+        self._flatteninputs = flatteninputs
         if fn is not None:
             with open(fn) as f:
                 s = f.read()
@@ -242,7 +243,7 @@ class TeXFile(TeXNode):
         contentstr = '\n'.join(content)
         
         self.preamble = Preamble(self,preamblestr)
-        self.children = text_to_nodes(self,contentstr)
+        self.children = text_to_nodes(self,contentstr,self._flatteninputs)
         self.children.insert(0,self.preamble)
         
         for c in self.children:
@@ -862,15 +863,29 @@ class Comment(TeXNode):
         return ('%'+self.text,'')
 
 
-def text_to_nodes(parent,txt):
+def text_to_nodes(parent,txt,flatteninputs=False):
     """
     Converts a string into a list of corresponding :class:`TeXNode` objects.
     
     :param parent: The parent node
     :param txt: The text to parse
+    :param bool flatteninputs: 
+        If True, "include" directives will be replaced by the content if their
+        referenced file.
     
     :returns: A list of :class:`TeXNode` objects
     """
+    import re
+    
+    #first look for \input{filename} and 
+    if flatteninputs:
+        inclre = re.compile(r'\\input{(.*?)}')
+        txts = inclre.split(txt)
+        for i,fn in list(enumerate(txts))[1::2]:
+            with open(fn,'r') as f:
+                txts[i] = f.read()
+        txt = ''.join(txts)
+    
     txtnodel = []
     #now split out nested environments and commands and build them 
     splitenv = _envre.split(txt) 
@@ -1018,7 +1033,7 @@ def _warn(*args):
 _arxiv_abstract_max_lines = 20 
 _arxiv_abstract_char_per_line = 80 
 def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,
-                       figexts=('eps','pdf'),verbose=True):
+                       figexts=('eps','pdf'),verbose=True,flatteninputs=True):
     r"""
     Takes a LaTeX file and prepares it for posting to `arXiv
     <http://arxiv.org/>`_.  This includes the following actions:
@@ -1047,6 +1062,9 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,
     :param verbose: 
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
+    :param bool flatteninputs:
+        If True, \\input sections will be replaced with their actual content
+        in the final output.
     
     :returns: 
         (file,dir) where `file` is the altered :class:`TexFile` object and `dir`
@@ -1058,7 +1076,7 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,
     if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
         texfn = texfn+'.tex'
         
-    f = TeXFile(texfn)
+    f = TeXFile(texfn,flatteninputs=flatteninputs)
     doc = f.document
     fnodes = f.children
     
@@ -1175,7 +1193,8 @@ def prep_for_arxiv_pub(texfn,newdir='pubArXiv',overwritedir=False,
 #remove \comment?
 _apj_abstract_max_words = 250 
 def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
-                     figexts=('eps','pdf'),verbose=True):
+                     figexts=('eps','pdf'),verbose=True,flatteninputs=True, 
+                     emulateapj=False):
     r"""
     Takes a LaTeX file and prepares it for submission to `The Astrophysical
     Journal <http://iopscience.iop.org/0004-637X>`_. This involves the following
@@ -1209,6 +1228,11 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
     :param verbose: 
         If True, information will be printed when the each action is taken.
         Otherwise, only warnings will be issued when there is a problem.
+    :param bool flatteninputs:
+        If True, \\input sections will be replaced with their actual content
+        in the final output.
+    :param bool emulateapj:
+        If True, uses the emulateapj style file instead of aastex.
     
     :returns: 
         (file,dir) where `file` is the altered :class:`TexFile` object and `dir`
@@ -1220,7 +1244,7 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
     if not texfn.endswith('.tex') and os.path.exists(texfn+'.tex'):
         texfn = texfn+'.tex'
         
-    f = TeXFile(texfn)
+    f = TeXFile(texfn,flatteninputs=flatteninputs)
     doc = f.document
     fnodes = f.children
     
@@ -1250,41 +1274,47 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
             print 'Abstract within word limit'
         
     #replace document class with aastex
-    f.preamble.docclass = 'aastex'
-    f.preamble.docclassopts = 'manuscript'
+    if emulateapj:
+        f.preamble.docclass = 'emulateapj'
+        f.preamble.docclassopts = ''
+    else:
+        f.preamble.docclass = 'aastex'
+        f.preamble.docclassopts = 'manuscript'
     
-    #deluxetable* -> deluxetable, rotate, and remove location hints
-    dts = 0
-    dtlochintre = _re.compile(r'(\{.*\})(\[.*?\])')
-    for dt in f.visit(lambda n:n if isinstance(n,Environment) and n.name=='deluxetable*' else None):
-        dts += 1
-        dt.name = 'deluxetable'
-        nls = [i for i,c in enumerate(dt.children) if isinstance(c,Newline)]
-        if len(nls)>0:
-            insi = nls[0]+1
-        else:
-            insi = len(nls)
-        dt.children.insert(insi,Newline(dt))
-        dt.children.insert(insi,Command(dt,('rotate',[])))
-        #remove location hints if they are present
-        if hasattr(dt.children[0],'text'):
-            print 'in',dt.children[0].text
-            m = dtlochintre.match(dt.children[0].text)
-            if m is not None:
-                dt.children[0].text = m.group(1)
-        
-    if verbose:
-        print 'Replaced deluxetable* with deluxetable',dts,'times'
+    if not emulateapj:
+        #deluxetable* -> deluxetable, rotate, and remove location hints
+        dts = 0
+        dtlochintre = _re.compile(r'(\{.*\})(\[.*?\])')
+        for dt in f.visit(lambda n:n if isinstance(n,Environment) and n.name=='deluxetable*' else None):
+            dts += 1
+            dt.name = 'deluxetable'
+            nls = [i for i,c in enumerate(dt.children) if isinstance(c,Newline)]
+            if len(nls)>0:
+                insi = nls[0]+1
+            else:
+                insi = len(nls)
+            dt.children.insert(insi,Newline(dt))
+            dt.children.insert(insi,Command(dt,('rotate',[])))
+            #remove location hints if they are present
+            if hasattr(dt.children[0],'text'):
+                print 'in',dt.children[0].text
+                m = dtlochintre.match(dt.children[0].text)
+                if m is not None:
+                    dt.children[0].text = m.group(1)
+            
+        if verbose:
+            print 'Replaced deluxetable* with deluxetable',dts,'times'
     
-    #Remove epsscale from figures
-    epssrmcnt = 0
-    for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
-        for c in figenv.children[:]:
-            if isinstance(c,Command) and c.name == 'epsscale':
-                c.prune()
-                epssrmcnt += 1
-    if verbose:
-        print 'Removed epsscale',epssrmcnt,'times'
+    if not emulateapj:
+        #Remove epsscale from figures
+        epssrmcnt = 0
+        for figenv in f.visit(lambda n:n if isinstance(n,Figure) else None):
+            for c in figenv.children[:]:
+                if isinstance(c,Command) and c.name == 'epsscale':
+                    c.prune()
+                    epssrmcnt += 1
+        if verbose:
+            print 'Removed epsscale',epssrmcnt,'times'
     
     #Find directory and delete existing if necessary
     if newdir.endswith(os.sep):
