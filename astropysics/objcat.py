@@ -15,7 +15,7 @@
 """
 
 ======================================================
-objcat -- flexible, dynamically updated object catalog 
+objcat -- flexible, dynamically updated object catalog
 ======================================================
 
 The :mod:`objcat` module contains classes and functions for generating catalogs
@@ -70,24 +70,24 @@ except ImportError: #support for earlier versions
     class Sequence(object):
         __slots__=('__weakref__',) #support for weakrefs as necessary
 
-        
+
 class CycleError(Exception):
     """
     This exception indicates a cycle was detected in some graph-like structure
     """
     def __init__(self,message):
         super(CycleError,self).__init__(message)
-        
+
 class CycleWarning(Warning):
     """
     This warning indicates a cycle was detected in some graph-like structure
     """
     def __init__(self,message):
         super(CycleWarning,self).__init__(message)
-        
+
 class SourceDataError(Exception):
     """
-    This exception indicates a problem occured while trying to retrieve 
+    This exception indicates a problem occured while trying to retrieve
     external Source-related data
     """
     def __init__(self,message):
@@ -99,36 +99,36 @@ class SourceDataError(Exception):
 class CatalogNode(object):
     """
     This object is the superclass for all elements/nodes of a catalog with both
-    parents and children.  
-    
+    parents and children.
+
     This is an abstract class that must have its initializer overriden.
-    
+
     *Subclassing*
         * Subclasses must call super(Subclass,self).__init__(parent) in their
           __init__
-    
+
     """
-    
+
     __metaclass__ = ABCMeta
     __slots__=('_parent','_children','__weakref__')
-    
+
     @abstractmethod
     def __init__(self,parent):
         self._children = []
         self._parent = None
-        
+
         if parent is not None:
             self.parent = parent
-            
+
     def __getstate__(self):
         return {'_parent':self._parent,'_children':self._children}
     def __setstate__(self,d):
         self._parent = d['_parent']
         self._children = d['_children']
-        
+
     def _cycleCheck(self,source):
         """
-        call this from a child object with the child as the Source to check 
+        call this from a child object with the child as the Source to check
         for cycles in the graph
         """
         if source is self:
@@ -137,14 +137,14 @@ class CatalogNode(object):
             return None
         else:
             return self.parent._cycleCheck(source)
-            
+
     def _getParent(self):
-        return self._parent 
+        return self._parent
     def _setParent(self,val):
         if val is not None:
             val._cycleCheck(self) #TODO:test performance effect/make disablable
             val._children.append(self)
-            
+
         if self._parent is not None:
             #TODO: optimize this by storing index somewhere?
             for i,c in enumerate(self._parent._children):
@@ -154,34 +154,34 @@ class CatalogNode(object):
                 raise ValueError('Node '+str(self)+" not in parent's children! This should be impossible.")
             del self._parent._children[i]
         self._parent = val
-        
+
     parent=property(_getParent,_setParent)
-    
-    
+
+
     @property
     def children(self):
         return tuple(self._children)
-    
+
     def reorderChildren(self,neworder,inverseinds=False):
         """
         Change the order of the children
-        
-        :param neworder: 
+
+        :param neworder:
             Must be one of:
                 * 'reverse'
                     Flip the order of the children
                 * Array-like with integer values
                     Specifies the new order of the children. (e.g. to reorder
                     [a,b,c] to [c,a,b], neworder would be [2,0,1])
-                * A callable 
+                * A callable
                     Reorders the children as per the :meth:`sort` list method,
                     using the callable as the `cmp` argument - it is called as
                     cmp(node1,node2) and should return -1 if node1<node2, 0 if
                     equal, or 1 if node1>node2.
-                * None 
+                * None
                     Reorders as per standard python list sorting
-                    
-        :param inverseinds: 
+
+        :param inverseinds:
             If True and `neworder` is integer array-like, does inverse
             reordering (e.g. if `neworder` is [2,0,1] and the children are
             [c,a,b] ,the children are reordered to [a,b,c]).  Otherwise,
@@ -203,7 +203,7 @@ class CatalogNode(object):
                 neworder = argsort(neworder)
             #now reorder
             self._children[:] = np.array(self._children,dtype=object)[neworder]
-    
+
     def addChild(self,node):
         """
         Adds a node as a child of this node.  Note that this will replace the
@@ -212,19 +212,19 @@ class CatalogNode(object):
         if not isinstance(node,FieldNode):
             raise ValueError('children must be FieldNodes')
         node.parent = self
-        
+
     def removeChild(self,node):
         """
-        Removes the requested child from this node, leaving it an orphan (i.e. 
-        it's parent is None)  
-        
+        Removes the requested child from this node, leaving it an orphan (i.e.
+        it's parent is None)
+
         If child is not present, a ValueError will be raised
         """
         if node not in self:
             raise ValueError('requested child not present in this node')
         node.parent = None
-        
-    
+
+
     @property
     def nnodes(self):
         """
@@ -232,7 +232,7 @@ class CatalogNode(object):
         (including self - e.g. a leaf in the tree returns 1)
         """
         return sum([c.nnodes for c in self._children],1)
-    
+
     def idstr(self):
         """
         a string uniquely identifying the object in its catalog heirarchy
@@ -250,50 +250,50 @@ class CatalogNode(object):
                 if self is c:
                     break
                 j+=1
-            return '{0}/{1}/{2}'.format(i,j,obj.idstr()) 
-        
-    
+            return '{0}/{1}/{2}'.format(i,j,obj.idstr())
+
+
     def visit(self,func,traversal='postorder',filter=False,includeself=True):
         """
         This function walks through the object and all its children, executing
         func(:class:`CatalogNode`) and returning a list of the return values
-        
+
         :param func: The function to call as ``func(node)`` on each node.
         :type func: a callable
-        
-        :param traversal:  
+
+        :param traversal:
             The traversal order of the tree - can be:
-        
+
             * 'preorder'
             * 'postorder'
             * an integer indicating at which index the root should be evaluated
               (pre/post are 0/-1)
             * a float between -1 and 1 indicating where the root should be evaluated
               as a fraction
-            * 'level'/'breathfirst' 
+            * 'level'/'breathfirst'
             * None:only visit this Node
-        
+
         :param filter:
             Sets a filter to control which nodes are visited. Can be:
-        
+
             * False
                 process and return all values
-            * A callable 
+            * A callable
                 is called as g(node) and if it returns False, the node will not
                 be processed nor put in the list (also ignores anything that
                 returns None)
             * any other
                 If the node returns this value on processing, it will not be
                 included in the returned list.
-                    
-        :param includeself: 
+
+        :param includeself:
             If False, the function will not visit the node itself (only the
             sub-trees)
         :type includeself: bool
-        
+
         :returns: A list with the return values of `visitfunc` at each visited node.
-            
-        """       
+
+        """
         if callable(filter):
             oldfunc = func
             def func(*args,**kwargs):
@@ -304,7 +304,7 @@ class CatalogNode(object):
             filterval = None
         else:
             filterval = filter
-        
+
         if type(traversal) is int:
             retvals = []
             doroot = True
@@ -331,10 +331,10 @@ class CatalogNode(object):
             for c in self._children:
                 retvals.extend(c.visit(func,traversal))
             if  includeself:
-                retvals.append(func(self))    
+                retvals.append(func(self))
         elif traversal == 'preorder':
             retvals = self.visit(func,0,filter,includeself)
-        elif traversal == 'level' or traversal == 'breadthfirst':            
+        elif traversal == 'level' or traversal == 'breadthfirst':
             retvals=[]
             q = deque()
             if includeself:
@@ -347,53 +347,53 @@ class CatalogNode(object):
             retvals = [func(self)]
         else:
             raise ValueError('unrecognized traversal type')
-        
+
         if filterval is not False:
             retvals = [v for v in retvals if v is not filterval]
         return retvals
-    
+
     def save(self,file,savechildren=True,**kwargs):
         """
         save this node as a file with the given name or file-like object
-        
+
         if savechildren is True, the entire subtree will be saved, if False,
         just this node
-        
+
         Note that the parent and everything above this point will NOT be
         saved (when reloaded the parent will be None)
-        
+
         extra kwargs are passed into utils.fpickle
         """
         from .utils import fpickle
 
         oldpar = self._parent
         self._parent = None
-        
+
         oldchildren = self._children
         if not savechildren:
             self._children = []
-          
+
         try:
             fpickle(self,file,**kwargs)
         finally:
             self._parent = oldpar
             self._children = oldchildren
-        
-    #this is a staticmethod to keep both save and load methods in the same 
+
+    #this is a staticmethod to keep both save and load methods in the same
     #place - they are also available at the package level
     @staticmethod
     def load(file):
         """
-        Load a previously saved :class:`CatalogNode`. 
-        
-        :param file: 
+        Load a previously saved :class:`CatalogNode`.
+
+        :param file:
             A file name or file-like object for a file storing a pickled
             :class:`CatalogNode`.
-            
-        :raises TypeError: If `file` does not contain a :class:`CatalogNode`. 
+
+        :raises TypeError: If `file` does not contain a :class:`CatalogNode`.
         """
         import cPickle as pickle
-        
+
         if isinstance(file,basestring):
             #filename
             fn = file
@@ -402,23 +402,23 @@ class CatalogNode(object):
         else:
             fn = file.name
             res = pickle.load(file)
-        
+
         if not isinstance(res,CatalogNode):
             raise TypeError('File %s does not contain a CatalogNode'%fn)
-            
+
         return res
-        
+
 #these place save/load at module-level, as well
 def save(node,file,savechildren=True):
     """
     save the specified node as a file with the given name or file-like object
-    
+
     if savechildren is True, the entire subtree will be saved, if False,
     just this node
-    
+
     Note that the parent and everything above this point will NOT be
     saved (when reloaded the parent will be None)
-    """      
+    """
     return node.save(file,savechildren)
 load = CatalogNode.load
 
@@ -426,25 +426,25 @@ class ActionNode(CatalogNode):
     """
     This object is the superclass for nodes of a catalog that perform an action
     but do not store data. Thus, they have a parent, but no children.
-    
+
     *Subclassing*
-    
+
     * If :meth:`__init__` is overridden in a subclass,
       :meth:`ActionNode.__init__` must be called.
     * Subclasses must override the abstract :meth:`_doAction` method to define
       the action for the node. The first argument should be the node to act on.
       Additional arguments (passed on from :meth:`__call__` should be documented
       in the class docstring.
-    
+
     If an action is desired without inserting the :class:`ActionNode` into the
     graph, the following method is typically used::
-        
+
         output = SomeActionClass(None,param1=foo,param2=bar)(targetnode)
-    
+
     """
-    
+
     __metaclass__ = ABCMeta
-    
+
     #no slots - makes ActionNodes more adaptable, as they don't store data
 
     def __init__(self,parent,name=None):
@@ -460,15 +460,15 @@ class ActionNode(CatalogNode):
         else:
             self.name = self.__class__.__name__ + ' node'
         self._children = tuple() #ActionNodes are always childless
-    
+
     def __call__(self,node=None,*args,**kwargs):
         """
-        Call this object to perform the action of this node.  
-        
-        :param node: 
+        Call this object to perform the action of this node.
+
+        :param node:
             The node this action is to operate on, or None to use this node's
             parent.
-            
+
         Additional arguments or keyword arguments are particular to a given node
         class - see the class docstring for details.
         """
@@ -483,59 +483,59 @@ class ActionNode(CatalogNode):
         this node expects. Whatever it returns will be returned by `__call__`
         """
         raise NotImplementedError
-    
+
     def __getstate__(self):
         d = super(ActionNode,self).__getstate__()
         d.update(self.__dict__)
         return d
-    
+
     def __setstate__(self,d):
         super(ActionNode,self).__setstate__(d)
         for k,v in d.iteritems():
             if not hasattr(self,k):
                 self.__dict__[k] = v
-    
+
 class FieldNode(CatalogNode,Sequence):
     """
-    A node in the catalog that has Fields.  
-    
-    Note that for these subclasses, attribute access (e.g. node.fieldname) 
-    accesses the Field object, while mapping or sequence-style access 
+    A node in the catalog that has Fields.
+
+    Note that for these subclasses, attribute access (e.g. node.fieldname)
+    accesses the Field object, while mapping or sequence-style access
     (e.g node['fieldname'] or node[1])  directly accesses the current value
-    of the field (or None if there is no value).  This means that 
+    of the field (or None if there is no value).  This means that
     iterating over the object will also give values.  To iterate over
     the Field objects, use the fields() method.
-    
-    Further, setting an attribute (e.g. node['fieldname'] = value) has different 
+
+    Further, setting an attribute (e.g. node['fieldname'] = value) has different
     behavior depending on the type of the input value:
-    
-    * an integer i: sets the current value for that field to the ith entry in 
+
+    * an integer i: sets the current value for that field to the ith entry in
       the field
     * a string: sets the current value to the entry that has the provided source
       name
     * a tuple (string,value): sets the field entry for the source named by the
       string to the value, and sets that source as the current value
-    * a tuple (string,(value,lerr[,uerr]): sets the field entry for the source 
-      named by the string to the value and sets the errors for that entry, and 
+    * a tuple (string,(value,lerr[,uerr]): sets the field entry for the source
+      named by the string to the value and sets the errors for that entry, and
       sets that source as the current value
     """
     __slots__=('_fieldnames',)
-    
+
     #@abstractmethod
     def __init__(self,parent,**kwargs):
         """
         Create a new fieldNode with the provided `parent`.
-        
+
         kwargs are assigned as node values as self[kwargkey] = kwargvalue
         """
         #TODO: consider using CatalogNode.__init__?
         #super(FieldNode,self).__init__(parent)
         CatalogNode.__init__(self,parent)
         self._fieldnames = []
-        
+
         for k,v in kwargs.iteritems():
             self[k] = v
-        
+
     def __getstate__(self):
         d = super(FieldNode,self).__getstate__()
         d['_fieldnames'] = self._fieldnames
@@ -550,22 +550,22 @@ class FieldNode(CatalogNode,Sequence):
             fi = d[n]
             setattr(self,n,fi)
             fi.node = self
-            
+
     def addField(self,field):
         if isinstance(field,basestring):
             field=Field(field)
         elif not isinstance(field,Field):
             raise ValueError('input value is not a Field')
-        
+
         if field.name in self._fieldnames:
             raise ValueError('Field name "%s" already present'%field.name)
-        
+
         setattr(self,field.name,field)
         if field.node is not None:
             raise ValueError('a Field can only reside in one Node')
         field.node = self
         self._fieldnames.append(field.name)
-        
+
     def delField(self,fieldname):
         try:
             self._fieldnames.remove(fieldname)
@@ -575,18 +575,18 @@ class FieldNode(CatalogNode,Sequence):
                 delattr(self,fieldname)
         except ValueError:
             raise KeyError('Field "%s" not found'%fieldname)
-        
+
     def fields(self):
         """
-        this yields an iterator over all of the Field objects (rather than 
+        this yields an iterator over all of the Field objects (rather than
         their values, as regular sequence access does)
         """
         for n in self._fieldnames:
             yield getattr(self,n)
-            
+
     def __str__(self):
         return 'FieldNode with fields %s'%self._fieldnames
-    
+
     def getFieldString(self,sep='\n'):
         """
         Generate a string with field:value pairs for all fields using
@@ -605,13 +605,13 @@ class FieldNode(CatalogNode,Sequence):
             return cmp(list(self),list(other))
         except TypeError:
             return 1
-        
+
     def __len__(self):
         return len(self._fieldnames)
-    
+
     def __contains__(self,key):
         return key in self._fieldnames
-        
+
     def __getitem__(self,key):
         iserr = issrc = False
         if key not in self._fieldnames:
@@ -636,10 +636,10 @@ class FieldNode(CatalogNode,Sequence):
                 return getattr(self,key).currentsource
             else:
                 return getattr(self,key)()
-            
+
         except IndexError: #field empty
             return None
-    
+
     def __setitem__(self,key,val):
         if key not in self._fieldnames:
             try:
@@ -648,14 +648,14 @@ class FieldNode(CatalogNode,Sequence):
                 raise IndexError('Field "%s" not found'%key)
         field = getattr(self,key)
         field.currentobj = val
-    
+
     def __delitem__(self,key):
         self.delField(key)
-        
+
     @property
     def fieldnames(self):
         return tuple(self._fieldnames)
-    
+
     @property
     def values(self):
         vals = []
@@ -665,7 +665,7 @@ class FieldNode(CatalogNode,Sequence):
             except IndexError:
                 vals.append('')
         return tuple(vals)
-    
+
     @property
     def sourcenames(self):
         vals = []
@@ -675,7 +675,7 @@ class FieldNode(CatalogNode,Sequence):
             except IndexError:
                 vals.append('')
         return tuple(vals)
-    
+
     @property
     def fielddict(self):
         vals = {}
@@ -685,25 +685,25 @@ class FieldNode(CatalogNode,Sequence):
             except IndexError:
                 vals[f.name] = None
         return vals
-    
+
     def setToSource(self,src,missing='skip'):
         """
         Sets a string or :class:`Source` object passed in as the `src` argument
         as the current source for the requested FieldNode and it's subtree.
-        
+
         `missing` can be:
-        
+
         * 'raise'/'exception'
             raise a ValueError if there is no value with that source
         * 'warn'
             give a warning if the value is missing
         * 'skip'
-            do nothing 
-        
+            do nothing
+
         """
         if not isinstance(src,Source) and src != 'derived':
-            src = Source(src)      #TODO:see if this is speedier          
-            
+            src = Source(src)      #TODO:see if this is speedier
+
         if callable(missing):
             action = missing
         elif missing == 'skip':
@@ -718,31 +718,31 @@ class FieldNode(CatalogNode,Sequence):
                 warn('could not find src %s in field %s and node %s'%(src,f,node))
         else:
             raise ValueError('invalid missing action')
-        
+
         for f in self.fields():
             if src in f:
                 f.currentobj = src
             else:
                 action(src,f,self)
-                    
+
     @staticmethod
     def setToSourceAtNode(node,src,missing='skip',traversal='postorder',siblings=False):
         """
         Sets a string or :class:`Source` object passed in as the `src` argument
         as the current source for the requested FieldNode and it's subtree.
-        
+
         `missing` can be:
-        
+
         * 'raise'/'exception'
             raise a ValueError if there is no value with that source
         * 'warn'
             give a warning if the value is missing
         * 'skip'
-            do nothing 
-        
+            do nothing
+
         `traversal` is the type of traversal to perform on the subtree. See
         :meth:`FieldNode.visit` for values.
-        
+
         If `siblings` is True, the function applies to all the children of this
         :class:`FieldNode's<FieldNode>` parent.
         """
@@ -752,7 +752,7 @@ class FieldNode(CatalogNode,Sequence):
                 includeself = False
             else:
                 includeself = True
-                
+
             def f(node):
                 if hasattr(node,'setToSource'):
                     node.setToSource(src,missing)
@@ -763,26 +763,26 @@ class FieldNode(CatalogNode,Sequence):
             for n in node:
                 vals.extend(FieldNode.setToSourceAtNode(n,src,missing,traversal,siblings))
             return vals
-    
-    @_add_docs_and_sig(setToSourceAtNode) 
+
+    @_add_docs_and_sig(setToSourceAtNode)
     def setToSourceAtSelf(self,*args,**kwargs):
         """
         Sets the given src string or Source object as the current source for
         this FieldNode and it's subtree. Based on
         :meth:`FieldNode.setToSourceAtNode` :
-        
+
         {docstr:setToSourceAtNode}
         """
         return FieldNode.setToSourceAtNode(self,*args,**kwargs)
-        
-        
+
+
     def getFieldValueNodes(self,fieldname,value):
         """
-        Searches through the tree and returns all nodes for which a particular 
+        Searches through the tree and returns all nodes for which a particular
         field name has the requested value
         """
         return FieldName.getFieldValueNodesAtNode(self,fieldname,value)
-    
+
     @staticmethod
     def extractFieldAtNode(node,fieldnames,traversal='postorder',filter=False,
                            missing=0,converter=None,sources=False,errors=False,
@@ -791,26 +791,26 @@ class FieldNode(CatalogNode,Sequence):
         This will walk through the tree starting from the :class:`FieldNode`
         given by the `node` argument and generate an :class:`array
         <numpy.ndarray>` of values for the specified fieldname.
-        
+
         :param node: The node from which to extract fields.
         :type node: a :class:`FieldNode` object
         :param fieldnames:  Can be:
-        
+
             * A single field name string.
             * A sequence of fieldnames strings.
             * A comma-seperated string of field names.
-            
+
         :param traversal: see :meth:`CatalogNode.visit`
         :param filter: see :meth:`CatalogNode.visit`
-        :param missing: 
+        :param missing:
             Determines the behavior in the event that a field is not present (or
             a non :class:`FieldNode` is encountered) it can be:
-            
+
             * 'exception'
                 raise an exception if the field is missing
             * 'skip'
-                do not include this object in the final array.  If `fieldnames` 
-                references more than one field, only the first field will be 
+                do not include this object in the final array.  If `fieldnames`
+                references more than one field, only the first field will be
                 used to determine if the node is skipped.
             * 'mask'
                 put 0 in the array location and return a mask of missing values as
@@ -820,22 +820,22 @@ class FieldNode(CatalogNode,Sequence):
                 missing values masked
             * any other
                 fill any missing entries with this value
-            
-        :param converter: 
+
+        :param converter:
             A function that is applied to the data before being added to the
             array (or None to perform no conversion).
         :type converter: callable or None
-        :param sources: 
+        :param sources:
             Determines if a sequence of sources should be returned - if False,
             only the array is returned. If True, the sources will be returned as
             described below. By default, string representations of the sources
             are returned. If it is set to 'object', the actual :class:`Source`
             objects will be returned instead.
         :type sources: bool or string value 'object'
-        :param errors: 
-            If True, the errors will be returned (see return values below). 
+        :param errors:
+            If True, the errors will be returned (see return values below).
         :type errors: bool
-        :param asrec: 
+        :param asrec:
             Is True, a :class:`record array <numpy.recarray>` is generated
             instead of a regular :class:`array <numpy.ndarray>`. It can
             optionally specify the numpy data type of the values, if it is a
@@ -846,36 +846,36 @@ class FieldNode(CatalogNode,Sequence):
         :type asrec: bool
         :param includeself: If True, this node itself will be included.
         :type includeself: bool
-        
+
         :returns:
             If `missing` is 'mask', the below return values that are wrapped as
             a (returnval,mask) tuple. If errors are returned, they are
             (uppererror,lowererror) arrays, i.e. +/- . Can be:
-            
+
             * a :class:`record array<numpy.recarray>` if `asrec` is True
             * an f x N :class:`array<numpy.ndarray>` of values if `sources` and
               `errors` are False
             * (values,errors,sources) if `sources` and `errors` are True
             * (values,sources) if `sources` are True and `errors` are False
             * (values,errors) if `errors` are True and `sources` are False
-        
+
         """
-        
+
         from functools import partial
-        
+
         if missing in ('exception','raise','skip','mask','masked'):
             missingval = 0
         else:
             missingval = missing
-            
-        
+
+
         if isinstance(fieldnames,basestring):
             if ',' in fieldnames:
                 fieldnames = fieldnames.split(',')
             else:
                 fieldnames = [fieldnames]
-                
-        
+
+
         if converter is None:
             if missing == 'exception' or missing == 'raise':
                 def visitfunc(node,fieldname):
@@ -910,29 +910,29 @@ class FieldNode(CatalogNode,Sequence):
                         return converter(node[fieldname])
                     except (KeyError,IndexError,TypeError,AttributeError):
                         return missingval
-                    
+
         def maskfunc(node,fieldname):
             try:
                 node[fieldname]
                 return True
             except (KeyError,IndexError,TypeError,AttributeError):
-                return False 
-            
+                return False
+
         if filter is not False and not callable(filter):
             def maskfilter(node,fieldname):
                 return visitfunc(node,fieldname)!=filter
         else:
             maskfilter = filter
-            
+
         lsts = []
         masks = []
         maskfilterp = maskfilter
         for fn in fieldnames:
             lsts.append(node.visit(partial(visitfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself))
             if filter is not False and not callable(filter):
-                maskfilterp = partial(maskfilter,fieldname=fn)                
+                maskfilterp = partial(maskfilter,fieldname=fn)
             masks.append(node.visit(partial(maskfunc,fieldname=fn),traversal=traversal,filter=maskfilterp,includeself=includeself))
-        
+
         lsts = [np.array(l) for l in lsts]
         #lists of objects sometimes becomes arrays of lists instead of the intended result - this fixes that
         lsts = [np.array(a.ravel()[0],dtype=object) if a.shape==tuple() else a for a in lsts]
@@ -940,42 +940,42 @@ class FieldNode(CatalogNode,Sequence):
         if missing=='skip':
             m = np.array(masks[0])
             lsts = [a[m] for a in lsts]
-        
-        
+
+
         if sources:
             def srcfunc(node,fieldname):
                 try:
                     return getattr(node,fieldname).currentobj.source
                 except (KeyError,IndexError,TypeError,AttributeError):
-                    return None 
-            if filter is not False and not callable(filter):   
+                    return None
+            if filter is not False and not callable(filter):
                 srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=partial(maskfilter,fieldname=fn),includeself=includeself) for fn in fieldnames]
             else:
                 srcs = [node.visit(partial(srcfunc,fieldname=fn),traversal=traversal,filter=filter,includeself=includeself) for fn in fieldnames]
-            
+
             if sources != 'object':
-                srcs = [[str(s) for s in f]  for f in srcs] 
-            
+                srcs = [[str(s) for s in f]  for f in srcs]
+
         if errors:
             def errfunc(node,fieldname):
                 try:
                     return getattr(node,fieldname).currentobj.errors
                 except (KeyError,IndexError,TypeError,AttributeError),e:
                     return (0,0)
-            if filter is not False and not callable(filter):      
+            if filter is not False and not callable(filter):
                 errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=partial(maskfilter,fieldname=fn),includeself=includeself) for fn in fieldnames]
             else:
                 errs = [node.visit(partial(errfunc,fieldname=fn),traversal=traversal,filter=maskfilter,includeself=includeself) for fn in fieldnames]
-            
-                
+
+
         if asrec:
             from operator import isMappingType,isSequenceType
-            
+
             if asrec is True:
                 asrec = {}
             elif isinstance(asrec,basestring):
                 asrec = asrec.split(',')
-            
+
             if isMappingType(asrec):
                 for fn in fieldnames:
                     if fn not in asrec:
@@ -984,11 +984,11 @@ class FieldNode(CatalogNode,Sequence):
                 if len(asrec) != len(fieldnames):
                     raise ValueError('asrec sequence does not match fieldnames')
                 asrec = dict(zip(fieldnames,asrec))
-                    
+
             else:
                 raise ValueError('invalid asrec entry')
-            
-            
+
+
             ralists = []
             newfnms = []
             for i,(fnm,lst,msk) in enumerate(zip(fieldnames,lsts,masks)):
@@ -1006,21 +1006,21 @@ class FieldNode(CatalogNode,Sequence):
                 if missing == 'mask':
                     newfnms.append(fnm+'_mask')
                     ralists.append(msk)
-                    
+
             res = np.rec.fromarrays(ralists,names=newfnms)
             if missing == 'masked':
                 return np.ma.MaskedArray(res,~np.array(msk))
             else:
                 return res
-            
+
         else:
             arr = np.array(lsts,dtype=object)
-            
+
             if errors:
                 errmsk = np.array([[2*[err == (0,0)] for err in fi] for fi in errs])
                 errs = np.array(errs)
-                
-            
+
+
             if len(arr)==1:
                 arr = arr[0]
                 masks = masks[0]
@@ -1028,9 +1028,9 @@ class FieldNode(CatalogNode,Sequence):
                     srcs = srcs[0]
                 if errors:
                     errs = errs[0]
-                
-                
-                    
+
+
+
             if missing == 'mask':
                 res = arr,np.array(masks)
             elif missing == 'masked':
@@ -1045,27 +1045,27 @@ class FieldNode(CatalogNode,Sequence):
                 res = arr
             else:
                 res = arr
-            
+
             if sources and errors:
-                return (res,errs,srcs)    
+                return (res,errs,srcs)
             elif sources:
                 return (res,srcs)
             elif errors:
                 return (res,errs)
             else:
                 return res
-            
-    @_add_docs_and_sig(extractFieldAtNode) 
+
+    @_add_docs_and_sig(extractFieldAtNode)
     def extractField(self,*args,**kwargs):
         """
         Walk through the tree starting from this object.
-        
+
         If the kwarg `siblings` is set to True, this will also extract the
         siblings (e.g. the parent subtree, except for the parent itself), and
         this overwrites `includeself`.
-        
-        The other arguments are for :meth:`FieldNode.extractFieldAtNode` : 
-        
+
+        The other arguments are for :meth:`FieldNode.extractFieldAtNode` :
+
         {docstr:extractFieldAtNode}
         """
         sib = kwargs.pop('siblings',False)
@@ -1078,11 +1078,11 @@ class FieldNode(CatalogNode,Sequence):
         else:
             return FieldNode.extractFieldAtNode(self,*args,**kwargs)
     #extractField.__doc__ += extractFieldAtNode.__doc__
-    
+
     @staticmethod
     def getFieldValueNodesAtNode(node,fieldname,value,visitkwargs={}):
         """
-        Searches through the tree and returns all nodes for which a particular 
+        Searches through the tree and returns all nodes for which a particular
         field name has the requested value
         """
         def visitfunc(node):
@@ -1090,34 +1090,34 @@ class FieldNode(CatalogNode,Sequence):
                 v = getattr(node,fieldname)
                 if callable(v) and v() == value:
                     return node
-        visitkwargs['filter'] = None    
+        visitkwargs['filter'] = None
         return node.visit(visitfunc,**visitkwargs)
 
-#<----------------------------node attribute types----------------------------->    
- 
+#<----------------------------node attribute types----------------------------->
+
 class Field(MutableSequence):
     """
     This class represents an attribute/characteristic/property of the
     FieldNode it is associated with.  It stores the current value
     as well as all the other possible values.
 
-    The values, sources, and default properties will return the actual values 
-    contained in the FieldValues, while :attr:`currentobj` and iterating 
-    over the Field will return FieldValue objects.  Calling the 
+    The values, sources, and default properties will return the actual values
+    contained in the FieldValues, while :attr:`currentobj` and iterating
+    over the Field will return FieldValue objects.  Calling the
     Field (no arguments) will return the current value itself
-    
-    usedef specified if the default should be set -- if True, defaultval will 
+
+    usedef specified if the default should be set -- if True, defaultval will
     be used, if None, a None defaultval will be ignored but any other
     will be recognizd, and if False, no default will be set
     """
     __slots__=('_name','_type','_vals','_nodewr','_notifywrs','_units','_descr')
-    
+
     def __init__(self,name=None,type=None,defaultval=None,usedef=None,
                       descr=None,units=None):
         """
         The field should have a name, and can optionally be given a type.  If the
         name is None, it will be inferred from the node it is placed inside.
-        """        
+        """
         self._name = name
         self._vals = []
         self._type = type
@@ -1125,10 +1125,10 @@ class Field(MutableSequence):
         self._nodewr = None
         self._units = units
         self._descr = descr
-        
+
         if usedef or (usedef is None and defaultval is not None):
             self.default = defaultval
-    
+
     _okDVs = set() #DerivedValues that are safe to ignore, used by StructuredFieldNode
     def __getstate__(self):
         prunedvals = []
@@ -1143,7 +1143,7 @@ class Field(MutableSequence):
                 prunedvals.append(v)
         return {'_name':self._name,'_type':self._type,'_vals':prunedvals,
                 '_units':self._units,'_descr':self._descr}
-        
+
     def __setstate__(self,d):
         self._name = d['_name']
         self._type = d['_type']
@@ -1158,9 +1158,9 @@ class Field(MutableSequence):
             self._descr = None
         self._notifywrs = None
         self._nodewr = None
-        #notifiers should late-attach when values are first accessed, and  
+        #notifiers should late-attach when values are first accessed, and
         #the Node does it's own attaching
-        
+
     def __call__(self):
         return self.currentobj.value
     def __len__(self):
@@ -1172,14 +1172,14 @@ class Field(MutableSequence):
             return True
         except (KeyError,IndexError):
             return False
-    
+
     def __str__(self):
         return 'Field %s:[%s]'%(self._name,', '.join([str(v) for v in self._vals]))
-    
+
     @property
     def currentsource(self):
         return self.currentobj.source
-        
+
     @property
     def currenterror(self):
         o = self.currentobj
@@ -1187,34 +1187,34 @@ class Field(MutableSequence):
             return o.errors
         else:
             return (0,0)
-    
+
     def strCurr(self):
         """
-        returns a string with the current value instead of the list of 
+        returns a string with the current value instead of the list of
         values (the behavior of str(Field_obj)
         """
         try:
             return 'Field %s: %s'%(self.name,self())
         except IndexError:
             return 'Field %s empty'%self.name
-    
+
     def _checkConvInVal(self,val,dosrccheck=True):
         """
         "check and convert input value
-        
+
         auto-converts tuples to ObservedValues or ObservedErroredValues
         taking the first element to be the source, and if the second
         is a tuple, it will be passed into ObservedErroredValue init
         #TODO: auto-convert callables with necessary information to derivedvalues
-        
-        * dosrccheck = True -> check if source is present and raise a  
+
+        * dosrccheck = True -> check if source is present and raise a
           ValueError if so
-        * dosrccheck = string/Source -> ensure that value matches specified 
+        * dosrccheck = string/Source -> ensure that value matches specified
           string/Source and if not raise a ValueError
         * dosrccheck = False -> do no checking - just convert
         """
         from operator import isSequenceType
-        
+
         if not isinstance(val,FieldValue):
             if hasattr(val,'source') and hasattr(val,'value'):
                 pass
@@ -1225,7 +1225,7 @@ class Field(MutableSequence):
                     val = ObservedValue(val[0],val[1])
             else:
                 raise TypeError('Input %s not FieldValue-compatible'%str(val))
-        
+
         if dosrccheck:
             if isinstance(dosrccheck,Source):
                 s = dosrccheck
@@ -1240,26 +1240,29 @@ class Field(MutableSequence):
                 for v in self._vals:
                     if v.source == val.source:
                         raise ValueError('value with %s already present in Field'%v.source)
-            
+
             try:
                 val.checkType(self.type)
-            except TypeError:
+            except TypeError,e:
                 if self.type==float:
-                    val._value = float(val._value)
+                    try:
+                        val._value = float(val._value)
+                    except ValueError:
+                        raise e
                 else:
                     raise
-        
+
         if isinstance(val,DerivedValue):
             if val.field is not None:
                 raise ValueError('DerivedValues can only reside in a single field for dependencies')
             val.field = self
         return val
-    
+
     def notifyValueChange(self,oldvalobject=None,newvalobject=None):
         """
-        notifies all registered functions that the value in this 
+        notifies all registered functions that the value in this
         field has changed
-        
+
         (see registerNotifier)
         """
         if self._notifywrs is not None:
@@ -1270,22 +1273,22 @@ class Field(MutableSequence):
                     deadrefs.append(i)
                 else:
                     callobj(oldvalobject,newvalobject)
-                    
-            
+
+
             if len(deadrefs) == len(self._notifywrs):
                 self._notifywrs = None
             else:
                 for i in reversed(deadrefs):
                     del self._notifywrs[i]
-    
+
     def registerNotifier(self,notifier,checkargs=True):
         """
-        this registers a function to be called when the value changes or is 
+        this registers a function to be called when the value changes or is
         otherwise rendered invalid.  The notifier will be called as
         notifier(oldvalobj,newvalobj) BEFORE the value change is finalized.
         """
         from weakref import ref
-        
+
         if not callable(notifier):
             raise TypeError('notifier not a callable')
         if checkargs:
@@ -1295,7 +1298,7 @@ class Field(MutableSequence):
         if self._notifywrs is None:
             self._notifywrs = []
         self._notifywrs.append(ref(notifier))
-    
+
     def __getitem__(self,key):
         if type(key) is int:
             return self._vals[key]
@@ -1322,7 +1325,7 @@ class Field(MutableSequence):
                 raise KeyError('Field does not have %s'%key)
             else:
                 raise TypeError('key not a Source key or index')
-            
+
     def __setitem__(self,key,val):
         if type(key) is int or key in self:
             i = key if type(key) is int else self._vals.index(self[key])
@@ -1343,29 +1346,29 @@ class Field(MutableSequence):
                 val = (s,val)
             val = self._checkConvInVal(val,dosrccheck=True)
             self._vals.append(val)
-        
+
     def __delitem__(self,key):
-        if type(key) is int: 
+        if type(key) is int:
             i = key
         else:
             i = self._vals.index(self[key])
-            
+
         if i == 0 and self._notifywrs is not None:
             self.notifyValueChange(self._vals[0],self._vals[1] if len(self._vals)>1 else None)
         del self._vals[i]
-            
+
     def insert(self,key,val):
         """
         Insert a value into this :class:`Field`.
-        
+
         :param key: The index or source at which to insert.
         :param val: The :class:`FieldValue` to add.
         """
         checktype = key if isinstance(key,Source) else True
         val = self._checkConvInVal(val,dosrccheck=checktype)
         self._nocheckinsert(key,val)
-        
-    def _nocheckinsert(self,key,val):        
+
+    def _nocheckinsert(self,key,val):
         if type(key) is int:
             i = key
         else:
@@ -1373,11 +1376,11 @@ class Field(MutableSequence):
         if i == 0 and self._notifywrs is not None:
             self.notifyValueChange(val,self._vals[0] if len(self._vals)>0 else None)
         self._vals.insert(i,val)
-        
+
     @property
     def name(self):
         return self._name
-    
+
     #TODO: some sort of unit/conversion support beyond just names
     @property
     def units(self):
@@ -1385,14 +1388,14 @@ class Field(MutableSequence):
         The units of this :class:`Field`.
         """
         return self._units
-    
+
     @property
     def description(self):
         """
         The description of this :class:`Field`.
         """
         return self._descr
-    
+
     def _getNode(self):
         return None if self._nodewr is None else self._nodewr()
     def _setNode(self,val):
@@ -1404,19 +1407,19 @@ class Field(MutableSequence):
         for d in self.derived:
             d.sourcenode = val
     node = property(_getNode,_setNode,doc='the node to which this Field belongs')
-    
+
     @property
     def type(self):
         """
-        Selects the type to enforce for this field. if None, no type-checking 
+        Selects the type to enforce for this field. if None, no type-checking
         will be performed if a numpy dtype, the value must be an array matching
-        the dtype can also be a sequence of types (accepts all) or a function 
-        that will be called directly on the function that returns True if the 
+        the dtype can also be a sequence of types (accepts all) or a function
+        that will be called directly on the function that returns True if the
         type is valid.
         """
         return self._type
 
-    #TODO:default should be Catalog-level?    
+    #TODO:default should be Catalog-level?
     def _getDefault(self):
         return self[None].value
     def _setDefault(self,val):
@@ -1427,7 +1430,7 @@ class Field(MutableSequence):
     The default value is the FieldValue that has a the None Source -
     this property is the default value itself, not the fieldValue object
     """)
-    
+
     def _getCurr(self):
         try:
             return self._vals[0]
@@ -1445,42 +1448,42 @@ class Field(MutableSequence):
             #if it's already present, remove already existing value
             if valobj.source in self:
                 del self[valobj.source]
-        
+
         self.notifyValueChange(oldcurr,valobj)
         self._vals.insert(0,valobj)
     currentobj = property(_getCurr,_setCurr)
-    
+
     @property
     def values(self):
         return [v() for v in self._vals]
-    
+
     @property
     def sources(self):
         return [v.source for v in self._vals]
-    
+
     @property
     def sourcenames(self):
         return [str(v.source) for v in self._vals]
-    
+
     @property
     def observed(self):
         """
         returns a list of all the ObservedValue objects except the default
         """
         return [o for o in self if (isinstance(o,ObservedValue) and o.source._str != 'None')]
-        
+
     @property
     def derived(self):
         """
         returns a list of all the DerivedValue objects
         """
         return [o for o in self if isinstance(o,DerivedValue)]
-    
+
     @property
     def errors(self):
         return [v.errors if hasattr(v,'errors') else (0,0) for v in self._vals]
-        
-    
+
+
 class _SourceMeta(type):
     def __call__(cls,*args,**kwargs):
         obj = type.__call__(cls,*args,**kwargs)
@@ -1495,18 +1498,18 @@ class _SourceMeta(type):
                 singobj._adscode = obj._adscode
         else:
             Source._singdict[obj._str] = obj
-            
+
         return Source._singdict[obj._str]
 
 class Source(object):
     """
-    A source for an observation/measurement/value.  Note that there is always 
+    A source for an observation/measurement/value.  Note that there is always
     only one instance if a source at a given time - any two Sources with the
     same source string are the same object
-    
-    The source can optionally include a URL location to look up metadata 
+
+    The source can optionally include a URL location to look up metadata
     like authors, publication date, etc (location property)
-    
+
     the constructor string can be of the form 'str/loc' in which case loc will be
     interpreted as the bibcode (see :meth:`setBibcode` for valid forms) if it is
     not specified in the argument. If it is 'str//loc', the loc will not be
@@ -1514,17 +1517,17 @@ class Source(object):
     """
     __metaclass__ = _SourceMeta
     __slots__=['_str','_adscode','__weakref__']
-    
+
     from weakref import WeakValueDictionary
     _singdict = WeakValueDictionary()
     del WeakValueDictionary
-    
+
     def __init__(self,src,bibcode=None):
         src = src._str if hasattr(src,'_str') else str(src)
-        
+
         if bibcode is None and '/' in src:
             srcsp = src.split('/')
-            
+
             if srcsp[-2] == '': #don't do checking for // case
                 self._str = '/'.join(srcsp[:-2]).strip()
                 self._adscode = srcsp[-1].strip()
@@ -1535,35 +1538,35 @@ class Source(object):
         else:
             self._str = src
             self.setBibcode(bibcode)
-        
+
     def __reduce__(self):
         return (Source,(self._str+('' if self._adscode is None else ('//'+self._adscode)),))
-        
+
     def __str__(self):
         return self._str + ((' @' + self.getBibcode()) if self._adscode is not None else '')
-    
+
     adsurl = 'adsabs.harvard.edu'
     #the URL to use for looking up ADS entries
     adstimeout = 1
     #time in seconds before giving up on a search for ADS entries
-    
+
     def getBibcode(self):
         """
         Returns the ADS_ bibliographic code for this source.
-        
-        :returns: 
+
+        :returns:
             A string with the ADS_ bibcode or None if no bibcode is defined.
         """
         return self._adscode
-    
+
     def setBibcode(self,val):
         """
         Sets the ADS_ bibliographic code for this :class:`Source`
-        
-        :param val: 
+
+        :param val:
             The location reference for this bibcode. It may be any of the
             following:
-        
+
                 * A string of the form 'arxiv: ####.####'
                     The location is an ArXiv article identifier.
                 * A string of the form 'astro-ph: ####.####'
@@ -1577,13 +1580,13 @@ class Source(object):
                     Any other form will be interpreted as an ADS bibcode.
                 * None
                     The bibcode will be unset, and any ADS-related lookups for
-                    this source will fail. 
-                    
+                    this source will fail.
+
         :raises TypeError: If an improper type is provided for `val`.
         :raises SourceDataError: if the record cannot be located.
-        
+
         """
-        
+
         if val is not None:
             if not isinstance(val,basestring):
                 raise TypeError('bibcodes must be strings or None')
@@ -1592,7 +1595,7 @@ class Source(object):
             else:
                 val = self._findADScode(val)
         self._adscode = val
-    
+
     @staticmethod
     def _findADScode(loc):
         from urllib2 import urlopen,HTTPError,URLError
@@ -1602,7 +1605,7 @@ class Source(object):
         if not Source.adsurl:
             return loc
 
-        lloc = loc.lower()        
+        lloc = loc.lower()
         if 'arxiv' in lloc:
             url = 'http://%s/abs/arXiv:%s'%(Source.adsurl,lloc.replace('arxiv:','').replace('arxiv','').strip())
         elif 'astro-ph' in lloc:
@@ -1613,18 +1616,18 @@ class Source(object):
             url = loc
         else: #assume ADS abstract code
             url = 'http://%s/abs/%s'%(Source.adsurl,loc)
-            
+
         url += '?data_type=PLAINTEXT'
         try:
             if Source.adstimeout is None:
                 with closing(urlopen(url)) as page: #raises exceptions if url DNE
                     for l in page:
-                        if 'Bibliographic Code:' in l: 
+                        if 'Bibliographic Code:' in l:
                             return l.replace('Bibliographic Code:','').strip()
             else:
                 with closing(urlopen(url,timeout=Source.adstimeout)) as page: #raises exceptions if url DNE
                     for l in page:
-                        if 'Bibliographic Code:' in l: 
+                        if 'Bibliographic Code:' in l:
                             return l.replace('Bibliographic Code:','').strip()
         except HTTPError:
             raise SourceDataError('Requested location %s does not exist at url %s'%(loc,url))
@@ -1633,28 +1636,28 @@ class Source(object):
                 raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
             raise
         raise SourceDataError('Bibliographic entry for the location %s had no ADS code, or parsing problem'%loc)
-    
-    
+
+
     _adsxmlcache = {}
-    
+
     @staticmethod
     def clearADSCache(adscode=None, disable=False):
         """
-        this clears the cache of the specified adscode, or everything, if 
+        this clears the cache of the specified adscode, or everything, if
         the adscode is None
         """
         if adscode is None:
             Source._adsxmlcache.clear()
         else:
             del Source._adsxmlcache[adscode]
-    
+
     @staticmethod
     def useADSCache(enable=True):
         """
-        This is used to disable or enable the cache for ADS lookups - if the 
+        This is used to disable or enable the cache for ADS lookups - if the
         enable argument is True, the cache is enable (or unaltered if it
         is already active)) and if it is False, it will be disabled
-        
+
         note that if the cache is disabled, all entries are lost
         """
         if enable:
@@ -1662,49 +1665,49 @@ class Source(object):
                 Source._adsxmlcache = {}
         else:
             Source._adsxmlcache = None
-            
+
     def _getADSXMLRec(self):
         adscode = self._adscode
         if adscode is None:
             raise SourceDataError('No location provided for additional source data')
         if not Source.adsurl:
             raise SourceDataError('ADS URL not provided, so bibliographic lookup cannot occur.')
-            
+
         if Source._adsxmlcache is not None and adscode in Source._adsxmlcache:
             xmlrec = Source._adsxmlcache[adscode]
         else:
             from urllib2 import urlopen
             from contextlib import closing
             from xml.dom.minidom import parseString
-            
+
             with closing(urlopen('http://%s/abs/%s>data_type=XML'%(Source.adsurl,adscode))) as f:
                 xmld = parseString(f.read())
-            
+
             recs = xmld.getElementsByTagName('record')
             if len(recs) > 1:
                 raise SourceDataError('Multiple matching ADS records for code %s'%adscode)
-            
+
             xmlrec = recs[0]
-            if Source._adsxmlcache is not None: 
+            if Source._adsxmlcache is not None:
                 Source._adsxmlcache[adscode] = xmlrec
-        
+
         return xmlrec
-        
+
     def getBibEntry(self):
         """
-        Retrieves the BibTeX entry for this :class:`Source`. This data is 
+        Retrieves the BibTeX entry for this :class:`Source`. This data is
         retrieved from ADS_ and thus requires a network connection if it is not
         already cached.
-        
-        :raises SourceDataError: 
+
+        :raises SourceDataError:
             If no bibcode is defined (see :meth:`setBibcode`).
-        
+
         :returns: A string with the BibTeX formatted entry for this source.
-        
+
         """
         from urllib2 import urlopen,URLError
         from contextlib import closing
-        
+
         if self._adscode is None:
             raise SourceDataError('No location provided for additional source data')
         if not Source.adsurl:
@@ -1720,26 +1723,26 @@ class Source(object):
             if e.reason=='timed out':
                 raise SourceDataError('Lookup of Bibliographic code failed due to timeout')
             raise
-        
+
         return res[(res.index('@')):]
-        
+
     def openADSAbstract(self,opentype=None,**kwargs):
         """
         Opens the ADS abstract for this source in a web browser.
-        
+
         :param opentype: The type of web browser window to open.  Can be:
-            
+
             * None
                 Uses the :func:`webbrowser.open` function.
-            * 'new' 
+            * 'new'
                 Uses the :func:`webbrowser.open_new` function.
             * 'tab'
                 Uses the :func:`webbrowser.open_new_tab` function.
-        
+
         Additionaly keyword arguments will be passed into the relevant function.
         """
         import webbrowser
-        
+
         if opentype is None:
             openfunc = webbrowser.open
         elif opentype=='new':
@@ -1748,31 +1751,31 @@ class Source(object):
             openfunc = webbrowser.open_new_tab
         else:
             raise ValueError('invalid opentype in openADSAbstract')
-            
+
         openfunc(self.adsabs,**kwargs)
-            
+
     @staticmethod
     def build_bibliography(sources='all',fn=None):
         """
         Generates and returns BibTeX bibliography for :class:`Source` objects.
-        
-        :param sources: 
+
+        :param sources:
             A sequence of :class:`Source` objects or the string 'all' to use all
             :class:`Source` objects.
-        :param fn: 
+        :param fn:
             A filename at which to save the BibTeX content, or None to not save.
-        
-        :returns: 
+
+        :returns:
             bibstr,fail where `bibstr` is a string with the BibTeX content and
             `fail` is a list of :class:`Source` objects for which the lookup failed
             (usually because the :class:`Source` has no bibcode)
-            
-        :raises TypeError: 
+
+        :raises TypeError:
             If `sources` is not a list of :class:`Source` objects or 'all'
         """
-        
-        
-        
+
+
+
     @property
     def authors(self):
         """
@@ -1780,7 +1783,7 @@ class Source(object):
         """
         rec = self._getADSXMLRec()
         return [e.firstChild.nodeValue for e in rec.getElementsByTagName('author')]
-    
+
     @property
     def title(self):
         """
@@ -1791,7 +1794,7 @@ class Source(object):
         if len(es) != 1:
             raise SourceDataError('Title not found for %s'%self)
         return es[0].firstChild.nodeValue
-    
+
     @property
     def abstract(self):
         """
@@ -1802,7 +1805,7 @@ class Source(object):
         if len(es) != 1:
             raise SourceDataError('Abstract not found for %s'%self)
         return es[0].firstChild.nodeValue
-    
+
     @property
     def date(self):
         """
@@ -1813,7 +1816,7 @@ class Source(object):
         if len(es) != 1:
             raise SourceDataError('Publication date not found for %s'%self)
         return es[0].firstChild.nodeValue
-    
+
     @property
     def adsabs(self):
         """
@@ -1828,11 +1831,11 @@ class Source(object):
                 else:
                     return [n.firstChild.nodeValue for n in urlnodes]
         raise SourceDataError('Abstract URL not found for %s'%self)
-    
+
     @property
     def keywords(self):
         """
-        The keywords for this source, and the type of the keywords, if 
+        The keywords for this source, and the type of the keywords, if
         present
         """
         rec = self._getADSXMLRec()
@@ -1843,39 +1846,39 @@ class Source(object):
         except KeyError:
             type = None
         return kws,type
-    
+
 class FieldValue(object):
     """
     Superclass for values that belong to a field.
     """
     __metaclass__ = ABCMeta
     __slots__ = ('_source')
-    
+
     @abstractmethod
     def __init__(self):
         self._source = None
-    
+
     def __getstate__(self):
         return {'_source':self._source}
     def __setstate__(self,d):
         self._source = d['_source']
-    
+
     value = abstractproperty(doc='The value stored by this :class:`FieldValue`')
     """
     The value stored by this :class:`FieldValue`
     """
-    
+
     def _getSource(self):
         return self._source
     def _setSource(self,val):
         if not (val is None or isinstance(val,Source)):
             try:
                 val = Source(val)
-            except: 
+            except:
                 raise TypeError('Input source is not convertable to a Source object')
-        self._source = val 
+        self._source = val
     source=property(_getSource,_setSource,doc='The :class:`Source` for this :class:`FieldValue`')
-    
+
     def checkType(self,typetocheck):
         """
         ensure that the value of this FieldValue is of the requested Type
@@ -1884,13 +1887,13 @@ class FieldValue(object):
         """
         from .utils import check_type
         check_type(typetocheck,self.value)
-            
+
     def __call__(self):
         return self.value
-    
+
     def __str__(self):
         return 'Value %s'%self.value
-    
+
 class ObservedValue(FieldValue):
     """
     This value is an observed or otherwise measured value for the field
@@ -1903,7 +1906,7 @@ class ObservedValue(FieldValue):
             source = Source(source)
         self.source = source
         self._value = value
-        
+
     def __getstate__(self):
         d = super(ObservedValue,self).__getstate__()
         d['_value'] = self._value
@@ -1911,18 +1914,18 @@ class ObservedValue(FieldValue):
     def __setstate__(self,d):
         super(ObservedValue,self).__setstate__(d)
         self._value = d['_value']
-        
+
     def __str__(self):
         return '%s:Value %s'%(self.source,self.value)
-    
-    @property    
+
+    @property
     def value(self):
         return self._value
 
 class ObservedErroredValue(ObservedValue):
     """
     This value is an observed value with errorbars
-    
+
     The value is either (value,err) or (value,uperr,lowerr)
     """
     __slots__=('_upperr','_lowerr')
@@ -1943,13 +1946,13 @@ class ObservedErroredValue(ObservedValue):
         super(ObservedErroredValue,self).__setstate__(d)
         self._upperr = d['_upperr']
         self._lowerr = d['_lowerr']
-        
+
     def __str__(self):
         if self._lowerr is not None:
             return '%s:Value %s +%s -%s'%(self.source,self.value,self._upperr,self._lowerr)
         else:
             return '%s:Value %s +/- %s'%(self.source,self.value,self._upperr)
-        
+
     def checkType(self,typetocheck):
         """
         ensure that the value and errors are of the requested Type
@@ -1964,11 +1967,11 @@ class ObservedErroredValue(ObservedValue):
                 check_type(typetocheck,self._upperr)
             if self._lowerr is not None:
                 check_type(typetocheck,self._lowerr)
-    
+
     @property
     def errors(self):
         """
-        Errors on the measurement as a uppererror,lowererror tuple, or 0,0 
+        Errors on the measurement as a uppererror,lowererror tuple, or 0,0
         if no errors are present.
         """
         u,l = self._upperr,self._lowerr
@@ -1980,31 +1983,31 @@ class ObservedErroredValue(ObservedValue):
         #    return l,l
         else:
             return u,l
-    
+
     def hasSymmetricErrors(self):
         return self._upperr==self._lowerr
-        
+
 class DerivedValue(FieldValue):
     """
     A FieldValue that derives its value from a function of other
     :class:`FieldValues<FieldValue>`.
-    
+
     The values to use as arguments to the function are initially set through the
     default values of the function, and can be either references to fields or
     strings used to locate the dependencies in the catalog tree, using the
     `sourcenode` argument as the current source (see :class:`DependentSource`
     for details of how dependent values are dereferenced)
-    
+
     Alternatively, the initializer argument `flinkdict` may be a dictionary of
     link values that overrides the defaults from the function.
-    
+
     if `ferr` is True, the return value of `f` should be a 3-sequence of the
     form (value,uppererror,lowererror), and the arguments of `f` will be passed
     as (depvalue,uerr,lerr) from the source :class:`FieldValues<FieldValue>`.
-    
+
     The class attribute :attr:`failedvalueaction` determines the action to take
     if a an exception is encountered while deriving the value and can be:
-    
+
     * 'raise'
         raise an exception (or pass one along)
     * 'warn'
@@ -2014,31 +2017,31 @@ class DerivedValue(FieldValue):
         the value will be returned as None but the value will be left invalid
     * 'ignore'
         the value will be returned as None and will be marked valid
-    
+
     """
     __slots__=('_f','_ferr','_value','_errs','_valid','_fieldwr')
     #TODO: auto-reassign nodepath from source if Field moves
-    failedvalueaction = 'raise' 
-    
+    failedvalueaction = 'raise'
+
     def __init__(self,f,sourcenode=None,flinkdict=None,ferr=False):
         """
         `f` is the function to use for deriving the value - must have default
-        field links for every argument if `flinkdict` is None. 
-        
+        field links for every argument if `flinkdict` is None.
+
         `sourcenode` specifies the current node to allow for links to be strings
         instead of explicit references to :class:`Fields<Field>`.
-        
+
         `flinkdict` maps argument names to links, overriding the default values
         of the arguments of `f`
         """
         import inspect
-        
+
         if callable(f):
             self._f = f
             self._ferr = ferr
-            
+
             args, varargs, varkw, defaults = inspect.getargspec(f)
-            
+
             if varargs or varkw:
                 raise TypeError('DerivedValue function cannot have variable numbers of args or kwargs')
             if flinkdict:
@@ -2051,19 +2054,19 @@ class DerivedValue(FieldValue):
                 defaults = [flinkdict.pop(a) for a in args if a in flinkdict]
                 if len(flinkdict)>0:
                     raise ValueError('Override link for function arguments in a DerivedValue do not exist:%s'%flinkdict.keys())
-                
+
             if defaults is None or len(args) != len(defaults) :
                 raise TypeError('DerivedValue does not have enought initial linkage items')
         else:
             raise TypeError('attempted to initialize a DerivedValue with a non-callable')
-        
+
         self._valid = False
         self._value = None
         self._errs = None
-        
+
         self._fieldwr = None
         self._source = DependentSource(defaults,sourcenode,self._invalidateNotifier)
-        
+
     def __getstate__(self):
         d = super(DerivedValue,self).__getstate__()
         d['_value'] = self._value
@@ -2077,30 +2080,30 @@ class DerivedValue(FieldValue):
         self._valid = False
         self._fieldwr = None
         self._f = d['_f'] #TODO: find some way to work around this?
-        
+
     def __str__(self):
         try:
             return 'Derived Value: %s'%self.value
         except:
             return 'Derived Value: Underivable'
-    
+
     @property
     def source(self):
         return self._source
-    
+
     @property
     def flinkdict(self):
         from inspect import getargspec
-        
+
         args = getargspec(self._f)[0]
         return dict([t for t in zip(args,self.source.depstrs)])
-    
+
     def _getNode(self):
         return self._source.pathnode
     def _setNode(self,val):
         self._source.pathnode = val
     sourcenode=property(_getNode,_setNode,doc='The current location in the Catalog tree')
-    
+
     def _getField(self):
         return None if self._fieldwr is None else self._fieldwr()
     def _setField(self,val):
@@ -2111,7 +2114,7 @@ class DerivedValue(FieldValue):
             self._fieldwr = ref(val)
     field=property(_getField,_setField,doc='A function like Field.notifyValueChange')
 
-    
+
     def checkType(self,typetocheck):
         oldaction = DerivedValue.failedvalueaction
         try:
@@ -2120,11 +2123,11 @@ class DerivedValue(FieldValue):
         finally:
             DerivedValue.failedvalueaction = oldaction
     checkType.__doc__ = FieldValue.checkType.__doc__
-    
+
     def _invalidateNotifier(self,oldvalobj,newvalobj):
         return self.invalidate()
-    
-    
+
+
     __invcyclestack = deque()
     def invalidate(self):
         """
@@ -2139,7 +2142,7 @@ class DerivedValue(FieldValue):
                     cycleloc = 'Node "%s"'%self.sourcenode['name']
                 else:
                     cycleloc = 'Node '+ self.sourcenode.idstr()
-            
+
             if self.field is not None:
                 cycleloc += ' in Field %s'%self.field.name
             warn('Setting a DerivedValue that results in a cycle at '+cycleloc,CycleWarning)
@@ -2151,13 +2154,13 @@ class DerivedValue(FieldValue):
                     self.field.notifyValueChange(self,self)
             finally:
                 DerivedValue.__invcyclestack.pop()
-    
+
     @property
     def value(self):
         if self._valid:
             return self._value
         else:
-            try: 
+            try:
                 deps = self._source.getDeps(geterrs = True)
                 if self._ferr:
                     valres = self._f(*deps)
@@ -2167,7 +2170,7 @@ class DerivedValue(FieldValue):
                     depvals = [d[0] for d in deps]
                     self._value = val = self._f(*depvals)
                     if np.all([(np.all(d[1]==0) and np.all(d[2]==0)) for d in deps]):
-                        
+
                         #if errors are all zero in dependencies, set to zero straight
                         self._errs = (0,0)
                     else:
@@ -2191,19 +2194,19 @@ class DerivedValue(FieldValue):
                         cycleloc = ' at '+self.idstr()
                     else:
                         if 'name' in self.sourcenode:
-                            cycleloc = ' at Node '+ self.sourcenode['name'] 
+                            cycleloc = ' at Node '+ self.sourcenode['name']
                         else:
                             cycleloc = ' at Node '+ self.sourcenode.idstr()
                         if self.field is not None:
                             cycleloc += ' Field ' + self.field.name
-                            
+
                     dcs = DependentSource._DependentSource__depcyclestack
                     cyclestr = '->'.join(['('+','.join(ds.depstrs)+')' for ds in dcs])
                     e.args = (e.args[0]+cycleloc+' with Path:->'+cyclestr,)
                     e.message = e.args[0]
-                    
-                    
-                
+
+
+
                 if self.failedvalueaction == 'raise':
                     if len(e.args) == 2 and isinstance(e.args[1],list):
                         fields = [self._f.func_code.co_varnames[i] for i in e.args[1]]
@@ -2227,7 +2230,7 @@ class DerivedValue(FieldValue):
                     self._valid = True
                 else:
                     raise ValueError('invalid failedvalueaction')
-            
+
             return self._value
     @property
     def errors(self):
@@ -2238,52 +2241,52 @@ class DependentSource(Source):
     """
     This class holds weak references to the :class:`Field`s that are necessary
     to generate values such as in :class:`DerivedValue`.
-    
+
     This source must know the :class:`CatalogNode` that it is expected to
     inhabit to properly interpret string codes for fields. Otherwise, the input
     fields must be :class:`Field` objects.
-    
-    If locator strings are given to `depfields`, these strings follow a simple 
+
+    If locator strings are given to `depfields`, these strings follow a simple
     mini-language to locate their target field.  If they are strings without the
     '-' character, they will simply be treated as names within the same node. If
     a '-' is present, the text before the '-' follows the form "^^^.0.st"
     where a '^' character indicates that the path should go up to the parent of
-    the current node, ".0" indicates to go to the first child, and ".st" 
+    the current node, ".0" indicates to go to the first child, and ".st"
     indicates that a `LinkField` with the name 'st' should be followed.  Once
     the correct node is located, the text after the "-" indicates the name of
-    the field on that node.  
-    
+    the field on that node.
+
     Thus,'^^^.0.st-field' would go three needs up, into the first child, then
-    into the node from a link named 'st', and would return the value of the 
+    into the node from a link named 'st', and would return the value of the
     field named "field".
     """
-    
+
     __slots__ = ('depfieldrefs','depstrs','_pathnoderef','notifierfunc')
     _instcount = 0
-    
-    
-    #depfieldrefs: weakrefs to FieldValue objects 
-    #depstrs: strings that should be used to locate FieldValue objects 
-    #_pathnoderef: weakref to the CatalogNode used to dereference 
-    
+
+
+    #depfieldrefs: weakrefs to FieldValue objects
+    #depstrs: strings that should be used to locate FieldValue objects
+    #_pathnoderef: weakref to the CatalogNode used to dereference
+
     def __new__(cls,*args,**kwargs):
         obj = super(DependentSource,cls).__new__(cls)
         DependentSource._instcount += 1
         return obj
-    
+
     def __noneer(self):
         return None
-    
+
     def __init__(self,depfields,pathnode,notifierfunc=None):
         from weakref import ref
-        
+
         self._str = 'dependent%i'%DependentSource._instcount
         self._adscode = None
         self.depfieldrefs = depfieldrefs = []
         self.depstrs = depstrs = []
         self.pathnode = pathnode
         self.notifierfunc = notifierfunc
-        
+
         for f in depfields:
             if isinstance(f,basestring):
                 depstrs.append(f)
@@ -2298,23 +2301,23 @@ class DependentSource(Source):
                 depfieldsrefs.append(self.__noneer)
             else:
                 raise ValueError('Unrecognized field code %s'%str(f))
-    
+
     def __reduce__(self):
         #Only thing guaranteed are the strings
         return (DependentSource,(self.depstrs,None))
-        
+
     def __len__(self):
         return len(self.depfieldrefs)
-    
+
     @property
     def location(self):
         return None
-    
+
     def _getPathnode(self):
         return self._pathnoderef()
     def _setPathnode(self,val):
         from weakref import ref
-        
+
         if val is None:
             self._pathnoderef = self.__noneer
         else:
@@ -2326,23 +2329,23 @@ class DependentSource(Source):
             if s is None:
                 self.depfieldrefs[i] = self.__noneer
     pathnode = property(_getPathnode,_setPathnode,doc='The CatalogNode for dereferencing source names')
-    
+
     @staticmethod
     def _locatestr(s,node):
         """
         this method translates from a string and a location to the actual
         targeted Field
-        
+
         see :class:`DependentSource` docs for a description of the mini-language
         """
         if '-' not in s:
             return getattr(node,s)
-            
+
         sp = s.split('-')
         if len(sp)>2:
             raise ValueError('locator string has more than one "-" character')
         path,nm = sp
-        
+
         sp2 = path.split('^')
         lasti = len(sp2)-1
         for i,subs in enumerate(sp2):
@@ -2371,11 +2374,11 @@ class DependentSource(Source):
                             node = node.children[int(subs2)]
                         except ValueError,e:
                             raise ValueError('locator string has invalid child request "%s"'%subs2,e)
-                    
+
                     if node is None:
                         raise ValueError('locator string leads to broken link')
         return getattr(node,nm)
-    
+
     def populateFieldRefs(self):
         """
         this relinks all dead weakrefs using the dependancy strings and returns
@@ -2383,7 +2386,7 @@ class DependentSource(Source):
         strings cannot be dereferenced
         """
         from weakref import ref
-        
+
         if self.pathnode is None:
             refs = [wr() for wr in self.depfieldrefs]
             if None in refs:
@@ -2391,9 +2394,9 @@ class DependentSource(Source):
         else:
             if not hasattr(self.pathnode,'fieldnames'):
                 raise ValueError('Linked pathnode has no fields or does not exist')
-            
+
             refs = []
-            
+
             for i,wrf in enumerate(self.depfieldrefs):
                 if wrf() is None:
                     f = self._locatestr(self.depstrs[i],self.pathnode)
@@ -2403,14 +2406,14 @@ class DependentSource(Source):
                             f.registerNotifier(self.notifierfunc)
                 else:
                     refs.append(wrf())
-        
+
         return refs
-        
+
     __depcyclestack = deque()
     def getDeps(self,geterrs=False):
         """
         gets the values of the dependent field.
-        
+
         the return value is a list of the values in the fields if geterrs is
         False, or (value,upperr,lowerr) if it is True
         """
@@ -2420,8 +2423,8 @@ class DependentSource(Source):
                 raise CycleError('Attempting to compute a DerivedValue that results in a cycle')
             else:
                 DependentSource.__depcyclestack.append(self)
-                
-            fieldvals = [wr() for wr in self.depfieldrefs]    
+
+            fieldvals = [wr() for wr in self.depfieldrefs]
             if None in fieldvals:
                 fieldvals = self.populateFieldRefs()
             if geterrs:
@@ -2440,54 +2443,54 @@ class DependentSource(Source):
                 return [fi() for fi in fieldvals]
         finally:
             DependentSource.__depcyclestack.pop()
-            
-            
+
+
 class LinkField(Field):
     """
     A `Field` that only has values that point to other nodes.
-    
+
     :param str name: A string with the field's name.
     :param class type:
         The type of node that this link can accept. Must be `CatalogNode` or a
         subclass.
-    
+
     .. note::
-        If the current linked node has been removed, calling this will change the 
+        If the current linked node has been removed, calling this will change the
         current object to the next valid link.
-        
+
     """
-    
+
     __slots__ = tuple()
-    
+
     def __init__(self,name=None,type=CatalogNode,units=None,descr=None):
         if not (type is CatalogNode or issubclass(type,CatalogNode)):
             raise TypeError('nodetype must be a CatalogNode or subclass')
-        
+
         if units is not None:
             raise ValueError('LinkFields cannot have units')
-            
+
         Field.__init__(self,name,type,defaultval=None,usedef=None,
                             units=units,descr=descr)
-        
+
     def _checkConvInVal(self,val,dosrccheck=True):
         from operator import isSequenceType
-        
+
         if isSequenceType(val) and len(val)==2:
             val = LinkValue(val[0],val[1])
-            
+
         if not isinstance(val,LinkValue):
             raise TypeError('LinkFields can only take LinkValues')
-        
+
         val.checkType(self._type)
         return val
-        
+
     def __call__(self):
         res = self.currentobj.value
         if res is None:
             del self[self.currentobj.source]
             res = self() #recurses until there is no currentobj or we reach something
         return res
-        
+
 class LinkValue(FieldValue):
     """
     A `FieldValue` that points to a node.
@@ -2495,51 +2498,51 @@ class LinkValue(FieldValue):
     __slots__ = ('_linkwr',)
     def __init__(self,src,nodeval):
         from weakref import ref
-        
+
         self._source = src
         self._linkwr = ref(nodeval)
-        
+
     def checkType(self,type):
         node = self.value
         if not isinstance(node,type):
             raise TypeError('linked node %s does not match expected node type %s'%(node,type))
-            
+
     @property
     def value(self):
         return self._linkwr()
-    
+
     def __getstate__(self):
         d = super(LinkValue,self).__getstate__()
         d['_linkwr'] = self._linkwr()
         return d
-    
+
     def __setstate__(self,d):
         from weakref import ref
         super(LinkValue,self).__setstate__(d)
         self._linkwr = ref(d['_linkwr'])
-    
+
 #<------------------------------Node types------------------------------------->
 class Catalog(CatalogNode):
     """
     This class represents a catalog of objects or catalogs.
-    
-    A Catalog is essentially a node in the object tree that 
-    is typically (although not necessarily) the root of the 
+
+    A Catalog is essentially a node in the object tree that
+    is typically (although not necessarily) the root of the
     catalog tree.
-    
-    Iterator access is over the children, as is container testing and 
-    index access.  
-    
-    Attributes can also be accessed as catobj[attrname] (this allows 
+
+    Iterator access is over the children, as is container testing and
+    index access.
+
+    Attributes can also be accessed as catobj[attrname] (this allows
     access to Catalog attributes in the same way as FieldNodes)
-    """    
+    """
     def __init__(self,name='default Catalog',parent=None):
         super(Catalog,self).__init__(parent)
         self.name = name
-        
+
     def __str__(self):
-        return 'Catalog %s'%self.name  
-    
+        return 'Catalog %s'%self.name
+
     def __contains__(self,key):
         if isinstance(key,basestring):
             return hasattr(self,key)
@@ -2553,50 +2556,50 @@ class Catalog(CatalogNode):
         return len(self._children)
     def __iter__(self):
         return iter(self._children)
-    
+
     def isRoot(self):
         return self._parent is None
-    
+
     @property
     def actionchildren(self):
         return tuple([c for c in self.children if isinstance(c,ActionNode)])
-    
+
     def mergeNode(self,node,skipdup=False,testfunc=None):
         """
-        merges the given FieldNode into the catalog by reassigning all of 
+        merges the given FieldNode into the catalog by reassigning all of
         it's children to this Catalog
 
         testfunc is a function that will be called on the node to
         be transferred, and if it is True, the node will be moved, or
-        if not it will be left alone.  If it is None, this 
+        if not it will be left alone.  If it is None, this
         test will be skipped
-        
+
         if skipdup is True, any nodes that already have an object of the same
         name will not be transferred
-        
+
         returns the number of objects added
         """
         if testfunc is None:
             testfunc = lambda n:True
-        
+
         nms = [n['name'] for n in self.children]
-        
+
         i = -1
         countoffset = 1
         for i,c in enumerate(node.children):
             if (skipdup and c['name'] in nms) or not testfunc(c):
-                countoffset -= 1    
+                countoffset -= 1
             else:
                 c.parent = self
-            
+
         return i+countoffset
-    
+
     def insertInto(self,insertnode):
         """
-        Inserts this Catalog into another catalog heirarchy in the place of 
+        Inserts this Catalog into another catalog heirarchy in the place of
         a node `insertnode` . This will replace the current parent, if any.
-        
-        :param insertnode: 
+
+        :param insertnode:
             The node to insert this :class:`Catalog` in the place of. This
             :class:`Catalog` becomes the parant of `insertnode` .
         :type insertnode: :class:`CatalogNode`
@@ -2607,21 +2610,21 @@ class Catalog(CatalogNode):
         self.parent = newparent
         #put the Catalog in the same location in the parent as the old node
         newparent._children.insert(ind,newparent._children.pop())
-        
+
     #<----------------------FieldNode children-specific ----------------------->
     @_add_docs_and_sig(FieldNode.extractFieldAtNode)
     def extractField(self,*args,**kwargs):
         """
-        Walk through the tree starting from this object and generate an array 
+        Walk through the tree starting from this object and generate an array
         of the values for the requested fieldname if any :class:`FieldNode`s are in this
         :class:`Catalog`.
-        
+
         The other arguments are for :meth:`FieldNode.extractFieldAtNode` :
         {docstr:extractFieldAtNode}
         """
         kwargs['includeself']=False
         return FieldNode.extractFieldAtNode(self,*args,**kwargs)
-    
+
     def getFieldNames(self):
         """
         Searches the Catalog and finds all field names present in the children
@@ -2632,20 +2635,20 @@ class Catalog(CatalogNode):
                 s.update(node.fieldnames)
         self.visit(visfunc)
         return s
-    
+
     def getFieldValueNodes(self,fieldname,value):
         """
         Searches the Catalog and finds all objects with the requested name
         """
         return FieldNode.getFieldValueNodesAtNode(self,fieldname,value,{'includeself':False})
-    
+
     def locateName(self,name):
         """
         Searches the Catalog and finds all objects with the requested name
         """
         return FieldNode.getFieldValueNodesAtNode(self,'name',name,{'includeself':False})
-    
-    
+
+
 class _StructuredFieldNodeMeta(ABCMeta):
     #Metaclass is used to check at class creation-time that fields all match names
     def __new__(mcs,name,bases,dct):
@@ -2673,16 +2676,16 @@ class StructuredFieldNode(FieldNode):
     particular data structure (i.e. a consistent set of :class:`Fields<Field>`).
     It is meant to be subclassed to define generic types of objects in the
     catalog.
-    
+
     The fields and names are inferred from the class definition and hence the
     class attribute name must match the field name. Any
     :class:`FieldValues<FieldValue>` present in the class objects will be
     ignored.
-    
+
     The :attr:`checkonload` class attribute determines the action to take if an
     unaltered :class:`StructuredFieldNode` is loaded and found to be
     inconsistent with the current class definition. It may be:
-    
+
     * False/None/0
         Do no checking.
     * 'warn'
@@ -2695,20 +2698,20 @@ class StructuredFieldNode(FieldNode):
         silently revert to the current definition if inconsistencies are found
     * 'revertwarn'
         issue a warning, then revert
-    
+
     """
     __metaclass__ = _StructuredFieldNodeMeta
-    
+
     @staticmethod
     def __fieldInstanceCheck(x):
         return isinstance(x,Field) or (isinstance(x,tuple) and len(x) == 2 and isinstance(x[0],DerivedValue))
-    
+
     def __init__(self,parent,**kwargs):
         import inspect
-        
+
         super(StructuredFieldNode,self).__init__(parent) #kwargs processed below
         self._altered = False
-       
+
         dvs=[]  #derived values to apply to fields as (derivedvalue,field)
         #apply Fields from class into new object as new Fields
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
@@ -2717,7 +2720,7 @@ class StructuredFieldNode(FieldNode):
             else:
                 fi = v
                 dv = None
-            
+
             #make a new Field object (or subclass) for the new fields
             if None in fi:
                 fobj = fi.__class__(fi.name,type=fi.type,defaultval=fi[None],
@@ -2728,24 +2731,24 @@ class StructuredFieldNode(FieldNode):
                                     descr=fi.description,units=fi.units)
             setattr(self,k,fobj)
             fobj.node = self
-            
+
             if dv is not None:
                 dvs.append((dv,fobj))
-            
+
             self._fieldnames.append(k)
-            
+
         for dv,fobj in dvs:
             dvo = DerivedValue(dv._f,sourcenode=self,flinkdict=dv.flinkdict,
                                ferr=dv._ferr)
             dvo.field = fobj
             fobj._nocheckinsert(0,dvo)
-            
+
         for k,v in kwargs.iteritems():
             self[k] = v
-            
+
     def __getstate__(self):
         import inspect
-        
+
         #locate derived values and store where they should be re-inserted
         currderind = {}
         for k,v in inspect.getmembers(self.__class__,self.__fieldInstanceCheck):
@@ -2757,21 +2760,21 @@ class StructuredFieldNode(FieldNode):
                         if hasattr(dv,'_f') and dv._f is v[0]._f:
                             currderind[n] = fi.index(dv)
                             Field._okDVs.add(dv)
-                    
+
         d = super(StructuredFieldNode,self).__getstate__()
         d['_altered'] = self._altered
         d['currderind'] = currderind
         return d
-    
-    
+
+
     checkonload = 'warn'
     def __setstate__(self,d):
         #function spends a lot of time in getmembers - optimize if possible?
         import inspect
-        
+
         self._altered = d['_altered']
         super(StructuredFieldNode,self).__setstate__(d)
-        
+
         if StructuredFieldNode.checkonload:
             inconsistent = False
             fields = []
@@ -2789,53 +2792,53 @@ class StructuredFieldNode(FieldNode):
                     if ind > len(fi):
                         ind = len(fi)
                     fi.insert(ind,DerivedValue(v[0]._f,self,v[0].flinkdict,v[0]._ferr))
-            
-                    
+
+
             #consistency check to ensure that the object has the necessary fields
             if StructuredFieldNode.checkonload:
                 fields.append(k)
                 if (not inconsistent) and getattr(self,k) is getattr(self.__class__,k) or not isinstance(getattr(self,k),Field):
                     inconsistent = k
-                
+
         #do consistency check to ensure that there are no extra fields that shouldn't be present
         if StructuredFieldNode.checkonload:
             for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
                 if k not in fields:
                     inconsistent = str(k)+' not in '+str(fields)
                     break
-                
+
             if inconsistent is not False:
                 if 'raise' in StructuredFieldNode.checkonload:
                     raise ValueError("object %s is not consistent with it's class definition due to %s"%(self,inconsistent))
-                
+
                 if 'warn' in StructuredFieldNode.checkonload or StructuredFieldNode.checkonload is True:
                     from warnings import warn
                     warn("object %s is not consistent with it's class definition due to %s"%(self,inconsistent))
-                    
+
                 if 'revert' in StructuredFieldNode.checkonload:
                     self.revert()
-                
-    
+
+
     @property
     def alteredstruct(self):
         """
-        If True, the object no longer matches the specification given by the 
+        If True, the object no longer matches the specification given by the
         class.  Note that this will remain True even if the offending fields
         are returned to their correct state.
         """
         return self._altered
-    
+
     def revert(self):
         """
         Revert this object back to the standard Fields for  the class.
         Any deleted fields will be populated with the class Default Value
-        any attributes that match the names of deleted Fields will be 
+        any attributes that match the names of deleted Fields will be
         overwritten
-        
+
         TODO:test
         """
         import inspect,types
-        
+
         dvs=[]  #derived values to apply to fields as (derivedvalue,field)
         #replace any deleted Fields with defaults and keep track of which should be kept
         fields=[]
@@ -2845,7 +2848,7 @@ class StructuredFieldNode(FieldNode):
             else:
                 fi = v
                 dv = None
-                
+
             fields.append(k)
             #check to make sure the field is present, and if not, add it back in
             if hasattr(self,k) is hasattr(self.__class__,k) or not hasattr(self,k) or not isinstance(getattr(self,k),Field):
@@ -2855,46 +2858,46 @@ class StructuredFieldNode(FieldNode):
                     fobj = fi.__class__(fi.name,fi.type)
                 setattr(self,k,fobj)
                 fobj.node = self
-                
+
                 if dv is not None:
                     dvs.append((dv,fobj))
-                    
+
         #check to make sure there are no extra fields
         for k,v in inspect.getmembers(self,lambda x:isinstance(x,Field)):
             if k not in fields:
                 delattr(self,k)
-        
+
         self._fieldnames = fields
-        
+
         for dv,fobj in dvs:
             fobj.insert(0,DerivedValue(dv._f,self,dv.flinkdict,dv._ferr))
-        
+
         self._altered = False
         self.addField = types.MethodType(StructuredFieldNode.addField,self,StructuredFieldNode)
         self.delField = types.MethodType(StructuredFieldNode.delField,self,StructuredFieldNode)
-    
+
     def addField(self,field):
         self._altered = True
         self.addField = super(StructuredFieldNode,self).addField
         self.addField(field)
-        
+
     def delField(self,fieldname):
         self._altered = True
         self.delField = super(StructuredFieldNode,self).delField
         self.delField(fieldname)
-    
+
 def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
                      usedef=None,units=None,ferr=False,**kwargs):
     """
-    This method is to be used as a function decorator to generate a 
+    This method is to be used as a function decorator to generate a
     field with a name matching that of the function.  Note that the
     function should NOT have self as the leading argument
-    
-    Arguments are the same as for the Field constructor, except that 
-    leftover kwargs are passed in as links that override the 
+
+    Arguments are the same as for the Field constructor, except that
+    leftover kwargs are passed in as links that override the
     defaults of the function.
-    
-    The docstring of the function will be taken as the field's 
+
+    The docstring of the function will be taken as the field's
     :attr:`description`.
     """
     if f is None: #allow for decorator arguments
@@ -2904,60 +2907,60 @@ def derivedFieldFunc(f=None,name=None,type=None,defaultval=None,
             name = f.__name__
         fi = Field(name=name,type=type,defaultval=defaultval,usedef=usedef,
                    units=units,descr=f.__doc__)
-        
+
         dv = DerivedValue(f,sourcenode=None,flinkdict=kwargs,ferr=ferr)
         return dv,fi
-    
+
 #add this as a static class function for compatibility with older versions (for now)
 StructuredFieldNode.derivedFieldFunc = staticmethod(derivedFieldFunc)
-        
+
 def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
                  converters=None,namefield=None,setcurr=True):
     """
     Applies values from an array to CatalogNodes.
-    
+
     values must be a 2-dimensional array or a 1-dimensional structured array.
     If a 2D array, the first dimension should be the fields, while the
     second dimension should be the nodes to be created.
-    
+
     source is a Source object or a string that will be converted to a Source
     object
-    
-    nodes is either a container of nodes to visit or a CatalogNode 
+
+    nodes is either a container of nodes to visit or a CatalogNode
     in which all FieldNodes within will be used as the nodes to visit
-    
+
     fields is either a sequence of field names (must be at least as long as
     the array's second index dimension) or a mapping from indecies to field
     names or structured array field names to FieldNode field names
-    
-    if errors is not None, it should either be an object matching values 
+
+    if errors is not None, it should either be an object matching values
     in shape, or a tuple (upper,lower) and will be applied as the errors
     on the values
-    
-    matcher is a callable called as matcher(arrayrow,node) - if it returns 
+
+    matcher is a callable called as matcher(arrayrow,node) - if it returns
     False, the array will be matched to the next node - if True, the array
     values will be applied to the node
-    
-    converters  are either a sequence of callables or a mapping from indecies 
+
+    converters  are either a sequence of callables or a mapping from indecies
     to callables or structured array field names to callables that will be
-    called on each array element before being added to the FieldNode as 
+    called on each array element before being added to the FieldNode as
     converter(value).  If errors are provided, the converter will be called
-    as converter((value,uerr,lerr)). If converters is None, no converting 
+    as converter((value,uerr,lerr)). If converters is None, no converting
     is performed.
-    
-    
+
+
     namefield is a field name that will be set to a unique code of the form
-    'src-i' where i is element index of the array row (or None to apply 
+    'src-i' where i is element index of the array row (or None to apply
     no name).  It can also be a 2-tuple (name,converter) where converter is
-    a callable of the form converter(i) that should return the value to 
+    a callable of the form converter(i) that should return the value to
     apply to the field.
     """
     from operator import isSequenceType,isMappingType
     from inspect import getargspec
-    
+
     if not isinstance(source,Source):
         source = Source(source)
-     
+
     if isinstance(nodes,CatalogNode):
         if isinstance(matcher,basestring):
             traversal = matcher
@@ -2967,21 +2970,21 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
         nodes = nodes.visit(lambda n:n,traversal,lambda n:isinstance(n,FieldNode))
     else:
         nodes = list(nodes)
-    
+
     if isinstance(fields,basestring):
-            fields={0:fields}    
+            fields={0:fields}
     elif not isMappingType(fields):
         fields = dict([t for t in enumerate(fields)])
     else:
         fields = dict(fields) #copy
-       
+
     if converters is None:
         pass
     elif not isMappingType(converters):
         converters = dict([t for t in enumerate(converters)])
     else:
         converters = dict(converters) #copy
-    
+
     array = np.array(values,copy=False).T #now first dimension is along nodes and second is fields
     if errors is None:
         lerrors = uerrors = None
@@ -2990,15 +2993,15 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
     else:
         uerrors = errors
         lerrors = None
-    
+
     if converters is None:
         converters = {}
-    
+
     if array.dtype.names is not None and len(array.shape) == 1:
         #structured/record array
         if len(array.shape) != 1:
             raise ValueError('structured array must be 1d')
-        
+
         nms = array.dtype.names
         for k in fields.keys():
             if k in nms:
@@ -3024,7 +3027,7 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
             raise ValueError('first dimension of array does not match number of fields')
     else:
         raise ValueError('invalid input array')
-    
+
     fieldseq = []
     for i in range(len(array[0])):
         if i not in fields:
@@ -3034,19 +3037,19 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
             fieldseq.append(fi)
             del fields[i]
     fieldseq = tuple(fieldseq)
-    
+
     if fields:
         raise ValueError('fields %s were not found in the array'%fields)
-            
+
     convseq = []
     for i in range(len(array[0])):
         if i not in converters:
             convseq.append(lambda val:val)
         else:
             convseq.append(converters[i])
-    
+
     convseq = tuple(convseq)
-    
+
     twoargseq =[]
     for i,conv in enumerate(convseq):
         if conv is None:
@@ -3063,11 +3066,11 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
                         twoargseq.append(True)
                     else:
                         raise ValueError('converter for field %s has wrong number of arguments'%fieldseq[i])
-    
+
     if matcher is None and len(array) != len(nodes):
         raise ValueError('with no matcher, the number of nodes must match the size of the array')
-            
-    
+
+
     for i,a in enumerate(array):
         if matcher is None:
             n = nodes[0]
@@ -3085,7 +3088,7 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
         for fi in fieldseq:
             if fi is not None and fi not in n.fieldnames:
                 n.addField(fi)
-        
+
         for fiind,v in enumerate(a):
             if fieldseq[fiind] is not None:
                 fi = getattr(n,fieldseq[fiind])
@@ -3098,40 +3101,40 @@ def arrayToNodes(values,source,fields,nodes,errors=None,matcher=None,
                     fi[source] = convseq[fiind](v)
                 if setcurr:
                     fi.currentobj = source
-        
+
 def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFieldNode,
                    converters=None,filter=None,namefield=None,nameconv=None,
                    setcurr=True):
     """
-    Generates a catalog of nodes from the array of data.  
-    
+    Generates a catalog of nodes from the array of data.
+
     See ``arrayToNodes`` for values,source,fields, and covnerter arguments.
-    
+
     parent is the object to use as the parent for all of the nodes (which will
     be returned, a string (in which case a Catalog object will be created
     and returned), or None (return value will be a sequence of nodes)
-    
-    nodetype is the class to use to create the nodes (usually a subclass of 
+
+    nodetype is the class to use to create the nodes (usually a subclass of
     ``StructuredFieldNode``)
-    
-    filter is a function that will be called on the array row and if it 
-    returns True, a node will be created, and if False, that row will be 
+
+    filter is a function that will be called on the array row and if it
+    returns True, a node will be created, and if False, that row will be
     skipped
-    
-    namefield is the field to use to apply the name of the node from the 
+
+    namefield is the field to use to apply the name of the node from the
     index of the array row.  nameconv can be:
-    
+
     * None: name field will be set to '<sourcestr>-i'
     * a callable: name field will be set to nameconv(i)
     * a sequence of mapping: name field will be set as nameconv[i]
-    
+
     if namefiled is None, no name will be applied
 
     """
     if isinstance(parent,basestring):
         parent = Catalog(parent)
-    
-    source = Source(source) 
+
+    source = Source(source)
     if namefield:
         if nameconv is None:
             srcstr = source._str.split('/')[0]
@@ -3141,8 +3144,8 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
         else:
             nameseq = nameconv
             nameconv = lambda i:nameseq[i]
-        
-    if filter:  
+
+    if filter:
         def matcher(arrayrow,node):
             return filter(arrayrow)
     else:
@@ -3150,7 +3153,7 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
         matcher = None
 
     array = np.array(values,copy=False)
-    
+
     nodes = []
     for i,a in enumerate(array.T):
         if filter(a):
@@ -3163,86 +3166,86 @@ def arrayToCatalog(values,source,fields,parent,errors=None,nodetype=StructuredFi
                 if len(nfi) == 1 and None in nfi:
                     del nfi[None]
                 nfi[source] = nameconv(i)
-    
+
     arrayToNodes(array,source,fields,nodes,errors=errors,converters=converters,
                  matcher=matcher,setcurr=setcurr)
-    
+
     if parent is None:
         return nodes
     else:
         return parent
-    
-    
-    
-    
-    
+
+
+
+
+
 #<--------------------builtin/special purpose classes-------------------------->
 class SEDField(Field):
     """
-    This field represents the Spectral Energy Distribution of this object - 
+    This field represents the Spectral Energy Distribution of this object -
     e.g. a collection of Spectra or Photometric measurements
     """
-    
-    
+
+
     __slots__ = ['_maskedsedvals','_specunits']
-    
+
     def __init__(self,name='SED',specunits='angstroms',defaultval=None,
                       usedef=None,units=None,type=None,descr=None):
         from .spec import Spectrum,HasSpecUnits
         from .phot import PhotObservation
-        
+
         super(SEDField,self).__init__(name,descr=descr)
-        
-        
-        
+
+
+
         self._type = (Spectrum,PhotObservation)
         self._maskedsedvals = set()
         unittuple = HasSpecUnits.strToUnit(specunits)
         self._specunits = unittuple[0]+'-'+unittuple[1]
-        
+
         if type is not None and set(type) != set(self._type):
             raise ValueError("SEDFields only accept Spectrum and PhotObservation objects - can't set type")
         if units is not None:
             raise ValueError('SEDFields use non-standard units')
-        
-        
+
+
         if defaultval:
             self[None] = defaultval
-        
-        
+
+
     def __getstate__(self):
         d = super(SEDField,self).__getstate__()
         d['_maskedsedvals'] = self._maskedsedvals
         d['_specunits'] = self._specunits
         return d
-    
+
     def __setstate__(self,d):
         super(SEDField,self).__setstate__(d)
         self._maskedsedvals = d['_maskedsedvals']
         self._specunits = d['_specunits']
-        
+
     def __call__(self):
         return self.getFullSED()
-    
+
     def __setitem__(self,key,val):
         """
         allow self['source'] = (bands,values) syntax
         """
         from .phot import PhotObservation
-        
+
         if isinstance(val,tuple) and len(val) == 2:
             return super(SEDField,self).__setitem__(key,PhotObservation(*val))
         else:
             return super(SEDField,self).__setitem__(key,val)
-        
+
     @property
     def type(self):
         return self._type
-    
+
     @property
     def default(self):
         return self()
-    
+
     @property
     def specs(self):
         from .spec import Spectrum
@@ -3251,16 +3254,16 @@ class SEDField(Field):
     def specsources(self):
         from .spec import Spectrum
         return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,Spectrum) if i not in self._maskedsedvals]
-    
+
     @property
     def phots(self):
         from .phot import PhotObservation
-        return [o for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
+        return [o for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals]
     @property
     def photsources(self):
         from .phot import PhotObservation
-        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals] 
-    
+        return [self.sources[i] for i,o in enumerate(self.values) if isinstance(o,PhotObservation) if i not in self._maskedsedvals]
+
     def _getUnit(self):
         return self._specunits
     def _setUnit(self,val):
@@ -3268,7 +3271,7 @@ class SEDField(Field):
         #this checks to make sure the unit is valid
         val = HasSpecUnits.strToUnit(val)
         val = val[0]+'-'+val[1]
-        
+
         oldu = self._specunits
         try:
             for obj in self:
@@ -3280,10 +3283,10 @@ class SEDField(Field):
                 obj.specunits = oldu
             raise
     specunits = property(_getUnit,_setUnit,doc="""
-    The units to use in the objects of this SED - see 
+    The units to use in the objects of this SED - see
     astropysics.spec.HasSpecUnits for valid units
     """)
-    
+
     def getMasked(self):
         """
         return a copy of the values masked from the full SED
@@ -3312,19 +3315,19 @@ class SEDField(Field):
         unmask all values (all appear in full SED)
         """
         self._maskedsedvals.clear()
-        
+
     def getBand(self,bands,asflux=False,asdict=False):
         """
         determines the magnitude or flux in the requested band.
-        
+
         The first photometric measurement in this SEDField that has
-        the band will be used - if not present, it will be computed 
+        the band will be used - if not present, it will be computed
         from  the first Spectrum with appropriate overlap.  If none
         of these are found, a ValueError will be raised
-        
-        if asflux is True, the result will be returned as a flux - 
+
+        if asflux is True, the result will be returned as a flux -
         otherwise, a magnitude is returned.
-        
+
         asdict returns a dictionary of results - otherwise, a sequence will
         be returned (or a scalar if only one band is requested)
         """
@@ -3346,21 +3349,21 @@ class SEDField(Field):
             if v is None:
                 raise ValueError('could not locate value for band '%bn)
             vals.append(v)
-        
+
         if asdict:
             return dict([(b.name,v) for b,v in zip(bands,vals)])
         elif len(vals)==1:
             return vals[0]
         else:
             return vals
-    
+
     def getFullSED(self):
         """
-        the generates a astropysics.spec.Spectrum object that represents all 
+        the generates a astropysics.spec.Spectrum object that represents all
         the information contained in this SEDField
         """
         from .spec import Spectrum
-        
+
         x = np.array([])
         f = np.array([])
         e = np.array([])
@@ -3368,7 +3371,7 @@ class SEDField(Field):
             x = np.r_[x,s.x]
             f = np.r_[f,s.flux]
             e = np.r_[e,s.err]
-        
+
         for p in self.phots:
             pf,pe = p.flux,p.fluxerr
             px,pw = p.getBandInfo()
@@ -3379,21 +3382,21 @@ class SEDField(Field):
             x = np.r_[x,px.ravel()]
             f = np.r_[f,pf.ravel()]
             e = np.r_[e,pe.ravel()]
-            
+
         return Spectrum(x,f,e,unit=self._specunits)
-        
+
     def plotSED(self,specerrs=True,photerrs=True,plotbands=True,colors=('b','g','r','r','k'),log='',clf=True):
         """
         Generates a plot of the SED of this object.
-        
+
         colors is a tuple of colors as (spec,phot,specerr,photerr,other)
-        """       
+        """
         from .spec import HasSpecUnits
         from .plotting import _mpl_context
-        
+
         specs = self.specs
         phots = self.phots
-        
+
         mxy1 = np.max([np.max(s.flux) for s in specs]) if len(specs) > 0 else None
         mxy2 = np.max([np.max(p.getFluxDensity(self.unit)[0]) for p in phots]) if len(phots) > 0 else None
         mxy = max(mxy1,mxy2)
@@ -3416,19 +3419,19 @@ class SEDField(Field):
             mnx = mnx1
         else:
             mny = min(mnx1,mnx2)
-        
-        with _mpl_context(clf=clf) as plt:                
+
+        with _mpl_context(clf=clf) as plt:
             if 'x' in log and 'y' in log:
                 plt.loglog()
             elif 'x' in log:
                 plt.semilogx()
             elif 'y' in log:
                 plt.semilogy()
-            
+
             c = (colors[0],colors[2],colors[4],colors[4])
             for s in specs:
                 s.plot(fmt='-',ploterrs=specerrs,colors=c,clf=False)
-                
+
             lss = ('--',':','-.','-')
             for i,p in enumerate(phots):
                 if plotbands:
@@ -3436,11 +3439,11 @@ class SEDField(Field):
                         plotbands = {'bandscaling':(mxy - mny)*0.5,'bandoffset':mny}
                     plotbands['ls'] = lss[i%len(lss)]
                 p.plot(includebands=plotbands,fluxtype='fluxden',unit=self.unit,clf=False,fmt='o',c=colors[1],ecolor=colors[3])
-                
+
             rngx,rngy=mxx-mnx,mxy-mny
             plt.xlim(mnx-rngx*0.1,mxx+rngx*0.1)
             plt.ylim(mny-rngy*0.1,mxy+rngy*0.1)
-            
+
             xl = '-'.join(HasSpecUnits.strToUnit(self.unit)[:2])
             xl = xl.replace('wavelength','\\lambda')
             xl = xl.replace('frequency','\\nu')
@@ -3449,7 +3452,7 @@ class SEDField(Field):
             xl = xl.replace('micron','\\mu m')
             xl = tuple(xl.split('-'))
             plt.xlabel('$%s/{\\rm %s}$'%xl)
-            
+
             plt.ylabel('$ {\\rm Flux}/({\\rm erg}\\, {\\rm s}^{-1}\\, {\\rm cm}^{-2} {\\rm %s}^{-1})$'%xl[1])
 
 class AstronomicalObject(StructuredFieldNode):
@@ -3458,116 +3461,116 @@ class AstronomicalObject(StructuredFieldNode):
     object.
     """
     from .coords import CoordinateSystem as _CSys
-    
+
     def __init__(self,parent=None,name='default Name'):
         super(AstronomicalObject,self).__init__(parent)
         self.name.default=name
-        
+
     def __str__(self):
         return 'Object %s'%self.name()
-        
+
     def __repr__(self):
         return '<%s.%s object "%s" at %s>'%(
             self.__class__.__module__, self.__class__.__name__,self.name(),
             hex(id(self)))
-        
+
     _fieldorder = ('name','loc')
     name = Field('name',basestring)
     loc = Field('loc',_CSys)
     sed = SEDField('sed')
-    
+
 class MatplotAction(ActionNode):
     """
     This :class:`ActionNode` uses :mod:`matplotlib` to generate plots.
-    
-    This class is an abstract class, requiring subclasses to implement the 
+
+    This class is an abstract class, requiring subclasses to implement the
     :meth:`makePlot` method.
-    
+
     Keyword arguments when this action is called will be used to change the
     value of the object attribute with the same name as the keyword temporarily
     for *only* that call.
-    
+
     The :attr:`defaultattrs` class variable can be set for a class, and it must
     be a dictionary where the keys are strings. It will be used to initialize
     class variables, where the defaults are given by the values of
     :attr:`defaultattrs` .
-    
-    
+
+
     The following example illustrates the use of the of a :class:`MatplotAction`.
     Define the :class:`PlotXY` by doing::
-    
+
         class PlotXY(MatplotAction):
             defaultattrs = dict(logx=False)
-            
+
             def makePlot(self,node):
                 from numpy import log10
-                
+
                 x,y = node.extractField('x,y')
                 if self.logx:
                     x = log10(x)
                 scatter(x,y)
                 xlabel('x')
                 ylabel('y')
-    
+
     Then, if `c` is a `Catalog` with children that have `x` and `y` fields)::
-    
+
         PlotXY(c)()
-    
+
     will produce a plot of x vs y, as well as adding the `PlotXY` object as a
     child of `c`. similarly::
-        
+
         PlotXY(logx=True)(c)
-    
+
     Will produce a plot of log(x) vs. y for `c`'s chilren, but will *not* add
-    the `PlotXY` object as a child of `c`. 
-    
+    the `PlotXY` object as a child of `c`.
+
     """
-    
+
     defaultattrs = {}
-    
+
     def __init__(self,parent,nodename=None,clf=True,savefile=None,**kwargs):
         """
         :param parent: The parent to assign this node to or None for no parent.
-        :param nodename: 
+        :param nodename:
             The name of this node or None to use the default derived from the
             class name.
         :param clf: If True, the figure will be cleared before plotting.
-        :param savefile: 
+        :param savefile:
             A string specifying the file name to save the plot to when the node
             is called. If None, the plot will not be saved.
-        
+
         Additional keyword can be used to set attributes that have defaults
         given by :attr:`defaultattrs`.
         """
         ActionNode.__init__(self,parent,nodename)
-        
-        self.savefile = savefile        
+
+        self.savefile = savefile
         self.clf = clf
-        
+
         for k,v in self.defaultattrs.iteritems():
             if k in kwargs:
                 v = kwargs.pop(k)
             setattr(self,k,v)
-            
+
         if len(kwargs)>0:
             raise TypeError(self.__class__.__name__+' does not have attributes '+str(kwargs.keys()))
-        
-        
+
+
     def _doAction(self,node=None,**kwargs):
         """
         Creates the matplotlib plot.
-        
-        :param node: 
+
+        :param node:
             The node this action is associated with, or the parent of this
             :class:`MatplotAction` if None.
-            
+
         Additional arguments will be passed into `makePlot`
         """
         from matplotlib.pyplot import savefig,clf,title,gca
-        
+
         if node is None:
             node = self.parent
-        
+
         oldvars = dict([(k,getattr(self,k)) for k in kwargs])
         try:
             for k,v in kwargs.iteritems():
@@ -3582,62 +3585,62 @@ class MatplotAction(ActionNode):
         finally:
             for k,v in oldvars.iteritems():
                 setattr(self,k,v)
-        
+
     @abstractmethod
     def makePlot(self,node):
         """
         This method does the actual plotting.
-        
+
         :param node: The node this action is associated with.
         """
         raise NotImplementedError
-    
+
 
 class PlottingAction2D(MatplotAction):
     """
-    Generates 2D plots by extracting fields from the catalog for two specified 
+    Generates 2D plots by extracting fields from the catalog for two specified
     variables.
     """
     def __init__(self,parent,xaxisname,yaxisname,nodename='2D Plotting Node',
                  plottype='plot',plotkwargs=None,logify=None,
                  ordering='postorder',filter=False):
-        
+
         ActionNode.__init__(self,parent,nodename)
-        
+
         self.xaxisname = xaxisname
         """
         A string specifying the name of the field to use for the x-axis.
         """
-        
+
         self.yaxisname = yaxisname
         """
         A string specifying the name of the field to use for the y-axis.
         """
-       
+
         self.plottype = plottype
         """
         A string specifying the type of plot to make.  Must be one of:
-        
+
             * 'plot' - :func:`matplotlib.pyplot.plot`
             * 'errorbar' - :func:`matplotlib.pyplot.errorbar`
             * 'scatter' - :func:`matplotlib.pyplot.scatter`
             * 'hist' - :func:`matplotlib.pyplot.hist` (yaxisname is ignored).
-            
+
         """
-        
+
         self.plotkwargs = plotkwargs
         """
         Additional keywords to be passed into the plotting command, or None for
         defaults.
         """
-        
+
         self.logify = logify
         """
         Determines if a particular axis should be in log (base-10) form. If
         None, no axes will be log, otherwise, should be either 'x', 'y', or
         'xy', specifying which axes should be made logarithmic.
         """
-        
+
         self.ordering = ordering
         """
         Determines the order of the plotted arrays. If 'sortx' or 'sorty', the
@@ -3645,42 +3648,42 @@ class PlottingAction2D(MatplotAction):
         specifies the `traversal` argument for
         :meth:`FieldNode.extractFieldAtNode` .
         """
-        
+
         self.filter = filter
         """
         Can be used to filter out unwanted values by setting to a callable that
         takes in a node and reurns True if it should be processed, or False if
         not.  See :meth:`FieldNode.extractFieldAtNode` for more details.
         """
-        
-        
+
+
     def _doAction(self,node=None):
         """
         Perform the plotting (and saves the plot if :attr:`savefile` is not
         None).
-        
-        :param node: 
+
+        :param node:
             The node at which to start plotting. If None, the parent will be
             used.
-        
+
         """
         if node is None:
             node = self.parent
-        
+
         if isinstance(self.ordering,basestring) and self.ordering.startswith('sort'):
             traversal = 'postorder'
             sort = self.ordering[4:]
         else:
             traversal = self.ordering
             sort = False
-        
+
         ics = isinstance(node,FieldNode)
-            
+
         xarr,xerr = FieldNode.extractFieldAtNode(node,self.xaxisname,traversal,
                 missing='masked',filter=self.filter,includeself=ics,errors=True)
         yarr,yerr = FieldNode.extractFieldAtNode(node,self.yaxisname,traversal,
                 missing='masked',filter=self.filter,includeself=ics,errors=True)
-                                
+
         if self.logify:
             if 'x' in self.logify:
                 logxarr = np.log10(xarr)
@@ -3696,7 +3699,7 @@ class PlottingAction2D(MatplotAction):
                 loglyerr = np.log10(yarr-lyerr)+logyarr
                 yarr = logyarr
                 yerr = np.array((loguyerr,loglyerr)).T
-                
+
         if sort=='x':
             sorti = np.argsort(xarr)
             xarr = xarr[sorti]
@@ -3709,18 +3712,18 @@ class PlottingAction2D(MatplotAction):
             xerr = xerr[sorti]
             yarr = yarr[sorti]
             yerr = yerr[sorti]
-        
+
         if self.plottype == 'plot':
             from matplotlib.pyplot import plot
-            
+
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
             plot(xarr.astype(float),yarr.astype(float),**pkwargs)
-            
+
         elif self.plottype == 'errorbar':
             from matplotlib.pyplot import errorbar,clf
-            
+
             pkwargs = {'fmt':'o'} if self.plotkwargs is None else self.plotkwargs
-            
+
             if np.all(xerr.mask):
                 xerr = None
             else:
@@ -3730,48 +3733,48 @@ class PlottingAction2D(MatplotAction):
             else:
                 yerr = yerr.filled(0).T.astype(float)[::-1]
             errorbar(xarr.astype(float),yarr.astype(float),yerr,xerr,**pkwargs)
-            
+
         elif self.plottype == 'scatter':
             from matplotlib.pyplot import scatter
-            
+
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
             scatter(xarr.astype(float),yarr.astype(float),**pkwargs)
         elif self.plottype == 'hist':
             from matplotlib.pyplot import hist
-            
+
             pkwargs = {} if self.plotkwargs is None else self.plotkwargs
             host(xarr.astype(float),**pkwargs)
         else:
             raise ValueError('invalid plottype '+str(self.plottype))
-            
-            
+
+
 class TextTableAction(ActionNode):
     """
     This :class:`ActionNode` generates and returns formatted text tables.
-    
+
     Calling this action generates the and returns the table, and saves it if
     the :attr:`savefile` attribute is not None:
-    
-    :param node: 
+
+    :param node:
         The node at which to start plotting. If None, the parent will be
         used.
-    :param reorder: 
+    :param reorder:
         An array of indicies to change the order of the table before
         writing, or None to use the catalog ordering.
     :type: int array or None
-        
+
     :returns: A string with the table data
-    
-    
+
+
     """
     def __init__(self,parent,arrnames,titles=None,details=None,caption=None,
                 nodename='Table Node',tabformat='ascii',fmt='%.18e',errors=True,
                 logify=None,ordering='postorder',savefile=None):
         ActionNode.__init__(self,parent,nodename)
-        
+
         self.arrnames = arrnames
         """
-        A sequence of field names to use to extract the data. If the special 
+        A sequence of field names to use to extract the data. If the special
         name 'source' is given, the sources used for each data set are included.
         """
         self.titles = titles
@@ -3797,13 +3800,13 @@ class TextTableAction(ActionNode):
         """
         self.fmt = fmt
         """
-        The formatting specifier for each of the columns. Must be a single 
+        The formatting specifier for each of the columns. Must be a single
         string or a sequence that matches arrnames.
         """
         self.errors = errors
         """
         Include errorbar values in the table, if present.
-        """        
+        """
         self.savefile = savefile
         """
         A string specifying the file name to save the table to when the node is
@@ -3813,72 +3816,72 @@ class TextTableAction(ActionNode):
         """
         Determines tf a particular axis should be in log (base-10) form. If
         None, no axes will be log, otherwise, must be a sequence of bools
-        matching arrnames that is True if the column should have the log of its 
+        matching arrnames that is True if the column should have the log of its
         data taken.
         """
         self.ordering = ordering
         """
         Determines the order of the plotted arrays. If 'sort#', the values will
         be sorted on the axis specified by #. Otherwise, specifies the
-        `traversal` argument for :meth:`FieldNode.extractFieldAtNode` . 
+        `traversal` argument for :meth:`FieldNode.extractFieldAtNode` .
         """
-        
+
     def _doAction(self,node=None,reorder=None):
         """
         Generate the table (and saves the if :attr:`savefile` is not None).
-        
-        :param node: 
+
+        :param node:
             The node at which to start plotting. If None, the parent will be
             used.
-        :param reorder: 
+        :param reorder:
             An array of indicies to change the order of the table before
             writing, or None to use the catalog ordering.
         :type: int array or None
-            
+
         :returns: A string with the table data
-        
+
         """
         from operator import isSequenceType
-        
+
         if node is None:
             node = self.parent
-            
+
         storesources = 'source' in self.arrnames
-            
+
         if self.titles is None:
             titles = self.arrnames
         else:
             titles = self.titles
         if len(titles) != len(self.arrnames):
             raise ValueError('titles do not match arrnames')
-        
+
         if self.details is not None and len(self.details) != len(self.arrnames):
             raise ValueError('details do not match arrnames')
-        
+
         if isinstance(self.fmt,basestring):
             fmts = [self.fmt]*len(titles)
         else:
             fmts = self.fmt
         if len(fmts) != len(self.arrnames):
             raise ValueError('fmt does not match arrnames')
-        
+
         if not isSequenceType(self.logify):
             logifys = [self.logify]*len(titles)
         else:
             logifys = self.logify
         if len(logifys) != len(self.arrnames):
             raise ValueError('fmt does not match arrnames')
-        
-        
+
+
         if isinstance(self.ordering,basestring) and self.ordering.startswith('sort'):
             traversal = 'postorder'
             sort = self.ordering[4:]
         else:
             traversal = self.ordering
             sort = False
-        
+
         ics = isinstance(node,FieldNode)
-        
+
         arrs,errs,srcs = [],[],[]
         srcmap = {}
         for arrname,logify in zip(self.arrnames,logifys):
@@ -3897,7 +3900,7 @@ class TextTableAction(ActionNode):
                     arrs.append(arr)
                     errs.append(err)
                 srcs.append(src)
-            
+
         if storesources:
             srcs = np.array(srcs)
             srcs[srcs.astype('S9')=='dependent'] = 'None'
@@ -3911,8 +3914,8 @@ class TextTableAction(ActionNode):
             srccodes = np.empty(srcs.shape,dtype=int)
             for i,src in enumerate(usrcs):
                 srccodes[srcs==src] = i
-                
-            
+
+
             ocodes = []
             for code in srccodes.T.ravel():
                 if code not in ocodes:
@@ -3922,25 +3925,25 @@ class TextTableAction(ActionNode):
             ocodes = np.array(ocodes)
             srccodes = np.choose(srccodes,np.argsort(ocodes))
             usrcs = usrcs[ocodes]
-            
+
             srcstrs = []
             for src in srccodes.T:
                 lsrc = [str(s) for s in np.unique(src)]
-                
+
                 if '0' in lsrc:
                     lsrc.remove('0')
                 srcstrs.append(','.join(lsrc))
             sind = self.arrnames.index('source')
             arrs.insert(sind,srcstrs)
             errs.insert(sind,[0]*len(srcstrs))
-            
+
             srcannotation = [' %i) %s'%t for t in enumerate(usrcs) if t[0]!=0]
             srcannotation = 'Source Code:'+','.join(srcannotation)+'.'
-                
+
         if sort:
             sorti = np.argsort(arrs[int(i)])
             arrs = [arr[sorti] for arr in arrs]
-            
+
         if self.tabformat.startswith('ascii'):
             if self.tabformat[5:]=='':
                 sep = ' '
@@ -3998,7 +4001,7 @@ class TextTableAction(ActionNode):
                     lines.append(' & '.join(ss)+r' \\')
             lines[-1] = lines[-1][:-2]
             lines.append('\\end{tabular}')
-            
+
             caption = self.caption if self.caption is not None else ''
             if storesources:
                 caption += ('. ' if not caption.endswith('.') else ' ') + srcannotation
@@ -4006,7 +4009,7 @@ class TextTableAction(ActionNode):
                 lines.append('\\caption{'+caption+'}')
             lines.append('\\end{table}')
             tabtxt = '\n'.join(lines)
-            
+
         elif self.tabformat == 'deluxetable':
             lines = ['\\begin{deluxetable*}{'+''.join(['c']*len(titles))+'}']
             lines.append('\\tablecolumns{%i}'%len(titles))
@@ -4020,7 +4023,7 @@ class TextTableAction(ActionNode):
             lines.append('}')
             lines.append('')
             lines.append('\\startdata')
-            lines.append('') 
+            lines.append('')
             if self.errors:
                 for i in range(len(arrs[0])):
                     ss = []
@@ -4045,18 +4048,18 @@ class TextTableAction(ActionNode):
                     lines.append('')
                     lines.append('\\tablecomments{'+srcannotation+'}')
             for i,det in enumerate(self.details):
-                lines.append('\\tablenotetext{'+chr(97+i)+'}{'+det+'}') 
+                lines.append('\\tablenotetext{'+chr(97+i)+'}{'+det+'}')
 
             lines.append('')
             lines.append('\\end{deluxetable*}')
             tabtxt = '\n'.join(lines)
         else:
             raise ValueError('Unrecognized format '+str(self.format))
-        
+
         if self.savefile:
             with open(self.savefile,'w') as f:
                 f.write(tabtxt)
-        
+
         return tabtxt
 
 
@@ -4065,11 +4068,11 @@ class GraphAction(ActionNode):
     This :class:`ActionNode` will generate a :class:`networkx.DiGraph` object
     representing the node and its children. Note that :mod:`networkx` must be
     installed for this to work.
-    
+
     When this object is called, it returns a :class:`networkx.DiGraph` object.
-    
+
     """
-    
+
     #set the default drawlayout - special because it depends on whether or not
     #pygraphviz is present - if so we use dot, otherwise one of networkx's
     try:
@@ -4079,11 +4082,11 @@ class GraphAction(ActionNode):
         from networkx import layout
         dldef = layout.spring_layout
         del layout #don't want to leave this in the namespace
-        
+
     def __init__(self,parent,nodename='Graphing Node',traversal='preorder',
              drawlayout=dldef,drawkwargs={},show=False,savefile=None,clf=False):
-        ActionNode.__init__(self,parent,nodename) 
-        
+        ActionNode.__init__(self,parent,nodename)
+
         self.savefile = savefile
         """
         A string specifying the file name to save the graph to when the node is
@@ -4119,51 +4122,51 @@ class GraphAction(ActionNode):
         A dictionary of keywords that are passed into :func:`networkx.draw` when
         drawing the graph.
         """
-    del dldef    
-        
+    del dldef
+
     def _doAction(self,node):
         """
         Generate the graph (and save if :attr:`savefile` is not None).
-        
-        :param node: 
+
+        :param node:
             The node at which to generate the graph. If None, the parent will be
             used.
-            
+
         :returns: A :class:`networkx.DiGraph` object
-        
+
         """
         import networkx as nx
-        
+
         if node is None:
             node = self.parent
-        
+
         nodeidtopdnode={}
         def visitfunc(node):
             return node,None if node.parent is None else (node.parent,node)
         nelist = node.visit(visitfunc,traversal=self.traversal)
-        
+
         g = nx.DiGraph()
         g.add_node(nelist[0][0])
         for node,edge in nelist[1:]:
             g.add_node(node)
             g.add_edge(edge)
-        try:    
+        try:
             if isinstance(self.drawlayout,basestring):
                 pos = nx.pygraphviz_layout(g,prog=self.drawlayout)
             elif callable(self.drawlayout):
                 pos = self.drawlayout(g)
             else:
                 pos = self.drawlayout
-            
+
             nx.draw(g,pos,**self.drawkwargs)
-                
+
         except ImportError,e:
             if self.savefile or self.show:
                 from warnings import warn
                 warn('matplotlib not present, so networkx graph could not be drawn or saved')
-        
+
         return g
-        
-    
+
+
 del ABCMeta,abstractmethod,abstractproperty,MutableSequence,pi,division #clean up namespace
-  
+

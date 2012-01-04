@@ -83,13 +83,13 @@ def test_deps():
     tools.assert_raises(CycleError,o2.d1)
     tools.assert_raises(CycleError,o2.d2)
 
-    #Try setting o2.d2 to various non-float objects
+    #Try setting o2.d2 to various non-float objects, unless they're float-able
     def settoval(o,val):
         o[None] = val
     tools.assert_raises(TypeError,settoval,o2.d2,'astring')
-    tools.assert_raises(TypeError,settoval,o2.d2,1)
+    #tools.assert_raises(TypeError,settoval,o2.d2,1)
     tools.assert_raises(TypeError,settoval,o2.d2,[4.0,2.3])
-    tools.assert_raises(TypeError,settoval,o2.d2,np.array(1.5))
+    #tools.assert_raises(TypeError,settoval,o2.d2,np.array(1.5))
         
     o2.d2[None] = 1.5
     #should still fail b/c it is not set to the current value
