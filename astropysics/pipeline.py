@@ -139,8 +139,8 @@ class Pipeline(object):
         """
         from collections import deque
         
-        if not isinstance(e,PipelineElement):
-            raise TypeError('object %s is not a PipelineElement'%e)
+        if not isinstance(element,PipelineElement):
+            raise TypeError('object %s is not a PipelineElement'%element)
         
         self._elements.insert(stagenum,element)
         self._cycles.insert(stagenum,0)

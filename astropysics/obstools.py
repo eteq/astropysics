@@ -896,7 +896,7 @@ class Site(object):
             min = 60*(lst - hr)
             sec = 60*(min - int(min))
             min = int(min)
-            return '%i:%i:%f'%(hr,min,sec)
+            return '%02i:%02i:%f'%(hr,min,sec)
         elif rettype == 'datetime':
             hr = int(lst)
             min = 60*(lst - hr)
@@ -984,7 +984,7 @@ class Site(object):
                 min = 60*(lthr - hr)
                 sec = 60*(min - int(min))
                 min = int(min)
-                res.append('%i:%i:%f'%(hr,min,sec))
+                res.append('%02i:%02i:%f'%(hr,min,sec))
         elif returntype == 'datetime':
             res = []
             for i,dayoff in zip(lthrs,dayoffs): 
