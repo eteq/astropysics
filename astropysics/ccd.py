@@ -1017,14 +1017,17 @@ class FitsImage(CCDImage):
                 self.fitsfile = pyfits.HDUList([phdu])
                 self._chdu = 0
                 self._applyArray(None, fnordata)
+                self.fitsfile[self._chdu].update_header()
             elif isinstance(fnordata,list): #mult-HDU array form
                 hdus = [pyfits.PrimaryHDU()]
                 self._chdu = 0
                 self._applyArray(None, fnordata[0])
+                self.fitsfile[self._chdu].update_header()
                 for arr in fnordata[1:]:
                     hdus.append(pyfits.ImageHDU())
                     self._chdu += 1
                     self._applyArray(None, arr)
+                    self.fitsfile[self._chdu].update_header()
                 self.fitsfile = pyfits.HDUList(hdus)
             elif len(fnordata)==2: #assume one of the hdr,array forms
                 hdr,arr = fnordata
@@ -1034,14 +1037,17 @@ class FitsImage(CCDImage):
                     hdus = [pyfits.PrimaryHDU(data=arr[0],header=FitsImage._hdr_conv(hdr[0]))]
                     self._chdu = 0
                     self._applyArray(None, arr[0])
+                    self.fitsfile[self._chdu].update_header()
                     for hdri,arri in zip(hdr,arr)[1:]:
                         hdus.append(pyfits.ImageHDU(data=arri,header=FitsImage._hdr_conv(hdri)))
                         self._chdu += 1
                         self._applyArray(None, arri)
+                        self.fitsfile[self._chdu].update_header()
                 else: #single HDU
                     hdus = [pyfits.PrimaryHDU(data=arr,header=FitsImage._hdr_conv(hdr))]
                     self._chdu = 0
                     self._applyArray(None, arr)
+                    self.fitsfile[self._chdu].update_header()
                 self.fitsfile = pyfits.HDUList(hdus)
             else:
                 raise TypeError
