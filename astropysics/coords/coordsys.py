@@ -475,8 +475,8 @@ class AngularCoordinate(object):
         d,m,s = self.degminsec
         
         if canonical:
-            sgn = '' if self._decval < 0 else '+'
-            return '%s%02.i:%02.i:%05.2f'%(sgn,d,m,s)
+            sgn = '-' if self._decval < 0 else '+'
+            return '%s%02.i:%02.i:%05.2f'%(sgn,abs(d),m,s)
         
         d,m=str(d),str(m)
         
