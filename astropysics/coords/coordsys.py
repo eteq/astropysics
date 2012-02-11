@@ -478,7 +478,7 @@ class AngularCoordinate(object):
             sgn = '-' if self._decval < 0 else '+'
             return '%s%02.i:%02.i:%05.2f'%(sgn,abs(d),m,s)
         
-        d,m=str(d),str(m)
+        d,m=str(abs(d)),str(m)
         
         s = secform%s
         
@@ -491,6 +491,8 @@ class AngularCoordinate(object):
         
         if sign and self._decval  >= 0:
             tojoin.append('+')
+        if self._decval<0:
+            tojoin.append('-')
         
         if d is not '0':
             tojoin.append(d)
