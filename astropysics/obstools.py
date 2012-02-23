@@ -987,7 +987,7 @@ class Site(object):
                 res.append('%02i:%02i:%f'%(hr,min,sec))
         elif returntype == 'datetime':
             res = []
-            for i,dayoff in zip(lthrs,dayoffs): 
+            for lthr,dayoff in zip(lthrs,dayoffs): 
                 hr = int(lthr)
                 min = 60*(lthr - hr)
                 sec = 60*(min - int(min))
@@ -995,7 +995,8 @@ class Site(object):
                 msec = int(1e6*(sec-int(sec)))
                 sec = int(sec)
                 
-                res.append(datetime.datetime(date.year,date.month,date.day+dayoff,hr,min,sec,msec,self.tz))
+                dtobj = datetime.datetime(date.year,date.month,date.day,hr,min,sec,msec,self.tz)
+                res.append(dtobj + datetime.timedelta(dayoff))
         else:
             raise ValueError('invalid returntype argument')
         
@@ -1085,11 +1086,13 @@ class Site(object):
         degrees. Default is for approximate rise/set including refraction.
         
         `date` determines the date at which to do the computation. See
-        :func:`calendar_to_jd` for acceptable formats
+        :func:`calendar_to_jd` for acceptable formats. Note that this date is
+        the date of the *transit*, so the rise and set times may be on the 
+        previous/following day.
         
         *returns*
-        (rise,set,transit) as :class:datetime.time objects if `timeobj` is True
-        or if it is False, they are in decimal hours.  If the object is 
+        (rise,set,transit) as :class:datetime.datetime objects if `timeobj` 
+        is True or if it is False, they are in decimal hours.  If the object is 
         circumpolar, rise and set are both None.  If it is never visible,
         rise,set, and transit are all None
         """
@@ -1119,7 +1122,8 @@ class Site(object):
             set = (transit + lha)%24 #TODO:iterative algorithm
         
         if timeobj:
-            def hrtotime(t):
+            transitdate = self.localTime(eqpos.ra.hours,date,utc=utc,returntype='datetime').date()
+            def hrtodatetime(t):
                 if t is None:
                     return None
                 else:
@@ -1130,11 +1134,22 @@ class Site(object):
                     sec = np.floor(t)
                     t = (t-sec)*1e6
                     msec = np.floor(t)
-                    return datetime.time(int(hr),int(min),int(sec),int(msec),
+                    timeobj = datetime.time(int(hr),int(min),int(sec),int(msec),
                                     tzinfo=tz.tzutc() if utc else tz.tzlocal())
-            return hrtotime(rise),hrtotime(set),hrtotime(transit)
-        else:
-            return rise,set,transit
+                    return datetime.datetime.combine(transitdate,timeobj)
+                    
+            #now do the conversion
+            if rise < transit:
+                rise = hrtodatetime(rise)
+            else:
+                rise = hrtodatetime(rise) + datetime.timedelta(-1)
+            if set > transit:
+                set = hrtodatetime(set)
+            else:
+                set = hrtodatetime(set) + datetime.timedelta(1)
+            transit = hrtodatetime(transit)
+                
+        return rise,set,transit
         
         
     def apparentCoordinates(self,coords,datetime=None,precess=True,refraction=True):
