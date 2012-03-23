@@ -472,7 +472,8 @@ class AngularCoordinate(object):
         
         :returns: String representation of this object.
         """
-        d,m,s = self.degminsec
+        rounded = AngularCoordinate(round(self.degrees,11))
+        d,m,s = rounded.degminsec
         
         if canonical:
             sgn = '-' if self._decval < 0 else '+'
