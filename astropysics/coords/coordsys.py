@@ -472,16 +472,23 @@ class AngularCoordinate(object):
         
         :returns: String representation of this object.
         """
-        rounded = AngularCoordinate(round(self.degrees,11))
-        d,m,s = rounded.degminsec
+        d,m,s = self.degminsec
         
         if canonical:
-            sgn = '-' if self._decval < 0 else '+'
-            return '%s%02.i:%02.i:%05.2f'%(sgn,abs(d),m,s)
-        
-        d,m=str(abs(d)),str(m)
+            secform = '%05.2f'
+            sep = (':',':','')
+            sign = True
         
         s = secform%s
+        
+        if int(float(s))>=60:
+            s = secform%0
+            m += 1
+            if m==60:
+                m = 0
+                d += 1
+        
+        d,m=str(abs(d)),str(m)
         
         if isinstance(sep,basestring):
             if sep == 'dms':
@@ -536,13 +543,24 @@ class AngularCoordinate(object):
         h,m,s = self.hrsminsec
         
         if canonical:
-            return '%02.i:%02.i:%06.3f'%(h,m,s)
+            secform = '%05.2f'
+            sep = (':',':','')
         
-        h,m=str(h),str(m)
         if secform is None:
             s = str(s)
         else:
             s = secform%s
+        
+        if int(float(s))>=60:
+            s = secform%0
+            m += 1
+            if m==60:
+                m = 0
+                h += 1
+                if h==24:
+                    h = 0
+            
+        h,m=str(h),str(m)
         
         if isinstance(sep,basestring):
             if sep == 'hms':
