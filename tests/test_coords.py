@@ -426,14 +426,5 @@ def test_FK5Coordinates_string_formatting():
     d1 = target_coords.dec
     d2 =  AngularCoordinate("+35.000")
     
-#    print 
-#    print target_coords
-#    print d1.getDmsStr( canonical= True) #+34:59:60.00 #Note the 60 seconds mark. Not correct formatting
-#    print d2.getDmsStr( canonical= True) #+35:00:00.00 #Hmm.
-#    
-#    print repr(d1.degrees)#34.999999999999986 
-#    print repr(d2.degrees)#35.0
-    #Ok so it's a rounding issue
-    
     assert d1.getDmsStr( canonical= True) == d2.getDmsStr( canonical= True) 
     
