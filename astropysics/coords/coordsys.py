@@ -455,7 +455,8 @@ class AngularCoordinate(object):
     def __float__(self):
         return self.degrees
         
-    def getDmsStr(self,secform='%05.2f',sep=(unichr(176),"'",'"'), sign=True, canonical=False):
+    def getDmsStr(self,secform='%05.2f',sep=(unichr(176),"'",'"'), sign=True, 
+                  canonical=False, inclzero=True):
         """
         Generates the string representation of this AngularCoordinate as
         degrees, arcminutes, and arcseconds.
@@ -469,6 +470,11 @@ class AngularCoordinate(object):
         :param sign: Forces sign to be present before degree component.
         :type sign: boolean
         :param canonical: forces [+/-]dd:mm:ss.ss , overriding other arguments
+        :param inclzero: 
+            If True, a "0" is included whenever even if the degrees or minutes 
+            are 0.  Otherise, the "0" and the corresponding separator are 
+            omitted from the string. 
+        :type inclzero: bool
         
         :returns: String representation of this object.
         """
@@ -502,11 +508,11 @@ class AngularCoordinate(object):
         if self._decval<0:
             tojoin.append('-')
         
-        if d is not '0':
+        if inclzero or d is not '0':
             tojoin.append(d)
             tojoin.append(sep[0])
                 
-        if m is not '0':
+        if inclzero or m is not '0':
             tojoin.append(m)
             tojoin.append(sep[1])
                 
@@ -516,7 +522,8 @@ class AngularCoordinate(object):
             
         return ''.join(tojoin)
         
-    def getHmsStr(self,secform = None,sep = ('h','m','s'), canonical = False):
+    def getHmsStr(self,secform = None,sep = ('h','m','s'), canonical = False, 
+                  inclzero=True):
         """
         gets the string representation of this AngularCoordinate as hours,
         minutes, and seconds
@@ -536,6 +543,11 @@ class AngularCoordinate(object):
             The seperator between components - defaults to 'h', 'm', and 's'.
         :type sep: string or 3-tuple of strings
         :param canonical: forces [+/-]dd:mm:ss.ss , overriding other arguments
+        :param inclzero: 
+            If True, a "0" is included whenever even if the degrees or minutes 
+            are 0.  Otherise, the "0" and the corresponding separator are 
+            omitted from the string. 
+        :type inclzero: bool
         
         :returns: String representation of this object.
         """
@@ -569,11 +581,14 @@ class AngularCoordinate(object):
         
         tojoin = []
         
-        tojoin.append(h)
-        tojoin.append(sep[0])
-            
-        tojoin.append(m)
-        tojoin.append(sep[1])
+        
+        if inclzero or h is not '0':
+            tojoin.append(h)
+            tojoin.append(sep[0])
+        
+        if inclzero or m is not '0':
+            tojoin.append(m)
+            tojoin.append(sep[1])
                 
         tojoin.append(s)
         if len(sep)>2:
