@@ -1345,7 +1345,14 @@ def prep_for_apj_pub(texfn,newdir='pubApJ',overwritedir=False,
         else:
             figenv.filenames = newfns = ['f'+fignumstr+chr(97+i) for i in range(len(oldfns))]
         filenamemap.update(dict(zip(oldfns,newfns)))
-        
+    
+    if verbose:
+        print 'Figure name to number mapping:'
+        maplns  = []
+        for k,v in filenamemap.iteritems():
+            maplns.append(k + ':' + v + ',')
+        print '\n'.join(maplns)
+    
     exts = tuple([e if e.startswith('.') else ('.'+e) for e in figexts])
     for oldfn,newfn in filenamemap.iteritems():
         copied = False
