@@ -28,12 +28,6 @@ from __future__ import division,with_statement
 import numpy as np
 import os
 try:
-    import enthought
-    traitsflat = False
-except ImportError:
-    import traits
-    traitsflat = True
-if traitsflat:
     from traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                      Float,Event,Bool,DelegatesTo,Dict,Str,List, \
                                      Button,cached_property,on_trait_change,Enum, \
@@ -52,7 +46,7 @@ if traitsflat:
                                           DragTool
     from enable.api import ComponentEditor,BaseTool,Interactor,Line, \
                                      Component
-else:
+except ImportError:
     from enthought.traits.api import HasTraits,List,Instance,Property,Int,Range, \
                                      Float,Event,Bool,DelegatesTo,Dict,Str,List, \
                                      Button,cached_property,on_trait_change,Enum, \

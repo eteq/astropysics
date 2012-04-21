@@ -20,6 +20,7 @@ import numpy as np
 
 try:
     import enthought
+    from enthought.traits.api import HasTraits
     traitsflat = False
 except ImportError:
     import traits
