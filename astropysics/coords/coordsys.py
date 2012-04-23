@@ -1910,7 +1910,7 @@ class ICRSCoordinates(EquatorialCoordinatesBase):
         Technically, this is actually the Barycentric Celestial Referense System
         (BCRS), distringuished from ICRS by having acounted for space motion. In
         astropysics, instead, space motion is already accounted for by using
-        :class:`astropysics.coords.ephems.EphemerisObject` objects, which yield
+        a :class:`astropysics.coords.ephems.EphemerisObject` object, which yields
         coordinates (often :class:`ICRSCoordinates`) at the epoch of
         observation.
         
