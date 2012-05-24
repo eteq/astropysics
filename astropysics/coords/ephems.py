@@ -297,7 +297,7 @@ class ProperMotionObject(EphemerisObject):
         :param str name: Name of the object.
         :param float ra0: RA in degrees at the starting epoch.
         :param float dec0: Dec in degrees at the starting epoch.
-        :param float dra: Proper motion in RA, arcsec/yr.
+        :param float dra: Change in RA, arcsec/yr.
         :param float ddec: Proper motion in Dec, arcsec/yr.
         :param epoch0: Epoch for which `ra0`,`dec0`,and`distpc0` are valid.
         :param distpc0: Distance in pc at the starting epoch.
@@ -327,6 +327,24 @@ class ProperMotionObject(EphemerisObject):
         
         EphemerisObject.__init__(self,name)
         self.jd = self._jd0
+        
+    @property
+    def drastar(self):
+        """
+        Proper motion in right ascention in arcseconds.  This is distinguished 
+        from `dra` in that it is multiplied by ``cos(dec0)`` to produce a true 
+        proper motion component.
+        """
+        from math import cos, radians
+        
+        return self.dra * cos(radians(self.dec0))
+        
+    @dra.setter
+    def dra(self, val):
+        from math import cos, radians
+        
+        self.dra = val / cos(radians(self.dec0))
+        
         
     @property
     def ra(self):
