@@ -339,8 +339,8 @@ class ProperMotionObject(EphemerisObject):
         
         return self.dra * cos(radians(self.dec0))
         
-    @dra.setter
-    def dra(self, val):
+    @drastar.setter
+    def drastar(self, val):
         from math import cos, radians
         
         self.dra = val / cos(radians(self.dec0))
