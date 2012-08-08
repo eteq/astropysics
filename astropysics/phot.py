@@ -2221,6 +2221,7 @@ class IsophotalEllipse(object):
     def _fitEllipse(self):
         from scipy.optimize import leastsq
         from scipy.ndimage import map_coordinates
+        from math import pi
         
         diff = self._imdata - self._level
         maxdiff = max(np.max(diff)**2,np.min(diff)**2)
