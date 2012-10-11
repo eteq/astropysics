@@ -37,6 +37,8 @@ equatorial_transiting_at_ve_m1hr = FK5Coordinates("16:6:32 +0.0 J2000.0")
 #NB, this one sets the day after VE.
 equatorial_transiting_at_ve_p13hr = FK5Coordinates("6:6:32 +0.0 J2000.0")
 
+equatorial_transiting_at_ve_m5hr = FK5Coordinates("12:6:32 +0.0 J2000.0")
+
 #NB, this has not set from yesterdays transit at VE.
 equatorial_transiting_at_ve_m6hr = FK5Coordinates("11:6:32 +0.0 J2000.0")
 
@@ -268,3 +270,32 @@ class TestNextRiseSetTransit(unittest.TestCase):
         self.assertEqual(t.date(), vernal_equinox_2012.date())
         self.assertLess(vernal_equinox_2012, r)
 
+
+class TestOnSky(unittest.TestCase):
+    def setUp(self):
+        self.site = greenwich()
+
+    def test_equatorial_source_yesterdays_transit_still_up(self):
+        on_sky = self.site.onSky(equatorial_transiting_at_ve_m6hr,
+                                   vernal_equinox_2012,
+                                      )
+        self.assertTrue(on_sky)
+
+    def test_equatorial_source_after_setting(self):
+        on_sky = self.site.onSky(equatorial_transiting_at_ve_m5hr,
+                                   vernal_equinox_2012_p12h,
+                                      )
+        self.assertFalse(on_sky)
+
+    def test_equatorial_source_todays_transit_on_sky(self):
+        on_sky = self.site.onSky(equatorial_transiting_at_ve,
+                                   vernal_equinox_2012,
+                                      )
+        self.assertTrue(on_sky)
+
+
+    def test_equatorial_source_todays_transit_not_up(self):
+        on_sky = self.site.onSky(equatorial_transiting_at_ve_p13hr,
+                                   vernal_equinox_2012,
+                                      )
+        self.assertFalse(on_sky)

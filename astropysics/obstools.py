@@ -66,6 +66,8 @@ from .utils import DataObjectRegistry
 from .pipeline import PipelineElement
 import numpy as np
 
+from datetime import timedelta
+
 try: 
     from dateutil import tz as tzmod
     tzoffset = tzmod.tzoffset
@@ -1200,7 +1202,7 @@ class Site(object):
             jds, dtime = self._processDate(dtime)
 
         today = dtime.date()
-        tomorrow = today + datetime.timedelta(1)
+        tomorrow = today + timedelta(days=1)
 
         #Today's transit
         rise1, set1, transit1 = self.riseSetTransit(eqpos, today,
@@ -1224,7 +1226,7 @@ class Site(object):
 
         #Yesterday's transit (might have transited just before midnight 
         # and still be on-sky).
-        yesterday = today - datetime.timedelta(1)
+        yesterday = today - timedelta(days=1)
         rise0, set0, transit0 = self.riseSetTransit(eqpos, yesterday,
                                                     alt,
                                                     timeobj=True, utc=True)
@@ -1238,6 +1240,43 @@ class Site(object):
         else:
             return (rise2, set2, transit2) #Tomorrow's transit.
 
+    def onSky(self, eqpos, dtime=None, alt= -.5667):
+        """
+        Checks if a target is on-sky at specified datetime.
+        
+        NB on-sky means above minimum elevation as specifed by 'alt' parameter.
+        
+        *args*
+        `eqpos` Ra,Dec in equatorial co-ordinates.
+        
+        `dtime` determines the datetime at which to do the computation. See
+        :func:`calendar_to_jd` for acceptable formats. If None, the current 
+        datetime will be assumed as inferred from :attr:`Site.currentobsjd`
+        
+        `alt` determines the altitude to be considered as risen or set in 
+        degrees. Default is for approximate rise/set including refraction.
+        
+        *returns*
+         Boolean.
+        """
+        if dtime is None:
+            jds, dtime = self._processDate(dtime)
+
+        r, s, t = self.nextRiseSetTransit(eqpos, dtime, alt)
+
+        #Wrong hemisphere
+        if t is None:
+            return False
+
+        #Circumpolar, correct hemisphere.
+        if r is None:
+            return True
+
+        #Equatorial
+        if r <= dtime <= s:
+            return True
+        else:
+            return False
         
     def apparentCoordinates(self,coords,datetime=None,precess=True,refraction=True):
         """
