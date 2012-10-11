@@ -968,7 +968,7 @@ class Site(object):
             
         lst0 = self.localSiderialTime(date)
         lthrs = (lsts - lst0)%24
-        dayoffs = np.floor(lsts - lst0/24)
+        dayoffs = np.floor((lsts - lst0)/24.0)
         
         lthrs /= 1.0027378507871321 #correct for siderial day != civil day
         
