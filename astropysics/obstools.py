@@ -968,7 +968,10 @@ class Site(object):
             
         lst0 = self.localSiderialTime(date)
         lthrs = (lsts - lst0)%24
-        dayoffs = np.floor(lsts - lst0/24)
+        #NB floor rounds towards -ve infinity.  This is undesirable because:
+        #Sometimes current lst - lst0 < 0 as the LST has looped since daybreak.
+        #So floor will round a negative fraction to a whole day offset.
+        dayoffs = [ int((lst - lst0) / 24.0) for lst in lsts ]
         
         lthrs /= 1.0027378507871321 #correct for siderial day != civil day
         
@@ -1138,17 +1141,19 @@ class Site(object):
                                     tzinfo=tz.tzutc() if utc else tz.tzlocal())
                     return datetime.datetime.combine(transitdate,timeobj)
                     
+
+            if rise is not None:
             #now do the conversion
-            if rise < transit:
-                rise = hrtodatetime(rise)
-            else:
-                rise = hrtodatetime(rise) + datetime.timedelta(-1)
-            if set > transit:
-                set = hrtodatetime(set)
-            else:
-                set = hrtodatetime(set) + datetime.timedelta(1)
+                if rise < transit:
+                    rise = hrtodatetime(rise)
+                else:
+                    rise = hrtodatetime(rise) + datetime.timedelta(-1)
+                if set > transit:
+                    set = hrtodatetime(set)
+                else:
+                    set = hrtodatetime(set) + datetime.timedelta(1)
             transit = hrtodatetime(transit)
-                
+
         return rise,set,transit
         
         
