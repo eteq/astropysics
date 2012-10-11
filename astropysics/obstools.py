@@ -66,6 +66,8 @@ from .utils import DataObjectRegistry
 from .pipeline import PipelineElement
 import numpy as np
 
+from datetime import timedelta
+
 try: 
     from dateutil import tz as tzmod
     tzoffset = tzmod.tzoffset
@@ -968,7 +970,10 @@ class Site(object):
             
         lst0 = self.localSiderialTime(date)
         lthrs = (lsts - lst0)%24
-        dayoffs = np.floor(lsts - lst0/24)
+        #NB floor rounds towards -ve infinity.  This is undesirable because:
+        #Sometimes current lst - lst0 < 0 as the LST has looped since daybreak.
+        #So floor will round a negative fraction to a whole day offset.
+        dayoffs = [ int((lst - lst0) / 24.0) for lst in lsts ]
         
         lthrs /= 1.0027378507871321 #correct for siderial day != civil day
         
@@ -1138,19 +1143,140 @@ class Site(object):
                                     tzinfo=tz.tzutc() if utc else tz.tzlocal())
                     return datetime.datetime.combine(transitdate,timeobj)
                     
+
+            if rise is not None:
             #now do the conversion
-            if rise < transit:
-                rise = hrtodatetime(rise)
-            else:
-                rise = hrtodatetime(rise) + datetime.timedelta(-1)
-            if set > transit:
-                set = hrtodatetime(set)
-            else:
-                set = hrtodatetime(set) + datetime.timedelta(1)
+                if rise < transit:
+                    rise = hrtodatetime(rise)
+                else:
+                    rise = hrtodatetime(rise) + datetime.timedelta(-1)
+                if set > transit:
+                    set = hrtodatetime(set)
+                else:
+                    set = hrtodatetime(set) + datetime.timedelta(1)
             transit = hrtodatetime(transit)
-                
+
         return rise,set,transit
         
+    def nextRiseSetTransit(self, eqpos, dtime=None, alt= -.5667):
+        """
+        Get 'next' rise,set,transit for an equatorial position at a given 
+        datetime (see details).
+        
+        If on-sky at the specified datetime, returns the rise / set times 
+        bracketing current transit,
+        i.e. returns rise, set, transit such that
+                        rise < now < set;
+        so rise and possibly transit will be in the past at specified time.
+        
+        If the target is off-sky currently, then rise/transit/set will all be 
+        in the future, so
+                        now < rise < transit < set.
+            
+        If circumpolar (always visible) rise/set are None, 
+        and next transit is returned.
+        If never visible, rise / set / transit are all None.
+        
+        NB The only dates checked for visibility are 'today' and 'tomorrow'
+        (relative to given datetime). 
+        If the target is an edge case that's below the horizon all day today,
+        but is visible in 6 months, you will still get a None result.
+        
+        See also: riseSetTransit.
+        
+        *args*
+        alt` determines the altitude to be considered as risen or set in 
+        degrees. Default is for approximate rise/set including refraction.
+        
+        `dtime` determines the datetime at which to do the computation. See
+        :func:`calendar_to_jd` for acceptable formats. If None, the current 
+        datetime will be assumed as inferred from :attr:`Site.currentobsjd`
+        
+        *returns*
+        (rise,set,transit) as :class:datetime.datetime objects (UTC). 
+        If the object is circumpolar, rise and set are both None.  
+        If it is never visible, rise, set, and transit are all None.
+        
+        """
+        if dtime is None:
+            jds, dtime = self._processDate(dtime)
+
+        today = dtime.date()
+        tomorrow = today + timedelta(days=1)
+
+        #Today's transit
+        rise1, set1, transit1 = self.riseSetTransit(eqpos, today,
+                                                    alt,
+                                                    timeobj=True, utc=True)
+
+        #Tomorrow's transit (may rise before midnight today) 
+        rise2, set2, transit2 = self.riseSetTransit(eqpos, tomorrow,
+                                                    alt,
+                                                    timeobj=True, utc=True)
+
+        #Circumpolar case, have we passed today's transit?
+        if rise1 is None and transit1 is not None:
+            if dtime < transit1:
+                return (rise1, set1, transit1) #i.e. (None,None,t1)
+            else:
+                return (rise2, set2, transit2) #i.e. (None,None,t2)
+        elif transit1 is None:  #Always below horizon 
+            return (rise1, set1, transit1)  #(None,None,None)
+
+
+        #Yesterday's transit (might have transited just before midnight 
+        # and still be on-sky).
+        yesterday = today - timedelta(days=1)
+        rise0, set0, transit0 = self.riseSetTransit(eqpos, yesterday,
+                                                    alt,
+                                                    timeobj=True, utc=True)
+
+        #Yesterday's transit has not set:
+        if dtime < set0:
+            return (rise0, set0, transit0)
+        #Today's transit has not yet risen or is still up:
+        elif dtime < set1:
+            return (rise1, set1, transit1)
+        else:
+            return (rise2, set2, transit2) #Tomorrow's transit.
+
+    def onSky(self, eqpos, dtime=None, alt= -.5667):
+        """
+        Checks if a target is on-sky at specified datetime.
+        
+        NB on-sky means above minimum elevation as specifed by 'alt' parameter.
+        
+        *args*
+        `eqpos` Ra,Dec in equatorial co-ordinates.
+        
+        `dtime` determines the datetime at which to do the computation. See
+        :func:`calendar_to_jd` for acceptable formats. If None, the current 
+        datetime will be assumed as inferred from :attr:`Site.currentobsjd`
+        
+        `alt` determines the altitude to be considered as risen or set in 
+        degrees. Default is for approximate rise/set including refraction.
+        
+        *returns*
+         Boolean.
+        """
+        if dtime is None:
+            jds, dtime = self._processDate(dtime)
+
+        r, s, t = self.nextRiseSetTransit(eqpos, dtime, alt)
+
+        #Wrong hemisphere
+        if t is None:
+            return False
+
+        #Circumpolar, correct hemisphere.
+        if r is None:
+            return True
+
+        #Equatorial
+        if r <= dtime <= s:
+            return True
+        else:
+            return False
         
     def apparentCoordinates(self,coords,datetime=None,precess=True,refraction=True):
         """
