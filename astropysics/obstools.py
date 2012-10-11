@@ -968,7 +968,10 @@ class Site(object):
             
         lst0 = self.localSiderialTime(date)
         lthrs = (lsts - lst0)%24
-        dayoffs = np.floor((lsts - lst0)/24.0)
+        #NB floor rounds towards -ve infinity.  This is undesirable because:
+        #Sometimes current lst - lst0 < 0 as the LST has looped since daybreak.
+        #So floor will round a negative fraction to a whole day offset.
+        dayoffs = [ int((lst - lst0) / 24.0) for lst in lsts ]
         
         lthrs /= 1.0027378507871321 #correct for siderial day != civil day
         
