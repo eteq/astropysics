@@ -1138,17 +1138,19 @@ class Site(object):
                                     tzinfo=tz.tzutc() if utc else tz.tzlocal())
                     return datetime.datetime.combine(transitdate,timeobj)
                     
+
+            if rise is not None:
             #now do the conversion
-            if rise < transit:
-                rise = hrtodatetime(rise)
-            else:
-                rise = hrtodatetime(rise) + datetime.timedelta(-1)
-            if set > transit:
-                set = hrtodatetime(set)
-            else:
-                set = hrtodatetime(set) + datetime.timedelta(1)
+                if rise < transit:
+                    rise = hrtodatetime(rise)
+                else:
+                    rise = hrtodatetime(rise) + datetime.timedelta(-1)
+                if set > transit:
+                    set = hrtodatetime(set)
+                else:
+                    set = hrtodatetime(set) + datetime.timedelta(1)
             transit = hrtodatetime(transit)
-                
+
         return rise,set,transit
         
         
