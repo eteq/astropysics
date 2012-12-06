@@ -553,25 +553,24 @@ class AngularCoordinate(object):
         """
         
         h,m,s = self.hrsminsec
-        
+
         if canonical:
             secform = '%05.2f'
             sep = (':',':','')
-        
-        if secform is None:
-            s = str(s)
-        else:
-            s = secform%s
-        
+
+        s = str(s) if secform is None else secform % s
+
+        #this is for the s=60 case
         if int(float(s))>=60:
-            s = secform%0
+            news = float(s) - 60
+            s = str(news) if secform is None else secform%news
             m += 1
             if m==60:
                 m = 0
                 h += 1
                 if h==24:
                     h = 0
-            
+
         h,m=str(h),str(m)
         
         if isinstance(sep,basestring):
