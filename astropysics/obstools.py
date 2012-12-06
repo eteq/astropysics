@@ -1478,7 +1478,7 @@ class Site(object):
             return ra
         
     def nightPlot(self,coords,date=None,plottype='altam',onlynight=False,
-                       moon=True,sun=True,clf=True,utc=False,colors=None,
+                       clf=True,utc=False,colors=None,
                        plotkwargs=None):
                            
         """
@@ -1500,13 +1500,6 @@ class Site(object):
         between sunset and sunrise.  Otherwise, an entire day/night will be 
         plotted.
         
-        If `moon` is True, the path of the Moon will be plotted on relevant
-        plots. If it is a dictionary, they will be passed as kwargs to
-        :func:`matplotlib.pyplot.plot` for the moon.
-        
-        If `sun` is True, shaded regions for 18 degree,12 degree, and
-        sunrise/set will be added where relevant.
-        
         If `clf` is True, the figure is cleared before the observing plot is
         made.
         
@@ -1519,8 +1512,10 @@ class Site(object):
         :func:`matplotlib.pyplot.plot`, unless it is None
         """
         from operator import isMappingType,isSequenceType
-        from .coords import LatLongCoordinates,Sun,Moon
+        from .coords import LatLongCoordinates
         from .plotting import add_mapped_axis,_mpl_context
+
+        sun = moon = False  # Sun/Moon classes removed for now.  May return later
         
         if isMappingType(coords):
             names = coords.keys()
@@ -1659,7 +1654,6 @@ class Site(object):
                     plt.xticks(xtcks,['%i'%np.round(xt%24) for xt in xtcks])
                     plt.xlabel(r'$\rm UTC (hours)$')
                 else:
-                    print 'here'
                     plt.xticks(xtcks,[xt%24 for xt in xtcks])
                     plt.xlabel(r'$\rm Local Time (hours)$')
                     
@@ -1716,7 +1710,7 @@ class Site(object):
         if oldright is not None:
             plt.gcf().subplotpars.right = oldright
             
-    def yearPlot(self,coords,startdate=None,n=13,months=12,sun=True,moon=True,
+    def yearPlot(self,coords,startdate=None,n=13,months=12,
                       utc=False,clf=True,colors=None):
         """
         Plots the location transit and rise/set times of object(s) over ~year
@@ -1733,11 +1727,6 @@ class Site(object):
         
         `months` is the number of months to draw the plot for.        
         
-        If `sun` is True, shaded regions for 18 degree,12 degree, and
-        sunrise/set will be included.
-        
-        If `moon` is True, the path of the Moon will be plotted.
-        
         If `utc` is True, the times will be in UTC instead of local time.
         
         If `clf` is True, the figure is cleared before the observing plot is
@@ -1750,8 +1739,9 @@ class Site(object):
         from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter, \
                                      MONDAY,DayLocator,YearLocator
         from operator import isMappingType,isSequenceType
-        from .coords import Sun,Moon
         from .plotting import _mpl_context
+
+        sun = moon = False  # Sun/Moon classes removed for now.  May return later
         
         if isMappingType(coords):
             names = coords.keys()
