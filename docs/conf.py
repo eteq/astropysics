@@ -239,7 +239,7 @@ intersphinx_mapping = {'python':('http://docs.python.org/',None),
                        'numpy':('http://docs.scipy.org/doc/numpy/',None),
                        'scipy':('http://docs.scipy.org/doc/scipy/reference/',None),
                        'matplotlib':('http://matplotlib.sourceforge.net/',None),
-                       'pymc':('http://pymc.googlecode.com/svn/doc/',None),
+                       'pymc':('https://pymcmc.readthedocs.org/en/latest/',None),
                        'networkx':('http://networkx.lanl.gov/',None),
                        'pymodelfit':('http://packages.python.org/PyModelFit/',None)}
 
