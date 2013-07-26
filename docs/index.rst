@@ -84,7 +84,7 @@ Lead Developer
 Contributors
 ------------
 
-* Sebastian Gurevich
+* Sebastian Gurovich
 * Alex Hagen
 * Frederic Grollier
 
