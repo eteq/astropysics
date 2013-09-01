@@ -589,7 +589,7 @@ def run_ipython_setup():
     if majver==0 and minver==10:
         ipcfgfn = 'ipy_profile_astpys.py'
         cfgstr = get_package_data(ipcfgfn)
-    elif (majver==0 and minver>=11) or majover>0:
+    elif (majver==0 and minver>=11) or majver>0:
         ipcfgfn = 'ipython_config_astpys.py'
         cfgstr = get_package_data(ipcfgfn)
         
