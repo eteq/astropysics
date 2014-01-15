@@ -1,4 +1,4 @@
-""" 
+"""
 The astropysics interactive IPython configuration file for ipython versions < .11
 """
 
@@ -21,12 +21,12 @@ ip.ex("from scipy import stats,optimize,ndimage,integrate,interpolate,special")
 try:
     ip.ex("import pyfits")
 except ImportError:
-	pass
-	try:
-ip.ex("import asciitable")
-	except ImportError:
-		pass
-		
+        pass
+    try:
+        ip.ex("import asciitable")
+    except ImportError:
+        pass
+
 try:
     ip.ex("import astropysics")
     #import typical modules
@@ -37,7 +37,7 @@ try:
         pass #this just means traits isn't installed
 except ImportError:
     print "Unable to start astropysics profile, try re-running astpys-setup (or re-installing astropysics)"
-    
+
 
 
 
