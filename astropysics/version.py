@@ -19,9 +19,9 @@ from __future__ import division,with_statement
 
 #these components can be changed for new versions
 major = 1
-minor = 0
+minor = 1
 bugfix = 0
-dev = False
+dev = True
 
 
 #everything below here is derived
