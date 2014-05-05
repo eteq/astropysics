@@ -15,8 +15,21 @@ do exist other Python packages with some of the capabilities of this project,
 but the goal of this project is to integrate all these tools together and make
 them interact in the most straightforward ways possible.
 
-(And to that end, if you are running one of those other projects, I'd love to 
-help integrate our projects into a common framework!)
+.. note ::
+    The functionality of Astropysics is currently being incorporated
+    into `the Astropy project <http://www.astropy.org>`_.  Astropy is a
+    wider community effort, and to avoid wasting resources, most of the
+    energy that initially went into developing Astropysics have been
+    shifted to Astropy.  As a result, Astropysics is no longer getting
+    new features - those efforts are now in Astropy. Within the next few
+    versions of Astropy, we expect it will include all the functionality
+    of Astropysics (and more).
+
+    Astropysics will continue to be supported in the form of bug fixes,
+    though, and will be available for use roughly in its current form
+    for the foreseeable future.  So any existing code can continue to
+    use Astropysics, but for new work, I suggest you begin transitioning
+    to Astropy if it supports your needs.
 
 .. _contents:
 
@@ -29,7 +42,7 @@ module that contains a number of useful small-scale astronomy applications.
 
 .. toctree::
    :maxdepth: 2
-   
+
    install
    getstarted
    coremods/intro
@@ -56,7 +69,7 @@ If you want the must up-to-date (possible unstable) version, do::
     python setup.py develop
 
 (note that `mercurial <http://mercurial.selenic.com/>`_ must be installed, and
-on some systems the last command may need to have "sudo " at the beginning) 
+on some systems the last command may need to have "sudo " at the beginning)
 
 You can also alter the source code if you use this approach (see :doc:`develop`
 for guidelines of working contributing source code).
@@ -64,10 +77,10 @@ for guidelines of working contributing source code).
 In either case, afterwords you can run::
 
     astpys-setup
-    
+
 to install optional packages and setup the environment.
 
-       
+
 Bug Reports
 ===========
 
