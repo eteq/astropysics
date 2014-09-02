@@ -7,6 +7,13 @@ Web Page: http://packages.python.org/Astropysics/
 
 License: Apache License v2.0
 
+Note that Astropysics is now in "maintainence mode" only.  That is,
+further development is not expected, as my efforts have shifted to the
+`Astropy project <http://www.astropy.org>`.  It is a much larger effort
+that contains most of the functionality in Astropysics and much more.
+Astropysics will remain so that code written against it will continue to
+function, though, and I will continue to accept bug fixes as necessary.
+
 Installation
 ------------
 
