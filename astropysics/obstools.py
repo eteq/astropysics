@@ -2192,7 +2192,7 @@ class FMExtinction(_EBmVExtinction):
         gamma,x0 = self.gamma,self.x0
 
         xsq=x*x
-        D=xsq*((xsq-x0*x0)**2+xsq*gamma*gamma)**-2
+        D=xsq*((xsq-x0*x0)**2+xsq*gamma*gamma)**-1
         FMf=C1+C2*x+C3*D
 
         if np.isscalar(FMf):
