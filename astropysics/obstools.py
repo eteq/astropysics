@@ -1511,7 +1511,7 @@ class Site(object):
         """
         from operator import isMappingType,isSequenceType
         from .coords import LatLongCoordinates
-        from .plotting import add_mapped_axis,_mpl_context
+        from .plotting import add_mapped_axis,mpl_context
 
         sun = moon = False  # Sun/Moon classes removed for now.  May return later
 
@@ -1536,7 +1536,7 @@ class Site(object):
             plotkwargs = [None for c in coords]
 
 
-        with _mpl_context(clf=clf) as plt:
+        with mpl_context(clf=clf) as plt:
             oldright = None
             if plottype == 'altam' or plottype == 'alt' or plottype == 'am':
                 if plottype == 'altam':
@@ -1737,7 +1737,7 @@ class Site(object):
         from matplotlib.dates import MonthLocator,WeekdayLocator,DateFormatter, \
                                      MONDAY,DayLocator,YearLocator
         from operator import isMappingType,isSequenceType
-        from .plotting import _mpl_context
+        from .plotting import mpl_context
 
         sun = moon = False  # Sun/Moon classes removed for now.  May return later
 
@@ -1761,7 +1761,7 @@ class Site(object):
             center = 0
         cp12 = center + 12
 
-        with _mpl_context(clf=clf) as plt:
+        with mpl_context(clf=clf) as plt:
             if colors:
                 plt.gca().set_color_cycle(colors)
             for c,nm in zip(coords,names):

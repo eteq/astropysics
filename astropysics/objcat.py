@@ -3392,7 +3392,7 @@ class SEDField(Field):
         colors is a tuple of colors as (spec,phot,specerr,photerr,other)
         """
         from .spec import HasSpecUnits
-        from .plotting import _mpl_context
+        from .plotting import mpl_context
 
         specs = self.specs
         phots = self.phots
@@ -3420,7 +3420,7 @@ class SEDField(Field):
         else:
             mny = min(mnx1,mnx2)
 
-        with _mpl_context(clf=clf) as plt:
+        with mpl_context(clf=clf) as plt:
             if 'x' in log and 'y' in log:
                 plt.loglog()
             elif 'x' in log:
