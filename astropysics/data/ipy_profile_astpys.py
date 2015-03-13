@@ -21,7 +21,7 @@ ip.ex("from scipy import stats,optimize,ndimage,integrate,interpolate,special")
 try:
     ip.ex("import pyfits")
 except ImportError:
-        pass
+    pass
     try:
         ip.ex("import asciitable")
     except ImportError:
