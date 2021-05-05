@@ -25,7 +25,7 @@ On some linux distributions, this may need to be::
 
   sudo python setup.py install
   
-Note also, if you are using `pip` to install, the latest version might not work do to some issues with SSL. In that case you may have luck using the latest dev version:
+Note also, if you are using `pip` to install, the latest version might not work do to some issues with SSL. In that case you may have luck using the latest dev version::
 
   pip install git+https://github.com/eteq/astropysics.git
   
