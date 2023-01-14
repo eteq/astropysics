@@ -1279,27 +1279,17 @@ class Spectrum(HasSpecUnits):
         :returns: A :class:`~astropysics.gui.spylot.Spylot` instance.
         
         """
-        from operator import isMappingType
-        from .gui.spylot import Spylot
-        
+        from astropysics.gui.spylot import Spylot
         if spylotinstance is None:
             spylotinstance = Spylot([self])
+            if show is True:
+                show = {}
             if show:
-                if not isMappingType(show):
-                    show = {}
                 spylotinstance.edit_traits(**show)
-            
-        elif isinstance(spylotinstance,Spylot):
-            spylotinstance.specs.append(self)
-            
-            if show:
-                spylotinstance.currspeci = len(spylotinstance.specs)-1
-            else:
-                spylotinstance._specs_changed() #TODO: remove this when spylot properly responds
-            
         else:
-            raise TypeError('spylotinstance is not a Spylot object or None')
-        
+            spylotinstance.addSpectrum(self)
+            if show:
+                spylotinstance.show()
         return spylotinstance
 
 
